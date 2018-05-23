@@ -261,11 +261,11 @@ nsresult nsWebShellWindow::Initialize(nsIXULWindow* aParent,
   
   // XXX: need to get the default window size from prefs...
   // Doesn't come from prefs... will come from CSS/XUL/RDF
-//#ifdef (XP_MAC)
-  nsRect r(0, 20, aInitialWidth, aInitialHeight+20);
-//#else
-//  nsRect r(0, 0, aInitialWidth, aInitialHeight);
-//#endif
+#if (XP_MAC)  
+  nsRect r(0, 20, aInitialWidth, aInitialHeight+20); // See also widget (issue 147). Cameron
+#else
+  nsRect r(0, 0, aInitialWidth, aInitialHeight);
+#endif
   
   // Create top level window
   mWindow = do_CreateInstance(kWindowCID, &rv);

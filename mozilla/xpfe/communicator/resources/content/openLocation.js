@@ -26,6 +26,7 @@
  */
 
 var browser;
+var browserContent;
 var dialog = {};
 var pref = null;
 try {
@@ -52,13 +53,15 @@ function onLoad()
   dialog.bundle         = document.getElementById("openLocationBundle");
 
   browser = null;
-  if ("arguments" in window && window.arguments.length >= 1)
+  browserContent = null;
+  // Classilla issue 87: we need to see if the window actually has a getBrowser in it.
+  if ("arguments" in window && window.arguments.length >= 1) {
     browser = window.arguments[0];
-    
-  //if (isFullBrowserWindow(browser))
-  //	alert("damn it");
-   
-  if (!browser || !isFullBrowserWindow(browser)) { 
+    if (window.arguments.length >= 2)
+    	browserContent = window.arguments[1];
+  }
+       
+  if (!browser || !isFullBrowserWindow(browser) || !browserContent) { 
     // No browser supplied - we are calling from Composer (or we have no windows open)
     dialog.openAppList.selectedItem = dialog.openEditWindow;
 

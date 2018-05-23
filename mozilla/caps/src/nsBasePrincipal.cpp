@@ -57,7 +57,8 @@ nsBasePrincipal::GetJSPrincipals(JSPrincipals **jsprin)
         // No need for a ADDREF since it is a self-reference
     }
     *jsprin = &mJSPrincipals;
-    JSPRINCIPALS_HOLD(cx, *jsprin);
+    //JSPRINCIPALS_HOLD(cx, *jsprin);
+    (++(*jsprin)->refcount);
     return NS_OK;
 }
 

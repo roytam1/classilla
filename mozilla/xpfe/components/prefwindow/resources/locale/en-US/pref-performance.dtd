@@ -5,4 +5,4 @@
 <!ENTITY textFastScroll "Use slow scroll">
 <!ENTITY blurbFastScroll "When checked, &brandShortName; uses a slower scroll method that may work better on certain sites. You can toggle this from View &gt; Use Slow Scroll. This will reload the page.">
 <!ENTITY textDisablePlugins "Disable plugins">
-<!ENTITY blurbDisablePlugins "When checked, no plugins are loaded. This can speed up some sites and reduces flicker, but disables Flash, QuickTime and other plugins. Changes take effect when you reload the page.">
+<!ENTITY blurbDisablePlugins "When checked, no plugins are loaded. This can speed up some sites and reduces flicker, but disables Java, Flash, QuickTime and other plugins. Changes take effect when you reload the page.">

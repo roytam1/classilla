@@ -539,7 +539,8 @@ void nsMacControl::NSStringSetControlTitle(ControlHandle theControl, nsString ti
   		//
  		err = ::CreateUnicodeToTextRunInfoByScriptCode(0,NULL,&unicodeTextRunInfo);
   		NS_ASSERTION(err==noErr,"nsMacControl::NSStringSetControlTitle: CreateUnicodeToTextRunInfoByScriptCode failed.");
-  		if (err!=noErr) { return; }
+  		if (err!=noErr) { 
+  			return; }
 
 	  	//
 	  	// convert from Unicode to script run
@@ -552,7 +553,8 @@ void nsMacControl::NSStringSetControlTitle(ControlHandle theControl, nsString ti
 					scriptRunText,
 					1 /* count of scrip runs*/,&scriptCodeRunListLength,&convertedTextScript);
   					NS_ASSERTION(err==noErr,"nsMacControl::NSStringSetControlTitle: CreateUnicodeToTextRunInfoByScriptCode failed.");
-  					if (err!=noErr) { delete [] scriptRunText; return;}
+  					if (err!=noErr) { 
+  						delete [] scriptRunText; return;}
   	}	
 
 	scriptRunText[scriptRunTextLengthInBytes] = 0;	// null terminate

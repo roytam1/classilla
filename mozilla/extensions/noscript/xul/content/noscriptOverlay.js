@@ -3,7 +3,7 @@
 NoScript - a Firefox extension for whitelist driven safe JavaScript execution
 Copyright (C) 2004-2005 Giorgio Maone - g.maone@informaction.com
 
-Modified for Classilla (C)2009 Cameron Kaiser
+Modified for Classilla (C)2009-2010 Cameron Kaiser
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -28,16 +28,17 @@ function NoScriptOverlay() {
 NoScriptOverlay.prototype={
   _myLogIt: function(msg, error) {
 
-  return;
-  var consoleService = Components.classes["@mozilla.org/consoleservice;1"].
+  	//return;
+  	var consoleService = Components.classes["@mozilla.org/consoleservice;1"].
                        getService(Components.interfaces.nsIConsoleService);
-  msg = "NS says: "+msg;
-  //if (error) { // apparently not supported in 1.3
-  //  consoleService.logStringError(msg);
-  //} else {
-    consoleService.logStringMessage(msg);
-  //}
-},
+  	msg = "NS says: "+msg;
+  	//if (error) { // apparently not supported in 1.3
+  	//  consoleService.logStringError(msg);
+  	//} else {
+  		consoleService.logStringMessage(msg);
+  	//}
+  }
+,
 
   _strings: null,
   get strings() {
@@ -62,13 +63,14 @@ NoScriptOverlay.prototype={
     return s?s:this._stringFrom(this.stringsFB,key,parms);
   }
 ,
+  docdoc : null, // convenience for openOptions
   getSites: function() {
-    function populate(tagName) {
+    function populate(tagName, relative_to) {
       var elems=doc.getElementsByTagName(tagName);
       for(var j=elems.length; j-->0;) {
         try {
 	  var p;
-          p = ns.getSite(new XPCNativeWrapper(elems[j],"src").src);
+          p = ns.getSite(new XPCNativeWrapper(elems[j],"src").src, relative_to);
           if (p)
 		sites[sites.length] = p;
         } catch(ex) {
@@ -85,21 +87,17 @@ NoScriptOverlay.prototype={
     } catch(ex) {
       // OMG WORST KLUDGE EVAR
       // this depends on chrome documents, XUL windows, etc. not having srcDocs or URLs
-      this._myLogIt("must be a chrome URL");
-      return ['chrome:'];
+      durl = "chrome:";
     }
     try {
-      if (durl.substr(0,6)=="about:" || durl.substr(0,7)=="chrome:") {
-        // and this catches the ones that work
-        this._myLogIt(durl+" is a chrome URL");
-        return [durl];
-      }
-      var sites=[ns.getSite(doc.URL)];
-      populate('frame');
-      populate('iframe');
+    	//this._myLogIt(durl);
+      	sites=[this.docdoc = ns.getSite(durl)];
+      populate('frame', durl);
+      populate('iframe', durl);
+      //populate('script', durl); // we don't filter by script site. Yet.
       return ns.sortedSiteSet(sites);
     } catch(ex) {
-      this._myLogIt("bugged toplevel "+sites+" "+durl+" getSites: "+ex);
+      //this._myLogIt("bugged toplevel "+sites+" "+durl+" getSites: "+ex);
       return [];
     }
   }
@@ -191,6 +189,7 @@ NoScriptOverlay.prototype={
   syncUI: function(ev) {
   	// return; // test
     var ns=this.ns;
+    //ns.sitesString = "";
     
     //alert("sync UI 2");
     if(ev.eventPhase==Event.AT_TARGET && ev.type=="focus") {
@@ -212,22 +211,22 @@ NoScriptOverlay.prototype={
     var levstr = '';
     var scount=0;
     var upcount=0;
+    var ecount=0;
     var sites = new Array();
     if(global) {
       lev="glb";
     } else {
       sites=this.getSites();
-      scount=sites.length;
-      upcount=scount;
-      this._myLogIt("sites: "+sites.join(' '));
-      while(scount-->0 && !ns.isJSEnabled(sites[scount])) {
-		this._myLogIt("comping "+sites[scount]);
+      ecount=0;
+      upcount=sites.length;
+      scount = upcount;
+      //this._myLogIt("sites: "+sites.join(' '));
+      while(scount-->0) {      
+      	if(ns.isJSEnabled(sites[scount]))
+      		ecount++;
 	  }
-      lev=scount>-1?"yes":"no";
-      if (scount == -1)
-        levstr=" (0/"+upcount+")";
-      else
-        levstr=" ("+(upcount-scount)+"/"+upcount+")";
+      lev=(ecount==upcount)?"yes":(ecount==0)?"no":"part";
+      levstr=" ("+ecount+"/"+upcount+")";
       // eventually add support for partial? the image is there for later.
     }
     var widget=document.getElementById("noscript-status");
@@ -235,10 +234,11 @@ NoScriptOverlay.prototype={
       widget.setAttribute("tooltiptext",this.getString("allowed."+lev)+levstr);
       widget.setAttribute("src",this.getIcon(lev));
     }
-    //this.numberCalled++;
+    this.resultOfSyncUI = lev;
   }
 ,
   numberCalled: 0,
+  resultOfSyncUI: null,
   chromeBase: "chrome://noscript/content/",
   chromeName: "noscript"
 ,
@@ -265,12 +265,38 @@ _noScript_syncUI=function(ev) {
 };
 
 function _noScript_openPopup(ev) {
+	if (noscriptOverlay.docdoc == null || noscriptOverlay.docdoc == "about:blank" ||
+			noscriptOverlay.ns.jsEnabled) {
+		_noScript_openOptions(null);
+		return;
+	}
+	if (/^(about|chrome):/.test(noscriptOverlay.docdoc)) {
+		var rv = confirm(noscriptOverlay.getString("sbg.cant"));
+		if (rv)
+			_noScript_openOptions(null);
+		return;
+	}
+	if (noscriptOverlay.resultOfSyncUI == "yes") {
+		var rv = confirm(noscriptOverlay.getString("sbg.already"));
+		if (rv)
+			_noScript_openOptions(null);
+		return;
+	}
+    window.openDialog("chrome://noscript/content/noscriptScriptBGone.xul", "",
+                      "chrome,centerscreen,modal=yes", 
+                      { sites : noscriptOverlay.getSites(), docdoc : noscriptOverlay.docdoc,
+                      		ns : noscriptOverlay.ns,
+                      		browser : window._content });
+}
+
+function _noScript_openOptions(ev) {
       window.openDialog("chrome://noscript/content/noscriptOptions.xul", "",
                         "chrome,resizable=yes,modal=yes", 
                         pref.getBoolPref("dom.disable_open_during_load"),
                         "",
                         false);
 }
+
 
 window.addEventListener("load",_noScript_syncUI,false);
 window.addEventListener("DOMFrameContentLoaded",_noScript_syncUI,false);

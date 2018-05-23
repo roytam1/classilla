@@ -18,7 +18,9 @@
  * Rights Reserved.
  * Contributor(s): 
  *    Original author: oeschger@netscape.com 
- *    amended by: Peter Wilson (added sidebar tabs) */
+ *    amended by: Peter Wilson (added sidebar tabs)
+ *
+ * Modified for Classilla by Cameron Kaiser */
  
 //-------- global variables
 var helpBrowser;
@@ -34,7 +36,7 @@ var helpGlossaryPanel;
 // Namespaces
 const NC = "http://home.netscape.com/NC-rdf#";
 const SN = "rdf:http://www.w3.org/1999/02/22-rdf-syntax-ns#";
-const XML = "http://www.w3.org/XML/1998/namespace#"
+//const XML = "http://www.w3.org/XML/1998/namespace#" // no longer needed. Cameron
 const MAX_LEVEL = 40; // maximum depth of recursion in search datasources.
 
 // Resources

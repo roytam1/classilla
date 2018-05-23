@@ -7,6 +7,8 @@
 <!ENTITY openLinkCmd.accesskey        "W">
 <!ENTITY openLinkCmdInTab.label       "Open Link in New Tab">
 <!ENTITY openLinkCmdInTab.accesskey   "T">
+<!ENTITY openLinkCmdInBTab.label	  "Open Link in New Background Tab">
+<!ENTITY openLinkCmdInBTab.accesskey  "b">
 <!ENTITY openLinkInWindowCmd.label    "Open">
 <!ENTITY openLinkInWindowCmd.accesskey "p">
 <!ENTITY openFrameCmd.label           "Open Frame in New Window">

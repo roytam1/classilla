@@ -2651,8 +2651,12 @@ nsBlockFrame::ReflowDirtyLines(nsBlockReflowState& aState)
   /* TIGHTEN THIS LOOP UP BIG TIME! */
   // Classilla issue 62
   PRInt32 iters = 1; 
+  EventRecord event;
+  
   for ( ; line != line_end; ++line,  aState.AdvanceToNextLine()) {
   
+    
+
   // Classilla issue 62
   // This doesn't fix our reflow problem, but it gives us an escape hatch.
   // Essentially we simply declare the reflow done as long as the user holds the
@@ -2661,7 +2665,16 @@ nsBlockFrame::ReflowDirtyLines(nsBlockReflowState& aState)
   // (or update it to a later Mozilla).
   // Since this is expensive to run, only do this on every fourth line.
   if ((iters & 3) == 0) {
+      // Let us breathe a bit.
+#if(0)
+// This really hurts performance
+    EventAvail(0, &event);
+    EventAvail(0, &event);
+    EventAvail(0, &event);
+    EventAvail(0, &event);
+#endif
     KeyMap keymap;
+    
     GetKeys(keymap);
     if (keymap[1] == 8421376) {
     	rv = NS_OK;
@@ -3263,6 +3276,15 @@ nsBlockFrame::ReflowLine(nsBlockReflowState& aState,
 {
   nsresult rv = NS_OK;
   NS_ABORT_IF_FALSE(aLine->GetChildCount(), "reflowing empty line");
+  
+#if(0)
+// This does not seem to hit performance as bad as it does in ReflowDirtyLines.
+  EventRecord event;
+  EventAvail(0, &event);
+  EventAvail(0, &event);
+  EventAvail(0, &event);
+  EventAvail(0, &event);
+#endif
 
   // Setup the line-layout for the new line
   aState.mCurrentLine = aLine;

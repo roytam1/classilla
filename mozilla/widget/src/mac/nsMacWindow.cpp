@@ -61,6 +61,8 @@
 #include <Gestalt.h>
 #include <Quickdraw.h>
 #include <MacWindows.h>
+#include <UnicodeConverter.h>
+#include <TextEncodingConverter.h>
 
 #if UNIVERSAL_INTERFACES_VERSION < 0x0340
 enum {
@@ -1065,7 +1067,7 @@ NS_IMETHODIMP nsMacWindow::ConstrainPosition(PRBool aAllowSlop,
     }
   } else
     ::GetRegionBounds(::GetGrayRgn(), &screenRect);
-
+    
   if (aAllowSlop) {
     short pos;
     pos = screenRect.left;
@@ -1569,6 +1571,9 @@ PRBool nsMacWindow::OnPaint(nsPaintEvent &event)
 //-------------------------------------------------------------------------
 //
 // Set this window's title
+// This is also used for bookmarks and native menus, so we need to get the
+// encoding correct for Classilla. It is NOT used for XUL objects, tabs,
+// popups, etc.
 //
 //-------------------------------------------------------------------------
 NS_IMETHODIMP nsMacWindow::SetTitle(const nsString& aTitle)
@@ -1583,7 +1588,116 @@ NS_IMETHODIMP nsMacWindow::SetTitle(const nsString& aTitle)
       return NS_OK;
     }
   }
+#else
+
+/* See http://developer.apple.com/mac/library/samplecode/FSCopyObject/Listings/Sources_FSCopyObject_c.html and
+	http://developer.apple.com/mac/library/documentation/Carbon/Conceptual/ProgWithTECM/tecmgr_about/tecmgr_about.html */
+
+// Classilla issue 71
+// The problem is that we have no idea what encoding will work, so we have to try a few.
+
+#if(0)
+// First pass using TextInfoByEncoding.
+	OSErr					err;
+	UnicodeToTextInfo		unicodeTextInfo;
+	const PRUnichar*		unicodeText;
+	char*					scriptText;
+	size_t					unicodeTextLengthInBytes, unicodeTextReadInBytes,
+							scriptTextSizeInBytes, scriptTextLengthInBytes;
+	TextEncoding			textEncoding;
+
+	int	i;
+	int j;
+		
+	// get the Unicode text and prepare buffers
+	unicodeText = aTitle.get();
+	unicodeTextLengthInBytes = aTitle.Length() * sizeof(PRUnichar);
+	scriptTextSizeInBytes = unicodeTextLengthInBytes * 2;
+	scriptText = new char[scriptTextSizeInBytes];
+	
+	// Only put ones here we think people are likely to need, otherwise we might slow down.
+	// Asian languages have priority because we have a lot of Japanese Classilla users, but most
+	// things, praise the Lord and Ford, will be amenable to MacRoman. List in order of expected
+	// conversion frequency.
+	TextEncoding mappingsToTry[] = { 
+										   kTextEncodingMacRoman,
+										   kTextEncodingMacJapanese, // Nihon no Classilla user wa daisuki da yo!
+										   kTextEncodingMacChineseTrad,
+										   kTextEncodingMacChineseSimp,
+										   kTextEncodingMacKorean,
+										   kTextEncodingMacCyrillic,
+										   kTextEncodingMacCentralEurRoman }; // from TextCommon.h
+	// j below needs to be sizeof!
+	
+	// Basically do this until we find an encoding that works, or give up.
+	j = 7; // number of text encodings to try. KEEP THIS IN SYNC
+	
+	for (i = 0; i<j; i++) {
+		
+		// create the textinfo object
+		textEncoding = mappingsToTry[i];
+		err = ::CreateUnicodeToTextInfoByEncoding(textEncoding, &unicodeTextInfo);
+		if (err == noErr) {
+			err = ::ConvertFromUnicodeToText(unicodeTextInfo, unicodeTextLengthInBytes, NS_REINTERPRET_CAST(const PRUint16*, unicodeText),
+				0, /* no flags */
+				//kUnicodeLooseMappingsMask | kUnicodeUseFallbacksMask, // ????
+				0, NULL, 0, NULL,   /* offsetCounts & offsetArrays */
+				scriptTextSizeInBytes, &unicodeTextReadInBytes, &scriptTextLengthInBytes,
+				scriptText);
+		}
+  		::DisposeUnicodeToTextInfo(&unicodeTextInfo);
+		if (err == noErr) { // || err == kTECUsedFallbacksStatus) {	
+			scriptText[scriptTextLengthInBytes] = 0;	// null terminate
+			::SetWTitle(mWindowPtr, c2pstr(scriptText));
+			delete [] scriptText;
+			return NS_OK;
+		}
+  }
+  delete [] scriptText;
+#else
+// Second pass using TextRunInfo. This seems to work better when language kits are
+// missing or incomplete, so we're using this for 9.2.1.
+#define MAX_RUNS 4
+	OSErr					err;
+	UnicodeToTextRunInfo	unicodeTextInfo;
+	const PRUnichar*		unicodeText;
+	char*					scriptText;
+	size_t					unicodeTextLengthInBytes, unicodeTextReadInBytes,
+							scriptTextSizeInBytes, scriptTextLengthInBytes, scriptRunCount;
+	TextEncodingRun			textEncodingRuns[MAX_RUNS]; /* If it's more complex than this, we have a problem. */
+
+	// get the Unicode text and prepare buffers
+	unicodeText = aTitle.get();
+	unicodeTextLengthInBytes = aTitle.Length() * sizeof(PRUnichar);
+	scriptTextSizeInBytes = unicodeTextLengthInBytes * 2;
+	scriptText = new char[scriptTextSizeInBytes];
+
+	// create the conversion object
+	err = ::CreateUnicodeToTextRunInfo(0, NULL, &unicodeTextInfo); /* use any available script */
+	if (err == noErr) {
+		err = ::ConvertFromUnicodeToTextRun(unicodeTextInfo, unicodeTextLengthInBytes, NS_REINTERPRET_CAST(const PRUint16*, unicodeText),
+			kUnicodeKeepSameEncodingMask | kUnicodeTextRunMask,
+			0, NULL, 0, NULL,   /* offsetCounts & offsetArrays */
+			scriptTextSizeInBytes, &unicodeTextReadInBytes, &scriptTextLengthInBytes,
+			scriptText,
+			MAX_RUNS, &scriptRunCount, textEncodingRuns);
+  		::DisposeUnicodeToTextRunInfo(&unicodeTextInfo);
+	}
+
+	if (err == noErr) { // || err == kTECUsedFallbacksStatus) {	
+		scriptText[scriptTextLengthInBytes] = 0;	// null terminate
+		::SetWTitle(mWindowPtr, c2pstr(scriptText));
+		delete [] scriptText;
+		return NS_OK;
+	}
+  
+    delete [] scriptText;
+
 #endif
+// end issue
+#endif	/* TARGET_CARBON */
+
+  // We're out of options. Give up and let nsMacControl try to convert it, and throw in ?'s for what we can't do.
   Str255 title;
   // unicode to file system charset
   nsMacControl::StringToStr255(aTitle, title);

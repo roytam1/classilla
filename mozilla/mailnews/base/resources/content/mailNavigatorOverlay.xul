@@ -95,8 +95,12 @@
       if (gAddedMailContextMenuPopupListener)
         return;
       var popup = document.getElementById("contentAreaContextMenu");
-      popup.addEventListener("popupshowing", initMailContextMenuItems, false);
-      gAddedMailContextMenuPopupListener = true;
+      try { // popup is sometimes null. Classilla issue 136
+      	popup.addEventListener("popupshowing", initMailContextMenuItems, false);
+      	gAddedMailContextMenuPopupListener = true;
+      } catch(e) {
+      	// nothing
+      }
     }
 
     addEventListener("load", initMailContextMenuPopupListener, true);

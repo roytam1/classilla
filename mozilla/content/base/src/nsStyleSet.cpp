@@ -1639,9 +1639,27 @@ StyleSetImpl::ClearStyleData(nsIPresContext* aPresContext) // bug 188803 // , ns
     //NS_STATIC_CAST(nsStyleContext*,mRoots[i])->ClearStyleData(aPresContext);
     NS_STATIC_CAST(nsIStyleContext*,mRoots[i])->ClearStyleData(aPresContext);
   }
+  
 #endif
 // end bug 188803
- 
+
+  // Do we need this? Classilla
+  // We need to crawl the entire style context tree, and for each style context we need 
+  // to see if the specified rule is matched.  If so, that context and all its descendant
+  // contexts must have their data wiped.
+  nsCOMPtr<nsIPresShell> shell;
+  aPresContext->GetShell(getter_AddRefs(shell));
+  nsIFrame* rootFrame;
+  shell->GetRootFrame(&rootFrame);
+  if (rootFrame) {
+    //nsStyleContext* rootContext = rootFrame->GetStyleContext();
+    nsCOMPtr<nsIStyleContext> rootContext;
+    rootFrame->GetStyleContext(getter_AddRefs(rootContext));
+
+    if (rootContext)
+      rootContext->ClearStyleData(aPresContext); //, aRule);
+  }
+   
   return NS_OK;
 }
 

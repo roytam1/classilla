@@ -1480,7 +1480,7 @@ static PRInt32 SendReceiveStream(PRFileDesc *fd, void *buf, PRInt32 amount,
                         OTLeaveNotifier(endpoint);
                         disabledNotifications = false;
                     }
-					WaitOnThisThread(me, PR_INTERVAL_NO_TIMEOUT);
+					WaitOnThisThread(me, timeout); // PR_INTERVAL_NO_TIMEOUT);
 					result = me->md.osErrCode;
 					if (result != kOTNoError) // interrupted thread, etc.
 						break;

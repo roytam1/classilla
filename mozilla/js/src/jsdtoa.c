@@ -181,6 +181,11 @@
  * #define NO_IEEE_Scale to disable new (Feb. 1997) logic in strtod that
  *  avoids underflows on inputs whose result does not underflow.
  */
+ 
+//#define Sudden_Overflow 1
+//#define Inaccurate_Divide 1
+//#define No_leftright 1
+ 
 #ifdef IS_LITTLE_ENDIAN
 #define IEEE_8087
 #else
@@ -216,6 +221,7 @@ extern void *MALLOC(size_t);
 static double private_mem[PRIVATE_mem], *pmem_next = private_mem;
 #endif
 
+//#define Bad_float_h 1
 #ifdef Bad_float_h
 #undef __STDC__
 
@@ -289,8 +295,6 @@ Exactly one of IEEE_8087 or IEEE_MC68k should be defined.
 #ifndef NO_IEEE_Scale
 #define Avoid_Underflow
 #endif
-
-
 
 #ifdef RND_PRODQUOT
 #define rounded_product(a,b) a = rnd_prod(a, b)
@@ -2860,6 +2864,7 @@ JS_dtostr(char *buffer, size_t bufferSize, JSDToStrMode mode, int precision, dou
                     exponentialNotation = JS_TRUE;
                 break;
         }
+        //exponentialNotation = JS_FALSE; 
 
         /* If the number has fewer than minNDigits, pad it with zeros at the end */
         if (nDigits < minNDigits) {

@@ -1,0 +1,10 @@
+<!ENTITY sbgLabel "Script-B-Gone uses NoScript to help protect your computer from malicious JavaScript.">
+<!ENTITY sbgOptionsLabel "Options for this page">
+<!ENTITY sbgAllOnly "Allow all frames on this page only from this page's domain (recommended):">
+<!ENTITY sbgThisOnly "Allow only frames from this page's specific site:">
+<!ENTITY sbgAllAll "Allow all frames on this page from anywhere:">
+<!ENTITY sbgNothing "Keep my whitelist the same as I set it.">
+<!ENTITY sbgDisclaimer "Script-B-Gone remembers all sites you allow. Any of these sites you allowed before will stay enabled.">
+<!ENTITY sbgOptionsBlurb "For more options, or to remove sites you've already added, click">
+<!ENTITY sbgOptionsButton "Options">
+<!ENTITY sbgScriptsOnFrame "Scripts in this frame:">

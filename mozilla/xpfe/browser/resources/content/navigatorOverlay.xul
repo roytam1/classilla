@@ -21,6 +21,9 @@
    -   Blake Ross   <blakeross@telocity.com>
    -   Peter Annema <disttsc@bart.nl>
    -   Jeremy M. Dolan <jmd@pobox.com>
+   -
+   - Updated for Classilla by Cameron Kaiser
+   -
    -->
 
 <?xul-overlay href="chrome://global/content/globalOverlay.xul"?>
@@ -50,6 +53,7 @@
     <!-- File Menu -->
     <key id="key_newNavigator"/>
     <key id="key_newNavigatorTab" key="&tabCmd.commandkey;" modifiers="accel" command="cmd_newNavigatorTab"/>
+    <key id="key_lastClosedTab" key="&lastClosedTabCmd.commandkey;" modifiers="accel,shift" command="cmd_lastClosedTab"/>
     <key id="key_newBlankPage"/>
     <key id="focusURLBar"      key="&openCmd.commandkey;" oncommand="ShowAndSelectContentsOfURLBar();"
          modifiers="accel"/>
@@ -117,6 +121,7 @@
     <command id="cmd_newNavigator"/>
     <command id="cmd_newNavigatorTab" oncommand="BrowserOpenTab();"/>
     <command id="cmd_newTabWithTarget" oncommand="contentAreaClick(event);"/>
+    <command id="cmd_lastClosedTab" oncommand="BrowserLastClosedTab();"/>
 
     <command id="cmd_newEditor"/>
     
@@ -223,6 +228,7 @@
         <menuitem id="menu_close"/>
         <menuitem id="menu_closeOtherTabs" command="cmd_closeOtherTabs" label="&closeOtherTabs.label;"/>
         <menuitem id="menu_closeWindow" hidden="true" command="cmd_closeWindow" key="key_closeWindow" label="&closeWindow.label;"/>
+        <menuitem id="menu_lastClosedTab" command="cmd_lastClosedTab" key="key_lastClosedTab" label="&lastClosedTabCmd.label;"/>
         <menuseparator/>
         <menuitem label="&savePageCmd.label;" accesskey="&savePageCmd.accesskey;" key="key_savePage" command="Browser:SavePage"/>
         <menuitem id="savepage" label="&saveFrameCmd.label;" accesskey="&saveFrameCmd.accesskey;" oncommand="saveFrameDocument();" hidden="true"/>

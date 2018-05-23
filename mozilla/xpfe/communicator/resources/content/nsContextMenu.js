@@ -22,6 +22,9 @@
  *     William A. ("PowerGUI") Law <law@netscape.com>
  *     Blake Ross <blakeross@telocity.com>
  *     Gervase Markham <gerv@gerv.net>
+ *
+ * Modified for Classilla by Cameron Kaiser
+ *
  */
 
 /*------------------------------ nsContextMenu ---------------------------------
@@ -87,6 +90,7 @@ nsContextMenu.prototype = {
     initOpenItems : function () {
         this.showItem( "context-openlink", this.onSaveableLink || ( this.inDirList && this.onLink ) );
         this.showItem( "context-openlinkintab", this.onSaveableLink || ( this.inDirList && this.onLink ) );
+        this.showItem( "context-openlinkinbtab", this.onSaveableLink || ( this.inDirList && this.onLink ) );
 
         this.showItem( "context-sep-open", this.onSaveableLink || ( this.inDirList && this.onLink ) );
     },
@@ -538,6 +542,11 @@ nsContextMenu.prototype = {
     openLinkInTab : function () {
         // Determine linked-to URL.
         openNewTabWith( this.linkURL(), true, false );
+    },
+    // Open linked-to URL always in the background (Classilla issue 76)
+    openLinkInBTab : function () {
+    	// Determine linked-to URL. Why is this boilerplate crap in here?
+    	openNewTabWith( this.linkURL(), true, false, true );
     },
     // Open frame in a new tab.
     openFrameInTab : function () {

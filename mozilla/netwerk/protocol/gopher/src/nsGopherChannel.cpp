@@ -108,11 +108,11 @@ nsGopherChannel::Init(nsIURI* uri, nsIProxyInfo* proxyInfo)
 
     // For security reasons, don't allow anything expect the default
     // gopher port (70). See bug 71916 - bbaetz@cs.mcgill.ca
-/*
+    // undone for Classilla issue 140
+
     if (mPort==-1)
         mPort=GOPHER_PORT;
-*/
-    mPort=GOPHER_PORT;
+    //mPort=GOPHER_PORT;
 
     // No path given
     if (buffer[0]=='\0' || (buffer[0]=='/' && buffer[1]=='\0')) {

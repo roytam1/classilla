@@ -141,7 +141,11 @@ nsGopherHandler::NewChannel(nsIURI* url, nsIChannel* *result)
 NS_IMETHODIMP 
 nsGopherHandler::AllowPort(PRInt32 port, const char *scheme, PRBool *_retval)
 {
-    if (port == GOPHER_PORT)
+// Classilla issue 140 
+#define P(x) ||(port==x)
+// we don't do P(105) yet, because we don't yet support CSO. -- Cameron
+    if (port == GOPHER_PORT P(13) P(43) P(71) P(72) P(79) P(80) P(1070) P(2347) P(3000) P(3070) P(3099)
+    	P(4323) P(7055) P(7070) P(7071) P(7072) P(7077) P(7080) P(7777) P(8080) P(27070))
         *_retval = PR_TRUE;
     else
         *_retval = PR_FALSE;

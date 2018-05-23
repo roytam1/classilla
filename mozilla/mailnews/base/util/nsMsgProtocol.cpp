@@ -414,6 +414,17 @@ NS_IMETHODIMP nsMsgProtocol::OnStopRequest(nsIRequest *request, nsISupports *ctx
     } // if we got an error code
   } // if we have a mailnews url.
 
+// bug 173924 plus backbugs
+  // Drop notification callbacks to prevent cycles.
+  mCallbacks = 0;
+  mProgressEventSink = 0;
+  // Call CloseSocket(), in case we got here because the server dropped the 
+  // connection while reading, and we never get a chance to get back into
+  // the protocol state machine via OnDataAvailable.
+  if (m_socketIsOpen)
+  	CloseSocket();
+// end bug
+
   return rv;
 }
 

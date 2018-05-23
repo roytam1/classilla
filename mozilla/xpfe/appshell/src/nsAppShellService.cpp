@@ -286,26 +286,44 @@ nsAppShellService::DoProfileStartup(nsICmdLineService *aCmdLineService, PRBool c
     }
 
     
-  /* This seemed like a good place to put the check for overridden UA at
-     start up, since the user may need to be warned it's not ready for prime time. 
-     -- Cameron */
+	// Classilla specific startup tasks go here, before the main window appears.
+
+	// Warn user if they are using a non-standard user agent.
     nsresult rrv;    
     nsCOMPtr<nsIPrefBranch> prefBranch;
     nsCOMPtr<nsIPrefService> prefs = do_GetService(NS_PREFSERVICE_CONTRACTID, &rrv);
     nsCOMPtr<nsIPromptService> prompter(do_GetService("@mozilla.org/embedcomp/prompt-service;1"));
-    NS_ENSURE_SUCCESS(rrv,rrv);
-    rrv = prefs->GetBranch(nsnull, getter_AddRefs(prefBranch));
-    NS_ENSURE_SUCCESS(rrv,rrv);
-
-    nsXPIDLCString weirdUA;
-    rrv = prefBranch->GetCharPref("general.useragent.override", getter_Copies(weirdUA));
-    if (NS_SUCCEEDED(rrv) && weirdUA.Length()) {
-      /* L10n FAIL, I'll fix this later when I get a round tuit or a lottadoh */
-      if (prompter)
-        // it focuses right here, for some reason (probably the lastwindowclosing logic).
-#warning LOCALIZE ME!
+    if (NS_SUCCEEDED(rrv)) {
+    	rrv = prefs->GetBranch(nsnull, getter_AddRefs(prefBranch));
+    	if (NS_SUCCEEDED(rrv)) {
+    		nsXPIDLCString weirdUA;
+    		rrv = prefBranch->GetCharPref("general.useragent.override", getter_Copies(weirdUA));
+    		if (NS_SUCCEEDED(rrv) && weirdUA.Length()) {
+      			if (prompter) {
+        		// it focuses right here, for some reason (probably the lastwindowclosing logic).
+#if(0)
         prompter->Alert(nsnull, NS_LITERAL_STRING("Classilla").get(),
         						NS_LITERAL_STRING("You are using an altered browser user-agent. This may cause sites to enable features Classilla does not yet handle. To change the user-agent, go to Preferences > Navigator > User Agent.").get());
+#else
+			  		nsCOMPtr<nsIStringBundleService> stringBundleService(do_GetService(NS_STRINGBUNDLE_CONTRACTID, &rrv));
+  			  		nsCOMPtr<nsIStringBundle> navigatorBundle, brandBundle;
+              		nsXPIDLString brandName, dialogText;
+
+              		if (NS_SUCCEEDED(rrv))
+						rrv = stringBundleService->CreateBundle("chrome://navigator/locale/navigator.properties", getter_AddRefs(navigatorBundle));
+			  		if (NS_SUCCEEDED(rrv))
+						rrv = stringBundleService->CreateBundle("chrome://global/locale/brand.properties", getter_AddRefs(brandBundle));
+					if (NS_SUCCEEDED(rrv))
+						rrv = brandBundle->GetStringFromName(NS_LITERAL_STRING("brandShortName").get(), getter_Copies(brandName));
+					if (NS_SUCCEEDED(rrv))
+						rrv = navigatorBundle->GetStringFromName(NS_LITERAL_STRING("weird_ua").get(), getter_Copies(dialogText));
+					if (NS_SUCCEEDED(rrv))
+						prompter->Alert(nsnull, brandName.get(),
+										dialogText.get());
+#endif
+				}
+			}
+		}
     }
     
 #if(0)
@@ -319,6 +337,7 @@ nsAppShellService::DoProfileStartup(nsICmdLineService *aCmdLineService, PRBool c
   									NS_LITERAL_STRING("Classilla's experimental rendering mode is currently enabled. This enables rendering fix-ups that may cause sites to display in an unexpected fashion. To toggle these fix-ups, go to View > Use Experimental Renderer.").get());
     }
 #endif
+	// End Classilla specific startup tasks
     
     ExitLastWindowClosingSurvivalArea();
 
@@ -629,6 +648,18 @@ nsAppShellService::Quit(PRUint32 aFerocity)
   if (aFerocity == eForceQuit) {
     // do it!
 
+  	// Classilla specific shutdown tasks go here.
+  
+  	// Classilla issue 109: clear out the last tab closed so it doesn't get saved.
+  	nsCOMPtr<nsIPrefService> prefService(do_GetService(NS_PREFSERVICE_CONTRACTID));
+  	if (prefService) {
+  		nsCOMPtr<nsIPrefBranch> shutdownBranch;
+  		prefService->GetBranch(nsnull, getter_AddRefs(shutdownBranch));
+  		if (shutdownBranch) {
+  			shutdownBranch->SetCharPref("classilla.lasttab", "");
+  		}
+  	} // don't bomb if this fails.
+  	
     // No chance of the shutdown being cancelled from here on; tell people
     // we're shutting down for sure while all services are still available.
     nsCOMPtr<nsIObserverService> obsService = do_GetService("@mozilla.org/observer-service;1", &rv);
@@ -684,7 +715,7 @@ nsAppShellService::Quit(PRUint32 aFerocity)
       }
     }
   }
-
+  
   // turn off the reentrancy check flag, but not if we have
   // more asynchronous work to do still.
   if (!postedExitEvent)

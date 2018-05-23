@@ -60,6 +60,7 @@ var gIgnoreFocus = false;
 var gIgnoreClick = false;
 var gURIFixup = null;
 var gCurrentStyleSheet = '';
+var gLastURIClosed = null;
 
 var pref = null;
 
@@ -99,6 +100,16 @@ const gButtonPrefListener =
       document.getElementById("home-bm-separator").setAttribute("hidden", "true");
     else
       document.getElementById("home-bm-separator").removeAttribute("hidden");
+  }
+};
+
+const gLastTabPrefListener = // Classilla issue 109 - this is to pick up changes from tabbrowser.xml
+{
+  domain : "classilla.lasttab",
+  observe : function(subject, topic, prefName)
+  {
+    if (topic != "nsPref:changed") return;
+    BrowserUpdateLastTabClosed();
   }
 };
 
@@ -437,7 +448,6 @@ function Startup()
 // a browser window opens, so we can't hook this for app start up. Instead we
 // have to hook the app shell. FARK! So, see _AppShell.mcp for Classilla custom
 // startup code.
-//	alert("We get signal");
   // init globals
   gNavigatorBundle = document.getElementById("bundle_navigator");
   gBrandBundle = document.getElementById("bundle_brand");
@@ -484,6 +494,7 @@ function Startup()
   addPrefListener(gButtonPrefListener); 
   addPrefListener(gTabStripPrefListener);
   addPrefListener(gHomepagePrefListener);
+  addPrefListener(gLastTabPrefListener); // Classilla issue 109
   addPopupPermListener(gPopupPermListener);
   addPrefListener(gPopupPrefListener);
 
@@ -614,9 +625,13 @@ function Startup()
   // does clicking on the urlbar select its contents?
   gClickSelectsAll = pref.getBoolPref("browser.urlbar.clickSelectsAll");
   gClickAtEndSelects = pref.getBoolPref("browser.urlbar.clickAtEndSelects");
-
+  
   // now load bookmarks after a delay
   setTimeout(LoadBookmarksCallback, 0);
+  
+  // Classilla issue 109: update last closed tab (BUT NOT THE PREF!)
+  setTimeout(BrowserUpdateLastTabClosed, 0);
+
 }
 
 function LoadBookmarksCallback()
@@ -693,8 +708,10 @@ function Shutdown()
   removePrefListener(gHomepagePrefListener);
   removePopupPermListener(gPopupPermListener);
   removePrefListener(gPopupPrefListener);
+  removePrefListener(gLastTabPrefListener); // issue 109
 
   window.browserContentListener.close();
+  
   // Close the app core.
   if (appCore)
     appCore.close();
@@ -1102,7 +1119,8 @@ function BrowserSearchInternet()
 function BrowserOpenWindow()
 {
   //opens a window where users can select a web location to open
-  openDialog("chrome://communicator/content/openLocation.xul", "_blank", "chrome,modal,titlebar", window);
+  // Classilla issue 87: tell us what our browser content object is (could be null)
+  openDialog("chrome://communicator/content/openLocation.xul", "_blank", "chrome,modal,titlebar", window, getBrowser());
 }
 
 function BrowserOpenTab()
@@ -1204,6 +1222,17 @@ function BrowserCloseOtherTabs()
 function BrowserCloseTabOrWindow()
 {
   var browser = getBrowser();
+  
+  // Classilla issue 109: Remember the URI we are closing.
+  try {
+  	gLastURIClosed = browser.currentURI.spec;
+  } catch(e) {
+   	gLastURIClosed = null;
+  }
+  BrowserUpdateLastTabPref();
+  BrowserUpdateLastTabClosed();
+  // end issue
+  
   if (browser.mTabContainer.childNodes.length > 1) {
     // Just close up a tab.
     browser.removeCurrentTab();
@@ -2255,6 +2284,12 @@ function WindowIsClosing()
   var reallyClose = true;
 
   if (numtabs > 1) {
+  // Classilla issue 109: clear gLastURIClosed if we close multiple tabs, because then we don't know
+  // which one to restore.
+  	gLastURIClosed = null;
+  	BrowserUpdateLastTabPref();
+  	BrowserUpdateLastTabClosed();
+  	
     var shouldPrompt = pref.getBoolPref("browser.tabs.warnOnClose");
     if (shouldPrompt) {
       var promptService =
@@ -2313,7 +2348,7 @@ function updateViewStates(t)
   // we don't do anything with the menu object, but we might later.
   
   // fix up the fixup option, narf narf narf
-  // THIS IS DISABLED IN 9.1
+  // THIS IS DISABLED IN 9.1 and up
   //fixCheckBox('isFixupRender', 'classilla.layout.fixup');
   
   // fix up the slow scroll option
@@ -2322,7 +2357,6 @@ function updateViewStates(t)
 
 function BrowserToggleFixups()
 {
-//	alert("we're fixed up");
 	toggleBoolPref('classilla.layout.fixup');
 	BrowserReload();
 }
@@ -2332,3 +2366,66 @@ function BrowserToggleSlowScroll()
 	toggleBoolPref('classilla.layout.slowscroll');
 	BrowserReload();
 }
+
+// Classilla issue 109
+function BrowserLastClosedTab()
+{
+	BrowserGetLastTabPref();
+	//alert(gLastURIClosed);
+	if (gLastURIClosed) {
+		var browser = getBrowser();
+		if (browser && browser.mTabContainer)
+			browser.selectedTab = browser.addTab(gLastURIClosed);
+		else
+			delayedOpenWindow(getBrowserURL(), "all,dialog=no", gLastURIClosed);
+	}
+	gLastURIClosed = null;
+	BrowserUpdateLastTabPref();
+	BrowserUpdateLastTabClosed();
+}
+function BrowserUpdateLastTabClosed()
+{
+	var w = document.getElementById("menu_lastClosedTab");
+	if (!w) return;
+	BrowserGetLastTabPref();
+	if (gLastURIClosed && gLastURIClosed.length) {
+		w.removeAttribute("hidden");
+		return;
+	}
+	w.setAttribute("hidden", "true");
+	return;
+}
+function BrowserUpdateLastTabPref()
+{
+	var str = Components.classes["@mozilla.org/supports-string;1"]
+                        .createInstance(Components.interfaces.nsISupportsString);
+	if (gLastURIClosed && gLastURIClosed.length) {
+		str.data = gLastURIClosed;
+	} else {
+		str.data = "";
+	}
+	try {
+			BrowserPrefLastTabPref().setComplexValue("classilla.lasttab", Components.interfaces.nsISupportsString, str);
+	} catch(e) { alert(e); }
+	
+	//alert(BrowserPrefLastTabPref().getComplexValue("classilla.lasttab", Components.interfaces.nsISupportsString).data);
+}
+
+// This keeps our global in sync with tabbrowser.xml, which can change it.
+function BrowserGetLastTabPref()
+{
+	try {
+		gLastURIClosed = BrowserPrefLastTabPref().getComplexValue("classilla.lasttab", Components.interfaces.nsISupportsString).data;
+	} catch(e) { }
+	if (gLastURIClosed && gLastURIClosed.length)
+		return;
+	gLastURIClosed = null;
+}
+function BrowserPrefLastTabPref()
+{
+	// we can't trust that the pref global is set up for us already, so this returns a quickie pref branch.
+	return Components.classes["@mozilla.org/preferences-service;1"]
+                     .getService(Components.interfaces.nsIPrefService)
+                     .getBranch(null);
+}
+// end issue		

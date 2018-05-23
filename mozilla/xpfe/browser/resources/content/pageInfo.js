@@ -38,6 +38,8 @@
  * ***** END LICENSE BLOCK *****
 */
 
+/* Minor bug unmunging for Classilla by Cameron Kaiser */
+
 //******** define a js object to implement nsITreeView
 function pageInfoTreeView(columnids, copycol)
 {
@@ -523,7 +525,10 @@ function grabAll(elem)
   var linktext;
 
   // check for background images, any node may have one
-  var url = elem.ownerDocument.defaultView.getComputedStyle(elem, "").getPropertyCSSValue("background-image");
+  var url = null;
+try {
+  url = elem.ownerDocument.defaultView.getComputedStyle(elem, "").getPropertyCSSValue("background-image");
+} catch(e) { }
   if (url && url.primitiveType == CSSPrimitiveValue.CSS_URI)
     imageView.addRow([url.getStringValue(), gStrings.mediaBGImg, gStrings.notSet, elem, true]);
 
@@ -818,10 +823,11 @@ function makePreview(row)
   var kbSize = 0;
   var expirationTime = 0;
   var expirationDate = null;
-
+  var cacheEntryDescriptor = null;
+  
   try
   {
-    var cacheEntryDescriptor = httpCacheSession.openCacheEntry(url, Components.interfaces.nsICache.ACCESS_READ, false);   // open for READ, in non-blocking mode
+    cacheEntryDescriptor = httpCacheSession.openCacheEntry(url, Components.interfaces.nsICache.ACCESS_READ, false);   // open for READ, in non-blocking mode
     if (cacheEntryDescriptor)
     {
       switch(cacheEntryDescriptor.deviceID)
@@ -879,8 +885,9 @@ function makePreview(row)
                  ("codeType" in item && item.codeType) ||
                  ("contentType" in item && item.contentType) ||
                  getContentTypeFromImgRequest(item) ||
-                 getContentTypeFromHeaders(cacheEntryDescrptor) ||
-                 gStrings.unknown;
+                 ((cacheEntryDescriptor) ? 
+                 getContentTypeFromHeaders(cacheEntryDescriptor) :
+                 gStrings.unknown);
 
   document.getElementById("imagetypetext").value = mimeType;
   document.getElementById("imagesourcetext").value = sourceText;

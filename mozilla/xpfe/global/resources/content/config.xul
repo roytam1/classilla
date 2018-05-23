@@ -25,6 +25,9 @@ Contributors:
 Chip Clark <chipc@netscape.com>
 Seth Spitzer <sspitzer@netscape.com>
 Neil Rashbrook <neil@parkwaycc.co.uk>
+
+Modified for Classilla by Cameron Kaiser
+
 -->
 
 <!DOCTYPE window SYSTEM "chrome://global/locale/config.dtd">
@@ -53,6 +56,13 @@ Neil Rashbrook <neil@parkwaycc.co.uk>
   <menuitem label="&modify.label;" accesskey="&modify.accesskey;" oncommand="ModifySelected();"/>
   <menuitem label="&reset.label;" accesskey="&reset.accesskey;" oncommand="ResetSelected();"/>
 </popup>
+
+<hbox align="center">
+  <label value="&filterPrefs.label;" accesskey="&filterPrefs.accesskey;" control="textbox"/>
+  <textbox id="textbox" flex="1" type="timed" timeout="500" oncommand="FilterPrefs();" onchange="FilterPrefs();"/>
+  <button id="buttonf" label="&filtMeBaby.label;" accesskey="&filtMeBaby.accesskey;" oncommand="FilterPrefs();"/>
+  <button id="button" label="&showAll.label;" accesskey="&showAll.accesskey;" oncommand="ClearFilter();" disabled="true"/>
+</hbox>
 
 <tree id="configTree" flex="1" class="plain" seltype="single"
       enableColumnDrag="true" context="configContext">

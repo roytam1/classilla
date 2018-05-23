@@ -18,6 +18,13 @@ Communications Corporation. Portions created by Netscape are
 Rights Reserved.
 --> 
 
+<!ENTITY filterPrefs.label "Filter:">
+<!ENTITY filterPrefs.accesskey "I">
+<!ENTITY showAll.label "Show All">
+<!ENTITY showAll.accesskey "W">
+<!ENTITY filtMeBaby.label "Filter">
+<!ENTITY filtMeBaby.accesskey "r">
+
 <!ENTITY idxColumn.label "Index">
 <!ENTITY prefColumn.label "Preference Name">
 <!ENTITY lockColumn.label "Status">

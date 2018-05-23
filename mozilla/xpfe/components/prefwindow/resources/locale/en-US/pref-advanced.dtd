@@ -9,7 +9,7 @@
 
 <!ENTITY enbJavaCheck.label           "Enable Java">
 <!ENTITY enbJavaCheck.accesskey       "j">
-<!ENTITY enbJavaCheck.warning         "Due to known security issues with the classic Mac OS's Java RE, it is recommended only advanced users enable Java.">
+<!ENTITY enbJavaCheck.warning         "Due to known security issues with the classic Mac OS's Java RE, it is recommended only advanced users enable Java. You must also enable plugins in the Performance panel to use the MRJ Plugin.">
 
 <!ENTITY sendAddFtpCheck.label        "Send this email address as anonymous FTP password:">
 <!ENTITY sendAddFtpCheck.accesskey    "e">

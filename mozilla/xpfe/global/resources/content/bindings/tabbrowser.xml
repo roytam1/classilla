@@ -820,7 +820,7 @@
           <![CDATA[
             if (aTab.localName != "tab")
               aTab = this.mCurrentTab;
-
+              
             var l = this.mTabContainer.childNodes.length;
             if (l == 1) {
               // hide the tab bar
@@ -844,6 +844,20 @@
                 if (this.mTabContainer.childNodes[i] == aTab)
                   index = i;
             }
+
+            // Save it in our global pref for navigator.js to rescue it maybe. Classilla issue 109
+            var browser = this.getBrowserForTab(aTab);
+            var str = Components.classes["@mozilla.org/supports-string;1"]
+                        		.createInstance(Components.interfaces.nsISupportsString);
+
+            if (browser.currentURI && browser.currentURI.spec) {
+            	str.data = browser.currentURI.spec;
+            } else {
+            	str.data = "";
+            }
+            this.mPrefs.setComplexValue("classilla.lasttab", Components.interfaces.nsISupportsString, str);
+            // navigator.js will pick this up on the next sync.
+
 
             // Remove the tab's filter and progress listener.
             const filter = this.mTabFilters[index];

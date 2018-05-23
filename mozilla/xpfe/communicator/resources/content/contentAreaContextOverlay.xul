@@ -19,6 +19,9 @@
    - 
    - Contributor(s):
    -   Blake Ross <blakeross@telocity.com>
+   -
+   - Modified for Classilla by Cameron Kaiser
+   -
    -->
 <!DOCTYPE overlay SYSTEM "chrome://communicator/locale/contentAreaCommands.dtd" >
 <overlay id="contentAreaContextOverlay"
@@ -63,6 +66,10 @@
                 label="&openLinkCmdInTab.label;"
                 accesskey="&openLinkCmdInTab.accesskey;"
                 oncommand="gContextMenu.openLinkInTab();"/>
+      <menuitem id="context-openlinkinbtab"
+                label="&openLinkCmdInBTab.label;"
+                accesskey="&openLinkCmdInBTab.accesskey;"
+                oncommand="gContextMenu.openLinkInBTab();"/>
       <menuseparator id="context-sep-open"/>
       <menuitem id="context-bookmarklink"
                 label="&bookmarkLinkCmd.label;"

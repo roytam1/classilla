@@ -18,8 +18,8 @@
  * Rights Reserved.
  */
 
-const MOZ_HELP_URI = "chrome://help/content/help.xul";
-const MOZILLA_HELP = "chrome://help/locale/mozillahelp.rdf";
+var MOZ_HELP_URI = "chrome://help/content/help.xul";
+var MOZILLA_HELP = "chrome://help/locale/mozillahelp.rdf";
 var helpFileURI = MOZILLA_HELP;
 
 // Call this function to display a help topic.

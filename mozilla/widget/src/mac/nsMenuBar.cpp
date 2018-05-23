@@ -71,6 +71,7 @@
 
 #include "DefProcFakery.h"
 
+#include "nsMacControl.h"
 
 Handle       gMDEF = nsnull;
 nsWeakPtr    gMacMenubar;
@@ -810,14 +811,16 @@ MenuHelpers :: SetMenuItemText ( MenuHandle inMacMenuHandle, short inMenuItem, c
   // to hard code it to something reasonable and bigger fonts will just have to deal.
   const short kMaxItemPixelWidth = 300;
   
-	short themeFontID;
-	SInt16 themeFontSize;
-	Style themeFontStyle;
+  short themeFontID;
+  SInt16 themeFontSize;
+  Style themeFontStyle;
+  Str255 menuTitle;
+  OSErr err;
+  
   char* scriptRunText = ConvertToScriptRun ( inMenuString, inConverter, &themeFontID,
                                                &themeFontSize, &themeFontStyle );
   if ( scriptRunText ) {    
     // convert it to a pascal string
-    Str255 menuTitle;
     short scriptRunTextLength = strlen(scriptRunText);
     if (scriptRunTextLength > 255)
       scriptRunTextLength = 255;
@@ -826,12 +829,34 @@ MenuHelpers :: SetMenuItemText ( MenuHandle inMacMenuHandle, short inMenuItem, c
     
     // if the item text is too long, truncate it.
     ::TruncString ( kMaxItemPixelWidth, menuTitle, truncMiddle );
-	  ::SetMenuItemText(inMacMenuHandle, inMenuItem, menuTitle);
-	  OSErr err = ::SetMenuItemFontID(inMacMenuHandle, inMenuItem, themeFontID);	
+	::SetMenuItemText(inMacMenuHandle, inMenuItem, menuTitle);
+	err = ::SetMenuItemFontID(inMacMenuHandle, inMenuItem, themeFontID);	
 
   	nsMemory::Free(scriptRunText);
-  }
-  		
+  } else {
+  	// Problem converting/setting the menu item. This might happen if we did the
+  	// conversion already and we have incomplete script support. (Classilla issue 71)
+  	
+  	// Try converting using the file system charset. This is the nsMacWindow::SetTitle fallback
+  	// so it should work for us too.
+ 	nsMacControl::StringToStr255(inMenuString, menuTitle);
+ 	
+ 	// Truncate the string to the pixel width and install it in the menu.
+   	::TruncString ( kMaxItemPixelWidth, menuTitle, truncMiddle );
+  	::SetMenuItemText(inMacMenuHandle, inMenuItem, menuTitle);
+  	
+  	// Figure out our system font and use that. This doesn't always work (see qa issue 78983),
+  	// but works most of the time. (Also consider kThemeSmallSystemFont)
+	Str255 themeFontName;
+	SInt16 outFontSize;
+	Style outFontStyle;
+  	err = ::GetThemeFont(kThemeSystemFont, smSystemScript, themeFontName, &outFontSize, &outFontStyle);
+  	NS_ASSERTION(err==noErr,"nsMenu::NSStringSetMenuItemText: GetThemeFont failed.");
+  	if ( err ) { return; } // give up
+  	::GetFNum(themeFontName, &themeFontID);
+
+  	err = ::SetMenuItemFontID(inMacMenuHandle, inMenuItem, themeFontID);
+  }	
 } // SetMenuItemText
 
 

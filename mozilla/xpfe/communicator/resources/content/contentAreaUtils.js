@@ -102,7 +102,8 @@ function openNewWindowWith(url, sendReferrer)
   window.openDialog(getBrowserURL(), "_blank", "chrome,all,dialog=no", url, charsetArg, referrer);
 }
 
-function openNewTabWith(url, sendReferrer, reverseBackgroundPref) 
+// Modified for Classilla issue 76
+function openNewTabWith(url, sendReferrer, reverseBackgroundPref, forceBackground) 
 {
   var browser;
   try {
@@ -149,6 +150,8 @@ function openNewTabWith(url, sendReferrer, reverseBackgroundPref)
     var loadInBackground = pref.getBoolPref("browser.tabs.loadInBackground");
     if (reverseBackgroundPref)
       loadInBackground = !loadInBackground;
+    if (forceBackground)
+      loadInBackground = true;
 
     if (!loadInBackground)
       browser.selectedTab = tab;

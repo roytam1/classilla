@@ -18,6 +18,8 @@
 <!ENTITY tabCmd.label "Navigator Tab">
 <!ENTITY tabCmd.accesskey "T">
 <!ENTITY tabCmd.commandkey "t">
+<!ENTITY lastClosedTabCmd.label "Open Last Closed Tab">
+<!ENTITY lastClosedTabCmd.commandkey "T"> 
 <!ENTITY openCmd.label "Open Web Location...">
 <!ENTITY openCmd.accesskey "l">
 <!ENTITY openCmd.commandkey "l">
