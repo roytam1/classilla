@@ -1,0 +1,149 @@
+/*
+ * The contents of this file are subject to the Mozilla Public
+ * License Version 1.1 (the "License"); you may not use this file
+ * except in compliance with the License. You may obtain a copy of
+ * the License at http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS
+ * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * rights and limitations under the License.
+ *
+ * The Original Code is Mozilla JSIRC Library.
+ *
+ * The Initial Developer of the Original Code is New Dimensions Consulting,
+ * Inc. Portions created by New Dimensions Consulting, Inc. are
+ * Copyright (C) 1999 New Dimenstions Consulting, Inc. All
+ * Rights Reserved.
+ *
+ * Contributor(s):
+ *  Robert Ginda, rginda@ndcico.com, original author
+ * 
+ * Styles for UI, See output-default.css for output window styles
+ *
+ */
+
+@import url(chrome://communicator/skin/);
+
+window {
+
+    width: 640px;
+    height: 480px;
+
+}
+
+#menu-view-none {
+    display: none;
+}
+
+#tabpanels-contents-box {
+    margin: 3px;
+}
+
+#header-url:hover {
+    text-decoration: underline;
+}
+
+#outer-box {
+    margin: 5px;
+}
+
+#input-widget,
+#input-widget-multiline {
+    border: thin silver inset;
+}
+
+#button-multiline-expand {
+    list-style-image:url("chrome://chatzilla/skin/images/multiline-expand.png");
+}
+
+#button-multiline-contract {
+    list-style-image:url("chrome://chatzilla/skin/images/multiline-contract.png");
+}
+
+#button-input {
+    list-style-image:url("chrome://chatzilla/skin/images/input-send.png");
+}
+
+.highlight-menu-item:hover {
+    color: white !important;
+    background: darkslategrey !important;
+}
+
+.view-button {
+    color: black;
+}
+
+.view-button[state="current"] {
+    font-weight: bold;
+}
+
+.view-button[state="superfluous"] {
+    color: darkblue;
+}
+
+.view-button[state="activity"] {
+    color: darkgreen;
+}
+
+.view-button[state="attention"] {
+    color: red;
+}
+
+/* spaces after the 4th and 8th tab, so you can line them up with your Fn
+ * keys */
+.view-button[viewKey="4"],
+.view-button[viewKey="8"] {
+    margin-left: 5px;
+}
+
+.header-box, .usercount-data {
+    padding-top: 2px;
+    padding-bottom: 2px;
+    padding-right: 10px;
+}
+
+#server-nick {
+    padding-top: 5px;
+}
+
+.header-label {
+    font-weight: bold;
+    text-align: right;
+    margin-left: 10px;
+}
+
+.header-data {
+    text-align: left;
+    margin-left: 5px;
+}
+
+#channel-topic {
+    cursor: default;
+}
+
+#channel-topic[editable="true"] {
+    cursor: text;
+}
+
+.output-container {
+    border: thin silver inset;
+}
+
+/* op image column */
+treechildren:-moz-tree-image(usercol-op, state-true) {
+    list-style-image: url(chrome://chatzilla/skin/images/is-op.gif)
+}
+
+treechildren:-moz-tree-image(usercol-op, state-false) {
+    list-style-image: url(chrome://chatzilla/skin/images/isnt-op.gif)
+}
+
+/* voice image column */
+treechildren:-moz-tree-image(usercol-voice, state-true) {
+    list-style-image: url(chrome://chatzilla/skin/images/is-voice.gif)
+}
+
+treechildren:-moz-tree-image(usercol-voice, state-false) {
+    list-style-image: url(chrome://chatzilla/skin/images/isnt-voice.gif)
+}

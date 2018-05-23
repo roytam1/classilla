@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!DOCTYPE html [
+  <!ENTITY % htmlDTD
+    PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "DTD/xhtml1-strict.dtd">
+  %htmlDTD;
+  <!ENTITY % netErrorDTD
+       SYSTEM "chrome://global/locale/netError.dtd">
+  %netErrorDTD;
+]>
+
+<!--
+   The contents of this file are subject to the Netscape Public License
+   Version 1.0 (the "NPL"); you may not use this file except in
+   compliance with the NPL.  You may obtain a copy of the NPL at
+   http://www.mozilla.org/NPL/
+  
+   Software distributed under the NPL is distributed on an "AS IS" basis,
+   WITHOUT WARRANTY OF ANY KIND, either express or implied. See the NPL
+   for the specific language governing rights and limitations under the
+   NPL.
+  
+   The Initial Developer of this code under the NPL is Netscape
+   Communications Corporation.  Portions created by Netscape are
+   Copyright (C) 1998 Netscape Communications Corporation.  All Rights
+   Reserved.
+   
+   Contributor(s):
+     Adam Lock <adamlock@netscape.com>
+ -->
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+  <title>&loadError.label;</title>
+  <script src="chrome://global/content/netError.js"></script>
+  <style><![CDATA[
+    body {
+      font: message-box;
+    }
+    div.invisible {
+      display: none;
+    }
+    div.et_visible {
+      margin-top: 2em;
+      margin-bottom: 1em;
+      font-size: large;
+      text-align: left;
+      font-weight: bold;
+      color: #5D616E;
+    }
+    div#shortDesc {
+      width: 90%;
+      text-align: justify;
+      margin-left: 5%;
+      margin-right: 5%;
+    }
+    div#longDesc {
+      width: 90%;
+      text-align: justify;
+      margin-left: 5%;
+      margin-right: 5%;
+    }
+    div.ld_visible {
+      display: block;
+      background-color: #CEE0FF;
+    }
+  ]]></style>
+</head>
+
+<body style="font: message-box;" onload="fillIn();">
+
+  <!-- ERROR TITLE -->
+  <div id="errorTitle">
+    <div id="et_malformedURI" class="invisible">
+      <p>&malformedURI.title;</p>
+    </div>
+    <div id="et_fileNotFound" class="invisible">
+      <p>&fileNotFound.title;</p>
+    </div>
+    <div id="et_dnsNotFound" class="invisible">
+      <p>&dnsNotFound.title;</p>
+    </div>
+    <div id="et_protocolNotFound" class="invisible">
+      <p>&protocolNotFound.title;</p>
+    </div>
+    <div id="et_connectionFailure" class="invisible">
+      <p>&connectionFailure.title;</p>
+    </div>
+    <div id="et_netTimeout" class="invisible">
+      <p>&netTimeout.title;</p>
+    </div>
+    <div id="et_redirectLoop" class="invisible">
+      <p>&redirectLoop.title;</p>
+    </div>
+    <div id="et_unknownSocketType" class="invisible">
+      <p>&unknownSocketType.title;</p>
+    </div>
+    <div id="et_netReset" class="invisible">
+      <p>&netReset.title;</p>
+    </div>
+    <div id="et_netOffline" class="invisible">
+      <p>&netOffline.title;</p>
+    </div>
+  </div>
+
+  <!-- SHORT DESCRIPTION -->
+  <div id="shortDesc">
+    <p id="sd"> </p>
+  </div>
+
+  <!-- LONG DESCRIPTION -->
+  <div id="longDesc">
+    <div id="ld_malformedURI" class="invisible">
+      <p>&malformedURI.longDesc;</p>
+    </div>
+    <div id="ld_fileNotFound" class="invisible">
+      <p>&fileNotFound.longDesc;</p>
+    </div>
+    <div id="ld_dnsNotFound" class="invisible">
+      <p>&dnsNotFound.longDesc;</p>
+    </div>
+    <div id="ld_protocolNotFound" class="invisible">
+      <p>&protocolNotFound.longDesc;</p>
+    </div>
+    <div id="ld_connectionFailure" class="invisible">
+      <p>&connectionFailure.longDesc;</p>
+    </div>
+    <div id="ld_netTimeout" class="invisible">
+      <p>&netTimeout.longDesc;</p>
+    </div>
+    <div id="ld_redirectLoop" class="invisible">
+      <p>&redirectLoop.longDesc;</p>
+    </div>
+    <div id="ld_unknownSocketType" class="invisible">
+      <p>&unknownSocketType.longDesc;</p>
+    </div>
+    <div id="ld_netReset" class="invisible">
+      <p>&netReset.longDesc;</p>
+    </div>
+    <div id="ld_netOffline" class="invisible">
+      <p>&netOffline.longDesc;</p>
+    </div>
+  </div>
+
+  <p><a id="retry" href="#" onclick="retryThis();">&retry.label;</a></p>
+</body>
+
+</html>

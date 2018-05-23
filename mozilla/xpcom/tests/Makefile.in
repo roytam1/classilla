@@ -1,0 +1,92 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE		= xpcom
+DIRS		= dynamic services
+ifeq ($(OS_ARCH),WINNT)
+DIRS		+= windows
+endif
+
+REQUIRES	= \
+		  string \
+		  $(NULL)
+
+CPPSRCS		= \
+		nsIFileEnumerator.cpp \
+		nsIFileTest.cpp \
+		TestArray.cpp \
+		TestAtoms.cpp \
+		TestAutoLock.cpp \
+		TestCallTemplates.cpp \
+		TestCOMPtr.cpp \
+		TestCOMPtrEq.cpp \
+		TestCRT.cpp \
+		TestFactory.cpp \
+		TestID.cpp \
+		TestObserverService.cpp \
+		TestPermanentAtoms.cpp \
+		TestPipes.cpp \
+		TestServMgr.cpp \
+		TestThreads.cpp \
+		TestXPIDLString.cpp \
+		TestDeque.cpp \
+		$(NULL)
+
+#CPPSRCS		+= TimerTest.cpp
+
+SIMPLE_PROGRAMS	= $(CPPSRCS:.cpp=$(BIN_SUFFIX))
+
+include $(topsrcdir)/config/config.mk
+
+LIBS		+= \
+		$(XPCOM_LIBS) \
+		$(NSPR_LIBS) \
+		$(NULL)
+
+# Needed to resolve __yylex (?)
+ifeq ($(OS_ARCH)$(OS_RELEASE),FreeBSD2)
+LIBS		+= -lpcap
+endif
+
+include $(topsrcdir)/config/rules.mk
+
+LOCAL_INCLUDES	= \
+                -I$(srcdir)/../ds \
+		-I$(srcdir)/services \
+		$(NULL)
+
+ifeq ($(OS_ARCH),WINNT)
+CXXFLAGS	+= -GX
+endif
+
+libs::
+	$(INSTALL) $(srcdir)/test.properties $(DIST)/bin/res
+
+install::
+	$(SYSINSTALL) $(IFLAGS1) $(srcdir)/test.properties $(DESTDIR)$(mozappdir)/res
+

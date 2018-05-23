@@ -1,0 +1,108 @@
+<?xml version="1.0"?> 
+
+<!-- 
+  The contents of this file are subject to the Netscape Public
+  License Version 1.1 (the "License"); you may not use this file
+  except in compliance with the License. You may obtain a copy of
+  the License at http://www.mozilla.org/NPL/
+  
+  Software distributed under the License is distributed on an "AS
+  IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+  implied. See the License for the specific language governing
+  rights and limitations under the License.
+  
+  The Original Code is Mozilla Communicator client code, released
+  March 31, 1998.
+  
+  The Initial Developer of the Original Code is Netscape
+  Communications Corporation. Portions created by Netscape are
+  Copyright (C) 1998-1999 Netscape Communications Corporation. All
+  Rights Reserved.
+  
+  Contributor(s):
+    Bill Law    <law@netscape.com>
+
+-->
+
+<?xml-stylesheet href="chrome://global/skin/" type="text/css"?>
+
+<!DOCTYPE dialog [
+  <!ENTITY % brandDTD SYSTEM "chrome://global/locale/brand.dtd" >
+  %brandDTD;
+  <!ENTITY % nsHelperAppDlgDTD SYSTEM "chrome://global/locale/nsHelperAppDlg.dtd" >
+  %nsHelperAppDlgDTD;
+]>            
+
+<dialog id="nsHelperAppDlg"
+        xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+        title="&caption.label;"
+        onload="dialog.initDialog()"
+        onunload="if (dialog) dialog.onCancel()"
+        style="width: 40em;"
+        ondialogaccept="return dialog.onOK()"
+        ondialogcancel="return dialog.onCancel()">
+            
+    <vbox>
+        <hbox>
+            <vbox flex="1">
+                <description id="intro">&intro.label;</description>
+                <description id="location" crop="center" value=""/>
+                <separator orient="horizontal" class="thin"/>
+                <description id="prompt">&prompt.label;</description>
+            </vbox>
+            <vbox>
+                <image id="contentTypeImage"/>
+            </vbox>
+        </hbox>
+        
+        <separator orient="horizontal" class="thin"/>
+        
+        <radiogroup id="mode" oncommand="dialog.toggleChoice()" align="stretch">
+            <hbox>
+	        <!-- XXX Wallpaper over incremental reflow bug in XUL by giving
+                         ourselves more space... In fact, all this business
+                         with the hboxes is wallpaper. -->
+                <radio id="useSystemDefault"
+                       flex="7"
+                       label="&useSystemDefault.noDesc.label;"
+                       accesskey="&useSystemDefault.accesskey;"/>
+                <spacer flex="3"/>
+            </hbox>
+            <hbox align="center">
+                <radio id="openUsing"
+                       label="&openUsing.label;"
+                       accesskey="&openUsing.accesskey;"/>
+                <textbox id="appPath"
+                         flex="1"
+                         oninput="dialog.updateOKButton()"
+                         onfocus="this.select()"/>
+                <button id="chooseApp"
+                        label="&chooseApp.label;"
+                        accesskey="&chooseApp.accesskey;"
+                        oncommand="dialog.chooseApp()"/>
+            </hbox>
+            <hbox>
+                <radio id="saveToDisk"
+                       label="&saveToDisk.label;"
+                       accesskey="&saveToDisk.accesskey;"/>
+                <spacer flex="1"/>
+            </hbox>
+        </radiogroup>
+        
+        <separator orient="horizontal" class="thin"/>
+
+        <checkbox id="alwaysAskMe" label="&alwaysAsk.label;" accesskey="&alwaysAsk.accesskey;"/>
+
+        <separator class="groove"/>
+    </vbox>
+
+    <!-- Localizable strings (from .dtd) -->
+    <strings style="display:none;">
+        <string id="brandShortName">         &brandShortName;         </string>
+        <string id="intro.withDesc">         &intro.label;            </string>
+        <string id="intro.noDesc">           &intro.noDesc.label;     </string>
+        <string id="defaultApp">             &useSystemDefault.label; </string>
+        <string id="badApp">                 &badApp;                 </string>
+        <string id="badApp.title">           &badApp.title;           </string>
+    </strings>
+</dialog>

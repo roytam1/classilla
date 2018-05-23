@@ -1,0 +1,88 @@
+<?xml version="1.0"?> 
+<!-- 
+   - The contents of this file are subject to the Mozilla Public
+   - License Version 1.1 (the "License"); you may not use this file
+   - except in compliance with the License. You may obtain a copy of
+   - the License at http://www.mozilla.org/MPL/
+   - 
+   - Software distributed under the License is distributed on an "AS
+   - IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+   - implied. See the License for the specific language governing
+   - rights and limitations under the License.
+   - 
+   - The Original Code is mozilla.org code.
+   - 
+   - The Initial Developer of the Original Code is Netscape
+   - Communications Corp.  Portions created by Netscape are
+   - Copyright (C) 2001 Netscape Communications Corp.  All
+   - Rights Reserved.
+   - 
+   - Contributor(s):
+   -   Bob Lord <lord@netscape.com>
+   -   Terry Hayes <thayes@netscape.com>
+  -->
+
+<?xml-stylesheet href="chrome://communicator/skin/" type="text/css"?>
+
+<!DOCTYPE page [
+  <!ENTITY % brandDTD SYSTEM "chrome://global/locale/brand.dtd">
+  <!ENTITY % prefSslDTD SYSTEM "chrome://pippki/locale/pref-ssl.dtd">
+  %brandDTD;
+  %prefSslDTD;
+]>
+
+<page xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+      onload="parent.initPanel('chrome://pippki/content/pref-ssl.xul');"
+      headertitle="&prefheader.title;">
+
+  <!-- List elements to manage for prefs -->
+  <script type="application/x-javascript">
+  <![CDATA[
+    var _elementIDs = ["enableSSL2", "enableSSL3", "enableTLS", 
+        "warnEnteringSecure", "warnEnteringWeak", 
+        "warnLeavingSecure", "warnInsecurePost",
+        "warnViewMixed" ];
+  ]]>
+  </script>
+            
+  <groupbox orient="horizontal">
+    <caption label="&SSLProtocolVersions;"/>
+
+    <!-- Prefs -->
+    <vbox flex="1" align="start">
+      <checkbox id="enableSSL2" label="&enable.ssl2;"
+                prefstring="security.enable_ssl2"/>
+      <checkbox id="enableSSL3" label="&enable.ssl3;"
+                prefstring="security.enable_ssl3"/>
+      <checkbox id="enableTLS" label="&enable.tls;"
+                prefstring="security.enable_tls"/>
+    </vbox>
+
+    <vbox halign="right">
+      <button label="&edit.sslciphers;"
+              oncommand="window.openDialog('chrome://pippki/content/pref-ciphers.xul', '',
+                             'modal=yes,resizable,chrome');"
+              id="editSSLCiphersButton"
+              prefstring="security.disable_button.editSSLCiphers"/>
+    </vbox>
+
+  </groupbox>
+
+  <groupbox align="start">
+    <caption label="&SSLWarnings;"/>
+    <description>&warn.description;</description>
+    <!-- Prefs -->
+    <checkbox id="warnEnteringSecure" label="&warn.enteringsecure;"
+              prefstring="security.warn_entering_secure"/>
+    <checkbox id="warnEnteringWeak" label="&warn.enteringweak;"
+              prefstring="security.warn_entering_weak"/>
+    <checkbox id="warnLeavingSecure" label="&warn.leavingsecure;"
+              prefstring="security.warn_leaving_secure"/>
+    <checkbox id="warnInsecurePost" label="&warn.insecurepost;"
+              prefstring="security.warn_submit_insecure"/>
+    <checkbox id="warnViewMixed" label="&warn.viewmixed;"
+              prefstring="security.warn_viewing_mixed"
+              checked="true"/>
+  </groupbox>
+
+</page>

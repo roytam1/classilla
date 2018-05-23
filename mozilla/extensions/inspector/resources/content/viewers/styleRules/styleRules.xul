@@ -1,0 +1,76 @@
+<?xml version="1.0"?>
+
+<!DOCTYPE overlay [
+  <!ENTITY % dtd1 SYSTEM "chrome://inspector/locale/inspector.dtd"> %dtd1;
+  <!ENTITY % dtd2 SYSTEM "chrome://inspector/content/util.dtd"> %dtd2;
+  <!ENTITY % dtd3 SYSTEM "chrome://inspector/locale/viewers/styleRules.dtd"> %dtd3;
+]>
+
+<?xml-stylesheet href="chrome://inspector/skin/viewers/styleRules/styleRules.css"?>
+
+<page id="winStyleRules"
+      xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+  
+  <!--============================= SCRIPTS ============================= -->
+
+  <script type="application/x-javascript" src="chrome://inspector/content/jsutil/xul/inBaseTreeView.js"/>
+  <script type="application/x-javascript" src="chrome://inspector/content/viewers/styleRules/styleRules.js"/>
+
+  <script type="application/x-javascript" src="chrome://inspector/content/utils.js"/>
+  <script type="application/x-javascript" src="chrome://inspector/content/jsutil/xpcom/XPCU.js"/>
+  <script type="application/x-javascript" src="chrome://inspector/content/jsutil/rdf/RDFU.js"/>
+  <script type="application/x-javascript" src="chrome://inspector/content/jsutil/events/ObserverManager.js"/>
+
+  <!--============================= POPUPS ============================== -->
+
+  <popupset id="psPopups">
+    <popup id="ppStyleRuleContext" onpopupshowing="return viewer.onpopupshowingRulePopup()">
+      <menuitem label="New" oncommand="viewer.cmdNewRule()"/>
+      <menuitem label="Delete" oncommand="viewer.cmdDeleteSelectedRule()"/>
+      <menuitem label="Disable" oncommand="viewer.cmdToggleSelectedRule()"/>
+      <menuseparator/>
+      <menuitem label="Open File in Editor" oncommand="viewer.cmdOpenSelectedFileInEditor()"/>
+    </popup>
+
+    <popup id="ppStylePropsContext">
+      <menuitem label="New Property" oncommand="viewer.cmdNewProperty()"/>
+      <menuitem label="Edit" oncommand="viewer.cmdEditSelectedProperty()"/>
+      <menuitem label="Delete" oncommand="viewer.cmdDeleteSelectedProperty()"/>
+      <menuseparator/>
+      <menuitem label="Toggle !important" oncommand="viewer.cmdToggleSelectedImportant()"/>
+    </popup>
+  </popupset>
+
+  <!--============================= CONTENT ============================== -->
+
+  <tree id="olStyleRules" class="plain" flex="1" persist="height"
+            onselect="viewer.onRuleSelect()">
+    <treecols>
+      <treecol id="olcRule" label="Rule" flex="1"/>
+      <splitter class="tree-splitter"/>
+      <treecol id="olcFileURL" label="File" flex="1"/>
+      <splitter class="tree-splitter"/>
+      <treecol id="olcWeight" label="Weight"/>
+      <splitter class="tree-splitter"/>
+      <treecol id="olcLine" label="Line"/>
+    </treecols>
+    <treechildren id="olbStyleRules"/>
+  </tree>
+  
+  <splitter id="splTrees" collapse="after" persist="state">
+    <grippy/>
+  </splitter>
+
+  <tree id="olStyleProps" class="plain" flex="1" persist="height"
+            context="ppStylePropsContext">
+    <treecols>
+      <treecol id="olcPropPriority" label="Priority" class="treecol-image"/>
+      <splitter class="tree-splitter"/>
+      <treecol id="olcPropName" label="Style" flex="1"/>
+      <splitter class="tree-splitter"/>
+      <treecol id="olcPropValue" label="Value" flex="1"/>
+    </treecols>
+    <treechildren id="olbStyleProps"/>
+  </tree>
+
+</page>

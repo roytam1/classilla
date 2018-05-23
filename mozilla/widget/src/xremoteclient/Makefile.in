@@ -1,0 +1,71 @@
+# 
+# The contents of this file are subject to the Mozilla Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/MPL/
+# 
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+# 
+# The Original Code is mozilla.org code.
+# 
+# The Initial Developer of the Original Code is Christopher Blizzard.
+# Portions created by Christopher Blizzard are Copyright (C)
+# Christopher Blizzard.  All Rights Reserved.
+# 
+# Contributor(s):
+# 
+
+DEPTH		= ../../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE		= widget
+LIBRARY_NAME	= xremote_client
+EXPORT_LIBRARY = 1
+IS_COMPONENT	= 1
+MODULE_NAME	= XRemoteClientModule
+REQUIRES	= xpcom \
+		  string \
+		  $(NULL)
+
+CPPSRCS		= \
+		XRemoteClient.cpp \
+		XRemoteClientFactory.cpp \
+		$(NULL)
+
+EXTRA_DSO_LDOPTS = \
+		$(XLIBS) $(XLDFLAGS)  \
+		$(MOZ_COMPONENT_LIBS) \
+		$(NULL)
+
+EXPORTS		= \
+		nsXRemoteClientCID.h
+
+PROGRAM         = mozilla-xremote-client$(BIN_SUFFIX)
+
+PROGOBJS        = mozilla-xremote-client.$(OBJ_SUFFIX) \
+		XRemoteClient_standalone.$(OBJ_SUFFIX) \
+		$(NULL)
+
+LIBS            = \
+		$(NSPR_LIBS) \
+		$(XLDFLAGS) $(XLIBS)
+
+include $(topsrcdir)/config/rules.mk
+
+ifeq ($(OS_ARCH), Linux)
+DEFINES         += -D_BSD_SOURCE
+endif
+
+ifeq ($(OS_ARCH), OpenVMS)
+DEFINES		+= -DGENERIC_MOTIF_REDEFINES
+endif
+
+XRemoteClient_standalone.$(OBJ_SUFFIX): XRemoteClient.cpp
+	$(CXX) $(OUTOPTION)$@ -c $(COMPILE_CXXFLAGS) -DXREMOTE_STANDALONE $<

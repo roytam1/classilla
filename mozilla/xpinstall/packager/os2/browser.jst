@@ -1,0 +1,144 @@
+function upgradeCleanup()
+{
+  // Obsolete files and generated files that
+  // need to be cleaned up.
+  deleteThisFile("Components", "ucvja.dll");
+  deleteThisFile("Components", "ucvko.dll");
+  deleteThisFile("Components", "ucvtw.dll");
+  deleteThisFile("Components", "ucvtw2.dll");
+  deleteThisFile("Components", "ucvlatin.dll");
+  deleteThisFile("Components", "ucvcn.dll");
+  deleteThisFile("Components", "ucvibm.dll");
+  deleteThisFile("Components", "txtsvc.dll");
+  deleteThisFile("Components", "gfx2.dll");
+  deleteThisFile("Components", "gfx2.xpt");
+  deleteThisFile("Components", "ucharuti.dll");
+  deleteThisFile("Components", "chardet.dll");
+  deleteThisFile("Components", "lwbrk.dll");
+  deleteThisFile("Components", "nslocale.dll");
+  deleteThisFile("Components", "strres.dll");
+  deleteThisFile("Components", "imggif.dll");
+  deleteThisFile("Components", "imgjpeg.dll");
+  deleteThisFile("Components", "imgpng.dll");
+  deleteThisFile("Components", "imgbmp.dll");
+  deleteThisFile("Components", "imgxbm.dll");
+  deleteThisFile("Components", "imgppm.dll");
+  deleteThisFile("Components", "nkcache.dll");
+  deleteThisFile("Components", "mozbrwsr.dll");
+  deleteThisFile("Components", "jsloader.dll");
+  deleteThisFile("Components", "gkcontnt.dll");
+  deleteThisFile("Chrome",     "chrome.rdf");
+  deleteThisFolder("Chrome",   "overlayinfo");
+  deleteThisFile("Components", "gkhtml.dll");
+}
+
+// main
+var srDest;
+var err;
+var fProgram;
+
+srDest = $SpaceRequired$:bin;
+err    = initInstall("$ProductName$", "Browser", "$Version$"); 
+logComment("initInstall: " + err);
+
+fProgram  = getFolder("Program");
+logComment("fProgram: " + fProgram);
+
+if(verifyDiskSpace(fProgram, srDest))
+{
+  setPackageFolder(fProgram);
+
+  upgradeCleanup();
+  err = addDirectory("",
+                     "$Version$",
+                     "bin",              // dir name in jar to extract 
+                     fProgram,           // Where to put this file (Returned from GetFolder) 
+                     "",                 // subdir name to create relative to fProgram
+                     true);              // Force Flag 
+  logComment("addDirectory() of Program returned: " + err);
+
+  // check return value
+  if( err == SUCCESS )
+  {
+    // register chrome
+    registerChrome(CONTENT | DELAYED_CHROME, getFolder("Chrome","toolkit.jar"),"content/global-platform/");
+    registerChrome(CONTENT | DELAYED_CHROME, getFolder("Chrome","comm.jar"),"content/communicator-platform/");
+    registerChrome(CONTENT | DELAYED_CHROME, getFolder("Chrome","comm.jar"),"content/navigator-platform/");
+
+    registerChrome(CONTENT | DELAYED_CHROME, getFolder("Chrome","toolkit.jar"),"content/global/");
+    registerChrome(CONTENT | DELAYED_CHROME, getFolder("Chrome","toolkit.jar"),"content/global-region/");
+    registerChrome(CONTENT | DELAYED_CHROME, getFolder("Chrome","comm.jar"),"content/autoconfig/");
+    registerChrome(CONTENT | DELAYED_CHROME, getFolder("Chrome","comm.jar"),"content/cookie/");
+    registerChrome(CONTENT | DELAYED_CHROME, getFolder("Chrome","comm.jar"),"content/wallet/");
+    registerChrome(CONTENT | DELAYED_CHROME, getFolder("Chrome","content-packs.jar"), "content/content-packs/");
+    registerChrome(CONTENT | DELAYED_CHROME, getFolder("Chrome","comm.jar"),"content/communicator/");
+    registerChrome(CONTENT | DELAYED_CHROME, getFolder("Chrome","comm.jar"),"content/communicator-region/");
+    registerChrome(CONTENT | DELAYED_CHROME, getFolder("Chrome","comm.jar"),"content/editor/");
+    registerChrome(CONTENT | DELAYED_CHROME, getFolder("Chrome","comm.jar"),"content/editor-region/");
+    registerChrome(CONTENT | DELAYED_CHROME, getFolder("Chrome","comm.jar"),"content/navigator/");
+    registerChrome(CONTENT | DELAYED_CHROME, getFolder("Chrome","comm.jar"),"content/navigator-region/");
+    registerChrome(CONTENT | DELAYED_CHROME, getFolder("Chrome","comm.jar"),"content/necko/");
+    registerChrome(CONTENT | DELAYED_CHROME, getFolder("Chrome","comm.jar"),"content/mozldap/");
+    registerChrome(SKIN | DELAYED_CHROME, getFolder("Chrome","classic.jar"),"skin/classic/communicator/");
+    registerChrome(SKIN | DELAYED_CHROME, getFolder("Chrome","classic.jar"),"skin/classic/editor/");
+    registerChrome(SKIN | DELAYED_CHROME, getFolder("Chrome","classic.jar"),"skin/classic/global/");
+    registerChrome(SKIN | DELAYED_CHROME, getFolder("Chrome","classic.jar"),"skin/classic/messenger/");
+    registerChrome(SKIN | DELAYED_CHROME, getFolder("Chrome","classic.jar"),"skin/classic/navigator/");
+    registerChrome(SKIN | DELAYED_CHROME, getFolder("Chrome","modern.jar"),"skin/modern/communicator/");
+    registerChrome(SKIN | DELAYED_CHROME, getFolder("Chrome","modern.jar"),"skin/modern/editor/");
+    registerChrome(SKIN | DELAYED_CHROME, getFolder("Chrome","modern.jar"),"skin/modern/global/");
+    registerChrome(SKIN | DELAYED_CHROME, getFolder("Chrome","modern.jar"),"skin/modern/messenger/");
+    registerChrome(SKIN | DELAYED_CHROME, getFolder("Chrome","modern.jar"),"skin/modern/navigator/");
+    registerChrome(CONTENT | DELAYED_CHROME, getFolder("Chrome","help.jar"),"content/help/");
+    registerChrome(CONTENT | DELAYED_CHROME, getFolder("Chrome","comm.jar"),"content/xbl-marquee/");
+
+    /* Log files that are created after the installer is done, so they can be uninstalled */
+    logComment("Installing: "    + fProgram + ".autoreg");
+    logComment("Installing: "    + fProgram + "Xpcs Registry.dat");
+    logComment("Installing: "    + fProgram + "xpcom.log");
+    logComment("Create Folder: " + fProgram + "components");
+    logComment("Installing: "    + fProgram + "components\\xpti.dat");
+    logComment("Installing: "    + fProgram + "components\\xptitemp.dat");
+    logComment("Installing: "    + fProgram + "components\\compreg.dat");
+    logComment("Create Folder: " + fProgram + "chrome");
+    logComment("Installing: "    + fProgram + "chrome\\installed-chrome.txt");
+    logComment("Installing: "    + fProgram + "chrome\\chrome.rdf");
+    logComment("Create Folder: " + fProgram + "chrome\\overlayinfo");
+    logComment("Create Folder: " + fProgram + "chrome\\overlayinfo\\cookie");
+    logComment("Create Folder: " + fProgram + "chrome\\overlayinfo\\cookie\\content");
+    logComment("Installing: "    + fProgram + "chrome\\overlayinfo\\cookie\\content\\overlays.rdf");
+    logComment("Create Folder: " + fProgram + "chrome\\overlayinfo\\inspector");
+    logComment("Create Folder: " + fProgram + "chrome\\overlayinfo\\inspector\\content");
+    logComment("Installing: "    + fProgram + "chrome\\overlayinfo\\inspector\\content\\overlays.rdf");
+    logComment("Create Folder: " + fProgram + "chrome\\overlayinfo\\communicator");
+    logComment("Create Folder: " + fProgram + "chrome\\overlayinfo\\communicator\\content");
+    logComment("Installing: "    + fProgram + "chrome\\overlayinfo\\communicator\\content\\overlays.rdf");
+    logComment("Create Folder: " + fProgram + "chrome\\overlayinfo\\editor");
+    logComment("Create Folder: " + fProgram + "chrome\\overlayinfo\\editor\\content");
+    logComment("Installing: "    + fProgram + "chrome\\overlayinfo\\editor\\content\\overlays.rdf");
+    logComment("Create Folder: " + fProgram + "chrome\\overlayinfo\\messenger");
+    logComment("Create Folder: " + fProgram + "chrome\\overlayinfo\\messenger\\content");
+    logComment("Installing: "    + fProgram + "chrome\\overlayinfo\\messenger\\content\\overlays.rdf");
+    logComment("Create Folder: " + fProgram + "chrome\\overlayinfo\\navigator");
+    logComment("Create Folder: " + fProgram + "chrome\\overlayinfo\\navigator\\content");
+    logComment("Installing: "    + fProgram + "chrome\\overlayinfo\\navigator\\content\\overlays.rdf");
+    logComment("Create Folder: " + fProgram + "chrome\\overlayinfo\\navigator\\skin");
+    logComment("Installing: "    + fProgram + "chrome\\overlayinfo\\navigator\\skin\\stylesheets.rdf");
+
+    err = getLastError();
+    if (err == SUCCESS)
+    {
+      err = performInstall();
+      logComment("performInstall() returned: " + err);
+    }
+    else
+      cancelInstall(err);
+  }
+  else
+    cancelInstall(err);
+}
+else
+  cancelInstall(INSUFFICIENT_DISK_SPACE);
+
+
+// end main

@@ -1,0 +1,116 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE		= msgbaseutil
+LIBRARY_NAME	= msgbaseutil
+META_COMPONENT = mail
+EXPORT_LIBRARY = 1
+SHORT_LIBNAME	= msgbsutl
+REQUIRES	= xpcom \
+		  string \
+		  msgbase \
+		  rdf \
+		  necko \
+		  msgdb \
+		  intl \
+		  mork \
+		  mailnews \
+		  locale \
+		  pref \
+		  rdfutil \
+		  mime \
+		  msgcompose \
+      addrbook \
+		  docshell \
+		  webshell \
+		  uriloader \
+		  appshell \
+		  msgimap \
+		  msglocal \
+		  msgnews \
+		  txmgr \
+		  uconv \
+		  unicharutil \
+		  nkcache \
+		  mimetype \
+		  windowwatcher \
+		  $(NULL)
+
+CPPSRCS		= \
+		nsMsgGroupRecord.cpp \
+		nsMsgLineBuffer.cpp \
+		nsMsgFolder.cpp \
+		nsMsgDBFolder.cpp \
+		nsUint8Array.cpp \
+		nsUInt32Array.cpp \
+		nsMsgKeySet.cpp \
+		nsMsgKeyArray.cpp \
+		nsLocalFolderSummarySpec.cpp \
+		nsNewsSummarySpec.cpp \
+		nsMsgIdentity.cpp \
+		nsMsgIncomingServer.cpp \
+		nsMsgUtils.cpp \
+		nsMsgProtocol.cpp \
+		nsMsgMailNewsUrl.cpp \
+		nsMsgTxn.cpp \
+		nsMsgI18N.cpp \
+		nsMsgUtf7Utils.cpp \
+		$(NULL)
+
+EXPORTS		= \
+		nsMsgGroupRecord.h \
+		nsMsgLineBuffer.h \
+		nsUint8Array.h \
+		nsUInt32Array.h \
+		nsMsgKeySet.h \
+		nsMsgKeyArray.h \
+		nsMsgFolder.h \
+		nsMsgDBFolder.h \
+		nsLocalFolderSummarySpec.h \
+		nsNewsSummarySpec.h \
+		nsMsgIdentity.h \
+		nsMsgIncomingServer.h \
+		nsMsgUtils.h \
+		nsMsgProtocol.h \
+		nsMsgMailNewsUrl.h \
+		nsMsgTxn.h \
+		nsMsgI18N.h \
+		nsMsgUtf7Utils.h \
+		$(NULL)
+
+EXTRA_DSO_LDOPTS = \
+	$(LIBS_DIR) \
+	$(DIST)/lib/$(LIB_PREFIX)rdfutil_s.$(LIB_SUFFIX) \
+	$(MOZ_UNICHARUTIL_LIBS) \
+	$(MOZ_COMPONENT_LIBS) \
+	$(NULL)
+
+DEFINES		+= -D_IMPL_NS_MSG_BASE
+
+include $(topsrcdir)/config/rules.mk
+

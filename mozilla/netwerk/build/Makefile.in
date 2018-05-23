@@ -1,0 +1,105 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE		= necko
+LIBRARY_NAME	= necko
+EXPORT_LIBRARY = 1
+IS_COMPONENT	= 1
+MODULE_NAME	= necko_core_and_primary_protocols
+GRE_MODULE	= 1
+
+REQUIRES	= xpcom \
+		  string \
+		  nkcache \
+		  pref \
+		  mimetype \
+		  util \
+		  jar \
+		  locale \
+		  intl \
+		  uconv \
+		  unicharutil \
+		  caps \
+		  $(ZLIB_REQUIRES) \
+		  $(NULL)
+
+CPPSRCS		= nsNetModule.cpp
+EXPORTS		= nsNetCID.h
+
+SHARED_LIBRARY_LIBS = \
+		$(DIST)/lib/$(LIB_PREFIX)neckobase_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)neckodns_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)neckosocket_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)nkconv_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)nkcnvts_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)nkmime_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)nkhttp_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)nkfile_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)nkftp_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)nkjar_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)nkres_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)nkabout_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)nkcache_s.$(LIB_SUFFIX) \
+		$(NULL)
+
+LOCAL_INCLUDES	= \
+		-I$(srcdir)/../base/src \
+		-I$(srcdir)/../dns/src \
+		-I$(srcdir)/../socket/base \
+		-I$(srcdir)/../streamconv/src \
+		-I$(srcdir)/../streamconv/converters \
+		-I$(srcdir)/../mime/src \
+		-I$(srcdir)/../cache/src \
+		-I$(srcdir)/../protocol/http/src \
+		-I$(srcdir)/../protocol/file/src \
+		-I$(srcdir)/../protocol/ftp/src \
+		-I$(srcdir)/../protocol/jar/src \
+		-I$(srcdir)/../protocol/res/src \
+		-I$(srcdir)/../protocol/about/src \
+		$(NULL)
+
+ifdef MOZ_PERF_METRICS
+EXTRA_DSO_LIBS	+= mozutil_s
+endif
+
+EXTRA_DSO_LDOPTS = \
+		$(LIBS_DIR) \
+		$(EXTRA_DSO_LIBS) \
+		$(MOZ_UNICHARUTIL_LIBS) \
+		$(MOZ_COMPONENT_LIBS) \
+		$(ZLIB_LIBS) \
+		$(NULL)
+
+ifneq (,$(filter mac cocoa,$(MOZ_WIDGET_TOOLKIT)))
+EXTRA_DSO_LDOPTS += \
+		$(TK_LIBS) \
+	$(NULL)
+endif
+
+include $(topsrcdir)/config/rules.mk
+

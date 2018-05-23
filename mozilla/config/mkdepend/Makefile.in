@@ -1,0 +1,61 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+# undefine (as best we can, thanks gmake!) so we don't need build_number
+MOZILLA_OFFICIAL =
+BUILD_OFFICIAL   =
+MODULE		 = mkdepend
+HOST_PROGRAM	 = mkdepend$(BIN_SUFFIX)
+ifdef GNU_CC
+MODULE_OPTIMIZE_FLAGS = -O3
+else
+ifeq ($(OS_ARCH),SunOS)
+MODULE_OPTIMIZE_FLAGS = -fast
+endif
+endif
+
+HOST_CSRCS	= \
+		cppsetup.c \
+		ifparser.c \
+		include.c \
+		main.c \
+		parse.c \
+		pr.c \
+		$(NULL)
+
+include $(topsrcdir)/config/rules.mk
+
+HOST_CFLAGS	+= -DINCLUDEDIR=\"/usr/include\" -DOBJSUFFIX=\".$(OBJ_SUFFIX)\"
+
+ifdef GNU_CC
+_GCCDIR		= $(shell $(CC) -print-file-name=include)
+HOST_CFLAGS	+= -DPREINCDIR=\"$(_GCCDIR)\"
+endif
+
+export:: $(HOST_PROGRAM)
+

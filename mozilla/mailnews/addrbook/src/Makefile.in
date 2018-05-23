@@ -1,0 +1,169 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE		= addrbook
+LIBRARY_NAME	= addrbook_s
+META_COMPONENT = mail
+REQUIRES	= xpcom \
+		  string \
+		  rdf \
+		  rdfutil \
+		  appshell \
+		  dom \
+		  layout \
+		  content \
+		  widget \
+		  mork \
+		  docshell \
+		  pref \
+		  necko \
+		  locale \
+		  unicharutil \
+		  uconv \
+		  msgbase \
+		  msgbaseutil \
+		  mime \
+		  appcomps \
+		  intl \
+		  import \
+		  $(NULL)
+
+CPPSRCS		= \
+		nsAddressBook.cpp \
+		nsAddrBookSession.cpp \
+		nsAbRDFDataSource.cpp \
+		nsDirectoryDataSource.cpp \
+		nsAbCardProperty.cpp \
+		nsDirPrefs.cpp \
+		nsAddrDatabase.cpp \
+		nsAbDirProperty.cpp \
+		nsAbAutoCompleteSession.cpp \
+		nsAbAddressCollecter.cpp \
+		nsAddbookProtocolHandler.cpp  \
+		nsAbMDBDirProperty.cpp \
+		nsAbMDBDirectory.cpp \
+		nsAbMDBCardProperty.cpp \
+		nsAbMDBCard.cpp \
+		nsAbBSDirectory.cpp \
+		nsAddbookUrl.cpp    \
+		nsAbDirFactoryService.cpp	\
+		nsAbMDBDirFactory.cpp	\
+		nsAbUtils.cpp	\
+                nsAbDirectoryQuery.cpp    \
+                nsAbDirectoryQueryProxy.cpp    \
+                nsAbDirSearchListener.cpp \
+                nsAbBooleanExpression.cpp \
+                nsAbDirectoryRDFResource.cpp \
+                nsAbQueryStringToExpression.cpp \
+                nsAbView.cpp \
+		$(NULL)
+
+EXPORTS		= \
+		nsAddressBook.h \
+		nsAddrBookSession.h \
+		nsAbRDFDataSource.h \
+		nsDirectoryDataSource.h \
+		nsAbCardProperty.h \
+		nsDirPrefs.h \
+		nsAddrDatabase.h \
+		nsAbDirProperty.h \
+		nsAbAutoCompleteSession.h \
+		nsAbAddressCollecter.h \
+		nsAddbookProtocolHandler.h  \
+		nsAddbookUrl.h  \
+		nsAbMDBDirProperty.h \
+		nsAbMDBDirectory.h \
+		nsAbMDBCardProperty.h \
+		nsAbMDBCard.h \
+		nsAbBSDirectory.h \
+		nsAbDirFactoryService.h	\
+		nsAbMDBDirFactory.h	\
+		nsAbDirectoryQuery.h    \
+		nsAbDirectoryQueryProxy.h    \
+                nsAbDirSearchListener.h \
+		nsAbBooleanExpression.h \
+                nsAbDirectoryRDFResource.h \
+                nsAbView.h \
+		$(NULL)
+
+ifeq ($(OS_ARCH),WINNT)
+EXPORTS		+= \
+		nsAbOutlookCard.h \
+		nsAbOutlookDirFactory.h \
+		nsAbOutlookDirectory.h \
+		$(NULL)
+
+CPPSRCS		+= \
+		nsAbOutlookCard.cpp \
+		nsAbOutlookDirFactory.cpp \
+		nsAbOutlookDirectory.cpp \
+		nsAbWinHelper.cpp \
+		nsMapiAddressBook.cpp \
+		nsWabAddressBook.cpp \
+		$(NULL)
+
+endif
+
+ifdef MOZ_LDAP_XPCOM
+REQUIRES    += mozldap \
+               uriloader \
+               windowwatcher \
+               $(NULL)
+
+EXPORTS		+= nsAbLDAPDirectoryQuery.h \
+		nsAbLDAPDirectory.h \
+		nsAbLDAPDirFactory.h \
+		nsAbLDAPCard.h \
+		nsAbLDAPAutoCompFormatter.h \
+                nsAbLDAPReplicationService.h \
+                nsAbLDAPReplicationQuery.h \
+                nsAbLDAPReplicationData.h \
+                nsAbLDAPChangeLogQuery.h \
+                nsAbLDAPChangeLogData.h \
+		$(NULL)
+
+CPPSRCS		+= nsAbLDAPDirectory.cpp \
+		nsAbLDAPDirFactory.cpp	\
+                nsAbLDAPCard.cpp \
+                nsAbLDAPProperties.cpp \
+                nsAbLDAPDirectoryQuery.cpp \
+                nsAbBoolExprToLDAPFilter.cpp \
+		nsAbLDAPAutoCompFormatter.cpp \
+                nsAbLDAPReplicationService.cpp \
+                nsAbLDAPReplicationQuery.cpp \
+                nsAbLDAPReplicationData.cpp \
+                nsAbLDAPChangeLogQuery.cpp \
+                nsAbLDAPChangeLogData.cpp \
+		$(NULL)
+endif
+
+# we don't want the shared lib, but we want to force the creation of a static lib.
+FORCE_STATIC_LIB = 1
+
+include $(topsrcdir)/config/rules.mk
+

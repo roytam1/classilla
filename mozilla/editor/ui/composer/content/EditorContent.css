@@ -1,0 +1,126 @@
+/* 
+ * The contents of this file are subject to the Netscape Public
+ * License Version 1.1 (the "License"); you may not use this file
+ * except in compliance with the License. You may obtain a copy of
+ * the License at http://www.mozilla.org/NPL/
+ *  
+ * Software distributed under the License is distributed on an "AS
+ * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * rights and limitations under the License.
+ *  
+ * The Original Code is Mozilla Communicator client code, released
+ * March 31, 1998.
+ * 
+ * The Initial Developer of the Original Code is Netscape
+ * Communications Corporation. Portions created by Netscape are
+ * Copyright (C) 1998-1999 Netscape Communications Corporation. All
+ * Rights Reserved.
+ * 
+ * Contributor(s): 
+ *   Daniel Glazman <glazman@netscape.com>
+ */
+
+/* Styles to alter look of things in the Editor content window 
+ *  for the "Normal Edit Mode" These settings will be removed
+ *  when we display in completely WYSIWYG "Edit Preview" mode
+ *  Anything that should never change, like cursors, should be 
+ *  place in EditorOverride.css, instead of here.
+*/
+
+a[name] {
+  min-height: 17px; margin-left: 2px; margin-top: 2px;
+  padding-left: 20px; 
+  background-image: url(chrome://editor/content/images/tag-anchor.gif);
+  background-repeat: no-repeat; 
+  background-position: top left;
+}
+
+/* Force border display for empty cells 
+   and tables with 0 border
+*/
+table {
+  empty-cells: show;
+}
+
+/* give a red dotted border to tables and cells with no border
+   otherwise they are invisible
+*/
+table[empty-cells],
+  table[border="0"],
+  /* next two selectors on line below for the case where tbody is omitted */
+  table[border="0"] > tr > td, table[border="0"] > tr > th,
+  table[border="0"] > thead > tr > td, table[border="0"] > tbody > tr > td, table[border="0"] > tfoot > tr > td,
+  table[border="0"] > thead > tr > th, table[border="0"] > tbody > tr > th, table[border="0"] > tfoot > tr > th,
+  table:not([border]),
+  /* next two selectors on line below for the case where tbody is omitted */
+  table:not([border]) > tr > td, table:not([border]) > tr >  th,
+  table:not([border]) > thead > tr > td, table:not([border]) > tbody > tr > td, table:not([border]) > tfoot > tr > td,
+  table:not([border]) > thead > tr > th, table:not([border]) > tbody > tr > th, table:not([border]) > tfoot > tr > th
+{
+  border: 1px dotted red;
+}
+
+/* smileys */
+span.moz-smiley-s1,
+span.moz-smiley-s2,
+span.moz-smiley-s3,
+span.moz-smiley-s4,
+span.moz-smiley-s5,
+span.moz-smiley-s6,
+span.moz-smiley-s7 {
+  min-height: 17px; margin-left: 2px; margin-top: 2px;
+  padding-left: 20px; 
+  background-repeat: no-repeat; 
+  background-position: center center;
+
+
+}
+
+span.moz-smiley-s1 > span,
+span.moz-smiley-s2 > span,
+span.moz-smiley-s3 > span,
+span.moz-smiley-s4 > span,
+span.moz-smiley-s5 > span,
+span.moz-smiley-s6 > span,
+span.moz-smiley-s7 > span {
+    display: none;
+}
+
+
+
+span.moz-smiley-s1 {
+  background-image: url(chrome://editor/content/images/smile_n.gif);
+}
+
+
+span.moz-smiley-s2 {
+  background-image: url(chrome://editor/content/images/frown_n.gif);
+}
+
+
+span.moz-smiley-s3 {
+  background-image: url(chrome://editor/content/images/wink_n.gif);
+}
+
+
+span.moz-smiley-s4 { 
+  background-image: url(chrome://editor/content/images/tongue_n.gif);
+}
+
+span.moz-smiley-s5 {
+  background-image: url(chrome://editor/content/images/laughing_n.gif);
+}
+
+span.moz-smiley-s6 {
+  background-image: url(chrome://editor/content/images/embarrassed_n.gif);
+}
+
+
+span.moz-smiley-s7 {
+  background-image: url(chrome://editor/content/images/undecided_n.gif);
+}
+
+img {
+  -moz-force-broken-image-icon: 1;
+}

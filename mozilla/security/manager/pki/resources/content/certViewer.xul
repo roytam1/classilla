@@ -1,0 +1,80 @@
+<?xml version="1.0"?>
+<!-- 
+   - The contents of this file are subject to the Mozilla Public
+   - License Version 1.1 (the "License"); you may not use this file
+   - except in compliance with the License. You may obtain a copy of
+   - the License at http://www.mozilla.org/MPL/
+   - 
+   - Software distributed under the License is distributed on an "AS
+   - IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+   - implied. See the License for the specific language governing
+   - rights and limitations under the License.
+   - 
+   - The Original Code is mozilla.org code.
+   - 
+   - The Initial Developer of the Original Code is Netscape
+   - Communications Corp.  Portions created by Netscape are
+   - Copyright (C) 2001 Netscape Communications Corp.  All
+   - Rights Reserved.
+   - 
+   - Contributor(s):
+   -   Bob Lord <lord@netscape.com>
+   -   Ian McGreer <mcgreer@netscape.com>
+   -   Javier Delgadillo <javi@netscape.com>
+  -->
+
+<?xml-stylesheet href="chrome://global/skin/" type="text/css"?>
+
+<!DOCTYPE window SYSTEM "chrome://pippki/locale/certManager.dtd">
+
+<?xul-overlay href="chrome://pippki/content/viewCertDetails.xul"?>
+<?xul-overlay href="chrome://pippki/content/certDump.xul"?>
+
+
+<window id="certDetails" 
+  title="&certmgr.certdetail.title;"
+  xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+  onload="setWindowName();">
+
+<script type="application/x-javascript" src="chrome://global/content/strres.js"/>
+<script type="application/x-javascript" src="chrome://pippki/content/viewCertDetails.js"/>
+<script type="application/x-javascript" src="chrome://pippki/content/pippki.js"/>
+<script type="application/x-javascript" src="chrome://help/content/contextHelp.js"/>
+
+<keyset id="keys">
+  <key id="esc-key"    keycode="VK_ESCAPE" oncommand="window.close()"/>
+</keyset>
+
+  <grid flex="1">
+    <column flex="1"/>
+    <rows>
+      <row flex="1">
+        <tabbox flex="1">
+          <tabs>
+            <tab id="general_tab" label="&certmgr.detail.general_tab.title;"/>
+            <tab id="prettyprint_tab" label="&certmgr.detail.prettyprint_tab.title;"/>
+          </tabs>
+          <tabpanels flex="1">
+            <vbox id="general_info" flex="1"/>
+            <vbox id="certPrettyPrint" flex="1"/>
+          </tabpanels>
+        </tabbox>
+      </row>
+      <row>
+        <separator class="thin"/>
+      </row>
+      <row>
+        <hbox align="right" flex="1">
+          <button id="HelpButton"
+                  label="&certmgr.help.label;" 
+                  accesskey="&certmgr.helpButtonAccessKey;"
+                  oncommand="openHelp('cert_details');"/>
+          <button id="closeButton"
+                  label="&certmgr.close.label;" 
+                  accesskey="&certmgr.closeWindowAccessKey;"
+                  oncommand="window.close();"/>
+        </hbox>
+      </row>
+    </rows>
+  </grid>
+</window>

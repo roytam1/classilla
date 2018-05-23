@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+
+<overlay id="platformNavigationBindings"
+         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+
+  <keyset id="navigationKeys">
+    <!-- back and forward accelerators on Windows, strangely enough, are
+         Alt+Left arrow and Alt+Right arrow. -->
+    <key id="goBackKb"  keycode="VK_LEFT" command="Browser:Back" modifiers="alt"/>
+    <key id="goForwardKb"  keycode="VK_RIGHT" command="Browser:Forward" modifiers="alt"/>
+
+    <!-- Supporting IE 'refresh' shortcut key -->
+    <key keycode="VK_F5" oncommand="BrowserReload();"/>
+    <key keycode="VK_F5" modifiers="control" oncommand="BrowserReloadSkipCache();"/>
+
+    <key id="goHome" keycode="VK_HOME" command="Browser:Home" modifiers="alt"/>
+
+    <key id="key_fullScreen" keycode="VK_F11" command="View:FullScreen"/>
+    <key id="key_newTabWithTarget" keycode="VK_INSERT" command="cmd_newTabWithTarget"/>
+    <key id="key_newTabWithTarget" keycode="VK_INSERT" modifiers="shift" command="cmd_newTabWithTarget"/>
+  </keyset>  
+
+  <menuitem id="menuitem_fullScreen" hidden="false"/>
+</overlay>
+
+

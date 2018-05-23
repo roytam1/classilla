@@ -1,0 +1,71 @@
+#
+# The contents of this file are subject to the Mozill Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/MPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 2001 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+include $(srcdir)/objs.mk
+
+DIRS            = standalone
+
+MODULE		= xpcom
+LIBRARY_NAME	= xpcomglue_s
+
+REQUIRES	= $(NULL)
+
+LOCAL_INCLUDES	= \
+		-I$(srcdir)/../build \
+		$(NULL)
+
+CPPSRCS		= \
+		$(XPCOM_GLUE_SRC_LCSRCS) \
+		$(NULL)
+
+SDK_HEADERS     = \
+		nsIGenericFactory.h \
+		nsIInterfaceRequestorUtils.h \
+		nsISupportsImpl.h \
+		nsISupportsUtils.h \
+		nsIWeakReferenceUtils.h \
+		$(XPCOM_GLUE_SRC_LEXPORTS) \
+		$(NULL)
+
+SDK_BINARY     =                        \
+		$(LIB_PREFIX)xpcomglue_s.$(LIB_SUFFIX) \
+		$(NULL)
+
+# we don't want the shared lib, but we want to force the creation of a static lib.
+FORCE_STATIC_LIB = 1
+
+# Force use of PIC
+FORCE_USE_PIC	= 1
+
+include $(topsrcdir)/config/rules.mk
+
+# hack to work around objdir bustage
+export::
+	rm -f $(XPCOM_GLUE_SRC_CSRCS:.cpp=.$(OBJ_SUFFIX))
+
+DEFINES		+= \
+		-D_IMPL_NS_COM

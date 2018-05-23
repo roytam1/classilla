@@ -1,0 +1,87 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE		= msgbase
+
+EXPORTS		= \
+		msgCore.h \
+		nsMsgFolderFlags.h \
+		nsMsgHeaderMasks.h \
+		nsMsgMessageFlags.h \
+		nsMsgLocalFolderHdrs.h \
+		$(NULL)
+
+XPIDLSRCS	= \
+		nsICopyMessageListener.idl \
+		nsICopyMsgStreamListener.idl \
+		nsIMessenger.idl \
+		nsIFolder.idl \
+		nsIFolderListener.idl \
+		nsIMsgAccount.idl \
+		nsIMsgAccountManager.idl \
+		nsIMsgFolder.idl \
+		nsIMsgFolderCache.idl \
+		nsIMsgFolderCacheElement.idl \
+		nsIMsgFolderCompactor.idl \
+		nsIMsgGroupRecord.idl \
+		nsIMsgHost.idl \
+		nsIMsgIdentity.idl \
+		nsIMsgIncomingServer.idl \
+		nsIMsgMailSession.idl \
+		nsIMsgMessageService.idl \
+		nsIMsgSignature.idl \
+		nsIMsgThread.idl \
+		nsIMsgVCard.idl \
+		nsIUrlListener.idl \
+		nsIUrlListenerManager.idl \
+		nsIMsgBiffManager.idl \
+    nsIMsgPurgeService.idl \
+		nsIMsgCopyService.idl \
+		nsIMsgCopyServiceListener.idl \
+		nsIMsgStatusFeedback.idl \
+		nsIMsgMailNewsUrl.idl \
+		nsIMsgWindow.idl \
+		nsIMsgProtocolInfo.idl \
+		nsIMsgRDFDataSource.idl \
+		nsIIncomingServerListener.idl \
+		nsIMsgHdr.idl \
+		nsIMessengerMigrator.idl	\
+		nsIMessengerWindowService.idl	\
+		nsIMsgStringService.idl		\
+		nsIMsgPrintEngine.idl \
+		nsISubscribableServer.idl \
+		nsIMsgDBView.idl \
+		nsIMsgOfflineManager.idl \
+		nsIMsgProgress.idl \
+		nsIMessengerOSIntegration.idl \
+		nsIMsgMdnGenerator.idl	        \
+		nsISpamSettings.idl	        \
+		$(NULL)
+
+include $(topsrcdir)/config/rules.mk
+

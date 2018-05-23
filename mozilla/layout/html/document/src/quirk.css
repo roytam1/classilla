@@ -1,0 +1,298 @@
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: NPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Netscape Public License
+ * Version 1.1 (the "License"); you may not use this file except in
+ * compliance with the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/NPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
+ * The Original Code is mozilla.org code.
+ *
+ * The Initial Developer of the Original Code is 
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998
+ * the Initial Developer. All Rights Reserved.
+ *
+ * Contributor(s):
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or 
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the NPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the NPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
+
+@namespace url(http://www.w3.org/1999/xhtml); /* set default namespace to HTML */
+
+/* Quirk: input images have a blue border (b=28010) */ 
+
+/* default border */
+input[type=image] {
+  border: 2px solid blue;
+}
+
+/* border when focused -- only change style to dotted */
+input[type=image]:focused {
+  border-style: dotted;
+}
+
+/* border when focused -- only change color to gray */
+input[type=image][disabled] {
+  border-color: GrayText;
+}
+
+
+/* Quirk: make orphaned LIs have inside bullet (b=1049) */
+
+/* force inside position for orphaned lis */
+li {
+  list-style-position: inside; 
+}
+
+/* restore outside position for lists inside LIs */
+li ul, li ol, li dir, li menu { 
+  list-style-position: outside; 
+}
+
+/* undo previous two rules for properly nested lists */
+  ul ul,   ul ol,   ul dir,   ul menu,   ul li,
+  ol ul,   ol ol,   ol dir,   ol menu,   ol li,
+ dir ul,  dir ol,  dir dir,  dir menu,  dir li,
+menu ul, menu ol, menu dir, menu menu, menu li {
+  list-style-position: inherit;
+}
+
+
+/* Quirk: ensure that we get proper padding if the very first 
+ * node in an LI is another UL or OL. This is an ugly way to
+ * fix the problem, because it extends the LI up into what
+ * would otherwise appear to be the ULs space. (b=38832) */
+/* Note: this fix will fail once we implement marker box 
+ * alignment correctly. */
+li > ul:first-node,
+li > ol:first-node {
+  padding-top: 1em;
+}
+
+/* Quirk: prevent bullet from resizing with the list item
+ *   see bug 97351
+ */
+li:-moz-list-bullet {
+  font-size: -moz-initial;
+}
+
+/* Quirk: cut off all font inheritance in tables and captions except for family. */
+table, caption {
+  font-size: -moz-initial;
+  font-weight: -moz-initial;
+  font-style: -moz-initial;
+  font-variant: -moz-initial;
+}
+
+table {
+  text-align: -moz-initial;
+  white-space: normal; /* compatible with IE & spec */
+  line-height: normal;
+}
+
+
+/* Quirk: collapse top margin of BODY and TD and bottom margin of TD */
+
+/*
+ * While it may seem simpler to use :first-node and :last-node without
+ * tags, it's slower, since we have to do the :first-node or :last-node
+ * check on every single element in the document.  If we list all the
+ * element names for which the UA stylesheet specifies a margin, the
+ * selectors will be hashed in the RuleHash and things will be much more
+ * efficient.
+ */
+
+body > form:first-node, td > form:first-node, th > form:first-node,
+body > p:first-node, td > p:first-node, th > p:first-node,
+body > dl:first-node, td > dl:first-node, th > dl:first-node,
+body > multicol:first-node, td > multicol:first-node, th > multicol:first-node,
+body > blockquote:first-node, td > blockquote:first-node, th > blockquote:first-node,
+body > h1:first-node, td > h1:first-node, th > h1:first-node,
+body > h2:first-node, td > h2:first-node, th > h2:first-node,
+body > h3:first-node, td > h3:first-node, th > h3:first-node,
+body > h4:first-node, td > h4:first-node, th > h4:first-node,
+body > h5:first-node, td > h5:first-node, th > h5:first-node,
+body > h6:first-node, td > h6:first-node, th > h6:first-node,
+body > listing:first-node, td > listing:first-node, th > listing:first-node,
+body > plaintext:first-node, td > plaintext:first-node, th > plaintext:first-node,
+body > xmp:first-node, td > xmp:first-node, th > xmp:first-node,
+body > pre:first-node, td > pre:first-node, th > pre:first-node,
+body > ul:first-node, td > ul:first-node, th > ul:first-node,
+body > menu:first-node, td > menu:first-node, th > menu:first-node,
+body > dir:first-node, td > dir:first-node, th > dir:first-node,
+body > ol:first-node, td > ol:first-node, th > ol:first-node {
+  margin-top: 0;
+}
+
+td > form:last-node, th > form:last-node,
+td > p:last-node, th > p:last-node,
+td > dl:last-node, th > dl:last-node,
+td > multicol:last-node, th > multicol:last-node,
+td > blockquote:last-node, th > blockquote:last-node,
+td > h1:last-node, th > h1:last-node,
+td > h2:last-node, th > h2:last-node,
+td > h3:last-node, th > h3:last-node,
+td > h4:last-node, th > h4:last-node,
+td > h5:last-node, th > h5:last-node,
+td > h6:last-node, th > h6:last-node,
+td > listing:last-node, th > listing:last-node,
+td > plaintext:last-node, th > plaintext:last-node,
+td > xmp:last-node, th > xmp:last-node,
+td > pre:last-node, th > pre:last-node,
+td > ul:last-node, th > ul:last-node,
+td > menu:last-node, th > menu:last-node,
+td > dir:last-node, th > dir:last-node,
+td > ol:last-node, th > ol:last-node {
+  margin-bottom: 0;
+}
+
+/* Similar as above, but for empty elements
+ *  collapse the bottom or top margins of empty elements
+ *  - see bug 97361
+ */
+body > form:empty:first-node, td > form:empty:first-node, th > form:empty:first-node,
+body > p:empty:first-node, td > p:empty:first-node, th > p:empty:first-node,
+body > dl:empty:first-node, td > dl:empty:first-node, th > dl:empty:first-node,
+body > multicol:empty:first-node, td > multicol:empty:first-node, th > multicol:empty:first-node,
+body > blockquote:empty:first-node, td > blockquote:empty:first-node, th > blockquote:empty:first-node,
+body > h1:empty:first-node, td > h1:empty:first-node, th > h1:empty:first-node,
+body > h2:empty:first-node, td > h2:empty:first-node, th > h2:empty:first-node,
+body > h3:empty:first-node, td > h3:empty:first-node, th > h3:empty:first-node,
+body > h4:empty:first-node, td > h4:empty:first-node, th > h4:empty:first-node,
+body > h5:empty:first-node, td > h5:empty:first-node, th > h5:empty:first-node,
+body > h6:empty:first-node, td > h6:empty:first-node, th > h6:empty:first-node,
+body > listing:empty:first-node, td > listing:empty:first-node, th > listing:empty:first-node,
+body > plaintext:empty:first-node, td > plaintext:empty:first-node, th > plaintext:empty:first-node,
+body > xmp:empty:first-node, td > xmp:empty:first-node, th > xmp:empty:first-node,
+body > pre:empty:first-node, td > pre:empty:first-node, th > pre:empty:first-node,
+body > ul:empty:first-node, td > ul:empty:first-node, th > ul:empty:first-node,
+body > menu:empty:first-node, td > menu:empty:first-node, th > menu:empty:first-node,
+body > dir:empty:first-node, td > dir:empty:first-node, th > dir:empty:first-node,
+body > ol:empty:first-node, td > ol:empty:first-node, th > ol:empty:first-node {
+  margin-bottom: 0;
+}
+
+td > form:empty:last-node, th > form:empty:last-node,
+td > p:empty:last-node, th > p:empty:last-node,
+td > dl:empty:last-node, th > dl:empty:last-node,
+td > multicol:empty:last-node, th > multicol:empty:last-node,
+td > blockquote:empty:last-node, th > blockquote:empty:last-node,
+td > h1:empty:last-node, th > h1:empty:last-node,
+td > h2:empty:last-node, th > h2:empty:last-node,
+td > h3:empty:last-node, th > h3:empty:last-node,
+td > h4:empty:last-node, th > h4:empty:last-node,
+td > h5:empty:last-node, th > h5:empty:last-node,
+td > h6:empty:last-node, th > h6:empty:last-node,
+td > listing:empty:last-node, th > listing:empty:last-node,
+td > plaintext:empty:last-node, th > plaintext:empty:last-node,
+td > xmp:empty:last-node, th > xmp:empty:last-node,
+td > pre:empty:last-node, th > pre:empty:last-node,
+td > ul:empty:last-node, th > ul:empty:last-node,
+td > menu:empty:last-node, th > menu:empty:last-node,
+td > dir:empty:last-node, th > dir:empty:last-node,
+td > ol:empty:last-node, th > ol:empty:last-node {
+  margin-top: 0;
+}
+
+/* Quirk: support the ways of making PRE have wrapping */
+pre[wrap], pre[cols], pre[width] {
+  white-space: -moz-pre-wrap;
+}
+
+
+/* Quirk: HRs avoid floats (b=18754) */
+
+hr {
+  display: inline;
+  -moz-box-sizing: border-box;
+  margin: 0 0.1% 0 0.1%; /* Mmm! Hack-on-a-hack for bug 81776 */
+  font-size: -moz-initial !important;
+}
+
+hr:before {
+  white-space: pre;
+  content: "\A";
+}
+
+hr:after {
+  white-space: pre;
+  content: "\A";
+}
+
+/* Quirk: DD not in DL has text-indent instead of margin (b=5119) */
+
+:not(dl) > dd {
+  display: inline;
+  margin: 0;
+}
+
+:not(dl) > dd:before {
+  display: inline;
+  white-space: pre;
+  font-size: 1px;
+  line-height: 0;
+  content: "\A  ";
+  margin-right: 40px;
+}
+
+/* quirk to indent nested DL elements (b=8749) */
+dl > dl {
+  display: block;
+  margin-left: 40px;
+}
+
+/* Quirk: MAP acts like an inline, not a block */
+map {
+  display: inline;
+}
+
+/* Quirk: Make floated images have a margin  (b=58899) */
+img[align=left] {
+  margin-right: 3px;
+}
+
+img[align=right] {
+  margin-left: 3px;
+}
+
+/*
+ * XXX This is a potential performance problem.  This should not be
+ * using an attribute!
+ */
+
+/* Quirk: Make sure that the residual style tags' size info. 
+ * does not take precedence over heading tags' size. (b=77352)
+ * Note: This special attribute is set only for a residual 
+ * style tag within a heading tag.
+ */
+*[_moz-rs-heading] { 
+  font-size: inherit !important; 
+}
+
+/*
+ * Quirk: Use border-box box sizing for text inputs, password inputs, and
+ * textareas.  (b=184478 on why we use content-box sizing in standards mode)
+ */
+input:not([type=image]), textarea {
+  /* Note that all other <input>s already use border-box
+     sizing, so we're ok with this selector */
+  -moz-box-sizing: border-box;
+}
+

@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+
+<overlay id="platformNavigationBindings"
+         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+
+  <keyset id="navigationKeys">
+    <!-- proper arrow key navigation, 4.xP -->
+    <key id="goBackKb"  keycode="VK_LEFT" command="Browser:Back" modifiers="accel"/>
+    <key id="goForwardKb"  keycode="VK_RIGHT" command="Browser:Forward" modifiers="accel"/>
+    <key key="[" command="Browser:Back" modifiers="accel"/>
+    <key key="]" command="Browser:Forward" modifiers="accel"/>
+    <key key="." oncommand="BrowserStop();" modifiers="accel"/>
+    <key id="goHome" keycode="VK_HOME" command="Browser:Home" modifiers="meta"/>
+    <key id="key_newTabWithTarget" keycode="VK_INSERT" modifiers="shift" command="cmd_newTabWithTarget"/>
+  </keyset>  
+
+</overlay>
+
+

@@ -1,0 +1,180 @@
+<?xml version="1.0"?> 
+<!--
+   The contents of this file are subject to the Netscape Public
+   License Version 1.1 (the "License"); you may not use this file
+   except in compliance with the License. You may obtain a copy of
+   the License at http://www.mozilla.org/NPL/
+    
+   Software distributed under the License is distributed on an "AS
+   IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+   implied. See the License for the specific language governing
+   rights and limitations under the License.
+    
+   The Original Code is Mozilla Communicator client code, released
+   March 31, 1998.
+   
+   The Initial Developer of the Original Code is Netscape
+   Communications Corporation. Portions created by Netscape are
+   Copyright (C) 1998-2000 Netscape Communications Corporation. All
+   Rights Reserved.
+   
+   Contributor(s): 
+     Ryan Cassin (rcassin@supernova.org)
+  -->
+
+<?xml-stylesheet href="chrome://communicator/skin/" type="text/css"?>
+<?xul-overlay href="chrome://global/content/globalOverlay.xul"?>
+
+<!DOCTYPE window SYSTEM "chrome://editor/locale/pref-composer.dtd" >
+
+<page xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+      onload="parent.initPanel('chrome://editor/content/pref-composer.xul');"
+      headertitle="&lHeader;">
+
+  <script type="application/x-javascript">
+  <!-- Add "shouldAutoSave", "autoSaveAmount" to _elementIDs when implemented -->
+  <![CDATA[
+    var _elementIDs = ["maintainTableStructure", "preserveFormatting", "saveAssociatedFiles", "showPublishDialog", "recentFiles", "useCSS"];
+  ]]>
+  </script>        
+  <script type="application/x-javascript" src="chrome://editor/content/EdDialogCommon.js"/>
+  <script type="application/x-javascript" src="chrome://editor/content/editorUtilities.js"/>
+        
+  <!-- Recent files menu -->
+  <groupbox>
+    <caption label="&recentFiles.title;"/>
+    <hbox align="center">
+      <label value="&documentsInMenu;"/>
+      <textbox
+        id="recentFiles"
+        name="recent string" 
+        size="3" 
+        value="10" 
+        preftype="int" 
+        prefstring="editor.history.url_maximum"
+        oninput=" ValidateNumber(this, null, 0, 99); LimitStringLength('recentFiles',2);"
+      />
+    </hbox>
+  </groupbox>
+
+<!-- HTML formatting on output -->
+  <groupbox>
+    <caption label="&savingFiles.title;"/>
+    <spacer class="spacer"/>
+    <radiogroup
+      id            = "preserveFormatting"
+      preftype      = "bool"
+      prefstring    = "editor.prettyprint">
+      <radio 
+        value       = "false"
+        label      = "&preserveExistingFormatting;" 
+        accesskey  = "&preserveExistingFormatting.accesskey;"
+        tooltiptext= "&preserveExistingFormatting.tooltip;"
+      />
+      <radio 
+        value       = "true"
+        label      = "&reformat.label;" 
+        accesskey  = "&reformat.accesskey;"
+        tooltiptext= "&reformat.tooltip;"
+      />
+    </radiogroup>
+    <separator class="thin"/>
+    <checkbox 
+      label      = "&saveAssociatedFiles.label;"
+      id         = "saveAssociatedFiles"
+      preftype   = "bool" 
+      prefindex  = "0" 
+      prefstring = "editor.save_associated_files"
+    />
+    <checkbox 
+      label      = "&showPublishDialog.label;"
+      id         = "showPublishDialog"
+      preftype   = "bool" 
+      prefindex  = "0" 
+      prefstring = "editor.always_show_publish_dialog"
+    />
+  </groupbox>
+  
+  <groupbox align="start">
+    <caption label="&tableEditing.label;"/>
+    <checkbox 
+      label     = "&maintainTableStructure.label;"
+      id        = "maintainTableStructure" 
+      accesskey = "&maintainStructure.accesskey;"
+      tooltiptext="&maintainTableStructure.tooltip;"
+      prefstring= "editor.table.maintain_structure"
+    />
+    <separator class = "thin"/>
+  </groupbox>
+
+<!-- Take out Auto-Save; not supported at this time
+  <groupbox>
+    <caption label="&saving;"/>
+    <hbox align="center">
+      <checkbox 
+        label      = "&AutoSaveCheck;"
+        id         = "shouldAutoSave"
+        prefstring = "editor.auto_save"
+        name       = "autosave" 
+      />
+      <textbox
+        id="autoSaveAmount"
+        name="time" 
+        size="3" 
+        value="5" 
+        preftype="int" 
+        prefstring="editor.auto_save_delay"
+      />
+      <label value="&minText;" />
+    </hbox>
+  </groupbox>
+-->
+
+<!-- External Editors are not supported at this time
+    <groupbox>
+      <caption label="&exterLegend.label;"/> 
+    <hbox>
+      <checkbox 
+        name       = "htmlSourceEditorCheckbox"
+        label      = "&htmlSource;"
+        preftype   = "int" 
+        prefindex  = "0" 
+        prefstring = "editor.use_html_editor"
+      />
+      <textbox
+        name = "&chooseButton.label;"
+        preftype   = "string" 
+      />
+      <button 
+        name  = ""
+        label = "&chooseButton.label;"
+      />
+    </hbox>
+
+    <hbox>
+      <checkbox 
+        name  = "htmlImageEditorCheckbox" 
+        label = "&imageeditor;"
+        preftype   = "int" 
+        prefindex  = "0" 
+        prefstring ="editor.use_image_editor"
+      />
+
+      <textbox
+        name="chooseButton.label" 
+        prefstring = "editor.image_editor"
+      />
+      <button label="&chooseButton.label;" />
+    </hbox> 
+
+  </groupbox>
+  -->
+  <groupbox>
+    <caption label="&cssEditing.label;"/>
+    <checkbox
+      label     = "&useCSS.label;"
+      id        = "useCSS"
+      prefstring= "editor.use_css"
+    />
+  </groupbox>
+</page>

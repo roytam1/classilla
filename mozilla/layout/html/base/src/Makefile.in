@@ -1,0 +1,167 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s):
+#   Prabhat Hegde <prabhat.hegde@sun.com>
+#
+
+DEPTH		= ../../../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE		= layout
+LIBRARY_NAME	= gkhtmlbase_s
+REQUIRES	= xpcom \
+		  string \
+		  dom \
+		  content \
+		  gfx \
+		  widget \
+		  locale \
+		  view \
+		  necko \
+		  js \
+		  caps \
+		  pref \
+		  htmlparser \
+		  webshell \
+		  plugin \
+		  docshell \
+		  mimetype \
+		  webbrwsr \
+		  oji \
+		  util \
+		  unicharutil \
+		  lwbrk \
+		  imglib2 \
+		  accessibility \
+		  xpconnect \
+		  java \
+		  exthandler \
+		  intl \
+		  $(NULL)
+
+# Sun's Complex Text Layout support
+ifdef SUNCTL
+REQUIRES	+= ctl
+endif
+
+CPPSRCS		= \
+		nsAbsoluteContainingBlock.cpp \
+		nsAreaFrame.cpp \
+		nsBRFrame.cpp \
+		nsBlockBandData.cpp \
+		nsBlockFrame.cpp \
+		nsBlockReflowContext.cpp \
+		nsBlockReflowState.cpp \
+		nsBulletFrame.cpp \
+		nsContainerFrame.cpp \
+		nsFirstLetterFrame.cpp \
+		nsFrame.cpp \
+		nsFrameManager.cpp \
+		nsGfxScrollFrame.cpp \
+		nsHRFrame.cpp \
+		nsHTMLContainerFrame.cpp \
+		nsHTMLFrame.cpp \
+		nsHTMLReflowCommand.cpp \
+		nsHTMLReflowState.cpp \
+		nsImageFrame.cpp \
+		nsImageMap.cpp \
+		nsInlineFrame.cpp \
+		nsLeafFrame.cpp \
+		nsLineBox.cpp \
+		nsLineLayout.cpp \
+		nsObjectFrame.cpp \
+		nsPageFrame.cpp \
+		nsPageContentFrame.cpp \
+		nsPlaceholderFrame.cpp \
+		nsPresShell.cpp \
+		nsScrollFrame.cpp \
+		nsScrollPortFrame.cpp \
+		nsSelectsAreaFrame.cpp \
+		nsSimplePageSequence.cpp \
+		nsSpacerFrame.cpp \
+		nsSplittableFrame.cpp \
+		nsReflowPath.cpp \
+		nsTextFrame.cpp \
+		nsTextTransformer.cpp \
+		nsViewportFrame.cpp \
+		$(NULL)
+ifdef IBMBIDI
+CPPSRCS		+= \
+		nsBidiFrames.cpp \
+		$(NULL)
+endif
+
+EXPORTS		= \
+		nsILineIterator.h \
+		nsHTMLParts.h \
+		$(NULL)
+
+ifdef IBMBIDI
+EXPORTS		+= \
+		nsTextTransformer.h \
+		nsBidiFrames.h      \
+		$(NULL)
+endif
+
+RESOURCES_HTML =					\
+		$(srcdir)/gopher-audio.gif	\
+		$(srcdir)/gopher-binary.gif	\
+		$(srcdir)/gopher-find.gif	\
+		$(srcdir)/gopher-image.gif	\
+		$(srcdir)/gopher-menu.gif	\
+		$(srcdir)/gopher-movie.gif	\
+		$(srcdir)/gopher-sound.gif	\
+		$(srcdir)/gopher-telnet.gif	\
+		$(srcdir)/gopher-text.gif	\
+		$(srcdir)/gopher-unknown.gif	\
+		$(NULL)
+
+RESOURCES =					\
+		$(srcdir)/broken-image.gif	\
+		$(srcdir)/loading-image.gif \
+		$(NULL)
+
+
+# we don't want the shared lib, but we want to force the creation of a static lib.
+FORCE_STATIC_LIB = 1
+
+include $(topsrcdir)/config/rules.mk
+
+LOCAL_INCLUDES	= \
+		-I$(srcdir)/../../../xul/base/src \
+		-I$(srcdir)/../../../xul/content/src \
+		-I$(srcdir)/../../style/src \
+		-I$(srcdir)/../../forms/src \
+		-I$(srcdir)/../../../base/src \
+		-I$(srcdir) \
+		$(NULL)
+
+libs::
+	$(INSTALL) $(RESOURCES_HTML) $(DIST)/bin/res/html
+	$(INSTALL) $(RESOURCES) $(DIST)/bin/res
+
+install::
+	$(SYSINSTALL) $(IFLAGS1) $(RESOURCES_HTML) $(DESTDIR)$(mozappdir)/res/html
+	$(SYSINSTALL) $(IFLAGS1) $(RESOURCES) $(DESTDIR)$(mozappdir)/res
+
+DEFINES += -D_IMPL_NS_LAYOUT

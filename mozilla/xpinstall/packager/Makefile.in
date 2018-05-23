@@ -1,0 +1,213 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is Mozilla Communicator client code, 
+# released March 31, 1998. 
+#
+# The Initial Developer of the Original Code is Netscape Communications 
+# Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+#
+# This is how we create the Unix binary packages we release to the public.
+# Currently the only format is tar.gz (TGZ), but it should be fairly easy
+# to add .rpm (RPM) and .deb (DEB) later.
+#
+ifndef MOZ_PKG_FORMAT
+ifeq (,$(filter-out OS2 WINNT, $(OS_ARCH)))
+MOZ_PKG_FORMAT  = ZIP
+else
+MOZ_PKG_FORMAT	= TGZ
+endif
+endif
+ifndef MOZ_PKG_APPNAME
+MOZ_PKG_APPNAME = mozilla
+endif
+
+MAKE_PACKAGE	= echo "Sorry, don't know how to build a $(MOZ_PKG_FORMAT) file yet...."
+MAKE_SDK	=
+
+ifeq ($(MOZ_OS2_TOOLS),VACPP)
+TARGET_OS = os2-vacpp
+endif
+
+PKG_BASENAME	:= $(MOZ_PKG_APPNAME)-$(TARGET_CPU)-$(TARGET_VENDOR)-$(TARGET_OS)
+PACKAGE		= $(PKG_BASENAME)$(PKG_SUFFIX)
+
+SDK_DIR		= sdk
+SDK		= $(MOZ_PKG_APPNAME)-$(SDK_DIR)-$(TARGET_CPU)-$(TARGET_VENDOR)-$(TARGET_OS)$(PKG_SUFFIX)
+
+TAR_CREATE_FLAGS = -cvhf
+
+ifeq ($(OS_ARCH),BSD_OS)
+TAR_CREATE_FLAGS = -cvLf
+endif
+
+ifeq ($(MOZ_PKG_FORMAT),TAR)
+PKG_SUFFIX	= .tar
+MAKE_PACKAGE 	= tar -cf - $(MOZ_PKG_APPNAME) > $(PACKAGE)
+MAKE_SDK	= tar -cf - $(MOZ_PKG_APPNAME)-$(SDK_DIR) > $(SDK)
+endif
+ifeq ($(MOZ_PKG_FORMAT),TGZ)
+PKG_SUFFIX	= .tar.gz
+MAKE_PACKAGE 	= tar -cf - $(MOZ_PKG_APPNAME) | gzip -vf9 > $(PACKAGE)
+MAKE_SDK        = tar -cf - $(MOZ_PKG_APPNAME)-$(SDK_DIR) | gzip -vf9 > $(SDK)
+endif
+ifeq ($(MOZ_PKG_FORMAT),BZ2)
+PKG_SUFFIX	= .tar.bz2
+MAKE_PACKAGE 	= tar -cf - $(MOZ_PKG_APPNAME) | bzip2 -vf > $(PACKAGE)
+MAKE_SDK        = tar -cf - $(MOZ_PKG_APPNAME)-$(SDK_DIR) | bzip2 -vf > $(SDK)
+endif
+ifeq ($(MOZ_PKG_FORMAT),ZIP)
+PKG_SUFFIX	= .zip
+MAKE_PACKAGE	= $(ZIP) -r9 $(PACKAGE) $(MOZ_PKG_APPNAME)
+MAKE_SDK	= $(ZIP) -r9 $(SDK) $(MOZ_PKG_APPNAME)-$(SDK_DIR)
+endif
+ifeq ($(MOZ_PKG_FORMAT),RPM)
+PKG_SUFFIX	= .rpm
+endif
+ifeq ($(MOZ_PKG_FORMAT),DEB)
+PKG_SUFFIX	= .deb
+endif
+
+TARGETS		= $(PACKAGE) $(SDK)
+
+NSPR_LDIR	= $(findstring -L,$(NSPR_LIBS))
+ifneq ($(NSPR_LDIR),)
+NSPR_LDIR	= $(subst -L,,$(word 1,$(NSPR_LIBS)))
+endif
+
+EXCLUDE_LIST	= \
+		$(DIST)/bin/core \
+		$(DIST)/bin/bsdecho \
+		$(DIST)/bin/gtscc \
+		$(DIST)/bin/jscpucfg \
+		$(DIST)/bin/nsinstall \
+		$(DIST)/bin/viewer \
+		$(NULL)
+
+libs:: $(TARGETS)
+
+include $(topsrcdir)/config/rules.mk
+
+GARBAGE		+= $(DIST)/$(PACKAGE) $(PACKAGE) $(SDK)
+
+OSPACKAGE	= unix
+ifdef USE_SHORT_LIBNAME
+MOZILLA_BIN	= $(DIST)/bin/mozilla$(BIN_SUFFIX)
+else
+MOZILLA_BIN	= $(DIST)/bin/mozilla-bin
+endif
+
+ifeq ($(OS_ARCH),IRIX)
+STRIP_FLAGS	= -f
+endif
+ifeq ($(OS_ARCH),BeOS)
+STRIP_FLAGS	= -g
+PLATFORM_EXCLUDE_LIST = ! -name "*.stub" ! -name "mozilla-bin"
+endif
+ifeq ($(OS_ARCH),OS2)
+STRIP		= $(srcdir)/os2/strip.cmd
+STRIP_FLAGS	=
+OSPACKAGE	= os2
+TAR_CREATE_FLAGS = -cvf
+PLATFORM_EXCLUDE_LIST = ! -name "*.ico"
+endif
+
+$(SDK):
+	@rm -rf $(DIST)/$(MOZ_PKG_APPNAME)-$(SDK_DIR) $@
+	@mkdir $(DIST)/$(MOZ_PKG_APPNAME)-$(SDK_DIR)
+	@cd $(DIST)/$(SDK_DIR) && tar $(TAR_CREATE_FLAGS) - * | (cd ../$(MOZ_PKG_APPNAME)-$(SDK_DIR); tar -xf -)
+	cd $(DIST) && $(MAKE_SDK)
+
+$(PACKAGE): $(MOZILLA_BIN)
+	@rm -rf $(DIST)/$(MOZ_PKG_APPNAME) $(DIST)/$(PKG_BASENAME).tar $@ $(EXCLUDE_LIST)
+# NOTE: this must be a tar now that dist links into the tree so that we
+# do not strip the binaries actually in the tree.
+	@echo "Creating package directory..."
+	@mkdir $(DIST)/$(MOZ_PKG_APPNAME)
+	@cd $(DIST)/bin && tar $(TAR_CREATE_FLAGS) - * | (cd ../$(MOZ_PKG_APPNAME); tar -xf -)
+ifdef MOZ_NATIVE_NSPR
+ifndef EXCLUDE_NSPR_LIBS
+	@echo "Copying NSPR libs..."
+	@cp -p $(NSPR_LDIR)/*$(DLL_SUFFIX) $(DIST)/$(MOZ_PKG_APPNAME)
+	@chmod 755 $(DIST)/$(MOZ_PKG_APPNAME)/*$(DLL_SUFFIX)
+endif
+endif
+ifeq ($(MOZ_OS2_TOOLS),VACPP)
+# Copy the C runtime
+	@cp -p $(VACPP365)/runtime/cpprmi36.dll $(DIST)/$(MOZ_PKG_APPNAME)
+endif
+	@echo "Stripping package directory..."
+	@cd $(DIST)/$(MOZ_PKG_APPNAME); find . ! -type d \
+			! -name "*.js" \
+			! -name "*.xpt" \
+			! -name "*.gif" \
+			! -name "*.jpg" \
+			! -name "*.png" \
+			! -name "*.xpm" \
+			! -name "*.txt" \
+			! -name "*.rdf" \
+			! -name "*.sh" \
+			! -name "*.properties" \
+			! -name "*.dtd" \
+			! -name "*.html" \
+			! -name "*.xul" \
+			! -name "*.css" \
+			! -name "*.xml" \
+			! -name "*.jar" \
+			! -name "*.dat" \
+			! -name "*.tbl" \
+			! -name "*.src" \
+			! -name "*.reg" \
+			$(PLATFORM_EXCLUDE_LIST) \
+			-exec $(STRIP) $(STRIP_FLAGS) {} >/dev/null 2>&1 \;
+ifeq (,$(filter mozilla phoenix,$(MOZ_PKG_APPNAME)))
+	@echo "Creating start script $(MOZ_PKG_APPNAME)..."
+	cd $(DIST)/$(MOZ_PKG_APPNAME); cp mozilla $(MOZ_PKG_APPNAME)
+endif
+	@echo "Compressing..."
+	cd $(DIST); $(MAKE_PACKAGE)
+
+dist: $(MOZILLA_BIN)
+ifndef MOZ_PKG_DEST
+	@echo "Please define MOZ_PKG_DEST first. It must be an absolute path to a dir outside the source tree. It should be empty (files might get deleted without warning)."
+	@echo "Other options (not required):"
+	@echo "MOZ_PKG_FORMAT: Either TGZ for .tar.gz or BZ2 for .tar.bz2. Default TGZ."
+	@echo "MOZ_PKG_APPNAME: Application name, used for tarball filename, top-level dir in tarball and application start script. Default mozilla."
+else
+	@if [ ! -d $(MOZ_PKG_DEST) ]; then mkdir $(MOZ_PKG_DEST); fi
+	@cd $(MOZ_PKG_DEST); rm -rf bin $(MOZ_PKG_APPNAME) $(PACKAGE)
+	@echo "Creating distribution tarball in $(MOZ_PKG_DEST)..."
+	$(PERL) $(srcdir)/pkgcp.pl --source $(DEPTH)/dist --destination $(MOZ_PKG_DEST) --file $(srcdir)/packages-$(OSPACKAGE) --os $(OSPACKAGE) --flat
+	@cd $(MOZ_PKG_DEST); mv bin $(MOZ_PKG_APPNAME)
+ifneq ($(MOZ_PKG_APPNAME),mozilla)
+	@echo "Creating start script $(MOZ_PKG_APPNAME)..."
+	cd $(MOZ_PKG_DEST)/$(MOZ_PKG_APPNAME); cp mozilla $(MOZ_PKG_APPNAME)
+endif
+	@echo "Compressing..."
+	cd $(MOZ_PKG_DEST); $(MAKE_PACKAGE)
+	@echo "Deleting work files..."
+	@cd $(MOZ_PKG_DEST); rm -rf $(MOZ_PKG_APPNAME)
+	@echo "Done creating $(PACKAGE)."
+endif
+

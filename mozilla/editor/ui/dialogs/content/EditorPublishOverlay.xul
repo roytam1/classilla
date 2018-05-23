@@ -1,0 +1,76 @@
+<?xml version="1.0"?>
+
+<!--
+   - The contents of this file are subject to the Netscape Public
+   - License Version 1.1 (the "License"); you may not use this file
+   - except in compliance with the License. You may obtain a copy of
+   - the License at http://www.mozilla.org/NPL/
+   -  
+   - Software distributed under the License is distributed on an "AS
+   - IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+   - implied. See the License for the specific language governing
+   - rights and limitations under the License.
+   -  
+   - The Original Code is Mozilla Communicator client code, released
+   - March 31, 1998.
+   - 
+   - The Initial Developer of the Original Code is Netscape
+   - Communications Corporation. Portions created by Netscape are
+   - Copyright (C) 2001 Netscape Communications Corporation. All
+   - Rights Reserved.
+   - 
+   - Contributor(s): 
+  -->
+
+<?xml-stylesheet href="chrome://editor/skin/editor.css" type="text/css"?>
+<?xml-stylesheet href="chrome://editor/skin/EditorDialog.css" type="text/css"?>
+
+<!DOCTYPE window SYSTEM "chrome://editor/locale/EditorPublish.dtd">
+
+<overlay id="EditorPublishOverlay"
+     xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+
+<vbox id="PublishSettingsInputs">
+  <groupbox id="ServerSettingsBox">
+    <caption label="&serverInfo.label;"/>
+    <hbox align="center">
+      <label value="&siteName.label;"/>
+      <textbox id="SiteNameInput" class="MinWidth20em" 
+        tooltiptext="&siteName.tooltip;" oninput="onInputSettings();" flex="1"/>
+    </hbox>
+    <spacer class="spacer"/>
+    <label value="&siteUrl.label;"/>
+    <textbox id="PublishUrlInput" class="MinWidth20em uri-element"
+      tooltiptext="&siteUrl.tooltip;" oninput="onInputSettings();"/>
+    <spacer class="spacer"/>
+    <label value="&browseUrl.label;"/>
+    <textbox id="BrowseUrlInput" class="MinWidth20em uri-element" 
+      tooltiptext="&browseUrl.tooltip;" oninput="onInputSettings();"/>
+    <spacer class="spacer"/>
+  </groupbox>
+  <groupbox id="LoginSettingsBox">
+    <caption label="&loginInfo.label;"/>
+    <grid>
+      <columns><column flex="1"/><column flex="3"/></columns>
+      <rows>
+        <row align="center">
+          <label value="&username.label;"/>
+          <textbox id="UsernameInput" class="MinWidth10em" 
+            tooltiptext="&username.tooltip;" oninput="onInputSettings();" flex="1"/>
+        </row>
+        <row align="center">
+          <label value="&password.label;"/>
+          <hbox>
+            <textbox id="PasswordInput" type="password" class="MinWidth5em" 
+              oninput="onInputSettings();"/>
+            <checkbox id="SavePassword" label="&savePassword.label;" 
+              tooltiptext="&savePassword.tooltip;" oncommand="onInputSettings();"/>
+          </hbox>
+        </row>
+      </rows>
+    </grid>
+    <spacer class="spacer"/>
+  </groupbox>
+</vbox>
+
+</overlay>

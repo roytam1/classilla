@@ -1,0 +1,73 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../../../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE		= xpcom
+INTERNAL_TOOLS	= 1
+
+SIMPLE_PROGRAMS	= xpt_dump$(BIN_SUFFIX) xpt_link$(BIN_SUFFIX)
+
+CSRCS		= xpt_dump.c xpt_link.c
+
+SDK_BINARY     =                   \
+		$(SIMPLE_PROGRAMS) \
+		$(NULL)
+
+ifdef CROSS_COMPILE
+HOST_SIMPLE_PROGRAMS	= $(addprefix host_, $(SIMPLE_PROGRAMS))
+HOST_CSRCS		= $(CSRCS)
+endif
+
+include $(topsrcdir)/config/rules.mk
+
+# Compile directly against the static lib, so we can use the tools
+# during the build without the shared library path being set.
+ifeq ($(OS_ARCH),WINNT)
+DEFINES		+= -DEXPORT_XPT_API
+endif
+
+LIBS		= $(DIST)/lib/$(LIB_PREFIX)xpt.$(LIB_SUFFIX)
+
+# Tell the $(SIMPLE_PROGRAMS) target that we need to be recompiled
+# when libxpt changes.
+EXTRA_DEPS	= $(wildcard $(DIST)/lib/$(LIB_PREFIX)xpt.*)
+
+ifdef CROSS_COMPILE
+HOST_LIBS		= $(DIST)/host/lib/libhostxpt.$(LIB_SUFFIX)
+HOST_EXTRA_DEPS		= $(wildcard $(DIST)/host/lib/libhostxpt.*)
+
+ifdef HOST_NSPR_MDCPUCFG
+HOST_CFLAGS	+= -DMDCPUCFG=$(HOST_NSPR_MDCPUCFG)
+endif
+endif
+
+
+# Build xpt_link and xpt_dump early.  (libs creates .deps used by libs.)
+export:: libs
+
+
+

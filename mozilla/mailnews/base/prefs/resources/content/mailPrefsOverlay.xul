@@ -1,0 +1,125 @@
+<?xml version="1.0"?>
+
+<!DOCTYPE window [
+<!ENTITY % mailPrefsOverlayDTD SYSTEM "chrome://messenger/locale/mailPrefsOverlay.dtd" >
+%mailPrefsOverlayDTD;
+]>
+
+<overlay id="mailPrefsOverlay"
+         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+
+  <script type="application/x-javascript">
+  <![CDATA[
+    var panel;
+    if (panel != undefined) {
+      switch(panel) 
+      {
+      case "chrome://communicator/content/pref/pref-scripts.xul":
+        _elementIDs.push("javascriptAllowMailNews");
+        _elementIDs.push("pluginAllowMailNews");
+        break;
+      case "chrome://communicator/content/pref/pref-appearance.xul":
+        _elementIDs.push("generalStartupMail");
+        break;
+      case "chrome://cookie/content/pref-cookies.xul":
+        _elementIDs.push("networkDisableCookieForMailNews");
+        break;
+      case "chrome://cookie/content/pref-images.xul":
+        _elementIDs.push("networkImageDisableImagesInMailNews");
+        break;
+      }
+    }
+  ]]>
+  </script>         
+
+  <!-- javascript toggle for mail/news -->
+  <groupbox id="javascriptPreferences">
+    <checkbox id="javascriptAllowMailNews"
+              label="&enbJsCheckMailNews.label;" accesskey="&enbJsCheckMailNews.accesskey;"
+              pref="true" preftype="bool" prefstring="javascript.allow.mailnews"
+              prefattribute="checked" oncommand="javascriptEnabledChange();" insertafter="javascriptAllowNavigator"/>
+  </groupbox>
+  <!-- plugin toggle for mail/news -->
+  <groupbox id="pluginPreferences">
+    <checkbox id="pluginAllowMailNews"
+              label="&enbPluginCheckMailNews.label;" accesskey="&enbPluginCheckMailNews.accesskey;"
+              pref="true" preftype="bool" prefstring="mailnews.message_display.allow.plugins"
+              prefattribute="checked"/>
+  </groupbox>
+
+  <!-- mail startup toggle -->
+  <groupbox id="generalStartupPreferences">           
+    <checkbox id="generalStartupMail" wsm_persist="true" position="3"
+              label="&mail.label;" accesskey="&mail.accesskey;"
+              pref="true" preftype="bool" prefstring="general.startup.mail"
+              prefattribute="checked"/>         
+  </groupbox>
+  <!--- cookie toggle for mail/news -->
+  <page id="cookiesPanel">
+    <checkbox id="networkDisableCookieForMailNews"
+              label="&disableCookieForMailNews.label;" accesskey="&disableCookieForMailNews.accesskey;"
+              preftype="bool" prefstring="network.cookie.disableCookieForMailNews"
+              insertafter="networkCookieBehaviorSeparator"/>
+  </page>
+  <!--- image toggle for mail/news -->
+  <groupbox id="imagesArea">
+    <checkbox id="networkImageDisableImagesInMailNews"
+              label="&disableImageInMailNews.label;" accesskey="&disableImageInMailNews.accesskey;"
+              pref="true" preftype="bool" prefstring="mailnews.message_display.disable_remote_image"
+              prefattribute="checked" insertafter="networkImagesBehaviorSeparator"/>
+  </groupbox>
+
+
+
+  <!-- category tree entries for mail/news -->
+  <treechildren id="panelChildren">
+    <treeitem container="true" id="mailnews" position="3">
+      <treerow>       
+        <treecell url="chrome://messenger/content/pref-mailnews.xul" label="&mail.label;"/> 
+      </treerow>
+      <treechildren id="messengerChildren">
+        <treeitem>
+          <treerow>
+            <treecell url="chrome://messenger/content/pref-windows.xul" label="&windows.label;"/> 
+          </treerow>
+        </treeitem>
+        <treeitem>
+          <treerow>
+            <treecell url="chrome://messenger/content/pref-viewing_messages.xul" label="&viewingMessages.label;"/> 
+          </treerow>
+        </treeitem>
+        <treeitem>
+          <treerow>
+            <treecell url="chrome://messenger/content/pref-notifications.xul" label="&notifications.label;"/> 
+          </treerow>
+        </treeitem>
+        <treeitem id="mailcomposepref">
+          <treerow>
+            <treecell url="chrome://messenger/content/messengercompose/pref-composing_messages.xul" label="&composingMessages.label;"/> 
+          </treerow>
+        </treeitem>
+        <treeitem>
+          <treerow>
+            <treecell url="chrome://messenger/content/messengercompose/pref-formatting.xul" label="&format.label;"/> 
+          </treerow>
+        </treeitem>
+        <treeitem id="mailaddressbookpref">
+          <treerow>
+            <treecell url="chrome://messenger/content/addressbook/pref-addressing.xul" label="&address.label;"/> 
+          </treerow>
+        </treeitem>
+        <treeitem>
+          <treerow>
+            <treecell url="chrome://messenger/content/pref-labels.xul" label="&labels.label;"/>
+          </treerow>
+        </treeitem>
+        <treeitem>
+          <treerow>
+            <treecell url="chrome://messenger/content/pref-receipts.xul" label="&return.label;"/>
+          </treerow>
+        </treeitem>
+      </treechildren>
+    </treeitem>
+  </treechildren>
+           
+</overlay>         

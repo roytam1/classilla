@@ -1,0 +1,119 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+IS_COMPONENT=1
+MODULE_NAME	= appshell
+MODULE		= appshell
+LIBRARY_NAME	= nsappshell
+EXPORT_LIBRARY = 1
+SHORT_LIBNAME	= appshell
+GRE_MODULE	= 1
+
+REQUIRES	= xpcom \
+		  string \
+		  widget \
+		  docshell \
+		  webshell \
+		  gfx \
+		  layout \
+		  content \
+		  dom \
+		  necko \
+		  uriloader \
+		  js \
+		  locale \
+		  webbrwsr \
+		  pref \
+		  xpconnect \
+		  intl \
+		  xul \
+		  windowwatcher \
+		  browser \
+		  caps \
+		  profile \
+		  unicharutil \
+		  embed_base \
+		  uconv \
+		  exthandler \
+		  $(NULL)
+
+CPPSRCS		= \
+		nsChromeTreeOwner.cpp \
+		nsContentTreeOwner.cpp \
+		nsXULWindow.cpp \
+		nsAppShellService.cpp \
+		nsAppShellWindowEnumerator.cpp \
+		nsWebShellWindow.cpp \
+		nsCommandLineService.cpp \
+		nsWindowMediator.cpp \
+		nsAbout.cpp \
+		nsAppShellFactory.cpp \
+		nsTimingService.cpp \
+		$(NULL)
+
+ifeq ($(MOZ_WIDGET_TOOLKIT),os2)
+CPPSRCS	+= nsUserInfoOS2.cpp
+else
+ifeq ($(OS_ARCH),WINNT)
+CPPSRCS += nsUserInfoWin.cpp
+else
+ifneq (,$(filter mac cocoa,$(MOZ_WIDGET_TOOLKIT)))
+CPPSRCS += \
+		nsUserInfoMac.cpp \
+		nsCommandLineServiceMac.cpp \
+		$(NULL)
+OS_CXXFLAGS += -fexceptions
+EXTRA_COMPONENTS += nsCloseAllWindows.js
+else
+CPPSRCS	+= nsUserInfoUnix.cpp
+endif
+endif
+endif
+
+EXTRA_COMPONENTS = nsCloseAllWindows.js
+
+ifeq ($(OS_ARCH),WINNT)
+EXTRA_DSO_LIBS	= gkgfx
+endif
+
+EXTRA_DSO_LDOPTS = \
+		$(LIBS_DIR) \
+		$(EXTRA_DSO_LIBS) \
+		$(MOZ_UNICHARUTIL_LIBS) \
+		$(MOZ_COMPONENT_LIBS) \
+		$(MOZ_JS_LIBS) \
+		$(NULL)
+
+ifeq (,$(filter-out mac cocoa,$(MOZ_WIDGET_TOOLKIT)))
+SHARED_LIBRARY_LIBS = $(DIST)/lib/$(LIB_PREFIX)appleevents_s.$(LIB_SUFFIX)
+EXTRA_DSO_LDOPTS += $(TK_LIBS) 
+LOCAL_INCLUDES	= -I$(srcdir)/../../bootstrap/appleevents
+endif
+
+include $(topsrcdir)/config/rules.mk
+

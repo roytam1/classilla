@@ -1,0 +1,11 @@
+nsISupports.idl
+nsIMemory.idl
+nsrootidl.idl
+nsIInterfaceRequestor.idl
+nsIConsoleService.idl
+nsIConsoleMessage.idl
+nsIConsoleListener.idl
+nsIWeakReference.idl
+nsIException.idl
+nsIExceptionService.idl
+nsIProgrammingLanguage.idl

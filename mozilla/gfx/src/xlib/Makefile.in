@@ -1,0 +1,146 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#   Roland Mainz <roland.mainz@informatik.med.uni-giessen.de>
+#
+
+DEPTH		= ../../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE		= gfx
+EXPORTS		= nsGCCache.h
+LIBRARY_NAME	= gfx_xlib
+EXPORT_LIBRARY = 1
+IS_COMPONENT	= 1
+MODULE_NAME	= nsGfxXlibModule
+GRE_MODULE	= 1
+
+REQUIRES	= xpcom \
+		  string \
+		  xlibrgb \
+		  widget \
+		  js \
+		  necko \
+		  pref \
+		  util \
+		  view \
+		  uconv \
+		  locale \
+		  unicharutil \
+		  imglib2 \
+		  mozcomps \
+		  intl \
+		  $(NULL)
+
+# Sun's Complex Text Layout support
+ifdef SUNCTL
+REQUIRES	+= ctl
+endif
+
+# Code shared between GTK+, Xlib and Xprint gfx modules
+# (empty for now - but this will be filled soon...)
+X11SHARED_LCPPSRCS = \
+		$(NULL)
+
+CPPSRCS		= \
+		$(X11SHARED_LCPPSRCS) \
+		nsDeviceContextSpecFactoryX.cpp \
+		nsDeviceContextSpecXlib.cpp \
+		nsDeviceContextXlib.cpp \
+		nsDrawingSurfaceXlib.cpp \
+		nsFontMetricsXlib.cpp \
+		nsGfxFactoryXlib.cpp \
+		nsImageXlib.cpp \
+		nsRegionXlib.cpp \
+		nsRenderingContextXlib.cpp \
+		nsScreenXlib.cpp \
+		nsScreenManagerXlib.cpp \
+	       	nsPrintOptionsXlib.cpp \
+		nsGCCache.cpp \
+		$(NULL)
+
+ifdef HAVE_XIE
+CSRCS		+= XIE.c
+endif
+
+# If not primary toolkit, install in secondary path
+ifneq (xlib,$(MOZ_GFX_TOOLKIT))
+INACTIVE_COMPONENT = 1
+endif
+
+ifdef MOZ_ENABLE_XPRINT
+XPU_LCSRCS	 = xprintutil.c
+CSRCS           += $(XPU_LCSRCS)
+endif
+
+GARBAGE         += $(X11SHARED_LCPPSRCS) $(XPU_LCSRCS) $(wildcard *.$(OBJ_SUFFIX))
+
+include $(topsrcdir)/config/rules.mk
+
+EXTRA_DSO_LDOPTS += -L$(DIST)/bin -lxlibrgb $(MOZ_XLIB_LDFLAGS)
+CXXFLAGS	+= $(MOZ_XLIB_CFLAGS)
+
+ifdef HAVE_XIE
+DEFINES         += -DHAVE_XIE
+GFX_XIE_LIBS    += $(MOZ_XIE_LIBS)
+endif
+
+EXTRA_DSO_LDOPTS += \
+		$(NSPR_LIBS)	\
+		-lxpcom		\
+		-lgkgfx		\
+		-lgfxshared_s   \
+		$(GFX_XIE_LIBS) \
+		$(NULL)
+
+DEFINES		+= -DUSE_MOZILLA_TYPES
+
+ifeq ($(OS_ARCH), Linux)
+DEFINES         += -D_BSD_SOURCE
+endif
+
+ifdef MOZ_ENABLE_POSTSCRIPT
+DEFINES         += -DUSE_POSTSCRIPT
+endif
+
+ifdef MOZ_ENABLE_XPRINT
+DEFINES         += -DUSE_XPRINT
+EXTRA_DSO_LDOPTS += $(MOZ_XPRINT_LDFLAGS)
+endif
+
+LOCAL_INCLUDES	+= \
+		-I$(srcdir)/. \
+		-I$(srcdir)/.. \
+		-I$(srcdir)/../shared \
+		-I$(srcdir)/../x11shared \
+		$(NULL)
+
+ifdef MOZ_ENABLE_XPRINT
+export:: $(addprefix $(srcdir)/../xprint/,$(XPU_LCSRCS)) $(addprefix $(srcdir)/../x11shared/,$(X11SHARED_LCPPSRCS))
+	$(INSTALL) $^ .
+else
+# disabled until X11SHARED_LCPPSRCS becomes non-empty
+# export:: $(addprefix $(srcdir)/../x11shared/,$(X11SHARED_LCPPSRCS))
+#	$(INSTALL) $^ .
+endif
+

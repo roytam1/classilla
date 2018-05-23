@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+
+<!DOCTYPE overlay [
+  <!ENTITY % dtd1 SYSTEM "chrome://inspector/locale/inspector.dtd"> %dtd1;
+  <!ENTITY % dtd2 SYSTEM "chrome://inspector/content/util.dtd"> %dtd2;
+  <!ENTITY % dtd3 SYSTEM "chrome://inspector/locale/viewers/dom.dtd"> %dtd3;
+]>
+
+<?xml-stylesheet href="chrome://inspector/skin/viewers/styleRules/styleRules.css"?>
+
+<dialog id="winPseudoClasses"
+        title="&pseudoClasses.title;"
+        persist="screenX screenY width height"
+        ondialogaccept="return dialog.onOk()"
+        xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+  
+  <!--============================= SCRIPTS ============================= -->
+
+  <script type="application/x-javascript" src="chrome://inspector/content/viewers/dom/pseudoClassDialog.js"/>
+  <script type="application/x-javascript" src="chrome://inspector/content/jsutil/xpcom/XPCU.js"/>
+
+  <keyset id="dialogKeys"/>
+
+  <groupbox style="width: 25em;">
+    <caption label="&pseudoClasses.title;"/>
+    <vbox>
+      <checkbox id="cbxStateHover" label="&stateHover.label;"/>
+      <checkbox id="cbxStateActive" label="&stateActive.label;"/>
+      <checkbox id="cbxStateFocus" label="&stateFocus.label;"/>
+    </vbox>
+  </groupbox>
+
+</dialog>
+
+        

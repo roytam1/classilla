@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+
+<?xml-stylesheet href="chrome://messenger/skin/accountManage.css" type="text/css"?>
+
+<?xul-overlay href="chrome://messenger/content/smtpEditOverlay.xul"?>
+
+<!DOCTYPE window SYSTEM "chrome://messenger/locale/am-advanced.dtd" >
+
+<page xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+      onload="onLoad();">
+  <script type="application/x-javascript" src="amUtils.js"/>
+  <script type="application/x-javascript" src="am-smtp.js"/>
+
+  <dialogheader title="&smtpServer.label;"/>
+
+  <groupbox>
+
+  <description>&smtpDesc.label;</description>
+
+  <separator/>
+
+  <vbox id="smtpServerEditor"/>
+
+  <separator/>
+  
+  <hbox>
+    <spacer flex="1"/>
+    <button label="&advanced.label;" oncommand="onAdvanced(event);"
+            wsm_persist="true" id="smtp.advancedbutton" 
+            prefstring="mail.smtpserver.%serverkey%.advanced.disable"/>
+  </hbox>
+  
+  </groupbox>
+  
+</page>

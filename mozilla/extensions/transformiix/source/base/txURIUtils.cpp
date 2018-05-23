@@ -1,0 +1,228 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
+ *
+ * The contents of this file are subject to the Mozilla Public
+ * License Version 1.1 (the "License"); you may not use this file
+ * except in compliance with the License. You may obtain a copy of
+ * the License at http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS
+ * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * rights and limitations under the License.
+ *
+ * The Original Code is TransforMiiX XSLT processor.
+ *
+ * The Initial Developer of the Original Code is The MITRE Corporation.
+ * Portions created by MITRE are Copyright (C) 1999 The MITRE Corporation.
+ *
+ * Portions created by Keith Visco as a Non MITRE employee,
+ * (C) 1999 Keith Visco. All Rights Reserved.
+ *
+ * Contributor(s):
+ * Keith Visco, kvisco@ziplink.net
+ *    -- original author.
+ * Larry Fitzpatrick, OpenText, lef@opentext.com
+ *   -- 19990806
+ *     -- moved initialization of constant shorts and chars from
+ *        URIUtils.cpp to here
+ *
+ * Peter Van der Beken
+ *
+ */
+
+#include "txURIUtils.h"
+
+#ifndef TX_EXE
+#include "nsNetUtil.h"
+#include "nsIAttribute.h"
+#include "nsIScriptSecurityManager.h"
+#include "nsIDocument.h"
+#include "nsIDOMDocument.h"
+#include "nsIContent.h"
+#include "nsIPrincipal.h"
+#include "nsINodeInfo.h"
+#endif
+
+/**
+ * URIUtils
+ * A set of utilities for handling URIs
+**/
+
+#ifdef TX_EXE
+//- Constants -/
+
+const char   URIUtils::HREF_PATH_SEP  = '/';
+
+/**
+ * Returns an InputStream for the file represented by the href
+ * argument
+ * @param href the href of the file to get the input stream for.
+ * @return an InputStream to the desired resource
+ * @exception java.io.FileNotFoundException when the file could not be
+ * found
+**/
+istream* URIUtils::getInputStream(const nsAString& href, nsAString& errMsg)
+{
+    return new ifstream(NS_LossyConvertUCS2toASCII(href).get(), ios::in);
+} //-- getInputStream
+
+/**
+    * Returns the document base of the href argument
+    * @return the document base of the given href
+**/
+void URIUtils::getDocumentBase(const nsAFlatString& href, nsAString& dest)
+{
+    if (href.IsEmpty()) {
+        return;
+    }
+
+    nsAFlatString::const_char_iterator temp;
+    href.BeginReading(temp);
+    PRUint32 iter = href.Length();
+    while (iter > 0) {
+        if (temp[--iter] == HREF_PATH_SEP) {
+            dest.Append(Substring(href, 0, iter));
+            break;
+        }
+    }
+}
+#endif
+
+/**
+ * Resolves the given href argument, using the given documentBase
+ * if necessary.
+ * The new resolved href will be appended to the given dest String
+**/
+void URIUtils::resolveHref(const nsAString& href, const nsAString& base,
+                           nsAString& dest) {
+    if (base.IsEmpty()) {
+        dest.Append(href);
+        return;
+    }
+    if (href.IsEmpty()) {
+        dest.Append(base);
+        return;
+    }
+
+#ifndef TX_EXE
+    nsCOMPtr<nsIURI> pURL;
+    nsAutoString resultHref;
+    nsresult result = NS_NewURI(getter_AddRefs(pURL), base);
+    if (NS_SUCCEEDED(result)) {
+        NS_MakeAbsoluteURI(resultHref, href, pURL);
+        dest.Append(resultHref);
+    }
+#else
+    nsAutoString documentBase;
+    getDocumentBase(PromiseFlatString(base), documentBase);
+
+    //-- join document base + href
+    if (!documentBase.IsEmpty()) {
+        dest.Append(documentBase);
+        if (documentBase.CharAt(documentBase.Length()-1) != HREF_PATH_SEP)
+            dest.Append(PRUnichar(HREF_PATH_SEP));
+    }
+    dest.Append(href);
+
+#endif
+} //-- resolveHref
+
+#ifndef TX_EXE
+
+nsIScriptSecurityManager *gTxSecurityManager = 0;
+
+// static
+PRBool URIUtils::CanCallerAccess(nsIDOMNode *aNode)
+{
+    if (!gTxSecurityManager) {
+        // No security manager available, let any calls go through...
+
+        return PR_TRUE;
+    }
+
+    nsCOMPtr<nsIPrincipal> subjectPrincipal;
+    gTxSecurityManager->GetSubjectPrincipal(getter_AddRefs(subjectPrincipal));
+
+    if (!subjectPrincipal) {
+        // we're running as system, grant access to the node.
+
+        return PR_TRUE;
+    }
+
+    // Make sure that this is a real node. We do this by first QI'ing to
+    // nsIContent (which is important performance wise) and if that QI
+    // fails we QI to nsIDocument. If both those QI's fail we won't let
+    // the caller access this unknown node.
+    nsCOMPtr<nsIPrincipal> principal;
+    nsCOMPtr<nsIContent> content = do_QueryInterface(aNode);
+    nsCOMPtr<nsIAttribute> attr;
+    nsCOMPtr<nsIDocument> doc;
+
+    if (!content) {
+        doc = do_QueryInterface(aNode);
+
+        if (!doc) {
+            attr = do_QueryInterface(aNode);
+            if (!attr) {
+                // aNode is not a nsIContent, a nsIAttribute or a nsIDocument,
+                // something weird is going on...
+
+                NS_ERROR("aNode is not a nsIContent, a nsIAttribute or a nsIDocument!");
+
+                return PR_FALSE;
+            }
+        }
+    }
+
+    if (!doc) {
+        nsCOMPtr<nsIDOMDocument> domDoc;
+        aNode->GetOwnerDocument(getter_AddRefs(domDoc));
+        if (!domDoc) {
+            nsCOMPtr<nsINodeInfo> ni;
+            if (content) {
+                content->GetNodeInfo(*getter_AddRefs(ni));
+            }
+            else {
+                attr->GetNodeInfo(*getter_AddRefs(ni));
+            }
+
+            if (!ni) {
+                // aNode is not part of a document, let any caller access it.
+
+                return PR_TRUE;
+            }
+
+            ni->GetDocumentPrincipal(getter_AddRefs(principal));
+
+            if (!principal) {
+              // we can't get to the principal so we'll give up and give the
+              // caller access
+
+              return PR_TRUE;
+            }
+        }
+        else {
+            doc = do_QueryInterface(domDoc);
+            NS_ASSERTION(doc, "QI to nsIDocument failed");
+        }
+    }
+
+    if (!principal) {
+        doc->GetPrincipal(getter_AddRefs(principal));
+    }
+
+    if (!principal) {
+        // We can't get hold of the principal for this node. This should happen
+        // very rarely, like for textnodes out of the tree and <option>s created
+        // using 'new Option'.
+
+        return PR_TRUE;
+    }
+
+    nsresult rv = gTxSecurityManager->CheckSameOriginPrincipal(subjectPrincipal,
+                                                               principal);
+
+    return NS_SUCCEEDED(rv);
+}
+
+#endif /* TX_EXE */

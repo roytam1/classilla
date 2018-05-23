@@ -1,0 +1,170 @@
+<?xml version="1.0"?>
+<!--
+The contents of this file are subject to the Netscape Public
+License Version 1.1 (the "License"); you may not use this file
+except in compliance with the License. You may obtain a copy of
+the License at http://www.mozilla.org/NPL/
+
+Software distributed under the License is distributed on an "AS
+IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+implied. See the License for the specific language governing
+rights and limitations under the License.
+
+The Original Code is Mozilla Communicator client code, released
+March 31, 1998.
+
+The Initial Developer of the Original Code is Netscape
+Communications Corporation. Portions created by Netscape are
+ Copyright (C) 1998-1999 Netscape Communications Corporation. All
+Rights Reserved.
+
+Contributor(s):
+  Håkan Waara <hwaara@chello.se>
+
+-->
+
+<?xml-stylesheet href="chrome://messenger/skin/filterDialog.css" type="text/css"?>
+
+<?xul-overlay href="chrome://global/content/dialogOverlay.xul"?>
+<?xul-overlay href="chrome://messenger/content/msgFolderPickerOverlay.xul"?>
+<?xul-overlay href="chrome://messenger/content/searchTermOverlay.xul"?>
+
+<!DOCTYPE window SYSTEM "chrome://messenger/locale/FilterEditor.dtd">
+
+<dialog id="FilterEditor"
+  xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+  xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+  title="&window.title;"
+  windowtype="mailnews:filtereditor"
+  width="560" height="460"
+  persist="width height screenX screenY"
+  buttons="accept,cancel,help"
+  onload="filterEditorOnLoad();"
+  onunload="filterEditorOnUnload();"
+  ondialogaccept="return onAccept();"
+  ondialoghelp="return doHelpButton();">
+
+  <dummy class="usesMailWidgets"/>
+  <stringbundleset id="stringbundleset">
+    <stringbundle id="bundle_filter" src="chrome://messenger/locale/filter.properties"/>
+    <stringbundle id="bundle_search" src="chrome://messenger/locale/search.properties"/>
+  </stringbundleset>
+  <!-- XXX: only mailWidgets.xml requires strres.js (<script> isn't valid in XBL yet - see hyatt)-->
+  <script type="application/x-javascript" src="chrome://global/content/strres.js"/>
+  <script type="application/x-javascript" src="chrome://messenger/content/mailWindowOverlay.js"/>
+  <script type="application/x-javascript" src="chrome://messenger/content/mailCommands.js"/>
+  <script type="application/x-javascript" src="chrome://messenger/content/FilterEditor.js"/>
+  <script type="application/x-javascript" src="chrome://messenger/content/widgetglue.js"/>
+  <script type="application/x-javascript" src="chrome://help/content/contextHelp.js"/>
+
+  <hbox align="center">
+    <label value="&filterName.label;" accesskey="&filterName.accesskey;" control="filterName"/>
+    <textbox flex="50%" id="filterName"/>
+    <spacer flex="50%"/>
+  </hbox>
+
+  <separator/>
+
+  <vbox flex="1">
+    <label value="&conditionDesc.label;"/>
+    <vbox id="searchTermListBox" flex="1"/>
+  </vbox>
+
+  <separator/>
+
+  <vbox>
+    <label value="&filterActionDesc.label;" accesskey="&filterActionDesc.accesskey;"/>
+    <hbox align="start" height="100">
+    <listbox flex="1" id="filterActionList">
+      <listcols>
+        <listcol flex="1"/>
+        <listcol flex="1"/>
+        <listcol flex="1"/>
+      </listcols>
+      <listitem allowevents="true">
+        <listcell>
+          <checkbox id="moveToFolder" enablefornews="false" label="&moveToFolder.label;"/>
+        </listcell>
+        <listcell> 
+          <menulist id="actionTargetFolder" enablefornews="false" flex="1"/>
+        </listcell>
+        <listcell> 
+          <button id="newFolderButton" enablefornews="false" label="&newFolderButton.label;" 
+              accesskey="&newFolderButton.accesskey;" 
+              oncommand="MsgNewFolder(SearchNewFolderOkCallback);"/>
+        </listcell>
+      </listitem>
+
+      <listitem allowevents="true">
+        <listcell>
+        <checkbox id="label" label="&label.label;"/>
+        </listcell>
+        <listcell> 
+          <menulist id="actionValueLabel" flex="1">
+            <menupopup>
+              <!-- see MailNewsTypes2.idl -->
+              <menuitem id="labelMenuItem1" value="1"/>
+              <menuitem id="labelMenuItem2" value="2"/>
+              <menuitem id="labelMenuItem3" value="3"/>
+              <menuitem id="labelMenuItem4" value="4"/>
+              <menuitem id="labelMenuItem5" value="5"/>
+            </menupopup>
+          </menulist>
+        </listcell>
+      </listitem>
+
+      <listitem allowevents="true">
+        <listcell>
+          <checkbox id="changePriority" label="&changePriority.label;"/>
+        </listcell>
+        <listcell> 
+          <menulist id="actionValuePriority" flex="1">
+            <menupopup>
+              <!-- see MailNewsTypes2.idl -->
+              <menuitem value="6" label="&highestPriorityCmd.label;"/>
+              <menuitem value="5" label="&highPriorityCmd.label;"/>
+              <menuitem value="4" label="&normalPriorityCmd.label;"/>
+              <menuitem value="3" label="&lowPriorityCmd.label;"/>
+              <menuitem value="2" label="&lowestPriorityCmd.label;"/>
+            </menupopup>
+          </menulist>
+        </listcell>
+      </listitem>
+
+      <listitem allowevents="true">
+        <listcell>
+          <checkbox id="markRead" label="&markRead.label;"/>
+        </listcell>
+      </listitem>
+
+      <listitem allowevents="true">
+        <listcell>
+          <checkbox id="markFlagged" label="&markFlagged.label;"/>
+        </listcell>
+      </listitem>
+
+      <listitem allowevents="true">
+        <listcell>
+          <checkbox id="delete" label="&delete.label;"/>
+        </listcell>
+      </listitem>
+
+      <listitem allowevents="true">
+        <listcell>
+          <checkbox id="kill" enablefornews="true" label="&killThread.label;"/>
+        </listcell>
+      </listitem>
+
+      <listitem allowevents="true">
+        <listcell>
+          <checkbox id="watch" enablefornews="true" label="&watchThread.label;"/>
+        </listcell>
+      </listitem>
+
+    </listbox>
+    </hbox>
+  </vbox>
+
+  <separator/>
+
+</dialog>

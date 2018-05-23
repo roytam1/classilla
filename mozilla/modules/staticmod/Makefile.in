@@ -1,0 +1,137 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+ifdef MOZ_STATIC_COMPONENTS
+MODULE		= staticmod
+LIBRARY_NAME	= staticmod
+SHORT_LIBNAME	= statcmod
+endif
+IS_COMPONENT	= 1
+
+include $(topsrcdir)/config/config.mk
+
+REQUIRES	= xpcom \
+		  $(NULL)
+
+ifdef MOZ_STATIC_COMPONENTS
+CPPSRCS		= nsStaticModule.cpp
+endif
+
+LOCAL_INCLUDES	= -I$(srcdir)
+
+ifdef _COMPONENT_BASE
+_META_COMPONENT_NAMES := MOZ_META_COMPONENTS_$(_COMPONENT_BASE)
+_META_COMPONENT_LIBS := MOZ_META_COMPONENTS_$(_COMPONENT_BASE)_comps
+_META_DEP_LIBS := MOZ_META_COMPONENTS_$(_COMPONENT_BASE)_libs
+endif
+
+ifdef MOZ_STATIC_COMPONENTS
+SHARED_LIBRARY_LIBS = \
+		$(foreach m, $(MOZ_STATIC_COMPONENTS), $(DIST)/lib/components/$(LIB_PREFIX)$(m).$(LIB_SUFFIX))
+endif
+
+ifdef _COMPONENT_BASE
+SHARED_LIBRARY_LIBS = $(foreach m,$($(_META_COMPONENT_LIBS)), $(DIST)/lib/components/$(LIB_PREFIX)$(m).$(LIB_SUFFIX))
+SHARED_LIBRARY_LIBS += $(foreach m,$($(_META_DEP_LIBS)), $(DIST)/lib/$(LIB_PREFIX)$(m).$(LIB_SUFFIX))
+endif
+
+ifndef NO_RECURSE
+libs clean distclean clobber realclean clobber_all::
+	set -e; \
+	for f in $(MOZ_META_COMPONENTS); do \
+		$(MAKE) NO_RECURSE=1 BUILD_SHARED_LIBS=1 BUILD_STATIC_LIBS= LIBRARY_NAME=meta_$$f CPPSRCS=nsMetaModule_$$f.cpp _COMPONENT_BASE=$$f $@ ; \
+	done
+endif
+
+
+include $(topsrcdir)/config/rules.mk
+
+ifdef MOZ_STATIC_COMPONENTS
+EXTRA_DSO_LDOPTS += \
+		$(ZLIB_LIBS) \
+		$(XPCOM_LIBS) \
+		$(MOZ_JS_LIBS) \
+		$(NSPR_LIBS) \
+		$(PNG_LIBS) \
+		-ljsdom
+endif
+
+ifdef MOZ_META_COMPONENTS
+# Force XPCOM_TRANSLATE_NSGM_ENTRY_POINT to be defined so the macros
+# in nsIGenericFactory.h will come out in the wash.
+DEFINES += -DMETA_MODULE=\"$(LIBRARY_NAME)\" -DXPCOM_TRANSLATE_NSGM_ENTRY_POINT
+ifeq ($(LIBRARY_NAME),meta_mail)
+EXTRA_DSO_LDOPTS += \
+	$(DIST)/lib/$(LIB_PREFIX)gkgfx.$(LIB_SUFFIX) \
+	$(DIST)/lib/$(LIB_PREFIX)rdfutil_s.$(LIB_SUFFIX) \
+	$(NULL)
+endif
+ifeq ($(LIBRARY_NAME),meta_crypto)
+EXTRA_DSO_LDOPTS += \
+	$(MOZ_JS_LIBS) \
+	$(NSS_LIBS) \
+	$(NULL)
+endif
+EXTRA_DSO_LDOPTS += \
+	$(MOZ_UNICHARUTIL_LIBS) \
+	$(MOZ_COMPONENT_LIBS) \
+	$(NULL)
+endif
+
+ifeq ($(OS_ARCH),WINNT)
+OS_LIBS	+= ole32.lib shell32.lib
+endif
+
+GARBAGE += $(CPPSRCS)
+
+list:
+	echo $(MOZ_STATIC_COMPONENTS)
+
+ifdef _NO_AUTO_VARS
+_TARGET = $(srcdir)/$(@F)
+GARBAGE	+= $(addprefix $(srcdir)/,$(CPPSRCS))
+else
+_TARGET = $@
+endif
+
+ifdef MOZ_STATIC_COMPONENTS
+nsStaticModule.cpp: nsMetaModule.cpp.in Makefile Makefile.in $(DEPTH)/config/autoconf.mk
+	rm -f $@
+	cat $< | \
+	sed -e "s|%DECLARE_SUBMODULE_INFOS%|$(foreach m, $(MOZ_STATIC_COMPONENTS), extern nsModuleInfo NSMODULEINFO($(m));)|" | \
+	sed -e "s|%SUBMODULE_INFOS%|$(foreach m, $(MOZ_STATIC_COMPONENTS), \\& NSMODULEINFO($(m)),)|" \
+	> $(_TARGET)
+endif
+
+nsMetaModule_%.cpp: nsMetaModule.cpp.in Makefile Makefile.in $(topsrcdir)/config/config.mk
+	rm -f $@
+	cat $< | \
+	sed -e "s|%DECLARE_SUBMODULE_INFOS%|$(foreach m, $($(_META_COMPONENT_NAMES)), extern nsModuleInfo NSMODULEINFO($(m));)|" | \
+	sed -e "s|%SUBMODULE_INFOS%|$(foreach m, $($(_META_COMPONENT_NAMES)), \\& NSMODULEINFO($(m)),)|" \
+	> $(_TARGET)
+

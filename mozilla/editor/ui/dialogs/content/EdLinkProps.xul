@@ -1,0 +1,63 @@
+<?xml version="1.0"?>
+
+<!--
+   - The contents of this file are subject to the Netscape Public
+   - License Version 1.1 (the "License"); you may not use this file
+   - except in compliance with the License. You may obtain a copy of
+   - the License at http://www.mozilla.org/NPL/
+   -  
+   - Software distributed under the License is distributed on an "AS
+   - IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+   - implied. See the License for the specific language governing
+   - rights and limitations under the License.
+   -  
+   - The Original Code is Mozilla Communicator client code, released
+   - March 31, 1998.
+   - 
+   - The Initial Developer of the Original Code is Netscape
+   - Communications Corporation. Portions created by Netscape are
+   - Copyright (C) 1998-1999 Netscape Communications Corporation. All
+   - Rights Reserved.
+   - 
+   - Contributor(s): 
+  -->
+
+<?xml-stylesheet href="chrome://editor/skin/editor.css" type="text/css"?>
+<?xml-stylesheet href="chrome://editor/skin/EditorDialog.css" type="text/css"?>
+
+<?xul-overlay href="chrome://global/content/globalOverlay.xul"?>
+<?xul-overlay href="chrome://editor/content/EdDialogOverlay.xul"?> 
+
+<!DOCTYPE window SYSTEM "chrome://editor/locale/EditorLinkProperties.dtd">
+
+<dialog id="linkDlg" title="&windowTitle.label;"
+   xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+   buttons="accept,cancel,help"
+   onload = "Startup()"
+   ondialogaccept="return onAccept();"
+   ondialogcancel="return onCancel();"
+   ondialoghelp="return doHelpButton();">
+
+  <script type="application/x-javascript" src="chrome://editor/content/editorUtilities.js"/>
+  <script type="application/x-javascript" src="chrome://editor/content/EdDialogCommon.js"/>
+  <script type="application/x-javascript" src="chrome://editor/content/EdLinkProps.js"/>
+  <script type="application/x-javascript" src="chrome://help/content/contextHelp.js"/>
+
+  <broadcaster id="args" value=""/>
+  <spacer id="location" offsetY="50" persist="offsetX offsetY"/>
+
+  <vbox style="min-width: 20em">
+    <groupbox><caption id="linkTextCaption"/>
+      <vbox>
+        <label id="linkTextMessage" control="linkTextInput"/>
+        <textbox id="linkTextInput"/>
+      </vbox>
+    </groupbox>
+
+    <groupbox><caption label="&LinkURLBox.label;"/>
+      <vbox id="LinkLocationBox"/>
+    </groupbox>
+  </vbox>
+  <!-- from EdDialogOverlay -->
+  <vbox id="AdvancedEdit"/>
+</dialog>

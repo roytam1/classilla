@@ -1,0 +1,12 @@
+//
+//	NSPRDebug.Prefix
+//
+// Global prefix file for the debug NSPR project.
+//
+//
+
+
+#include "MacPrefix_debug.h"
+#include "NSPRConfig.h"
+
+#define DEVELOPER_DEBUG 1

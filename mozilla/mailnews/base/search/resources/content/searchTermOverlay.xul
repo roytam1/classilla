@@ -1,0 +1,84 @@
+<?xml version="1.0"?>
+
+<!--
+ The contents of this file are subject to the Netscape Public
+ License Version 1.1 (the "License"); you may not use this file
+ except in compliance with the License. You may obtain a copy of
+ the License at http://www.mozilla.org/NPL/
+
+ Software distributed under the License is distributed on an "AS
+ IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+ implied. See the License for the specific language governing
+ rights and limitations under the License.
+
+ The Original Code is Mozilla Communicator client code.
+
+ The Initial Developer of the Original Code is Netscape Communications
+ Corporation.  Portions created by Netscape are
+ Copyright (C) 1998 Netscape Communications Corporation. All
+ Rights Reserved.
+
+ Contributor(s):
+ Alec Flett <alecf@netscape.com>
+ Hkan Waara <hwaara@chello.se>
+-->
+
+<!DOCTYPE window SYSTEM "chrome://messenger/locale/searchTermOverlay.dtd" >
+
+<overlay xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+
+  <script src="chrome://messenger/content/searchTermOverlay.js"/>
+
+  <vbox id="searchTermListBox" >
+
+    <radiogroup id="booleanAndGroup" orient="horizontal"
+                selectedItem="or" oncommand="booleanChanged(event);">
+      <radio value="and" label="&matchAll.label;" accesskey="&matchAll.accesskey;"/>
+      <radio selected="true" value="or" label="&matchAny.label;" accesskey="&matchAny.accesskey;"/>
+    </radiogroup>
+    
+    <hbox flex="1">
+      <hbox id="searchterms"/>
+      <listbox flex="1" id="searchTermList">
+        <listcols>
+          <listcol flex="&searchTermListSpace1FlexValue;"/>
+          <listcol flex="&searchTermListAttributesFlexValue;"/>
+          <listcol flex="&searchTermListSpace2FlexValue;"/>
+          <listcol flex="&searchTermListOperatorsFlexValue;"/>
+          <listcol flex="&searchTermListSpace3FlexValue;"/>
+          <listcol flex="&searchTermListValueFlexValue;"/>
+          <listcol flex="&searchTermListSpace4FlexValue;"/>
+        </listcols>
+
+        <!-- this is what the listitems will look like:
+          <listitem id="searchListItem">
+            <listcell id="preSearchAttr"/>
+            <listcell allowevents="true">
+              <searchattribute id="searchAttr1" for="searchOp1,searchValue1" flex="1"/>
+            </listcell>
+            <listcell id="preSearchOp"/>
+            <listcell allowevents="true">
+              <searchoperator id="searchOp1" opfor="searchValue1" flex="1"/>
+            </listcell>
+            <listcell id="preSearchValue"/>
+            <listcell allowevents="true" >
+              <searchvalue id="searchValue1" flex="1"/>
+            </listcell>
+            <listcell id="postSearchValue"/>
+          </listitem>
+          <listitem>
+            <listcell label="the.."/>
+            <listcell label="contains.."/>
+            <listcell label="text here"/>
+          </listitem>
+        -->
+      </listbox>
+      
+    </hbox>
+    <hbox>
+      <button id="more" label="&more.label;" oncommand="onMore(event);" accesskey="&more.accesskey;"/>
+      <button id="less" label="&less.label;" disabled="true" oncommand="onLess(event);" accesskey="&less.accesskey;"/>
+    </hbox>
+  </vbox>
+
+</overlay>

@@ -1,0 +1,199 @@
+<?xml version="1.0"?>
+
+<!--
+   - The contents of this file are subject to the Mozilla Public
+   - License Version 1.1 (the "License"); you may not use this file
+   - except in compliance with the License. You may obtain a copy of
+   - the License at http://www.mozilla.org/MPL/
+   -  
+   - Software distributed under the License is distributed on an "AS
+   - IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+   - implied. See the License for the specific language governing
+   - rights and limitations under the License.
+   - 
+   - The Original Code is JSIRC Test Client #3
+   - 
+   - The Initial Developer of the Original Code is New Dimensions Consulting,
+   - Inc. Portions created by New Dimensions Consulting, Inc. are
+   - Copyright (C) 1999 New Dimenstions Consulting, Inc. All
+   - Rights Reserved.
+   - 
+   - Contributor(s):
+   -  Robert Ginda, rginda@ndcico.com, original author
+   -  Josh Soref, timeless@mac.com, international support
+   -  Chiaki Koufugata chiaki@mozilla.gr.jp UI i18n
+   -->
+
+<!DOCTYPE window SYSTEM "chrome://chatzilla/locale/chatzilla.dtd">
+
+<?xml-stylesheet href="chrome://chatzilla/skin/chatzilla.css" type="text/css"?>
+
+<?xul-overlay href="chrome://global/content/globalOverlay.xul"?>
+<?xul-overlay href="chrome://communicator/content/utilityOverlay.xul"?>
+<?xul-overlay href="chrome://chatzilla/content/scripts.xul"?>
+<?xul-overlay href="chrome://chatzilla/content/menus.xul"?>
+<?xul-overlay href="chrome://chatzilla/content/popups.xul"?>
+
+<window id="chatzilla-window"
+  xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+  xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+  orient="vertical" onload="onLoad();" onunload="onUnload();"
+  onclose="return onClose();" onmouseover="onMouseOver(event);"
+  persist="width height screenX screenY" windowtype="irc:chatzilla">
+
+  <overlaytarget id="scripts-overlay-target"/>
+  <overlaytarget id="menu-overlay-target"/>
+  <overlaytarget id="popup-overlay-target"/>
+
+  <vbox id="outer-box" flex="1">
+    <vbox id="upper-box" flex="1">
+      <hbox id="tabpanels-contents-box" flex="1">
+        <vbox id="user-list-box" width="20%" persist="collapsed width">
+ 
+          <tree id="user-list" container="true" datasources="rdf:null" flex="1"
+            containment="http://home.netscape.com/NC-irc#chanuser"
+            seltype="multiple" context="userlistPopup">
+
+            <template>
+              <rule>
+                <conditions>
+                  <content uri="?container"/>
+                  <member container="?container" child="?member"/>
+                </conditions>
+                
+                <bindings>
+                  <binding subject="?member" predicate="http://home.netscape.com/NC-irc#op" object="?op"/>
+                  <binding subject="?member" predicate="http://home.netscape.com/NC-irc#voice" object="?voice"/>
+                  <binding subject="?member" predicate="http://home.netscape.com/NC-irc#nick" object="?nick"/>
+                </bindings>
+                
+                <action>
+                  <treechildren>
+                    <treeitem uri="?member" flex="1" properties="op-?op voice-?voice">
+                      <treerow>
+                          <treecell properties="state-?op"/>
+                          <treecell properties="state-?voice"/>
+                          <treecell label="?nick"/>
+                      </treerow>
+                    </treeitem>
+                  </treechildren>
+                </action>
+              </rule>
+            </template>
+    
+            <treecols>
+              <treecol id="usercol-op" label="O"
+                onclick="return onSortCol('usercol-op')"
+                resource="http://home.netscape.com/NC-irc#op" width="25"/>
+              <splitter class="tree-splitter"/>
+              <treecol id="usercol-voice" label="V"
+                onclick="return onSortCol('usercol-voice')"
+                resource="http://home.netscape.com/NC-irc#voice" width="25"/>
+              <splitter class="tree-splitter"/>
+              <treecol id="usercol-nick" label="Nick" flex="1"
+                onclick="return onSortCol('usercol-nick')"
+                resource="http://home.netscape.com/NC-irc#nick"/>
+            </treecols>
+          </tree>
+    
+        </vbox> <!-- user-list-box -->
+  
+        <splitter id="main-splitter" collapse="before" persist="collapsed left">
+          <grippy/>
+        </splitter>
+  
+        <vbox flex="1">
+          <toolbox id="header-bar-tbox" crop="right" persist="collapsed">
+            <toolbar class="chromeclass-toolbar" id="header-bar-tbar"
+              grippytooltiptext="&header.tooltip;" crop="right">
+              <hbox flex="1" class="header-box">
+                <vbox flex="1%">
+                  <label class="header-label" value="&url.label;"/>
+                  <label class="header-label" value="&topic.label;"/>
+                </vbox>
+                <vbox flex="99%">
+                  <hbox flex="1">
+                    <hbox flex="1">
+                      <label class="header-data" id="header-url"
+                        ondraggesture="nsDragAndDrop.startDrag(event, tabDNDObserver);"
+                        crop="right"/>
+                    </hbox>
+                    <hbox flex="1">
+                      <label class="header-label" value="&mode.label;"/>
+                      <label class="header-data" id="channel-mode"
+                        crop="right"/>
+                    </hbox>
+                    <hbox flex="1">
+                      <label class="header-label" value="&users.label;"/>
+                      <label class="header-data" id="channel-users"/>
+                    </hbox>
+                  </hbox>
+                  <hbox flex="1">
+                    <hbox flex="1">
+                      <label class="header-data" id="channel-topic" flex="1"
+                        crop="right" onclick="onTopicEditStart()">text</label>
+                      <textbox flex="1" id="channel-topicedit" collapsed="true"/>
+                    </hbox>
+                  </hbox>
+                </vbox>
+              </hbox>
+  
+            </toolbar>
+          </toolbox>
+  
+          <deck id="output-deck" flex="1"/>
+        </vbox>
+  
+      </hbox> <!-- tabpanels-contents-box -->
+    
+      <hbox id="tabstrip-box" flex="0" crop="right">
+        <scrollbox id="view-tabs" persist="collapsed" orient="horizontal"
+          flex="1">
+  
+          <hbox>
+          <tabs class="tabs-bottom" id="views-tbar-inner" flex="1" crop="right">
+            <tab collapsed="true"/> <!-- dummy tab to keep the freaking xbl from 
+                                         causing an exception -->
+          </tabs>
+          </hbox>
+        </scrollbox>
+      </hbox>
+  
+    </vbox> <!-- upper-box -->
+  
+    <splitter id="input-splitter" orient="vertical" collapse="after"
+      collapsed="true"/>
+  
+    <hbox id="input-widgets">
+      <text id="server-nick" value=""/>
+      <hbox id="multiline-box" flex="1" collapsed="true">
+        <textbox id="multiline-input" multiline="true" flex="1" height="100px"
+          class="multiline-input-widget" onfocus="onInputFocus();"/>
+        <vbox>
+          <toolbarbutton id="button-input" flex="1"
+            oncommand="onMultilineSend(event);"
+            tooltiptext="&multiline-send.tooltip;" />
+          <toolbarbutton id="button-multiline-contract"
+            oncommand="multilineInputMode(false);" 
+            tooltiptext="&multiline-contract.tooltip;" />
+        </vbox>
+      </hbox>
+      <hbox id="singleline-box" flex="1" collapsed="true">
+        <textbox id="input" class="input-widget" flex="1" autostretch="true"
+          onfocus="onInputFocus();"/>
+        <toolbarbutton id="button-multiline-expand" 
+          oncommand="multilineInputMode(true);"
+          tooltiptext="&multiline-expand.tooltip;"/>
+      </hbox>
+    </hbox>
+  </vbox> <!-- outer-box -->
+  
+  <statusbar id="status-bar" persist="collapsed">
+    <statusbarpanel id="component-bar"/>
+    <statusbarpanel id="status-text" label="&StatusText.label;" flex="1"
+      crop="right"/>
+    <statusbarpanel class="statusbarpanel-icononly" id="offline-status"
+      hidden="true" offline="true"/>
+  </statusbar>  
+  
+</window>

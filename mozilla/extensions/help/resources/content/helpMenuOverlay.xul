@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+
+<!DOCTYPE window [
+<!ENTITY % helpMenuDTD SYSTEM "chrome://help/locale/helpMenuOverlay.dtd">
+%helpMenuDTD;
+]>
+
+<overlay id="helpMenuID"
+     xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+  <script type="application/x-javascript" src="chrome://help/content/contextHelp.js"/>
+
+  <menupopup id="helpPopup">
+    <menuitem label="&helpContents.label;" 
+      accesskey="&helpContents.accesskey;" 
+      position="1" id="help"
+      oncommand="openHelp();" />   
+  </menupopup>
+  
+</overlay>

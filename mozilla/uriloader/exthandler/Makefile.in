@@ -1,0 +1,116 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+ifeq ($(MOZ_WIDGET_TOOLKIT),os2)
+OSDIR		= os2
+else
+ifeq ($(MOZ_WIDGET_TOOLKIT),windows)
+OSDIR		= win
+else
+ifneq (,$(filter mac cocoa,$(MOZ_WIDGET_TOOLKIT)))
+OSDIR		= mac
+else
+ifeq ($(MOZ_WIDGET_TOOLKIT),beos)
+OSDIR		= beos
+else
+OSDIR		= unix
+endif
+endif
+endif
+endif
+
+VPATH		:= $(srcdir) $(srcdir)/$(OSDIR)
+
+MODULE = exthandler
+LIBRARY_NAME    = exthandler_s
+REQUIRES	= xpcom \
+		  string \
+		  unicharutil \
+		  mimetype \
+		  uriloader \
+		  dom \
+		  necko \
+		  rdf \
+		  webshell \
+		  helperAppDlg \
+		  plugin \
+		  pref \
+		  intl \
+		  uconv \
+		  windowwatcher \
+		  $(NULL)
+
+ifneq (,$(filter mac cocoa,$(MOZ_WIDGET_TOOLKIT)))
+REQUIRES		+= windowwatcher \
+	             $(NULL)
+endif
+
+OSHELPER	= nsOSHelperAppService.cpp
+
+ifneq (,$(filter mac cocoa,$(MOZ_WIDGET_TOOLKIT)))
+OSHELPER		+= nsInternetConfig.cpp \
+			nsInternetConfigService.cpp \
+			$(NULL)
+endif
+
+EXPORTS = 	nsExternalHelperAppService.h \
+		nsExternalProtocolHandler.h \
+		$(OSDIR)/nsOSHelperAppService.h \
+		nsHelperAppRDF.h	    \
+			$(NULL)
+
+XPIDLSRCS = \
+	nsCExternalHandlerService.idl	\
+	nsIExternalProtocolService.idl \
+	nsIExternalHelperAppService.idl	\
+	$(NULL)
+	
+ifneq (,$(filter mac cocoa,$(MOZ_WIDGET_TOOLKIT)))
+XPIDLSRCS		+= nsIInternetConfigService.idl
+endif
+
+CPPSRCS	= \
+	nsExternalHelperAppService.cpp	\
+	nsExternalProtocolHandler.cpp \
+	$(OSHELPER) \
+	$(NULL)
+
+ifeq ($(OS_ARCH),WINNT)
+OS_LIBS		+= shell32.lib
+GARBAGE		+= nsOSHelperAppService.cpp $(srcdir)/nsOSHelperAppService.cpp
+endif
+
+# we don't want the shared lib, but we want to force the creation of a static lib.
+FORCE_STATIC_LIB = 1
+SRCS_IN_OBJDIR	= 1
+include $(topsrcdir)/config/rules.mk
+
+# the use of multiple VPATH dirs is broken in cygwin make
+ifeq ($(OS_ARCH),WINNT)
+export:: $(OSDIR)/nsOSHelperAppService.cpp
+	$(INSTALL) $^ .
+endif

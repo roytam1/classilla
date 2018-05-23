@@ -1,0 +1,109 @@
+<?xml version="1.0"?>
+
+<?xml-stylesheet href="chrome://communicator/skin/" type="text/css"?>
+<?xml-stylesheet href="chrome://messenger/skin/prefPanels.css" type="text/css"?>
+
+<!DOCTYPE window SYSTEM "chrome://messenger/locale/pref-viewing_messages.dtd">
+
+<page xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+      onload="parent.initPanel('chrome://messenger/content/pref-viewing_messages.xul');"
+      headertitle="&pane.title;">
+
+  <script type="application/x-javascript">
+  <![CDATA[
+    var _elementIDs = ["mailFixedWidthMessages", "mailQuotedStyle", "mailQuotedSize", "wrapLongLines", "displayGlyph", "mailCitationColor", "sendDefaultCharsetList", "forceCharsetOverride"];
+    var observerService = Components.classes["@mozilla.org/observer-service;1"].getService(Components.interfaces.nsIObserverService);
+    observerService.notifyObservers(null, "charsetmenu-selected", "other");
+
+    function Startup()
+    {
+      getColorFromPickerAndSetWell('citationmenu', 'mailCitationColor');
+    }
+
+    function getColorFromPickerAndSetWell(menuID, colorfield)
+    {
+      var picker = document.getElementById( menuID );
+      var colorValue = document.getElementById( colorfield );
+      if (picker) {
+        picker.color = colorValue.getAttribute("value");
+      }
+    }
+    
+    function setColorWell(aPicker) 
+    {
+      var colorRef = aPicker.nextSibling; 
+      colorRef.setAttribute("value", aPicker.color );
+    }
+  ]]>
+  </script>
+
+  <groupbox>
+    <caption label="&displayWidth.label;"/>
+
+      <description>&plainText.label;</description>
+    
+    <hbox class="indent">
+      <radiogroup id="mailFixedWidthMessages" 
+                  preftype="bool" prefstring="mail.fixed_width_messages">
+        <radio value="true" label="&fixedWidth.label;" accesskey="&fixedWidth.accesskey;"/>
+        <radio value="false" label="&variableWidth.label;" accesskey="&variableWidth.accesskey;"/>                
+      </radiogroup>
+    </hbox>
+
+    <separator class="thin"/>
+
+  <description>&displayText.label;</description>
+    <hbox class="indent" align="center">
+      <label value="&style.label;" accesskey="&style.accesskey;" control="mailQuotedStyle"/>
+      <menulist id="mailQuotedStyle" prefstring="mail.quoted_style">
+        <menupopup>
+          <menuitem value="0" label="&regular.label;"/>
+          <menuitem value="1" label="&bold.label;"/>
+          <menuitem value="2" label="&italic.label;"/>
+          <menuitem value="3" label="&boldItalic.label;"/>
+        </menupopup>
+      </menulist>
+
+      <label value="&size.label;" accesskey="&size.accesskey;" control="mailQuotedSize"/>
+      <menulist id="mailQuotedSize" prefstring="mail.quoted_size">
+        <menupopup>
+          <menuitem value="0" label="&regular.label;"/>
+          <menuitem value="1" label="&bigger.label;"/>
+          <menuitem value="2" label="&smaller.label;"/>
+        </menupopup>
+      </menulist>
+      
+      <label value="&color.label;" accesskey="&color.accesskey;" control="citationmenu"/>
+      <colorpicker type="button" id="citationmenu" palettename="standard" onchange="setColorWell(this);"/>
+      <broadcaster id="mailCitationColor" pref="true" preftype="color" prefstring="mail.citation_color" prefattribute="value" wsm_attributes="value"/>
+    </hbox>    
+
+  <description>&viewingPlainText.label;</description>
+    <vbox align="start" class="indent">
+      <checkbox id="wrapLongLines" label="&wrapInMsg.label;"
+                prefstring="mail.wrap_long_lines" accesskey="&wrapInMsg.accesskey;"/>
+      <checkbox class="iconic" id="displayGlyph" label="&convertEmoticons.label;"
+                prefstring="mail.display_glyph" accesskey="&convertEmoticons.accesskey;"/>
+    </vbox>
+  </groupbox>
+
+  <groupbox align="start">
+    <caption label="&languagesTitle.label;"/>
+    <description>&coding.label;</description>
+    <hbox align="center">
+      <label control="sendDefaultCharsetList"
+             value="&sendDefaultCharset.label;" accesskey="&sendDefaultCharset.accesskey;"/>
+        <menulist id="sendDefaultCharsetList" ref="NC:DecodersRoot" datasources="rdf:charset-menu"
+                preftype="localizedstring" prefstring="mailnews.view_default_charset">
+        <template>
+          <menupopup>
+            <menuitem label="rdf:http://home.netscape.com/NC-rdf#Name" value="..." uri="..."/>
+          </menupopup>
+        </template>
+      </menulist> 
+    </hbox>      
+    <checkbox id="forceCharsetOverride" label="&forceCharsetOverride.label;"
+              prefstring="mailnews.force_charset_override"
+              accesskey="&forceCharsetOverride.accesskey;"/>
+  </groupbox>   
+</page>

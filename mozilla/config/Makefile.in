@@ -1,0 +1,163 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+ifneq (,$(filter-out WINNT OS2,$(OS_ARCH)))
+HOST_PROGRAM	= nsinstall$(BIN_SUFFIX)
+HOST_CSRCS	= nsinstall.c pathsub.c
+endif
+
+PLSRCS		= nfspwd.pl revdepth.pl
+
+TARGETS		= $(HOST_PROGRAM) $(PLSRCS:.pl=) $(SIMPLE_PROGRAMS)
+
+# Generate the build number on the fly.
+TARGETS		+= build_number nsBuildID.h
+
+ifndef CROSS_COMPILE
+ifdef USE_ELF_DYNSTR_GC
+TARGETS		+= elf-dynstr-gc
+endif
+endif
+
+ifeq ($(OS_ARCH), Darwin)
+# XXX Setting CPP_PROG_LINK is ugly, but it works (it makes nsinstall
+# link with $(CXX)).  asdecode should really be in its own directory.
+CPP_PROG_LINK	= 1
+SIMPLE_PROGRAMS	+= asdecode
+endif
+
+# IMPORTANT: Disable NSBUILDROOT for this directory only, otherwise we have
+# a recursive rule for finding nsinstall and the Perl scripts.
+ifdef NSBUILDROOT
+override NSBUILDROOT :=
+endif
+
+ifdef GNU_CC
+MODULE_OPTIMIZE_FLAGS = -O3
+endif
+
+ifndef COMPILER_DEPEND
+ifndef MOZ_NATIVE_MAKEDEPEND
+DIRS		+= mkdepend
+endif
+endif
+
+include $(topsrcdir)/config/config.mk
+
+# Do not install util programs
+NO_INSTALL=1
+
+include $(topsrcdir)/config/rules.mk
+
+ifeq ($(OS_ARCH), Linux)
+DEFINES         += -D_BSD_SOURCE
+endif
+
+ifeq ($(OS_CONFIG),SunOS4.1)
+NSPR_CFLAGS	+= -I$(srcdir)/../nsprpub/pr/include/md
+endif
+
+HEADERS		= nsBuildID.h $(DEPTH)/mozilla-config.h
+
+export:: $(TARGETS) $(HEADERS)
+	$(INSTALL) $(IFLAGS1) $(HEADERS) $(DIST)/include
+	$(PERL) -I$(MOZILLA_DIR)/config $(MOZILLA_DIR)/config/build-list.pl $(PUBLIC)/.headerlist $(HEADERS)
+	-rm -f $(FINAL_LINK_COMPS) $(FINAL_LINK_LIBS) $(FINAL_LINK_COMP_NAMES)
+	-rm -f $(DIST)/bin/chrome/chromelist.txt
+	$(NSINSTALL) -t $(IFLAGS1) $(HEADERS) $(DIST)/sdk/
+
+
+# Create mini-SDK directory for NSPR
+ifndef MOZ_NATIVE_NSPR
+_ABS_DIST=$(shell cd $(DIST) && pwd)
+libs::
+	$(RM) -rf $(DIST)/sdk/nspr
+	$(MAKE) -C $(DEPTH)/nsprpub real_install prefix=$(_ABS_DIST)/sdk/nspr exec_prefix=$(_ABS_DIST)/sdk/nspr bindir=$(_ABS_DIST)/sdk/nspr/bin includedir=$(_ABS_DIST)/sdk/nspr/include libdir=$(_ABS_DIST)/sdk/nspr/lib datadir=$(_ABS_DIST)/sdk/nspr/share DESTDIR=
+	$(RM) -rf $(DIST)/sdk/nspr/bin $(DIST)/sdk/nspr/share
+	mv $(DIST)/sdk/nspr/lib $(DIST)/sdk/nspr/bin
+ifndef DISABLE_DIST_GRE
+ifeq ($(OS_ARCH),OS2)
+	$(NSINSTALL) -D $(GRE_DIST)
+	cp $(DIST)/sdk/nspr/bin/$(LIB_PREFIX)*$(DLL_SUFFIX) $(GRE_DIST)
+else
+	$(INSTALL) $(DIST)/sdk/nspr/bin/*$(DLL_SUFFIX) $(GRE_DIST)
+endif
+endif
+endif
+
+# we don't use an explicit dependency here because then we would
+# regenerate nsBuildID.h during the make install phase and that would
+# be bad.
+install::
+	@if test ! -f nsBuildID.h; then\
+		echo "You must have done at least a make export before trying to do a make install."; \
+		echo "(nsBuildID.h is missing.)"; \
+		exit 1; \
+	fi;
+	$(SYSINSTALL) $(IFLAGS1) nsBuildID.h $(DESTDIR)$(includedir)
+	$(SYSINSTALL) $(IFLAGS1) $(DEPTH)/mozilla-config.h $(DESTDIR)$(includedir)
+
+GARBAGE += build_number nsBuildID \
+	$(FINAL_LINK_COMPS) $(FINAL_LINK_LIBS) $(FINAL_LINK_COMP_NAMES)
+
+ifneq ($(origin BUILD_OFFICIAL)_$(origin MOZILLA_OFFICIAL),undefined_undefined)
+_BN_OFFICIAL=1
+else
+_BN_OFFICIAL=
+endif
+
+ifdef MOZ_ENABLE_GTK2
+  GLIB_CFLAGS = $(MOZ_GTK2_CFLAGS)
+  GLIB_LIBS = $(MOZ_GTK2_LIBS)
+endif
+
+build_number: FORCE
+	$(PERL) -I$(srcdir) $(srcdir)/bdate.pl $@ $(_BN_OFFICIAL)
+
+nsBuildID.h: nsBuildID.h.in build_number 
+	$(RM) $@
+	$(PERL) -I$(srcdir) $(srcdir)/aboutime.pl $@ build_number $(srcdir)/nsBuildID.h.in
+
+ifndef CROSS_COMPILE
+ifdef USE_ELF_DYNSTR_GC
+elf-dynstr-gc: elf-dynstr-gc.c Makefile Makefile.in
+	$(CC) $(COMPILE_CFLAGS) $(GLIB_CFLAGS) $(GLIB_LIBS) $(LDFLAGS) -o $@ $<
+
+export:: elf-dynstr-gc
+	$(INSTALL) -m 555 elf-dynstr-gc $(DIST)/bin
+endif
+endif
+
+FORCE:
+
+ifdef MKDEPEND_DIR
+clean clobber realclean clobber_all::
+	cd $(MKDEPEND_DIR); $(MAKE) $@
+endif
+
+

@@ -1,0 +1,88 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../../../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE		= layout
+LIBRARY_NAME	= gkhtmlstyle_s
+REQUIRES	= xpcom \
+		  string \
+		  dom \
+		  content \
+		  gfx \
+		  widget \
+		  locale \
+		  view \
+		  necko \
+		  webshell \
+		  pref \
+		  docshell \
+		  plugin \
+		  xuldoc \
+		  imglib2 \
+		  $(NULL)
+
+CPPSRCS		= \
+		nsCSSFrameConstructor.cpp \
+		nsCSSRendering.cpp \
+		nsCSSColorUtils.cpp \
+		nsFrameContentIterator.cpp \
+		nsChildIterator.cpp \
+		$(NULL)
+
+EXPORTS		= \
+		nsIHTMLStyleSheet.h \
+		nsICSSFrameConstructor.h \
+		$(NULL)
+
+# we don't want the shared lib, but we want to force the creation of a static lib.
+FORCE_STATIC_LIB = 1
+
+include $(topsrcdir)/config/rules.mk
+
+LOCAL_INCLUDES	= \
+		-I$(srcdir)/../../base/src \
+		-I$(srcdir)/../../../base/src \
+		-I$(srcdir)/../../table/src \
+		-I$(srcdir)/../../forms/src \
+		-I$(srcdir)/../../content/src \
+		-I$(srcdir)/../../../xul/content/src \
+		-I$(srcdir)/. \
+		-I$(srcdir)/../../../xul/base/src \
+		$(NULL)
+
+ifdef MOZ_MATHML
+LOCAL_INCLUDES += \
+        -I$(srcdir)/../../../mathml/content/src \
+        -I$(srcdir)/../../../mathml/base/src
+endif
+
+ifdef MOZ_SVG
+LOCAL_INCLUDES += \
+        -I$(srcdir)/../../../svg/base/src
+endif
+
+DEFINES += -D_IMPL_NS_LAYOUT

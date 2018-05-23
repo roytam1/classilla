@@ -1,0 +1,97 @@
+<?xml version="1.0"?>
+
+<?xml-stylesheet href="chrome://messenger/skin/accountManage.css" type="text/css"?>
+
+<!DOCTYPE window SYSTEM "chrome://messenger/locale/am-main.dtd" >
+
+<page xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+      onload="parent.onPanelLoaded('am-main.xul');">
+
+    <stringbundle id="bundle_prefutilities" src="chrome://communicator/locale/pref/prefutilities.properties"/>
+    <script type="application/x-javascript" src="chrome://messenger/content/am-main.js"/>
+    <script type="application/x-javascript" src="chrome://messenger/content/am-prefs.js"/>
+
+    <broadcaster id="broadcaster_attachSignature"/>
+
+    <dialogheader id="am-main-title" defaultTitle="&accountTitle.label;"/>
+    
+    <description>&accountSettingsDesc.label;</description>
+    <hbox align="center">
+      <label value="&accountName.label;" control="server.prettyName"/>
+      <textbox wsm_persist="true" size="30" id="server.prettyName"
+               prefstring="mail.server.%serverkey%.name"/>
+    </hbox>
+    
+    <separator class="thin"/>
+    
+    <groupbox flex="1" style="width: 20em !important;">
+      <caption label="&identityTitle.label;"/>
+      <description>&identityDesc.label;</description>
+      <separator class="thin"/>
+      <grid flex="1">
+        <columns>
+          <column/>
+          <column flex="1"/>
+        </columns>
+        <rows>
+          <row align="center">
+            <label value="&name.label;" control="identity.fullName"/>
+            <textbox wsm_persist="true" id="identity.fullName" size="30"
+                     prefstring="mail.identity.%identitykey%.fullName"/>
+          </row>
+          <row align="center">
+            <label value="&email.label;" control="identity.email"/>
+            <textbox wsm_persist="true" id="identity.email" 
+                     prefstring="mail.identity.%identitykey%.useremail" class="uri-element"/>
+          </row>
+          <row align="center">
+            <label value="&replyTo.label;" control="identity.replyTo"/>
+            <textbox wsm_persist="true" id="identity.replyTo"
+                     prefstring="mail.identity.%identitykey%.reply_to" class="uri-element"/>
+          </row>
+          <row align="center">
+            <label value="&organization.label;" control="identity.organization"/>
+            <textbox wsm_persist="true" id="identity.organization"
+                     prefstring="mail.identity.%identitykey%.organization"/>
+          </row>
+        </rows>
+      </grid>
+
+      <hbox align="center">
+        <checkbox wsm_persist="true" id="identity.attachSignature" label="&signature.label;" flex="1"
+                  oncommand="setupSignatureItems();"
+                  prefattribute="value"
+                  prefstring="mail.identity.%identitykey%.attach_signature"/>
+      </hbox>
+      <hbox align="center" class="indent">
+        <textbox wsm_persist="true" id="identity.signature" datatype="nsILocalFile" flex="1" name="identity.signature"
+                 observes="broadcaster_attachSignature"
+                 prefstring="mail.identity.%identitykey%.sig_file" class="uri-element"/>
+        <button class="push" name="browse" label="&choose.label;"  
+                oncommand="selectFile()"
+                observes="broadcaster_attachSignature"
+                wsm_persist="true" id="identity.sigbrowsebutton"
+                prefstring="mail.identity.%identitykey%.sigbrowse.disable"/>
+      </hbox>
+
+      <separator class="thin"/>
+      
+      <hbox align="center">
+        <checkbox wsm_persist="true" id="identity.composeHtml" label="&useHtml.label;"
+                  prefattribute="value"
+                  prefstring="mail.identity.%identitykey%.compose_html"/>
+      </hbox>
+
+      <spacer flex="1"/>
+
+      <hbox>
+        <spacer flex="1"/>
+        <button oncommand="onAdvanced();" label="&advancedButton.label;"
+                wsm_persist="true" id="identity.advancedbutton"
+                prefstring="mail.identity.%identitykey%.advanced.disable"/>
+        <label hidden="true" wsm_persist="true" id="identity.smtpServerKey" />
+      </hbox>
+
+    </groupbox>
+
+</page>

@@ -1,0 +1,119 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE		= xpcom
+XPIDL_MODULE	= xpcom_base
+LIBRARY_NAME	= xpcombase_s
+GRE_MODULE	= 1
+
+REQUIRES	= string \
+		  $(NULL)
+
+CPPSRCS		= \
+		nsAllocator.cpp \
+		nsMemoryImpl.cpp \
+		nsErrorService.cpp \
+		nsTraceRefcnt.cpp \
+		nsID.cpp \
+		nsCWeakReference.cpp \
+		nsConsoleService.cpp \
+		nsConsoleMessage.cpp \
+		nsExceptionService.cpp \
+		$(NULL)
+
+ifdef GC_LEAK_DETECTOR
+CSRCS += nsGarbageCollector.c
+CPPSRCS += nsLeakDetector.cpp
+REQUIRES	+= boehm
+endif
+
+EXPORTS		= \
+		nsAgg.h \
+		nsIAllocator.h \
+		nsCom.h \
+		nsComObsolete.h \
+		nsCWeakReference.h \
+		nsIID.h \
+		nsISupportsObsolete.h \
+		nsTraceRefcnt.h \
+		nsWeakPtr.h \
+		$(NULL)
+
+ifeq ($(OS_ARCH),WINNT)
+ifdef MOZ_DEBUG
+CSRCS		+= pure_api.c
+EXPORTS		+= pure.h
+endif
+CPPSRCS		+= nsStackFrameWin.cpp
+endif
+
+ifneq ($(OS_ARCH),WINNT)
+CPPSRCS		+= nsStackFrameUnix.cpp
+endif
+
+SDK_XPIDLSRCS   = \
+		nsIInterfaceRequestor.idl  \
+		nsIProgrammingLanguage.idl \
+		nsISupports.idl		   \
+		nsIWeakReference.idl	   \
+		nsIMemory.idl		   \
+		nsrootidl.idl		   \
+
+SDK_HEADERS     = \
+		nsError.h \
+		nsISupportsBase.h \
+		nscore.h \
+		nsID.h \
+
+
+XPIDLSRCS	= \
+		nsIErrorService.idl \
+		nsIConsoleService.idl \
+		nsIConsoleMessage.idl \
+		nsIConsoleListener.idl \
+		nsIException.idl \
+		nsIExceptionService.idl \
+		$(NULL)
+
+ifdef GC_LEAK_DETECTOR
+XPIDLSRCS       += nsILeakDetector.idl
+endif
+
+# we don't want the shared lib, but we want to force the creation of a static lib.
+FORCE_STATIC_LIB = 1
+
+# Force use of PIC
+FORCE_USE_PIC	= 1
+
+include $(topsrcdir)/config/rules.mk
+
+DEFINES		+= -D_IMPL_NS_COM
+
+ifeq ($(OS_ARCH), Linux)
+DEFINES		+= -D_BSD_SOURCE
+endif

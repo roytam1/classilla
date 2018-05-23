@@ -1,0 +1,70 @@
+<?xml version="1.0"?>
+<!-- 
+   - The contents of this file are subject to the Mozilla Public
+   - License Version 1.1 (the "License"); you may not use this file
+   - except in compliance with the License. You may obtain a copy of
+   - the License at http://www.mozilla.org/MPL/
+   - 
+   - Software distributed under the License is distributed on an "AS
+   - IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+   - implied. See the License for the specific language governing
+   - rights and limitations under the License.
+   - 
+   - The Original Code is mozilla.org code.
+   - 
+   - The Initial Developer of the Original Code is Netscape
+   - Communications Corp.  Portions created by Netscape are
+   - Copyright (C) 2001 Netscape Communications Corp.  All
+   - Rights Reserved.
+   - 
+   - Contributor(s):
+   -   Bob Lord <lord@netscape.com>
+   -   Ian McGreer <mcgreer@netscape.com>
+  -->
+
+<?xml-stylesheet href="chrome://global/skin/" type="text/css"?>
+
+<!DOCTYPE window SYSTEM "chrome://pippki/locale/certManager.dtd">
+
+<window id="editCaCert" 
+        title="&certmgr.editcacert.title;"
+        xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+        onload="setWindowName();"
+>
+
+  <script type="application/x-javascript" src="chrome://global/content/strres.js"/>
+  <script type="application/x-javascript" src="chrome://pippki/content/pippki.js"/>
+  <script type="application/x-javascript" src="chrome://pippki/content/editcerts.js"/>
+  <script type="application/x-javascript" src="chrome://help/content/contextHelp.js"/>
+
+
+  <vbox flex="1">
+    <description id="certmsg"/>
+    <separator />
+    <description flex="100%">&certmgr.editcert.edittrust;</description>
+    <vbox flex="100%">
+      <checkbox label="&certmgr.editcert.trustssl;"
+                id="trustSSL"/>
+      <checkbox label="&certmgr.editcert.trustemail;"
+                id="trustEmail"/>
+      <checkbox label="&certmgr.editcert.trustobjsign;"
+                id="trustObjSign"/>
+    </vbox>
+
+    <keyset id="keys">
+      <key id="enter-key"  keycode="VK_ENTER"  oncommand="doSSLOK();"/>
+      <key id="return-key" keycode="VK_RETURN" oncommand="doSSLOK();"/>
+      <key id="esc-key"    keycode="VK_ESCAPE" oncommand="window.close();"/>
+    </keyset>
+
+    <hbox>
+      <button id="ok-button" label="&certmgr.ok.label;"
+              oncommand="doOK();"/> 
+      <button id="cancel-button" label="&certmgr.cancel.label;"
+              oncommand="window.close();"/> 
+      <button id="help-button" label="&certmgr.help.label;"
+              oncommand="openHelp('edit_ca_certs');"/>
+    </hbox>
+  </vbox>
+
+</window>

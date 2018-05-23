@@ -1,0 +1,103 @@
+#! gmake
+#
+# The contents of this file are subject to the Mozilla Public License
+# Version 1.1 (the "License"); you may not use this file except in
+# compliance with the License. You may obtain a copy of the License
+# at http://www.mozilla.org/MPL/
+#
+# Software distributed under the License is distributed on an "AS IS"
+# basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+# the License for the specific language governing rights and
+# limitations under the License.
+#
+# The Initial Developer of the Original Code is Kipp E.B. Hickman.
+#
+# Autoconf version of original Makefile
+# Fri Sep 24 23:44:10 PDT 1999 <mcafee@netscape.com>
+#
+
+DEPTH		= ../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+SIMPLE_PROGRAMS = TestLeaky TestPreload ShowLibs
+
+PROGRAM = leaky
+
+CPPSRCS = \
+	bfd.cpp    \
+	coff.cpp   \
+	dict.cpp   \
+	elf.cpp	   \
+	leaky.cpp  \
+	strset.cpp \
+	$(NULL)
+
+LIBS = \
+	-lbfd \
+	-liberty \
+	$(NULL)
+
+RESOURCES =	       \
+	leaky.css      \
+	leaky.js       \
+	open.gif       \
+	open-over.gif  \
+	close.gif      \
+	close-over.gif \
+	$(NULL)
+
+RESOURCES := $(addprefix $(srcdir)/, $(RESOURCES))
+
+# Stuff to build the library used to wrap malloc
+LIBMALLOC_CPPSRCS = libmalloc.cpp
+LIBMALLOC_OBJECTS = $(LIBMALLOC_CPPSRCS:.cpp=.o)
+LIBMALLOC = libleaky.so
+
+# Stuff to build test programs
+LIBPRELOAD_CPPSRCS = LibPreload.cpp
+LIBPRELOAD_OBJECTS = $(LIBPRELOAD_CPPSRCS:.cpp=.o)
+LIBPRELOAD = libpreload.so
+
+# include $(topsrcdir)/config/config.mk
+
+OTHER_LIBRARIES = $(LIBMALLOC) $(LIBPRELOAD)
+TARGETS := $(PROGRAM) $(SIMPLE_PROGRAMS) $(OTHER_LIBRARIES)
+
+include $(topsrcdir)/config/rules.mk
+
+# Make sure all depends on files that rules.mk doesn't know about.
+all:: $(OTHER_LIBRARIES)
+
+# Make sure install depends on files that rules.mk doesn't know about.
+libs:: $(OTHER_LIBRARIES)
+
+# Make sure libs depends on files that rules.mk doesn't know about.
+libs:: $(OTHER_LIBRARIES)
+
+clobber::
+	rm -f $(LIBMALLOC_OBJECTS) $(LIBPRELOAD_OBJECTS)
+	rm -f $(LIBMALLOC) $(LIBPRELOAD)
+	rm -f $(SIMPLE_PROGRAMS:=.o)
+
+clean::
+	rm -f $(LIBMALLOC_OBJECTS) $(LIBPRELOAD_OBJECTS)
+
+$(LIBMALLOC): $(LIBMALLOC_OBJECTS)
+	rm -f $@
+	$(MKSHLIB) $(LIBMALLOC_OBJECTS)
+
+$(LIBPRELOAD): $(LIBPRELOAD_OBJECTS)
+	$(MKSHLIB) $(LIBPRELOAD_OBJECTS)
+
+test:
+	@echo LIBMALLOC = $(LIBMALLOC)
+	@echo LIBPRELOAD = $(LIBPRELOAD)
+	@echo TARGETS = $(TARGETS)
+
+libs:: $(OTHER_LIBRARIES) $(RESOURCES)
+	$(INSTALL) -m 555 $(OTHER_LIBRARIES) $(DIST)/lib
+	$(INSTALL) $(RESOURCES) $(DIST)/bin/res/leaky

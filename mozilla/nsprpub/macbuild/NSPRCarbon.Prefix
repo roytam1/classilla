@@ -1,0 +1,10 @@
+//
+//	NSPRCarbon.Prefix
+//
+// Global prefix file for the non-debug Carbon NSPR project.
+//
+//
+
+
+#include "MacPrefix.h"
+#include "NSPRConfig.h"

@@ -1,0 +1,7 @@
+nsCollationCID.h
+nsDateTimeFormatCID.h
+nsICollation.h
+nsIDateTimeFormat.h
+nsLocaleCID.h
+nsIMacLocale.h
+

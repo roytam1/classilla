@@ -1,0 +1,72 @@
+<?xml version="1.0"?>
+
+<!-- The contents of this file are subject to the Netscape Public
+License Version 1.1 (the "License"); you may not use this file
+except in compliance with the License. You may obtain a copy of
+the License at http://www.mozilla.org/NPL/
+
+Software distributed under the License is distributed on an "AS
+IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+implied. See the License for the specific language governing
+rights and limitations under the License.
+
+The Original Code is Mozilla Communicator client code.
+
+The Initial Developer of the Original Code is Netscape
+Communications Corporation. Portions created by Netscape are
+Copyright (C) 1998-1999 Netscape Communications Corporation. All
+Rights Reserved.
+
+Contributor(s):
+   Don Bragg <dbragg@netscape.com>
+   Dan Veditz <dveditz@netscape.com>
+   Blake Ross <blakeross@telocity.com>
+   Håkan Waara <hwaara@chello.se>
+-->
+
+<?xml-stylesheet href="chrome://communicator/skin/xpinstall/xpinstall.css" type="text/css"?>
+<?xul-overlay href="chrome://global/content/dialogOverlay.xul"?>
+<!DOCTYPE window SYSTEM "chrome://communicator/locale/xpinstall/institems.dtd">
+
+<window xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+        onload="onLoad()"
+        title="&dialog.title;"
+        id="confirmDlg"
+        class="dialog"
+        style="width: 50em"
+        >
+
+    <script src="chrome://communicator/content/xpinstall/institems.js"/>
+    <stringbundle id="xpinstallBundle" src="chrome://communicator/locale/xpinstall/xpinstall.properties"/>
+
+    <hbox flex="1" align="center">
+        <hbox align="center">
+            <image id="alert-image" class="alert-icon"/>
+        </hbox>
+
+        <vbox id="confirmBox" flex="1">
+            <description id="warn1" flex="1">
+                &warningText.label;
+            </description>
+
+            <separator class="confirmSeparator"/>
+
+            <grid id="confirmGrid" flex="1">
+                <columns>
+                    <column id="xpiColumn"/>
+                    <column id="certColumn"/>
+                    <column id="urlColumn" flex="1"/>
+                </columns>
+                <rows id="xpirows">
+                </rows>
+            </grid>
+
+            <separator class="confirmSeparator"/>
+
+            <description id="warn2" flex="1">
+                &warningText2.label;
+            </description>
+        </vbox>
+    </hbox>
+    <hbox id="okCancelButtonsRight"/>
+</window>

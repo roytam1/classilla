@@ -1,0 +1,70 @@
+<?xml version="1.0"?>
+<!-- 
+   - The contents of this file are subject to the Mozilla Public
+   - License Version 1.1 (the "License"); you may not use this file
+   - except in compliance with the License. You may obtain a copy of
+   - the License at http://www.mozilla.org/MPL/
+   - 
+   - Software distributed under the License is distributed on an "AS
+   - IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+   - implied. See the License for the specific language governing
+   - rights and limitations under the License.
+   - 
+   - The Original Code is mozilla.org code.
+   - 
+   - The Initial Developer of the Original Code is Netscape
+   - Communications Corp.  Portions created by Netscape are
+   - Copyright (C) 2001 Netscape Communications Corp.  All
+   - Rights Reserved.
+   - 
+   - Contributor(s):
+   -   Bob Lord <lord@netscape.com>
+   -   Ian McGreer <mcgreer@netscape.com>
+  -->
+
+<?xml-stylesheet href="chrome://global/skin/" type="text/css"?>
+<?xul-overlay href="chrome://global/content/dialogOverlay.xul"?>
+
+<?xul-overlay href="chrome://pippki/content/MineOverlay.xul"?>
+<?xul-overlay href="chrome://pippki/content/OthersOverlay.xul"?>
+<?xul-overlay href="chrome://pippki/content/WebSitesOverlay.xul"?>
+<?xul-overlay href="chrome://pippki/content/CAOverlay.xul"?>
+
+<!DOCTYPE window SYSTEM "chrome://pippki/locale/certManager.dtd">
+
+<window id="certmanager" 
+	xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" 
+        title="&certmgr.title;"
+        onload="LoadCerts();">
+
+  <script type="application/x-javascript" src="chrome://help/content/contextHelp.js"/>
+  <script type="application/x-javascript" src="chrome://global/content/strres.js"/>
+  <script type="application/x-javascript" src="chrome://pippki/content/pippki.js"/>
+  <script type="application/x-javascript" src="chrome://pippki/content/certManager.js"/>
+
+  <vbox flex="1">
+    <tabbox flex="1">
+      <tabs id="certMgrTabbox">
+        <tab id="mine_tab" label="&certmgr.tab.mine;"/>
+        <tab id="others_tab" label="&certmgr.tab.others;"/>
+        <tab id="websites_tab" label="&certmgr.tab.websites;"/>
+        <tab id="ca_tab" label="&certmgr.tab.ca;" selected="true"/>
+      </tabs>
+      <tabpanels flex="1">
+        <vbox id="myCerts" flex="1"/>
+        <vbox id="othersCerts" flex="1"/>
+        <vbox id="webCerts" flex="1"/>
+        <vbox id="CACerts" flex="1"/>
+      </tabpanels>
+    </tabbox>
+
+    <hbox align="center">
+      <button id="HelpButton"
+              label="&certmgr.help.label;" 
+              accesskey="&certmgr.helpButtonAccessKey;"
+              oncommand="doHelpButton();"/>
+      <description id="ocsp_info" hidden="true">&certmgr.ocsp_info;</description>
+    </hbox>
+  </vbox>
+
+</window>

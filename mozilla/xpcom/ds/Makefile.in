@@ -1,0 +1,156 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE		= xpcom
+XPIDL_MODULE	= xpcom_ds
+LIBRARY_NAME	= xpcomds_s
+GRE_MODULE	= 1
+
+REQUIRES	= \
+		  string \
+		  $(NULL)
+
+CSRCS = \
+		pldhash.c \
+		plvector.c \
+		$(NULL)
+
+CPPSRCS		= \
+		nsArena.cpp \
+		nsAtomTable.cpp \
+		nsAtomService.cpp \
+		nsByteBuffer.cpp \
+		nsCheapSets.cpp \
+		nsCRT.cpp \
+		nsDeque.cpp \
+		nsEmptyEnumerator.cpp \
+		nsEnumeratorUtils.cpp \
+		nsFixedSizeAllocator.cpp \
+		nsHashSets.cpp \
+		nsHashtable.cpp \
+		nsHashtableEnumerator.cpp \
+		nsObserver.cpp \
+		nsObserverList.cpp \
+		nsObserverService.cpp \
+		nsProperties.cpp \
+		nsPersistentProperties.cpp \
+		nsQuickSort.cpp \
+		nsRecyclingAllocator.cpp \
+		nsSizeOfHandler.cpp \
+		nsStaticNameTable.cpp \
+		nsStatistics.cpp \
+		nsStringService.cpp \
+		nsSupportsArray.cpp \
+		nsSupportsArrayEnumerator.cpp \
+		nsSupportsPrimitives.cpp \
+		nsUnicharBuffer.cpp \
+		nsVariant.cpp \
+		nsVoidArray.cpp \
+		nsTextFormatter.cpp \
+		nsTimelineService.cpp \
+		nsValueArray.cpp \
+		nsCOMArray.cpp \
+		nsArray.cpp \
+		nsArrayEnumerator.cpp \
+		$(NULL)
+
+EXPORTS		= \
+		nsAtomService.h \
+		nsCheapSets.h \
+		nsCppSharedAllocator.h \
+		nsCRT.h \
+		nsDeque.h \
+		nsDoubleHashtable.h \
+		nsEnumeratorUtils.h \
+		nsFixedSizeAllocator.h \
+		nsHashSets.h \
+		nsHashtable.h \
+		nsHashtableEnumerator.h \
+		nsIArena.h \
+		nsIByteBuffer.h \
+		nsISizeOfHandler.h \
+		nsIUnicharBuffer.h \
+		nsInt64.h \
+		nsObserverService.h \
+		nsQuickSort.h \
+		nsRecyclingAllocator.h \
+		nsStaticNameTable.h \
+		nsStatistics.h \
+		nsSupportsArray.h \
+		nsSupportsPrimitives.h \
+		nsTime.h \
+		nsUnitConversion.h \
+		nsVariant.h \
+		nsVector.h \
+		nsVoidArray.h \
+		pldhash.h \
+		plvector.h \
+		nsTextFormatter.h \
+		nsValueArray.h \
+		nsArray.h \
+		nsArrayEnumerator.h \
+		nsCOMArray.h \
+		$(NULL)			
+
+XPIDLSRCS	= \
+		nsIAtom.idl \
+		nsIAtomService.idl \
+		nsICollection.idl \
+		nsIEnumerator.idl \
+		nsIPersistentProperties2.idl \
+		nsIPropertyBag.idl \
+		nsIRecyclingAllocator.idl \
+		nsIVariant.idl \
+		nsISerializable.idl \
+		nsIStringService.idl \
+		nsISupportsArray.idl \
+		nsISupportsIterators.idl \
+		nsITimelineService.idl \
+		nsIArray.idl \
+		$(NULL)
+
+SDK_XPIDLSRCS   = \
+		nsIObserverService.idl	   \
+		nsIObserver.idl		   \
+		nsIProperties.idl          \
+		nsISimpleEnumerator.idl	   \
+		nsIStringService.idl       \
+		nsISupportsPrimitives.idl  \
+		$(NULL)
+
+EXPORTS		:= $(addprefix $(srcdir)/, $(EXPORTS))
+
+# we don't want the shared lib, but we want to force the creation of a static lib.
+FORCE_STATIC_LIB = 1
+
+# Force use of PIC
+FORCE_USE_PIC	= 1
+
+include $(topsrcdir)/config/rules.mk
+
+DEFINES		+= -D_IMPL_NS_COM

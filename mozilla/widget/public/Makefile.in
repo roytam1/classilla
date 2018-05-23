@@ -1,0 +1,93 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE		= widget
+XPIDL_MODULE	= widget
+GRE_MODULE	= 1
+
+EXPORTS		= \
+		nsIMenuBar.h \
+		nsIMenu.h \
+		nsIMenuItem.h \
+		nsIPopUpMenu.h \
+		nsStringUtil.h \
+		nsIWidget.h \
+		nsIKBStateControl.h \
+		nsIButton.h \
+		nsICheckButton.h \
+		nsITextWidget.h \
+		nsIScrollbar.h \
+		nsGUIEvent.h \
+		nsEvent.h \
+		nsIMouseListener.h \
+		nsIEventListener.h \
+		nsIMenuListener.h \
+		nsWidgetsCID.h \
+		nsILookAndFeel.h \
+		nsILabel.h \
+		nsIDragSessionGTK.h \
+		nsIDragSessionXlib.h \
+		nsIDragSessionMac.h \
+		nsIXRemoteWidgetHelper.h \
+		nsIPluginWidget.h \
+		$(NULL)
+
+ifneq (,$(filter mac cocoa,$(MOZ_WIDGET_TOOLKIT)))
+EXPORTS       += nsWidgetAtoms.h nsWidgetAtomList.h
+endif
+
+XPIDLSRCS	= \
+		nsIAppShell.idl \
+		nsIFilePicker.idl \
+		nsIToolkit.idl \
+		nsISound.idl \
+		nsITransferable.idl \
+		nsIDragSession.idl \
+		nsIDragService.idl \
+		nsIDragTracker.idl \
+		nsIFormatConverter.idl \
+		nsIClipboard.idl \
+		nsIClipboardHelper.idl \
+		nsIClipboardOwner.idl \
+		nsIRollupListener.idl \
+		nsIMenuRollup.idl \
+		nsIBaseWindow.idl \
+		nsIBidiKeyboard.idl \
+		nsIXRemoteClient.idl \
+		nsIFullScreen.idl \
+		nsINativeScrollbar.idl \
+		$(NULL)
+
+ifneq (,$(filter mac cocoa,$(MOZ_WIDGET_TOOLKIT)))
+XPIDLSRCS       += nsIEventSink.idl
+endif
+
+EXPORTS		:= $(addprefix $(srcdir)/, $(EXPORTS))
+
+include $(topsrcdir)/config/rules.mk
+

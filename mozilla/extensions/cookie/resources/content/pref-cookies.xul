@@ -1,0 +1,151 @@
+<?xml version="1.0"?>
+
+<!--
+   The contents of this file are subject to the Netscape Public
+   License Version 1.1 (the "License"); you may not use this file
+   except in compliance with the License. You may obtain a copy of
+   the License at http://www.mozilla.org/NPL/
+    
+   implied. See the License for the specific language governing
+   rights and limitations under the License.
+    
+   The Original Code is Mozilla Communicator client code, released
+   March 31, 1998.
+   
+   The Initial Developer of the Original Code is Netscape
+   Communications Corporation. Portions created by Netscape are
+   Copyright (C) 1998-1999 Netscape Communications Corporation. All
+   Rights Reserved.
+   
+   Contributor(s):
+     Håkan Waara <hwaara@chello.se>
+     Peter Annema <disttsc@bart.nl>
+  -->
+
+<?xml-stylesheet href="chrome://communicator/skin/" type="text/css"?>
+
+<!DOCTYPE window SYSTEM "chrome://cookie/locale/pref-cookies.dtd">
+
+<page id="cookiesPanel" xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+      onload="init();"
+      headertitle="&lHeader;">
+
+  <script type="application/x-javascript" src="chrome://cookie/content/cookieOverlay.js"/>
+
+  <script type="application/x-javascript">
+  <![CDATA[
+  var panel = "chrome://cookie/content/pref-cookies.xul";
+  var _elementIDs = ["networkCookieBehaviour", "networkWarnAboutCookies",
+                     "lifetimeEnabled", "lifetimeBehavior", "lifetimeDays"];
+
+  function init()
+  {
+    parent.initPanel('chrome://cookie/content/pref-cookies.xul');
+    setDisables(false);
+
+    const NS_COOKIECONSENT_CONTRACTID = '@mozilla.org/cookie-consent;1';
+    if (NS_COOKIECONSENT_CONTRACTID in Components.classes) {
+      var p3pRadioButton = document.getElementById("p3pRadioButton");
+      p3pRadioButton.removeAttribute("hidden");
+    }
+
+  }
+
+  const cookies_disabled = "2";
+  const cookies_no_third_party = "1";
+  const cookies_p3p = "3";
+  const cookies_enabled = "0";
+
+  function setDisables(setFocus)
+  {
+    var cookieBehavior = document.getElementById("networkCookieBehaviour");
+
+    var p3pButton = document.getElementById("p3pDialog");
+    p3pButton.disabled = (cookieBehavior.value != cookies_p3p);
+    if (parent.hPrefWindow.getPrefIsLocked(p3pButton.getAttribute("prefstring")) )
+      p3pButton.disabled = true;
+
+    // if mailnews is installed then we will have networkCookieBehaviorForMailNews checkbox
+    if (document.getElementById('networkDisableCookieForMailNews'))
+    {
+      var networkDisableCookieForMailNews = document.getElementById("networkDisableCookieForMailNews");
+      networkDisableCookieForMailNews.disabled = cookieBehavior.value == cookies_disabled; 
+    }
+
+    var warnCheckbox = document.getElementById("networkWarnAboutCookies");
+    warnCheckbox.disabled = (cookieBehavior.value == cookies_disabled);
+    if (parent.hPrefWindow.getPrefIsLocked(warnCheckbox.getAttribute("prefstring")) )
+      warnCheckbox.disabled = true;
+
+    var lifetimeCheckbox  = document.getElementById("lifetimeEnabled");
+    lifetimeCheckbox.disabled = (cookieBehavior.value == cookies_disabled);
+    if (parent.hPrefWindow.getPrefIsLocked(lifetimeCheckbox.getAttribute("prefstring")) )
+      lifetimeCheckbox.disabled = true;
+
+    var lifetimeEnabled = document.getElementById("lifetimeEnabled");
+    var lifetimeBehavior = document.getElementById("lifetimeBehavior");
+    var lifetimeDays = document.getElementById("lifetimeDays");
+
+    lifetimeBehavior.disabled = (cookieBehavior.value == cookies_disabled) ||
+                                !lifetimeEnabled.checked;
+    if (parent.hPrefWindow.getPrefIsLocked(lifetimeBehavior.getAttribute("prefstring")) )
+      lifetimeBehavior.disabled = true;
+
+    lifetimeDays.disabled = (cookieBehavior.value == cookies_disabled) ||
+                            !lifetimeEnabled.checked ||
+                            (lifetimeBehavior.value != 1);
+    if (parent.hPrefWindow.getPrefIsLocked(lifetimeDays.getAttribute("prefstring")) )
+      lifetimeDays.disabled = true;
+    
+    if (!lifetimeDays.disabled && setFocus)
+      lifetimeDays.focus();
+  }
+  ]]>
+  </script>
+
+    <description>&cookieDetails;</description>
+    <radiogroup id="networkCookieBehaviour"
+                prefstring="network.cookie.cookieBehavior">
+      <radio value="2" label="&disableCookies.label;"
+             accesskey="&disableCookies.accesskey;" oncommand="setDisables(false);"/>
+      <radio value="1" label="&accOrgCookiesRadio.label;"
+             accesskey="&accOrgCookiesRadio.accesskey;" oncommand="setDisables(false);"/>
+      <hbox id="p3pRadioButton" hidden="true">
+        <radio value="3" label="&accP3PCookiesRadio.label;"
+               accesskey="&accP3PCookiesRadio.accesskey;" oncommand="setDisables(false);"/>
+        <button label="&viewP3P.label;" accesskey="&viewP3P.accesskey;" oncommand="viewP3P();"
+                id="p3pDialog"
+                prefstring="pref.advanced.cookies.disable_button.more_info"/>
+      </hbox>
+      <radio value="0" label="&accAllCookiesRadio.label;"
+             accesskey="&accAllCookiesRadio.accesskey;" oncommand="setDisables(false);"/>
+    </radiogroup>
+    <separator id="networkCookieBehaviorSeparator"/>
+    <vbox align="start">
+      <checkbox id="networkWarnAboutCookies" label="&warnAboutCookies.label;" accesskey="&warnAboutCookies.accesskey;"
+                prefstring="network.cookie.warnAboutCookies"/>
+      <checkbox id="lifetimeEnabled" label="&limitLifetime.label;" accesskey="&limitLifetime.accesskey;"
+                prefstring="network.cookie.lifetime.enabled"
+                oncommand="setDisables(false);"/>
+      <hbox class="indent">
+        <radiogroup id="lifetimeBehavior" prefstring="network.cookie.lifetime.behavior">
+          <radio value="0" label="&current.label;" 
+                 accesskey="&current.accesskey;"
+                 oncommand="setDisables(false);"/>
+          <hbox>
+            <radio value="1" accesskey="&days.accesskey;"
+                    oncommand="setDisables(true);"/>
+            <textbox id="lifetimeDays" pref="true" size="4"
+                     preftype="int" prefstring="network.cookie.lifetime.days"/>
+            <description>&days.label;</description>
+            </hbox>
+         </radiogroup>
+      </hbox>
+   </vbox>
+   <separator/>
+   <hbox pack="end">
+     <button label="&viewCookies.label;" accesskey="&viewCookies.accesskey;" oncommand="viewCookies();"
+		     id="viewCookieButton"
+		     prefstring="pref.advanced.cookies.disable_button.view_cookies"/>
+   </hbox>
+</page>

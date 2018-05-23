@@ -1,0 +1,98 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE		= xpcom
+XPIDL_MODULE	= xpcom_components
+LIBRARY_NAME	= xpcomcomponents_s
+GRE_MODULE	= 1
+
+REQUIRES	= libreg \
+		  string \
+		  $(NULL)
+
+CPPSRCS		= \
+		nsCategoryManager.cpp \
+		nsComponentManager.cpp \
+		nsComponentManagerObsolete.cpp \
+		nsNativeComponentLoader.cpp \
+		nsRegistry.cpp \
+		nsServiceManagerObsolete.cpp \
+		xcDll.cpp \
+		$(NULL)
+
+# XXX not really right.
+ifdef MOZ_STATIC_COMPONENT_LIBS
+CPPSRCS		+= nsStaticComponentLoader.cpp
+DEFINES		+= -DENABLE_STATIC_COMPONENT_LOADER=1
+endif
+
+EXPORTS		= \
+		nsCategoryManagerUtils.h \
+		nsComponentManagerUtils.h \
+		nsComponentManagerObsolete.h \
+		nsIRegistryUtils.h \
+		nsIServiceManagerUtils.h \
+		nsIServiceManagerObsolete.h \
+		nsXPComFactory.h \
+		nsNativeComponentLoader.h \
+		nsStaticComponent.h \
+		nsObsoleteModuleLoading.h \
+		xcDll.h \
+		$(NULL)
+
+XPIDLSRCS	= \
+		nsIComponentLoader.idl \
+		nsIComponentLoaderManager.idl \
+		nsIComponentManagerObsolete.idl \
+		nsIRegistry.idl \
+		$(NULL)
+
+SDK_XPIDLSRCS	= \
+		nsIClassInfo.idl	\
+		nsIComponentRegistrar.idl \
+		nsIFactory.idl		\
+		nsIModule.idl		\
+		nsIServiceManager.idl	\
+		nsIComponentManager.idl \
+		nsICategoryManager.idl \
+		$(NULL)
+
+EXPORTS		:= $(addprefix $(srcdir)/, $(EXPORTS))
+
+LOCAL_INCLUDES	= -I$(srcdir)/../base -I$(srcdir)/../thread -I$(srcdir)/../ds
+
+# we don't want the shared lib, but we want to force the creation of a static lib.
+FORCE_STATIC_LIB = 1
+
+# Force use of PIC
+FORCE_USE_PIC	= 1
+include $(topsrcdir)/config/rules.mk
+
+DEFINES	+= -D_IMPL_NS_COM -DEXPORT_XPTI_API
+
+

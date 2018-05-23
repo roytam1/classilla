@@ -1,0 +1,152 @@
+<?xml version="1.0"?> 
+
+<!--
+   The contents of this file are subject to the Netscape Public
+   License Version 1.1 (the "License"); you may not use this file
+   except in compliance with the License. You may obtain a copy of
+   the License at http://www.mozilla.org/NPL/
+    
+   implied. See the License for the specific language governing
+   rights and limitations under the License.
+    
+   The Original Code is Mozilla Communicator client code, released
+   March 31, 1998.
+   
+   The Initial Developer of the Original Code is Netscape
+   Communications Corporation. Portions created by Netscape are
+   Copyright (C) 1998-1999 Netscape Communications Corporation. All
+   Rights Reserved.
+   
+   Contributor(s): 
+     Håkan Waara <hwaara@chello.se>
+     Peter Annema <disttsc@bart.nl>
+  -->
+<?xml-stylesheet href="chrome://communicator/skin/" type="text/css"?>
+
+<!DOCTYPE window [
+<!ENTITY % brandDTD SYSTEM "chrome://global/locale/brand.dtd" >
+%brandDTD;
+<!ENTITY % prefImagesDTD SYSTEM "chrome://cookie/locale/pref-images.dtd" >
+%prefImagesDTD;
+]>
+
+<page id="imagesPanel" xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+      onload="init();"
+      headertitle="&lHeader;">
+          
+  <script type="application/x-javascript" src="chrome://cookie/content/cookieOverlay.js"/>
+
+  <script type="application/x-javascript">
+  <![CDATA[
+  
+  var panel = "chrome://cookie/content/pref-images.xul";
+  var _elementIDs = ["accOrgImages", "networkImageBehaviour", "networkImageWarnAboutImages", "imageLooping"];
+
+  function init()
+  {
+    parent.initPanel('chrome://cookie/content/pref-images.xul');
+
+    imageBlockingEnabled();
+    setDisables();
+  }
+
+  // Present finer control over image loading to the user.
+  // enable image blocker if "imageblocker.enabled" pref is true
+  function imageBlockingEnabled()
+  {
+    var enabled;
+    try {
+      enabled = parent.hPrefWindow.getPref("bool", "imageblocker.enabled");
+    }
+    catch(ex) {
+      enabled = false;
+    }
+    if (!enabled)
+    {
+      document.getElementById("haveImageBlocking").setAttribute("hidden", "true");
+      if (!document.getElementById("networkImageDisableImagesInMailNews"))
+        document.getElementById("haveImageBlockingOrMailnews").setAttribute("hidden", "true");
+    }
+  }
+
+  function setDisables()
+  {
+    var imageBehavior = document.getElementById("networkImageBehaviour");
+    setWarnAboutImagesEnabled(imageBehavior.value != "2");
+
+    // if mailnews is installed then we will have networkImageDisableImagesInMailNews checkbox
+    var networkImageDisableImagesInMailNews = document.getElementById("networkImageDisableImagesInMailNews");
+    if (networkImageDisableImagesInMailNews)
+      networkImageDisableImagesInMailNews.disabled = (imageBehavior.value == 2); 
+  }
+
+  function setWarnAboutImagesEnabled(aEnabled)
+  {
+    var warnCheckbox = document.getElementById("networkImageWarnAboutImages");
+    if (warnCheckbox)
+    {
+      warnCheckbox.disabled = !aEnabled;
+      if (parent.hPrefWindow.getPrefIsLocked(warnCheckbox.getAttribute("prefstring")) )
+        warnCheckbox.disabled = true;
+    }
+  }
+ 
+  ]]>
+  </script>
+
+  <broadcaster id="haveImageBlocking"/>
+  <broadcaster id="haveImageBlockingOrMailnews"/>
+
+  <groupbox id="imagesArea">
+    <caption label="&imageBlocking.label;"/>
+
+    <description>&imageDetails;</description>
+
+    <radiogroup id="networkImageBehaviour"
+                prefstring="network.image.imageBehavior">
+      <radio value="2" label="&disableImages.label;"
+             accesskey="&disableImages.accesskey;"
+             oncommand="setDisables();"/>
+      <radio value="1" label="&accOrgImagesRadio.label;"
+             accesskey="&accOrgImagesRadio.accesskey;"
+             id="accOrgImages" observes="haveImageBlocking"
+             oncommand="setDisables();"/>
+      <radio value="0" label="&accAllImagesRadio.label;"
+             accesskey="&accAllImagesRadio.accesskey;"
+             oncommand="setDisables();"/>
+    </radiogroup>
+
+    <separator id="networkImagesBehaviorSeparator" observes="haveImageBlockingOrMailnews"/>
+
+<!--
+    <vbox align="start">
+      <checkbox id="networkImageWarnAboutImages" label="&warnAboutImages.label;"
+                accesskey="&warnAboutImages.accesskey;" observes="haveImageBlocking"
+                prefstring="network.image.warnAboutImages"/>
+    </vbox>
+-->
+
+    <separator observes="haveImageBlocking"/>
+
+    <hbox pack="end">
+      <button id="viewImages" label="&viewImages.label;"
+              accesskey="&viewImages.accesskey;" oncommand="viewImages();"
+              observes="haveImageBlocking"
+              prefstring="pref.advanced.images.disable_button.view_image"/>
+    </hbox>
+
+  </groupbox>
+  <groupbox>
+    <caption label="&animLoopingTitle.label;"/>
+    <radiogroup id="imageLooping"
+                preftype="string" prefstring="image.animation_mode">
+        <radio value="normal" label="&animLoopAsSpecified.label;"
+               accesskey="&animLoopAsSpecified.accesskey;"/>
+        <radio value="once" label="&animLoopOnce.label;"
+               accesskey="&animLoopOnce.accesskey;"/>
+        <radio value="none" label="&animLoopNever.label;"
+               accesskey="&animLoopNever.accesskey;"/>
+    </radiogroup>
+  </groupbox>
+
+</page>

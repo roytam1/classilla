@@ -1,0 +1,92 @@
+<?xml version="1.0"?>
+
+<!--
+ The contents of this file are subject to the Netscape Public
+ License Version 1.1 (the "License"); you may not use this file
+ except in compliance with the License. You may obtain a copy of
+ the License at http://www.mozilla.org/NPL/
+ 
+ Software distributed under the License is distributed on an "AS
+ IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+ implied. See the License for the specific language governing
+ rights and limitations under the License.
+ 
+ The Original Code is Mozilla Communicator client code, released
+ March 31, 1998.
+ 
+ The Initial Developer of the Original Code is Netscape
+ Communications Corporation. Portions created by Netscape are
+ Copyright (C) 1998-1999 Netscape Communications Corporation. All
+ Rights Reserved.
+
+ Contributors:
+ Alec Flett <alecf@netscape.com>
+
+-->
+
+<!DOCTYPE window SYSTEM "chrome://messenger/locale/smtpEditOverlay.dtd">
+
+<overlay xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+
+  <script src="smtpEditOverlay.js"/>
+
+  <vbox id="smtpServerEditor">
+    <grid>
+      <columns>
+        <column/>
+        <column/>
+      </columns>
+      <rows>
+        <row align = "center">
+          <label value="&serverName.label;"/>
+          <textbox id="smtp.hostname" flex="1"
+                   preftype="string"
+                   class="uri-element"
+                   prefstring="mail.smtpserver.%serverkey%.hostname"/>
+        </row>
+        <row align="center">
+          <hbox align="center">
+            <label value="&serverPort.label;"/>
+          </hbox>
+          <hbox align="center">
+            <textbox id="smtp.port" size="5"
+                     preftype="int"
+                     prefstring="mail.smtpserver.%serverkey%.port"/>
+          </hbox>
+        </row>
+      </rows>
+    </grid>
+    <!-- use a grid here when it's implemented -->
+    <vbox>
+      <!-- This hidden one will hold the integer version
+           of smtp.useUsername -->
+      <label hidden="true" id="smtp.authMethod"/>
+      <hbox align="center">
+      <checkbox id="smtp.useUsername" label="&alwaysUseUsername.label;"
+                oncommand="onUseUsername(event.target,true);"
+                prefattribute="value"
+                prefstring="mail.smtpserver.%serverkey%.use_username"/>
+      </hbox>                
+      <vbox style="margin-left: 2em">
+        <hbox align="center">
+          <label id="smtpusernamelabel" value="&userName.label;"/>
+          <textbox id="smtp.username" flex="1"
+                   preftype="string"
+                   prefstring="mail.smtpserver.%serverkey%.username"/>
+        </hbox>
+      </vbox>
+     </vbox>
+     <hbox align="center">
+       <label value="&isSecure.label;"/>
+     </hbox>
+     <radiogroup id="smtp.trySSL"
+                 prefstring="mail.smtpserver.%serverkey%.try_ssl">
+       <hbox style="margin-left: 2em">
+         <radio value="0" label="&neverSecure.label;" id="smtp.neverSecure"/>
+         <radio value="1" label="&sometimesSecure.label;" id="smtp.sometimesSecure"/>
+         <radio value="2" label="&alwaysSecure.label;" id="smtp.alwaysSecure"/>
+       </hbox>
+     </radiogroup>
+  </vbox>
+</overlay>

@@ -1,0 +1,68 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../../../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE		= necko
+LIBRARY_NAME	= nkftp_s
+REQUIRES	= xpcom \
+		  string \
+		  exthandler \
+		  mimetype \
+		  pref \
+		  intl \
+		  necko \
+		  nkcache \
+		  $(NULL)
+
+CPPSRCS		= \
+		nsFtpProtocolHandler.cpp \
+		nsFTPChannel.cpp \
+		nsFtpConnectionThread.cpp \
+		nsFtpControlConnection.cpp \
+		$(NULL)
+
+# Use -g for Irix mipspro builds as workaround for bug 92099
+ifneq (,$(filter IRIX IRIX64,$(OS_ARCH)))
+ifndef GNU_CC
+MODULE_OPTIMIZE_FLAGS=-O -g
+endif
+endif
+
+# we don't want the shared lib, but we want to force the creation of a
+# static lib.
+FORCE_STATIC_LIB = 1
+
+include $(topsrcdir)/config/rules.mk
+
+ifeq ($(OS_ARCH),WINNT)
+ifndef MOZ_DEBUG
+ifndef NO_LOGGING
+DEFINES		+= -DFORCE_PR_LOG
+endif
+endif
+endif # WINNT
+

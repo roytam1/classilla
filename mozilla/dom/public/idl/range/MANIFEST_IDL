@@ -1,0 +1,4 @@
+nsIDOMDocumentRange.idl
+nsIDOMNSRange.idl
+nsIDOMRange.idl
+nsIDOMRangeException.idl

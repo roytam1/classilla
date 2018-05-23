@@ -1,0 +1,83 @@
+<?xml version="1.0"?> 
+<!-- 
+   - The contents of this file are subject to the Mozilla Public
+   - License Version 1.1 (the "License"); you may not use this file
+   - except in compliance with the License. You may obtain a copy of
+   - the License at http://www.mozilla.org/MPL/
+   - 
+   - Software distributed under the License is distributed on an "AS
+   - IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+   - implied. See the License for the specific language governing
+   - rights and limitations under the License.
+   - 
+   - The Original Code is mozilla.org code.
+   - 
+   - The Initial Developer of the Original Code is Netscape
+   - Communications Corp.  Portions created by Netscape are
+   - Copyright (C) 2001 Netscape Communications Corp.  All
+   - Rights Reserved.
+   - 
+   - Contributor(s):
+   -   Bob Lord <lord@netscape.com>
+   -   Terry Hayes <thayes@netscape.com>
+  -->
+
+<?xml-stylesheet href="chrome://communicator/skin/" type="text/css"?>
+
+<!DOCTYPE page [
+  <!ENTITY % brandDTD SYSTEM "chrome://global/locale/brand.dtd">
+  <!ENTITY % prefSec SYSTEM "chrome://pippki/locale/pref-security.dtd">
+  <!ENTITY % prefSslDTD SYSTEM "chrome://pippki/locale/pref-ssl.dtd">
+  %brandDTD;
+  %prefSec;
+  %prefSslDTD;
+]>
+
+<page xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+      onload="parent.initPanel('chrome://pippki/content/pref-certs.xul');"
+      headertitle="&certs.label;">
+
+  <!-- List elements to manage for prefs -->
+  <script type="application/x-javascript" src="chrome://pippki/content/pref-security.js"/>
+  <script type="application/x-javascript">
+  <![CDATA[
+    var _elementIDs = [ "certSelection" ];
+  ]]>
+  </script>
+
+  <groupbox align="start">
+    <caption label="&SSLClientAuthMethod;"/>
+    <description> &certselect.description; </description>
+    <!-- Prefs -->
+    <radiogroup id="certSelection" orient="horizontal" preftype="string" 
+	        prefstring="security.default_personal_cert">
+    <radio label="&certselect.auto;" value="Select Automatically"/>
+    <radio label="&certselect.ask;" value="Ask Every Time"/>
+    </radiogroup>
+  </groupbox>
+
+  <!-- Certificate manager -->
+  <groupbox>
+    <caption label="&managecerts.label;"/>
+    <description>&managecerts.text;</description>
+    <hbox align="center">
+      <button label="&managecerts.button;"
+              oncommand="openCertManager();" 
+              id="openCertManagerButton"
+              prefstring="security.disable_button.openCertManager"/>
+    </hbox>
+  </groupbox>
+
+  <!-- Device manager -->
+  <groupbox>
+    <caption label="&managedevices.label;"/>
+    <description>&managedevices.text;</description>
+    <hbox align="center">
+      <button label="&managedevices.button;"
+              oncommand="openDeviceManager();"
+              id="openDeviceManagerButton"
+              prefstring="security.disable_button.openDeviceManager"/>
+    </hbox>
+  </groupbox>
+
+</page>

@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+
+<!DOCTYPE overlay [
+  <!ENTITY % dtd1 SYSTEM "chrome://inspector/locale/inspector.dtd"> %dtd1;
+  <!ENTITY % dtd2 SYSTEM "chrome://inspector/content/util.dtd"> %dtd2;
+]>
+
+<?xml-stylesheet href="chrome://inspector/skin/"?>
+
+<page id="winJSObject"
+      xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+
+  <script type="application/x-javascript" src="chrome://inspector/content/viewers/jsObject/jsObject.js"/>
+  <script type="application/x-javascript" src="chrome://inspector/content/jsutil/xpcom/XPCU.js"/>
+  <script type="application/x-javascript" src="chrome://inspector/content/jsutil/events/ObserverManager.js"/>
+  <script type="application/x-javascript" src="chrome://inspector/content/hooks.js"/>
+  <script type="application/x-javascript" src="chrome://inspector/content/utils.js"/>
+  
+  <commandset>
+    <command id="cmdCopyValue" oncommand="viewer.cmdCopyValue()"/>
+    <command id="cmdEvalExpr" oncommand="viewer.cmdEvalExpr()"/>
+    <command id="cmdInspectInNewView" oncommand="viewer.cmdInspectInNewView()"/>
+  </commandset>
+  
+  <popupset>
+    <popup id="popupContext" onpopupshowing="return viewer.onpopupshowingContext(this)">
+      <menuitem label="Inspect in New Window" observes="cmdInspectInNewView"/>
+      <menuseparator/>
+      <menuitem label="Copy Value" observes="cmdCopyValue"/>
+      <menuitem label="Evaluate Javascript..." observes="cmdEvalExpr"/>
+    </popup>
+  </popupset>
+  
+  <tree id="treeJSObject" flex="1" context="popupContext">
+    <treecols>
+      <treecol id="colProp" flex="1" primary="true" label="Property"/>
+      <splitter class="tree-splitter"/>
+      <treecol id="colVal" flex="1" label="Value"/>
+    </treecols>
+      
+    <treechildren id="trchJSObject"/>
+  </tree>
+
+</page>

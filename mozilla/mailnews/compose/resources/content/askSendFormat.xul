@@ -1,0 +1,71 @@
+<?xml version="1.0"?><!-- -*- Mode: SGML; tab-width: 4; indent-tabs-mode: nil; -*- -->
+
+<?xml-stylesheet href="chrome://messenger/skin/dialogs.css" type="text/css"?>
+
+<?xul-overlay href="chrome://global/content/dialogOverlay.xul"?>
+
+<!DOCTYPE window SYSTEM "chrome://messenger/locale/messengercompose/askSendFormat.dtd">
+
+<window id="askSendFormat"
+    title="&windowTitle.label;"
+    xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+    onload="Startup()"
+    class="dialog">
+
+<script type="application/x-javascript" src="chrome://messenger/content/messengercompose/askSendFormat.js"/>
+
+<keyset id="dialogKeys"/>
+
+    <spacer style="height:0.5em"/>
+    <hbox>
+        <spacer style="width:10px"/>
+        <vbox id="askImageBox">
+            <image id="convertDefault" />
+        </vbox>
+        <spacer style="width:10px"/>
+        <vbox flex="1">
+            <description>&recipient.label;</description>
+            <deck id="mailSendFormatExplanation">
+                <vbox><description>&convertibleDefault.label;</description></vbox>  <!-- Hack: <vbox> is a workaround for bug 44513. -->
+                <vbox><description>&convertibleYes.label;</description></vbox>
+                <vbox><description>&convertibleAltering.label;</description></vbox>
+                <vbox><description>&convertibleNo.label;</description></vbox>
+            </deck>
+            <description>&question.label;</description>
+            <spacer style="height:1em"/>
+
+      <radiogroup id="mailDefaultHTMLAction">
+         <hbox>
+                <radio id="SendPlainTextAndHtml" value="0" label="&plainTextAndHtml.label;"/>
+                <description id="plainTextAndHtmlRecommended" hidden="true" style="margin-top: 4px;">&recommended.label;</description>
+                <!-- Hack: box and html are workarounds for bug 49623 -->
+               </hbox>
+         <hbox>
+        <radio id="SendPlainTextOnly" value="1" label="&plainTextOnly.label;"/>
+                <description id="plainTextOnlyRecommended" hidden="true" style="margin-top: 4px;">&recommended.label;</description>
+               </hbox>
+         <hbox>
+        <radio id="SendHtmlOnly" value="2" label="&htmlOnly.label;"/>
+                <description id="htmlOnlyRecommended" hidden="true" style="margin-top: 4px;">&recommended.label;</description>
+               </hbox>
+      </radiogroup>
+
+        </vbox>
+        <spacer style="width:10px"/>
+    </hbox>
+
+    <spacer style="height:1em"/>
+  <hbox id="okCancelButtons"
+        button1Label="&send.label;"
+        button2Label="&cancel.label;"
+      button3Label="&recipients.label;"
+      button4Label="&help.label;"
+  />
+  <hbox id="hiddenLabels"
+        plainTextAndHtmlRecommendedLabel="&plainTextAndHtmlRecommended.label;"
+        plainTextOnlyRecommendedLabel="&plainTextOnlyRecommended.label;"
+        htmlOnlyRecommendedLabel="&htmlOnlyRecommended.label;"
+  />
+    <spacer style="height:1em" />
+
+</window>

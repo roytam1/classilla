@@ -1,0 +1,391 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= .
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+include $(topsrcdir)/build/unix/modules.mk
+
+ifeq ($(BUILD_MODULES),all)
+#
+# And now for something completely different...
+# Divide the default build into tiers. 
+# Tiers must be defined on module boundaries 
+#
+default: $(SUBMAKEFILES)
+	$(MAKE) -C config export
+	$(MAKE) nspr
+	$(MAKE) ldap
+	$(MAKE) tier_0
+	$(MAKE) tier_1
+	$(MAKE) tier_2
+	$(MAKE) tier_9
+ifdef MOZ_EXTENSIONS
+	$(MAKE) tier_94
+endif
+ifdef MOZ_PSM
+	$(MAKE) tier_95
+endif
+ifdef MOZ_MAIL_NEWS
+	$(MAKE) tier_97
+endif
+ifdef MOZ_CALENDAR
+	$(MAKE) tier_98
+endif
+	$(MAKE) tier_99
+
+# Make sure that the existing rulesets work
+DIRS = \
+	$(tier_0_dirs) \
+	$(tier_1_dirs) \
+	$(tier_2_dirs) \
+	$(tier_9_dirs) \
+	$(NULL)
+
+ifdef GC_LEAK_DETECTOR
+DIRS += gc/boehm
+endif
+
+ifdef MOZ_EXTENSIONS
+DIRS += $(tier_94_dirs)
+endif
+ifdef MOZ_PSM
+DIRS += $(tier_95_dirs)
+endif
+ifdef MOZ_MAIL_NEWS
+DIRS += $(tier_97_dirs)
+endif
+ifdef MOZ_CALENDAR
+DIRS += $(tier_98_dirs)
+endif
+
+DIRS	+= $(tier_99_dirs)
+
+#
+# tier 0 - base build config dirs
+# 
+tier_0_dirs = \
+	config \
+	build \
+	include \
+	$(NULL)
+
+#
+# tier 1 -  3rd party individual libraries
+#
+tier_1_dirs	+= dbm
+
+ifndef MOZ_NATIVE_JPEG
+tier_1_dirs	+= jpeg
+endif
+
+ifndef MOZ_NATIVE_ZLIB
+tier_1_dirs	+= modules/zlib
+endif
+
+# Installer needs standalone libjar, hence standalone zlib
+ifdef MOZ_INSTALLER
+tier_1_dirs	+= modules/zlib/standalone
+endif
+
+ifdef MOZ_INTERNAL_LIBART_LGPL
+tier_1_dirs	+= other-licenses/libart_lgpl
+endif
+
+#
+# tier 2 - base libraries
+# 
+tier_2_dirs	= js
+
+# MacOSX needs to build lib for MoreFiles before xpcom
+ifneq (,$(filter mac cocoa,$(MOZ_WIDGET_TOOLKIT)))
+tier_2_dirs += lib/mac/MoreFiles
+endif
+
+tier_2_dirs	+= \
+		modules/libreg \
+		string \
+		xpcom \
+		$(NULL)
+
+ifdef NS_TRACE_MALLOC
+tier_2_dirs	+= tools/trace-malloc/lib tools/trace-malloc
+endif
+
+#
+# tier 9 - core components (necko,gecko)
+#
+
+tier_9_dirs += \
+		js/src/xpconnect \
+		intl \
+		modules/libjar \
+		$(NULL)
+
+ifdef MOZ_OJI
+tier_9_dirs	+= js/src/liveconnect
+endif
+
+ifdef MOZ_JSDEBUGGER
+tier_9_dirs	+= js/jsd
+endif
+
+ifdef MOZ_ENABLE_XLIB
+tier_9_dirs	+= gfx/src/xlibrgb widget/src/xlibxtbin
+endif
+
+ifdef MOZ_ENABLE_GTK
+tier_9_dirs	+= widget/src/gtksuperwin widget/src/gtkxtbin
+endif
+
+ifdef MOZ_ENABLE_GTK2
+tier_9_dirs     += widget/src/gtkxtbin
+endif
+
+tier_9_dirs	+= \
+		modules/libutil \
+		netwerk \
+		uriloader \
+		modules/libpref \
+		modules/libimg \
+		modules/oji \
+		caps \
+		rdf \
+		expat \
+		htmlparser \
+		gfx \
+		modules/libpr0n \
+		modules/plugin \
+		dom \
+		view \
+		widget \
+		content \
+		layout \
+		db \
+		docshell \
+		webshell \
+		profile \
+		embedding \
+		editor \
+		sun-java \
+		themes \
+		$(NULL)
+
+ifdef ACCESSIBILITY
+tier_9_dirs    += accessible
+endif
+
+ifdef MOZ_LDAP_XPCOM
+tier_9_dirs	+= directory/xpcom
+endif
+
+# This must preceed xpfe
+ifdef MOZ_JPROF
+tier_9_dirs        += tools/jprof
+endif
+
+tier_9_dirs	+= xpfe xpinstall
+
+ifdef MOZ_LEAKY
+tier_9_dirs        += tools/leaky
+endif
+
+ifdef MOZ_MAPINFO
+tier_9_dirs	+= tools/codesighs
+endif
+
+tier_9_dirs	+= l10n
+
+ifdef MOZ_PHOENIX
+tier_9_dirs	+= toolkit
+endif
+
+#
+# tier 9x - application features
+#
+
+ifdef MOZ_EXTENSIONS
+tier_94_dirs	+= extensions
+endif
+
+ifdef MOZ_PSM
+tier_95_dirs	+= security/manager
+endif
+
+ifdef MOZ_MAIL_NEWS
+tier_97_dirs	+= mailnews
+endif
+
+ifdef MOZ_CALENDAR
+tier_98_dirs	+= other-licenses/libical calendar
+endif
+
+#
+# tier 99 - application binaries
+#
+
+ifneq (,$(MOZ_STATIC_COMPONENTS)$(MOZ_META_COMPONENTS))
+tier_99_dirs   += modules/staticmod
+endif
+
+ifdef MOZ_PHOENIX
+tier_99_dirs	+= browser
+else
+tier_99_dirs	+= xpfe/bootstrap
+endif
+
+ifneq (,$(MOZ_ENABLE_GTK)$(MOZ_ENABLE_GTK2))
+tier_99_dirs	+= embedding/browser/gtk
+endif
+
+# viewer
+ifneq (,$(ENABLE_TESTS))
+tier_99_dirs += webshell/tests
+endif
+
+# winembed, mfcembed
+ifeq ($(OS_ARCH),WINNT)
+ifneq (,$(ENABLE_TESTS)$(MOZILLA_OFFICIAL))
+tier_99_dirs += embedding/tests
+endif
+endif
+
+else
+
+# Standalone build
+
+DIRS		= $(BUILD_MODULE_DIRS)
+
+# Hack to generate xpidl Makefile
+ifneq ($(BUILD_MODULES),all)
+ifneq (,$(findstring xpcom, $(BUILD_MODULE_DIRS)))
+DIRS		:= xpcom/typelib $(DIRS)
+SUBMAKEFILES	:= xpcom/typelib/Makefile
+endif
+endif
+
+default: $(SUBMAKEFILES)
+	$(MAKE) export
+	$(MAKE) libs
+
+endif # BUILD_MODULES == all
+
+STATIC_MAKEFILES := nsprpub directory/c-sdk security/nss
+
+GARBAGE_DIRS += dist
+DIST_GARBAGE = config.cache config.log config.status config-defs.h \
+   dependencies.beos config/autoconf.mk config/myrules.mk config/myconfig.mk \
+   unallmakefiles mozilla-config.h \
+   $(topsrcdir)/.mozconfig.mk $(topsrcdir)/.mozconfig.out 
+
+# Build pseudo-external modules first when export is explicitly called
+export::
+	$(MAKE) -C config export
+	$(MAKE) nspr
+	$(MAKE) ldap
+ifneq ($(BUILD_MODULES),all)
+ifneq (,$(findstring xpcom, $(BUILD_MODULE_DIRS)))
+	$(MAKE) -C xpcom/typelib
+	$(MAKE) export-idl
+endif
+endif
+
+install::
+ifndef MOZ_NATIVE_NSPR
+	$(MAKE) -C nsprpub real_install DESTDIR=$(DESTDIR) libdir=$(mozappdir) includedir=$(includedir)/nspr
+	$(RM) -f $(addprefix $(DESTDIR)$(mozappdir)/$(LIB_PREFIX), $(addsuffix .$(LIB_SUFFIX), nspr4 plds4 plc4))
+	$(RM) -f $(addprefix $(DESTDIR)$(bindir)/,nspr-config compile-et.pl prerr.properties)
+endif
+ifdef MOZ_LDAP_XPCOM
+	$(MAKE) -C directory/c-sdk real_install DESTDIR=$(DESTDIR) libdir=$(mozappdir) includedir=$(includedir)/ldap
+endif
+
+include $(topsrcdir)/config/rules.mk
+
+# Clean up after pseudo-external modules
+clean clobber realclean clobber_all distclean::
+ifndef MOZ_NATIVE_NSPR
+	$(MAKE) -C nsprpub $@
+endif
+ifdef MOZ_LDAP_XPCOM
+	$(MAKE) -C directory/c-sdk $@
+endif
+
+tier_%: 
+	@echo "$@: $($@_dirs)"
+	@$(EXIT_ON_ERROR) \
+		for d in $($@_dirs); do $(UPDATE_TITLE) \
+			$(MAKE) -C $$d export; \
+		done ; \
+		$(PERL) $(MOZILLA_DIR)/config/purge-old-headers.pl $(DIST)/include ;\
+		for d in $($@_dirs); do $(UPDATE_TITLE) \
+			$(MAKE) -C $$d libs; \
+		done
+#
+# Individual modules
+#
+boehm:
+ifdef GC_LEAK_DETECTOR
+	$(MAKE) -C gc/boehm
+endif
+
+nspr: boehm
+ifndef MOZ_NATIVE_NSPR
+	$(MAKE) -C nsprpub
+endif
+
+ldap:
+ifdef MOZ_LDAP_XPCOM
+	$(MAKE) -C directory/c-sdk
+endif
+
+export::
+	@$(PERL) $(MOZILLA_DIR)/config/purge-old-headers.pl $(DIST)/include
+
+distclean::
+	cat unallmakefiles | $(XARGS) rm -f
+	rm -f unallmakefiles $(DIST_GARBAGE)
+
+ifeq ($(OS_ARCH),WINNT)
+rebase:
+ifdef MOZILLA_OFFICIAL
+	echo rebasing $(DIST)
+	/bin/find $(DIST) -name "*.dll" > rebase.lst
+	rebase -b 60000000 -R . -G rebase.lst
+	rm rebase.lst
+endif
+
+splitsymbols:
+ifdef MOZILLA_OFFICIAL
+	echo splitting symbols out of binaries
+	/bin/find $(DIST) -name "*.dll" -exec splitsym {} \;
+	/bin/find $(DIST) -name "*.exe" -exec splitsym {} \;
+	/bin/find $(DIST) -name "*.EXE" -exec splitsym {} \;
+endif # MOZILLA_OFFICIAL
+
+deliver: splitsymbols rebase
+
+endif # WINNT
+

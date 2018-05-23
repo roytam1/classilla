@@ -1,0 +1,204 @@
+<?xml version="1.0"?>
+<!--
+The contents of this file are subject to the Netscape Public
+License Version 1.1 (the "License"); you may not use this file
+except in compliance with the License. You may obtain a copy of
+the License at http://www.mozilla.org/NPL/
+
+Software distributed under the License is distributed on an "AS
+IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+implied. See the License for the specific language governing
+rights and limitations under the License.
+
+The Original Code is Mozilla Communicator client code, released
+March 31, 1998.
+
+The Initial Developer of the Original Code is Netscape
+Communications Corporation. Portions created by Netscape are
+ Copyright (C) 1998-1999 Netscape Communications Corporation. All
+Rights Reserved.
+
+Contributor(s):  Hkan Waara <hwaara@chello.se>
+                 Seth Spitzer <sspitzer@netscape.com>
+-->
+
+<?xml-stylesheet href="chrome://messenger/skin/filterDialog.css" type="text/css"?>
+
+<?xul-overlay href="chrome://messenger/content/msgFolderPickerOverlay.xul"?>
+
+<!DOCTYPE window SYSTEM "chrome://messenger/locale/FilterListDialog.dtd">
+
+<window id="filterListDialog"
+  xmlns:nc="http://home.netscape.com/NC-rdf#"
+  xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+  windowtype="mailnews:filterlist"
+  onload="onLoad();"
+  onclose="return onFilterClose();"
+  persist="width height screenX screenY"
+  title="&window.title;">
+
+  <script type="application/x-javascript" src="chrome://messenger/content/FilterListDialog.js"/>
+  <script type="application/x-javascript" src="chrome://help/content/contextHelp.js"/>
+  <script type="application/x-javascript" src="chrome://communicator/content/utilityOverlay.js"/>
+  <stringbundle id="bundle_filter" src="chrome://messenger/locale/filter.properties"/>
+
+  <keyset id="dialogKeys"/>
+
+  <hbox align="center">
+    <label value="&filtersForPrefix.label;" 
+           accesskey="&filtersForPrefix.accesskey;" control="serverMenu"/>
+
+      <menulist oncommand="onServerClick(event);" id="serverMenu"
+          datasources="rdf:msgaccountmanager rdf:mailnewsfolders"
+          sortResource="http://home.netscape.com/NC-rdf#FolderTreeName"
+          sortDirection="ascending"
+          ref="msgaccounts:/">
+          <template>
+            <rule iscontainer="true" isempty="false" nc:ServerType="nntp">
+              <menupopup>
+                <menu uri="..." 
+                                class="folderMenuItem menu-iconic" 
+                                IsServer="rdf:http://home.netscape.com/NC-rdf#IsServer"
+                                IsSecure="rdf:http://home.netscape.com/NC-rdf#IsSecure"
+                                ServerType="rdf:http://home.netscape.com/NC-rdf#ServerType"
+                                label="rdf:http://home.netscape.com/NC-rdf#Name">
+                  <menupopup class="menulist-menupopup"/>
+                </menu>
+              </menupopup>
+            </rule>
+            <rule nc:ServerType="nntp">
+              <menupopup>
+                <menuitem uri="..." value="..."  
+                 class="folderMenuItem menuitem-iconic"
+                 IsServer="rdf:http://home.netscape.com/NC-rdf#IsServer"
+                 IsSecure="rdf:http://home.netscape.com/NC-rdf#IsSecure"
+                 ServerType="rdf:http://home.netscape.com/NC-rdf#ServerType"
+                 label="rdf:http://home.netscape.com/NC-rdf#Name"/>
+              </menupopup>
+            </rule>
+            <rule nc:SupportsFilters="true">
+              <menupopup>
+                <menuitem uri="..." value="..."
+                 class="folderMenuItem menuitem-iconic"
+                 IsServer="rdf:http://home.netscape.com/NC-rdf#IsServer"
+                 IsSecure="rdf:http://home.netscape.com/NC-rdf#IsSecure"
+                 ServerType="rdf:http://home.netscape.com/NC-rdf#ServerType"
+                 label="rdf:http://home.netscape.com/NC-rdf#Name"/>
+              </menupopup>
+            </rule>
+          </template>
+          <menupopup/>
+      </menulist>
+      <spacer flex="1"/> 
+      <vbox>
+        <button label="&viewLogButton.label;" accesskey="&viewLogButton.accesskey;" oncommand="viewLog();"/>
+      </vbox>
+  </hbox>
+
+  <grid flex="1">
+    <columns>
+      <column flex="1"/>
+      <column/>
+    </columns>
+    <rows>
+      <row>
+        <separator/>
+      </row>
+      <row>
+        <description>&filterHeader.label;</description>
+      </row>
+      
+      
+      <row flex="1">
+        <vbox>
+          <tree id="filterTree" flex="1" hidecolumnpicker="true"
+                onselect="onFilterSelect(event);"
+                onkeypress="onFilterTreeKeyPress(event);"
+                onclick="onFilterClick(event);"
+                ondblclick="onFilterDoubleClick(event);"
+                datasources="rdf:msgfilters rdf:msgaccountmanager" flags="dont-build-content">
+
+            <treecols>
+              <treecol id="nameColumn" flex="1" label="&nameColumn.label;" sort="?Name"/>
+              <treecol id="activeColumn" label="&activeColumn.label;" cycler="true"/>
+            </treecols>
+
+            <template>
+              <rule>
+                <conditions>
+                  <treeitem uri="?container"/>
+                  <member container="?container" child="?member"/>
+                </conditions>
+                
+                <bindings>
+                  <binding subject="?member"
+                          predicate="http://home.netscape.com/NC-rdf#Name"
+                          object="?Name"/>
+                  <binding subject="?member"
+                          predicate="http://home.netscape.com/NC-rdf#Enabled"
+                          object="?Enabled"/>
+                </bindings>
+
+                <action>
+                  <treechildren>
+                    <treeitem uri="?member">
+                      <treerow>
+                        <treecell label="?Name"/>
+                        <treecell properties="Enabled-?Enabled"/>
+                      </treerow>
+                    </treeitem>
+                  </treechildren>
+                </action>
+              </rule>
+            </template>
+          </tree>
+        </vbox>
+
+        <vbox>
+          <button id="newButton" label="&newButton.label;" accesskey="&newButton.accesskey;"
+                  oncommand="onNewFilter(null);"/>
+          <button id="editButton" label="&editButton.label;" accesskey="&editButton.accesskey;" 
+                  oncommand="onEditFilter();"/>
+          <button id="deleteButton" label="&deleteButton.label;" accesskey="&deleteButton.accesskey;" 
+                  oncommand="onDeleteFilter();"/>
+          <spacer flex="1"/>
+          <button id="reorderUpButton" label="&reorderUpButton.label;" accesskey="&reorderUpButton.accesskey;" 
+                  oncommand="onUp(event);"/>
+          <button id="reorderDownButton" label="&reorderDownButton.label;" accesskey="&reorderDownButton.accesskey;" 
+                  oncommand="onDown(event);"/>
+          <spacer flex="1"/>
+        </vbox>
+      </row>
+      <row>
+        <vbox>
+          <hbox align="center">
+            <label id="folderPickerPrefix" value="&folderPickerPrefix.label;" 
+                   accesskey="&folderPickerPrefix.accesskey;"
+                   disabled="true" control="runFiltersFolder"/>
+
+            <menulist id="runFiltersFolder" disabled="true"/>
+          </hbox>
+        </vbox>
+        <vbox>
+          <button id="runFiltersButton" 
+                  label="&runFilters.label;" 
+                  accesskey="&runFilters.accesskey;" 
+                  runlabel="&runFilters.label;" 
+                  runaccesskey="&runFilters.accesskey;" 
+                  stoplabel="&stopFilters.label;" 
+                  stopaccesskey="&stopFilters.label;" 
+                  oncommand="runSelectedFilters();" disabled="true"/>
+        </vbox>
+      </row>
+    </rows>
+  </grid>
+
+  <separator/>
+
+  <hbox id="statusContainerBox" align="center">
+    <spacer flex="1"/>
+    <label id="statusText" crop="right" flex="1"/> 
+    <progressmeter class="progressmeter-statusbar" id="statusbar-icon" mode="normal" value="0"/>
+  </hbox>
+</window>
+

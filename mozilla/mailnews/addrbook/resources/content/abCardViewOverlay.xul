@@ -1,0 +1,146 @@
+<?xml version="1.0"?> 
+<!--
+The contents of this file are subject to the Netscape Public
+License Version 1.1 (the "License"); you may not use this file
+except in compliance with the License. You may obtain a copy of
+the License at http://www.mozilla.org/NPL/
+
+Software distributed under the License is distributed on an "AS
+IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+implied. See the License for the specific language governing
+rights and limitations under the License.
+
+The Original Code is Mozilla Communicator client code, released
+March 31, 1998.
+
+The Initial Developer of the Original Code is Netscape
+Communications Corporation. Portions created by Netscape are
+ Copyright (C) 1998-1999 Netscape Communications Corporation. All
+Rights Reserved.
+--> 
+
+<!DOCTYPE window SYSTEM "chrome://messenger/locale/addressbook/abCardViewOverlay.dtd">
+
+<overlay xmlns:html="http://www.w3.org/1999/xhtml"
+     xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+     xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+
+  <script type="application/x-javascript" src="chrome://messenger/content/addressbook/abCardViewOverlay.js"/>
+
+  <vbox id="CardViewBox" flex="1">
+  
+  <vbox id="CardViewInnerBox" collapsed="true" flex="1">
+    
+    <description id="CardTitle"/>
+
+    <hbox style="width:100%" flex="1">
+      
+      <vbox flex="1">
+        <vbox id="cvbContact" class="cardViewGroup">
+            <description class="CardViewHeading" id="cvhContact">&contact.heading;</description>          
+
+            <description class="CardViewLink" id="cvListNameBox">
+              <html:p><html:a href="" id="cvListName"/></html:p>
+            </description>
+
+            <description class="CardViewText" id="cvDisplayName"/>
+
+            <description class="CardViewText" id="cvNickname"/>
+
+            <description class="CardViewLink" id="cvEmail1Box">
+              <html:a href="" id="cvEmail1"/>
+            </description>
+
+            <description class="CardViewLink" id="cvEmail2Box">
+              <html:a href="" id="cvEmail2"/>
+            </description>
+
+            <description class="CardViewLink" id="cvScreennameBox">
+              <html:a href="" id="cvScreenname"/>
+              <html:img onclick="GoIM()" align="top" id="cvAimPresence"/>
+            </description>
+        </vbox>
+        
+        <vbox id="cvbHome" class="cardViewGroup">
+          <description class="CardViewHeading" id="cvhHome">&home.heading;</description>          
+          <hbox>
+            <vbox flex="1">
+              <description class="CardViewText" id="cvHomeAddress"/>
+              <description class="CardViewText" id="cvHomeAddress2"/>
+              <description class="CardViewText" id="cvHomeCityStZip"/>
+              <description class="CardViewText" id="cvHomeCountry"/>
+            </vbox>
+            <vbox id="cvbHomeMapItBox" pack="end">
+              <button id="cvHomeMapIt" url="" label="&mapItButton.label;" oncommand="MapIt('cvHomeMapIt');" tooltiptext="&mapIt.tooltip;"/>
+            </vbox>
+          </hbox>
+          <description class="CardViewLink" id="cvHomeWebPageBox">
+            <html:a onclick="return openLink('cvHomeWebPage');" href="" id="cvHomeWebPage"/>
+          </description>
+        </vbox>
+
+        <vbox id="cvbOther" class="cardViewGroup">
+          <description class="CardViewHeading" id="cvhOther">&other.heading;</description>
+          <description class="CardViewText" id="cvCustom1"/>
+          <description class="CardViewText" id="cvCustom2"/>
+          <description class="CardViewText" id="cvCustom3"/>
+          <description class="CardViewText" id="cvCustom4"/>
+          <description class="CardViewText" id="cvNotes"/>
+
+          <hbox autostretch="never">
+            <image id="cvBuddyIcon"/> 
+          </hbox>
+        </vbox>
+
+        <vbox id="cvbDescription" class="cardViewGroup">
+          <description class="CardViewHeading" id="cvhDescription">&description.heading;</description>
+          <description class="CardViewText" id="cvDescription"/>
+        </vbox>
+
+        <vbox id="cvbAddresses" class="cardViewGroup">
+          <description class="CardViewHeading" id="cvhAddresses">&addresses.heading;</description>
+          <vbox id="cvAddresses"/>                                                                                             
+        </vbox>
+      </vbox>
+      
+      <spacer style="width:20px"/>
+
+      <vbox flex="1">
+        <vbox id="cvbPhone" class="cardViewGroup">
+          <description class="CardViewHeading" id="cvhPhone">&phone.heading;</description>
+          <description class="CardViewText" id="cvPhWork"/>
+          <description class="CardViewText" id="cvPhHome"/>
+          <description class="CardViewText" id="cvPhFax"/>
+          <description class="CardViewText" id="cvPhCellular"/>
+          <description class="CardViewText" id="cvPhPager"/>
+        </vbox>
+        
+        <vbox id="cvbWork" class="cardViewGroup">
+          <description class="CardViewHeading" id="cvhWork">&work.heading;</description>
+          <description class="CardViewText" id="cvJobTitle"/>
+          <description class="CardViewText" id="cvDepartment"/>
+          <description class="CardViewText" id="cvCompany"/>
+          <hbox>
+            <vbox flex="1">
+              <description class="CardViewText" id="cvWorkAddress"/>
+              <description class="CardViewText" id="cvWorkAddress2"/>
+              <description class="CardViewText" id="cvWorkCityStZip"/>
+              <description class="CardViewText" id="cvWorkCountry"/>
+            </vbox>
+            <vbox id="cvbWorkMapItBox" pack="end">
+              <button id="cvWorkMapIt" url="" label="&mapItButton.label;" oncommand="MapIt('cvWorkMapIt');" tooltiptext="&mapIt.tooltip;"/>
+            </vbox>
+          </hbox>
+          <description class="CardViewLink" id="cvWorkWebPageBox">
+            <html:a onclick="return openLink('cvWorkWebPage');" href="" id="cvWorkWebPage"/>
+          </description>
+        </vbox>
+      </vbox>
+
+    </hbox>
+
+  </vbox>
+
+</vbox>
+
+</overlay>

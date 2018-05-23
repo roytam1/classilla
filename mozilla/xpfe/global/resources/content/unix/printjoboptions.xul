@@ -1,0 +1,108 @@
+<?xml version="1.0"?> <!-- -*- Mode: HTML -*- -->
+
+<!--
+The contents of this file are subject to the Netscape Public
+License Version 1.1 (the "License"); you may not use this file
+except in compliance with the License. You may obtain a copy of
+the License at http://www.mozilla.org/NPL/
+
+Software distributed under the License is distributed on an "AS
+IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+implied. See the License for the specific language governing
+rights and limitations under the License.
+
+The Original Code is Mozilla Communicator client code, released
+March 31, 1998.
+
+The Initial Developer of the Original Code is Netscape
+Communications Corporation. Portions created by Netscape are
+Copyright (C) 1998-1999 Netscape Communications Corporation. All
+Rights Reserved.
+
+Contributor(s): 
+  Masaki Katakai <katakai@japan.sun.com>
+  Dan Rosen <dr@netscape.com>
+  Roland Mainz <roland.mainz@informatik.med.uni-giessen.de>
+  Asko Tontti <atontti@cc.hut.fi>
+
+-->
+
+<?xml-stylesheet href="chrome://communicator/skin/" type="text/css"?>
+<!DOCTYPE dialog SYSTEM "chrome://global-platform/locale/printjoboptions.dtd">
+
+<dialog xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+  onload="onLoad();"
+  ondialogaccept="return onAccept();"
+  title="&printJobOptions.title;"
+  persist="screenX screenY"
+  screenX="24" screenY="24">
+
+  <script type="application/x-javascript" src="chrome://global/content/printjoboptions.js"/>
+<script type="application/x-javascript" src="chrome://global/content/strres.js"/>
+
+  <grid>
+    <columns>
+      <column/>
+      <column flex="1"/>
+    </columns>
+
+    <rows>
+      <row>
+        <hbox align="center" pack="end">
+          <label id="paperLabel" value="&paperInput.label;"/>
+        </hbox>
+        <menulist id="paperList" flex="1">
+          <menupopup/>
+        </menulist>
+      </row>
+
+      <row>
+        <label id="cmdLabel" value="&cmdInput.label;"/>
+        <textbox id="cmdInput" flex="1"/>
+      </row>
+
+      <row>
+        <label value="&colorGroup.label;"/>
+        <radiogroup id="colorGroup" orient="horizontal">
+          <radio id="grayRadio" label="&grayRadio.label;"/>
+          <radio id="colorRadio" label="&colorRadio.label;"/>
+        </radiogroup>
+      </row>
+
+    </rows>
+  </grid>
+
+  <grid>
+    <columns>
+      <column/>
+    </columns>
+    <rows>
+      <row>
+       <groupbox flex="1">
+        <caption label="&edgeMarginInput.label;"/>
+        <hbox>
+          <hbox align="center">
+            <label id="topLabel" control="topInput" value="&topInput.label;"/>
+            <textbox id="topInput" style="width:5em;" onkeyup="checkDouble(this, 0.5)"/>
+          </hbox>
+          <hbox align="center">
+            <label id="bottomLabel" control="bottomInput" value="&bottomInput.label;"/>
+            <textbox id="bottomInput" style="width:5em;" onkeyup="checkDouble(this, 0.5)"/>
+          </hbox>
+          <hbox align="center">
+            <label id="leftLabel" control="leftInput" value="&leftInput.label;"/>
+            <textbox id="leftInput" style="width:5em;" onkeyup="checkDouble(this, 0.5)"/>
+          </hbox>
+          <hbox align="center">
+            <label id="rightLabel" control="rightInput" value="&rightInput.label;"/>
+            <textbox id="rightInput" style="width:5em;" onkeyup="checkDouble(this, 0.5)"/>
+          </hbox>
+        </hbox>
+        </groupbox>
+      </row>
+
+    </rows>
+  </grid>
+
+</dialog>
+

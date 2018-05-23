@@ -1,0 +1,182 @@
+<?xml version="1.0"?>
+
+<!--
+   The contents of this file are subject to the Netscape Public
+   License Version 1.1 (the "License"); you may not use this file
+   except in compliance with the License. You may obtain a copy of
+   the License at http://www.mozilla.org/NPL/
+    
+   Software distributed under the License is distributed on an "AS
+   IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+   implied. See the License for the specific language governing
+   rights and limitations under the License.
+    
+   The Original Code is Mozilla Communicator client code, released
+   March 31, 1998.
+   
+   The Initial Developer of the Original Code is Netscape
+   Communications Corporation. Portions created by Netscape are
+   Copyright (C) 1998-1999 Netscape Communications Corporation. All
+   Rights Reserved.
+   
+   Contributor(s): 
+  -->
+
+<!DOCTYPE window SYSTEM "chrome://wallet/locale/walletNavigatorOverlay.dtd">
+
+<overlay id="walletNavigatorOverlay"
+         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+
+  <script type="application/x-javascript" src="chrome://wallet/content/walletOverlay.js"/>
+
+  <script type="application/x-javascript">
+  <![CDATA[
+
+    function initEditItems() {
+
+      // Determine if capture/prefill should be displayed and enabled.
+      var state = getState(0);
+      setDisabledAttr("edit_capture", (state.capture != enable));
+      setDisabledAttr("edit_prefill", (state.prefill != enable));
+    }
+
+/* form toolbar is out
+    // Can't use generic goToggleToolbar (see utilityOverlay.js) for form menu because
+    // form toolbar could be hidden even when the checkbox in the view menu is checked
+    function goToggleFormToolbar(id, elementID) {
+      var element = document.getElementById(elementID);
+      if (element) {
+        var checkValue = element.getAttribute("checked");
+        if (checkValue == "false") {
+          element.setAttribute("checked","true")
+          initToolbarItems();
+        } else {
+          element.setAttribute("checked","false")
+          showItem("formToolbar", false);
+        }
+        document.persist(id, 'hidden');
+        document.persist(elementID, 'checked');
+      }
+    }
+
+    function navObserver() {
+    }
+    navObserver.prototype.observe = function (subject, message, contextUrl) {
+      if (message == 'EndDocumentLoad') {
+        initToolbarItems()
+      }
+    }
+
+    function addEndDocumentLoadListener() {
+      if (window._content) {
+        var observerService = Components.classes["@mozilla.org/observer-service;1"].getService();
+        observerService = observerService.QueryInterface(Components.interfaces.nsIObserverService);
+        var observer = new navObserver();
+        if (observerService && observer) {
+          observerService.addObserver(observer, "EndDocumentLoad", PR_FALSE);
+        } else {
+          dump("FAILURE to get observer service\n");
+        }
+      }
+    }
+
+    window.addEventListener("load", addEndDocumentLoadListener, false);
+*/
+
+  ]]>
+  </script>         
+
+  <!-- menu items -->
+
+<!-- form toolbar is out
+  <broadcasterset id="broadcasterset">
+    <broadcaster id="cmd_viewformtoolbar" label="&formbarCmd.label;"
+                 accesskey="&formbarCmd.accesskey;" class="menuitem-iconic"
+                 type="checkbox" checked="true"
+                 oncommand="goToggleFormToolbar('formToolbar','cmd_viewformtoolbar');"/>
+  </broadcasterset>
+-->
+
+  <!-- view menu -->
+<!-- form toolbar is out
+  <menupopup id="view_toolbars_popup">
+    <menuitem insertafter="cmd_viewpersonaltoolbar"
+              observes="cmd_viewformtoolbar"/>
+  </menupopup>
+-->
+
+  <!-- edit menu -->
+  <menupopup id="menu_Edit_Popup" onpopupshowing="initEditItems();">
+    <menuseparator insertbefore="menu_PrefsSeparator"/> 
+    <menuitem id="edit_prefill"
+              label="&prefillCmd.label;"
+              accesskey="&prefillCmd.accesskey;"
+              oncommand="formPrefill();"
+              insertbefore="menu_PrefsSeparator"/>
+    <menuitem id="edit_capture"
+              label="&captureCmd.label;"
+              accesskey="&captureCmd.accesskey;"
+              oncommand="formCapture();"
+              insertbefore="menu_PrefsSeparator"/>
+  </menupopup>
+
+  <!-- Form toolbar items -->
+
+<!-- form toolbar is out
+  <hbox id="appcontent">
+    <toolbar id="formToolbar"
+             class="chromeclass-directories"
+             tbautostretch="always"
+             insertafter="browser"
+             persist="collapsed"
+             style="display:none;">
+      <button class="button-toolbar-4"
+              id="formPrefill"
+              oncommand="formPrefill();"
+              label="  &formPrefill.label;  "
+              tooltiptext="&formPrefill.tooltip;"/>
+      <toolbarseparator/>
+      <button class="button-toolbar-4"
+              id="formCapture"
+              oncommand="formCapture();"
+              label="  &formCapture.label;  "
+              tooltiptext="&formCapture.tooltip;"/>
+      <toolbarseparator/>
+      <button class="button-toolbar-4"
+              id="formShow"
+              oncommand="formShow(); initToolbarItems();"
+              label="  &formView.label;  "
+              tooltiptext="&formView.tooltip;"/>
+      <toolbarseparator/>
+    </toolbar>
+  </hbox>
+-->
+  <menupopup id="taskPopup">
+    <menu label="&walletFormManager.label;"
+          accesskey="&walletFormManager.accesskey;"
+          id="wallet"
+          insertafter="menu_searchWeb">
+      <menupopup>
+        <menuitem id="edit_prefill"
+                  label="&prefillCmd.label;"
+                  accesskey="&prefillCmd.accesskey;"
+                  oncommand="formPrefill();"/>
+        <menuitem id="edit_capture"
+                  label="&captureCmd.label;"
+                  accesskey="&captureCmd.accesskey;"
+                  oncommand="formCapture();"/>
+        <menuseparator/>
+        <menuitem label="&walletContentsCmd.label;"
+                  accesskey="&walletContentsCmd.accesskey;"
+                  id="walleteditor"
+                  oncommand="WalletDialog('wallet');"/> 
+        <menuitem label="&walletSitesCmd.label;"
+                  accesskey="&walletSitesCmd.accesskey;"
+                  id="walletsites"
+                  oncommand="WalletDialog('walletsites');"/> 
+      </menupopup>
+    </menu>
+  </menupopup>
+
+
+</overlay>

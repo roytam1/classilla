@@ -1,0 +1,74 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
+ *
+ * The contents of this file are subject to the Netscape Public
+ * License Version 1.1 (the "License"); you may not use this file
+ * except in compliance with the License. You may obtain a copy of
+ * the License at http://www.mozilla.org/NPL/
+ *
+ * Software distributed under the License is distributed on an "AS
+ * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * rights and limitations under the License.
+ *
+ * The Original Code is mozilla.org code.
+ *
+ * The Initial Developer of the Original Code is Netscape
+ * Communications Corporation.  Portions created by Netscape are
+ * Copyright (C) 1998 Netscape Communications Corporation. All
+ * Rights Reserved.
+ *
+ * Contributor(s): 
+ *  Bill Law    law@netscape.com
+ */
+
+#include "nsIDownload.idl"
+
+interface nsIDOMWindow;
+
+/* nsIProgressDialog
+ *
+ * These objects are used to display progress notifications to the user.
+ * They are displayed while files are being saved to disk, for example.
+ * 
+ * Typical usage is to:
+ *   1. Create an instance, via the component manager CreateInstance()
+ *      method.
+ *   2. Set appropriate attributes that control the display and behavior
+ *      of the dialog.
+ *   3. Open the dialog.
+ *   4. Send progress notifications to the dialog, via it's 
+ *      nsIWebProgressListener methods.
+ *   5. Close the dialog when the operation completes, or when the user
+ *      closes it manually.
+ *   6. Release the instance.  The instance will be referenced by
+ *      the dialog itself, so it won't get freed until the dialog closes.
+ *      The dialog will keep the instance alive, so typically one does
+ *      not need to hold a reference to it.
+ */
+
+[scriptable, uuid(88A478B3-AF65-440a-94DC-ED9B154D2990)]
+interface nsIProgressDialog : nsIDownload {
+   /**
+    * Open the dialog
+    *
+    * @param aParent  Parent window; optional (if null, then
+    *                 a top-level window is created)
+    */
+   void open( in nsIDOMWindow aParent );
+   
+   /**
+    * Whether the download should be cancelled when the progress
+    * dialog is closed using the standard OS close box.  This is
+    * useful for showing the progress dialog as an information
+    * window, which is what download manager does.
+    */
+   attribute PRBool cancelDownloadOnClose;
+
+  /**
+   * The dialog object itself.  This might be null if the dialog isn't
+   * open yet, or has been closed.
+   */   
+   attribute nsIDOMWindow dialog;
+};
+
+

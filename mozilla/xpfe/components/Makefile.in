@@ -1,0 +1,64 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+DIRS	= \
+			bookmarks \
+			directory \
+			filepicker \
+			find \
+			search \
+			sidebar \
+			related \
+			regviewer \
+			prefwindow \
+			shistory \
+			timebomb \
+			console \
+			updates \
+			intl \
+			resetPref \
+			killAll \
+			windowds \
+			$(NULL)
+
+ifndef MOZ_PHOENIX
+DIRS += autocomplete history urlbarhistory download-manager
+endif
+
+ifdef MOZ_ENABLE_XREMOTE
+DIRS		+= xremote
+endif
+
+ifeq ($(OS_ARCH),WINNT)
+DIRS		+= winhooks urlwidget alerts
+endif
+
+DIRS		+= build
+
+include $(topsrcdir)/config/rules.mk
+

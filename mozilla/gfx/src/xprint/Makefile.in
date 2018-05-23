@@ -1,0 +1,127 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#   Roland Mainz <roland.mainz@informatik.med.uni-giessen.de>
+#
+
+DEPTH		= ../../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE		= gfx
+LIBRARY_NAME	= gfxxprint
+EXPORT_LIBRARY	= 1
+IS_COMPONENT	= 1
+MODULE_NAME	= nsGfxXprintModule
+GRE_MODULE	= 1
+
+EXTRA_DSO_LIBS	= gkgfx gfxshared_s
+
+REQUIRES	= xpcom \
+		  string \
+		  widget \
+		  view \
+		  pref \
+		  locale \
+		  uconv \
+		  unicharutil \
+		  imglib2 \
+		  $(NULL)
+
+# Sun's Complex Text Layout support
+ifdef SUNCTL
+REQUIRES	+= ctl
+endif
+
+CSRCS		= \
+		xprintutil.c \
+		xprintutil_printtofile.c \
+		$(NULL)
+
+# Code shared between GTK+, Xlib and Xprint gfx modules
+# (empty for now - but this will be filled soon...)
+X11SHARED_LCPPSRCS = \
+		$(NULL)
+
+# nsDrawingSurfaceXlib only required for staticbuild 
+XLIB_LCPPSRCS	= \
+		nsDrawingSurfaceXlib.cpp \
+		nsFontMetricsXlib.cpp \
+		nsRenderingContextXlib.cpp \
+		nsRegionXlib.cpp \
+		nsGCCache.cpp \
+		$(NULL)
+
+CPPSRCS		= \
+		$(X11SHARED_LCPPSRCS) \
+		$(XLIB_LCPPSRCS) \
+		nsDeviceContextXP.cpp \
+		nsGfxFactoryXP.cpp \
+		nsXPrintContext.cpp \
+		nsRenderingContextXp.cpp \
+		$(NULL)
+
+EXPORTS		= \
+		nsIDeviceContextXPrint.h \
+		nsGfxXPrintCID.h \
+		nsIDeviceContextSpecXPrint.h \
+		xprintutil.h \
+		$(NULL)
+
+EXTRA_DSO_LDOPTS += \
+		$(MOZ_XPRINT_LDFLAGS) \
+		$(NULL)
+
+CXXFLAGS	 += $(MOZ_XPRINT_CFLAGS)
+
+EXTRA_DSO_LDOPTS += $(MOZ_COMPONENT_LIBS) \
+		$(NULL)
+
+GARBAGE		+= $(X11SHARED_LCPPSRCS) $(XLIB_LCPPSRCS) $(wildcard *.$(OBJ_SUFFIX))
+
+include $(topsrcdir)/config/rules.mk
+
+DEFINES         += -DUSE_MOZILLA_TYPES -DUSE_XPRINT
+ifeq ($(OS_ARCH), Linux)
+DEFINES         += -D_BSD_SOURCE
+endif
+CFLAGS		+= $(TK_CFLAGS)
+CXXFLAGS	+= $(TK_CFLAGS)
+
+EXTRA_DSO_LDOPTS += \
+		-lxlibrgb \
+		-L$(DIST)/bin \
+		-L$(DIST)/lib \
+		$(EXTRA_DSO_LIBS) \
+		$(MOZ_COMPONENT_LIBS) \
+		$(NULL)
+
+LOCAL_INCLUDES	= \
+		-I$(srcdir) \
+		-I$(srcdir)/../xlib \
+		-I$(srcdir)/../xlibrgb \
+		-I$(srcdir)/../x11shared \
+		-I$(srcdir)/.. \
+		$(NULL)
+
+export:: $(addprefix $(srcdir)/../x11shared/,$(X11SHARED_LCPPSRCS)) $(addprefix $(srcdir)/../xlib/,$(XLIB_LCPPSRCS))
+	$(INSTALL) $^ .

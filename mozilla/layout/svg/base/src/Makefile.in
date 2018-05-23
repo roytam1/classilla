@@ -1,0 +1,95 @@
+#
+# The contents of this file are subject to the Mozilla Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/MPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../../../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE		= layout
+LIBRARY_NAME	= gksvgbase_s
+REQUIRES	= xpcom \
+		  string \
+		  content \
+		  gfx \
+		  widget \
+		  dom \
+		  locale \
+		  view \
+		  pref \
+		  necko \
+		  unicharutil \
+		  $(NULL)
+
+CPPSRCS		= \
+		nsSVGBPathBuilder.cpp \
+		nsSVGEllipseFrame.cpp \
+		nsSVGCircleFrame.cpp \
+		nsSVGFill.cpp \
+		nsSVGForeignObjectFrame.cpp \
+		nsSVGGFrame.cpp \
+		nsSVGGenericContainerFrame.cpp \
+		nsSVGGraphic.cpp \
+		nsSVGGraphicFrame.cpp \
+		nsSVGLineFrame.cpp \
+		nsSVGOuterSVGFrame.cpp \
+		nsSVGPathFrame.cpp \
+		nsSVGPolygonFrame.cpp \
+		nsSVGPolylineFrame.cpp \
+		nsSVGRectFrame.cpp \
+		nsSVGRenderItem.cpp \
+		nsSVGRenderingContext.cpp \
+		nsSVGStroke.cpp \
+		$(NULL)
+
+include $(topsrcdir)/config/config.mk
+
+# we don't want the shared lib, but we want to force the creation of a static lib.
+FORCE_STATIC_LIB = 1
+
+include $(topsrcdir)/config/rules.mk
+
+CXXFLAGS	+= $(MOZ_LIBART_CFLAGS)
+
+LOCAL_INCLUDES	= \
+		-I$(srcdir)/../../../base/src \
+		-I$(srcdir)/../../../html/table/src \
+		-I$(srcdir)/../../../html/style/src \
+		-I$(srcdir)/../../../html/base/src \
+		-I$(srcdir)/../../../html/forms/src \
+		-I$(srcdir)/../../../../content/svg/content/src \
+		-I$(srcdir)/../../../html/content/src \
+		-I$(srcdir)/../../../xml/content/src \
+		-I$(srcdir)/../../../base/public \
+		$(NULL)
+
+EXPORT_RESOURCE_CONTENT = \
+		$(srcdir)/svg.dtd \
+		$(NULL)
+libs::
+	$(INSTALL) $(EXPORT_RESOURCE_CONTENT) $(DIST)/bin/res/dtd
+
+install::
+	$(SYSINSTALL) $(IFLAGS1) $(EXPORT_RESOURCE_CONTENT) $(DESTDIR)$(mozappdir)/res/dtd
+
+DEFINES += -D_IMPL_NS_LAYOUT

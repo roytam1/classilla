@@ -1,0 +1,119 @@
+<?xml version="1.0"?>
+<!-- 
+   - The contents of this file are subject to the Mozilla Public
+   - License Version 1.1 (the "License"); you may not use this file
+   - except in compliance with the License. You may obtain a copy of
+   - the License at http://www.mozilla.org/MPL/
+   - 
+   - Software distributed under the License is distributed on an "AS
+   - IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+   - implied. See the License for the specific language governing
+   - rights and limitations under the License.
+   - 
+   - The Original Code is mozilla.org code.
+   - 
+   - The Initial Developer of the Original Code is Netscape
+   - Communications Corp.  Portions created by Netscape are
+   - Copyright (C) 2001 Netscape Communications Corp.  All
+   - Rights Reserved.
+   - 
+   - Contributor(s):
+   -   Bob Lord <lord@netscape.com>
+   -   Ian McGreer <mcgreer@netscape.com>
+  -->
+<!DOCTYPE overlay SYSTEM "chrome://pippki/locale/certManager.dtd">
+
+<overlay id="certViewerOverlay" 
+         xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" 
+         xmlns:cert="http://netscape.com/rdf-cert#" 
+         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+<vbox class="box-padded" id="general_info">
+  <vbox id="verify_info_box">
+    <label class="header" id="verified"/>
+  </vbox>
+  <separator class="groove"/>
+  <vbox flex="1">
+    <grid> 
+      <columns>
+        <column/>
+        <column/>
+      </columns>
+      <rows>
+        <row>
+          <label class="header" value="&certmgr.subjectinfo.label;"/>
+          <spacer/>
+          <spacer/>
+        </row>
+        <row>
+          <label value="&certmgr.certdetail.cn;"/> 
+          <label id="commonname"/>
+        </row>
+        <row>
+          <label value="&certmgr.certdetail.o;"/> 
+          <label id="organization"/>
+        </row>
+        <row>
+          <label value="&certmgr.certdetail.ou;"/> 
+          <label id="orgunit"/>
+        </row>
+        <row>
+          <label value="&certmgr.certdetail.serialnumber;"/> 
+          <label id="serialnumber"/>
+        </row>
+        <row>
+          <separator class="thin"/>
+          <spacer/>
+        </row>
+        <row>
+          <label class="header" value="&certmgr.issuerinfo.label;"/>
+          <spacer/>
+        </row>
+        <row>
+          <label value="&certmgr.certdetail.cn;"/> 
+          <label id="issuercommonname"/>
+        </row>
+        <row>
+          <label value="&certmgr.certdetail.o;"/> 
+          <label id="issuerorganization"/>
+        </row>
+        <row>
+          <label value="&certmgr.certdetail.ou;"/> 
+          <label id="issuerorgunit"/>
+        </row>
+        <row>
+          <separator class="thin"/>
+          <spacer/>
+        </row>
+        <row>
+          <label class ="header" value="&certmgr.validity.label;"/>
+          <spacer/>
+        </row>
+        <row>
+          <label value="&certmgr.issued;"/>
+          <label id="validitystart"/>
+        </row>
+        <row>
+          <label value="&certmgr.expires;"/>
+          <label id="validityend"/>
+        </row>
+        <row>
+          <separator class="thin"/>
+          <spacer/>
+        </row>
+        <row>
+          <label class="header" value="&certmgr.fingerprints.label;"/>
+          <spacer/>
+        </row>
+        <row>
+          <label value="&certmgr.certdetail.sha1fingerprint;"/> 
+          <label id="sha1fingerprint"/>
+        </row>
+        <row>
+          <label value="&certmgr.certdetail.md5fingerprint;"/> 
+          <label id="md5fingerprint"/>
+        </row>
+      </rows>
+    </grid>
+  </vbox>
+</vbox>
+</overlay>

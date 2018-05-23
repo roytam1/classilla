@@ -1,0 +1,159 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#  Brian Ryner <bryner@netscape.com>
+# 
+
+DEPTH		= ../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+LOADABLE_ROOT_MODULE = $(LIB_PREFIX)nssckbi$(DLL_SUFFIX)
+
+NSS3_LIB = $(LIB_PREFIX)nss3$(DLL_SUFFIX)
+SMIME3_LIB = $(LIB_PREFIX)smime3$(DLL_SUFFIX)
+SSL3_LIB =  $(LIB_PREFIX)ssl3$(DLL_SUFFIX)
+SOFTOKEN3_LIB = $(LIB_PREFIX)softokn3$(DLL_SUFFIX)
+
+ifneq (,$(filter SunOS HP-UX,$(OS_ARCH)))
+ifeq (,$(filter i86pc ia64,$(OS_TEST)))
+ifndef HAVE_64BIT_OS
+HAVE_FREEBL_MODULES = 1
+FREEBL_PURE32_MODULE = libfreebl_pure32_3$(DLL_SUFFIX)
+FREEBL_HYBRID_MODULE = libfreebl_hybrid_3$(DLL_SUFFIX)
+endif
+endif
+endif
+
+# NSS makefiles are not safe for parallel execution.
+DEFAULT_GMAKE_FLAGS = MAKE="$(MAKE) -j1" -j1
+DEFAULT_GMAKE_FLAGS += MOZILLA_INCLUDES="-I$(MOZ_BUILD_ROOT)/dist/include/nspr -I$(MOZ_BUILD_ROOT)/dist/include/dbm"
+DEFAULT_GMAKE_FLAGS += SOURCE_MD_DIR=$(MOZ_BUILD_ROOT)/dist
+DEFAULT_GMAKE_FLAGS += DIST=$(MOZ_BUILD_ROOT)/dist
+DEFAULT_GMAKE_FLAGS += MOZILLA_CLIENT=1
+DEFAULT_GMAKE_FLAGS += NO_MDUPDATE=1
+ABS_topsrcdir   := $(shell cd $(topsrcdir); pwd)
+ifneq ($(ABS_topsrcdir),$(MOZ_BUILD_ROOT))
+DEFAULT_GMAKE_FLAGS += BUILD_TREE=$(MOZ_BUILD_ROOT)
+endif
+ifndef MOZ_DEBUG
+DEFAULT_GMAKE_FLAGS += BUILD_OPT=1
+endif
+ifdef GNU_CC
+DEFAULT_GMAKE_FLAGS += NS_USE_GCC=1 NS_USE_NATIVE=
+else
+DEFAULT_GMAKE_FLAGS += NS_USE_GCC= NS_USE_NATIVE=1
+endif
+ifdef USE_N32
+# It is not really necessary to specify USE_PTHREADS=1.  USE_PTHREADS
+# merely adds _PTH to coreconf's OBJDIR name.
+DEFAULT_GMAKE_FLAGS += USE_N32=1 USE_PTHREADS=1
+endif
+ifdef HAVE_64BIT_OS
+DEFAULT_GMAKE_FLAGS += USE_64=1
+endif
+ifeq ($(OS_ARCH),WINNT)
+DEFAULT_GMAKE_FLAGS += OS_TARGET=WIN95
+ifdef MOZ_DEBUG
+ifndef MOZ_NO_DEBUG_RTL
+DEFAULT_GMAKE_FLAGS += USE_DEBUG_RTL=1
+endif
+endif
+endif # WINNT
+
+SUBMAKEFILES = boot/Makefile ssl/Makefile pki/Makefile
+
+include $(topsrcdir)/config/rules.mk
+
+GARBAGE	+= .nss_cleaned
+
+# Attempt to properly handle NSS' refusal to implement a dependency system
+export:: 
+	if test ! -f .nss_cleaned; then \
+	if test ! -f $(topsrcdir)/../cvsco.log ||  \
+		test `grep -c '^U mozilla/security/nss' $(topsrcdir)/../cvsco.log 2>/dev/null` != 0 -o \
+		`grep -c '^U mozilla/security/coreconf' $(topsrcdir)/../cvsco.log 2>/dev/null` != 0 ; then \
+		$(MAKE) -C $(topsrcdir)/security/coreconf $(DEFAULT_GMAKE_FLAGS) clean ; \
+		$(MAKE) -C $(topsrcdir)/security/nss/lib $(DEFAULT_GMAKE_FLAGS) clean ; \
+		touch .nss_cleaned ; \
+	fi \
+	fi
+
+dependclean export::
+	$(MAKE) -C boot $@
+	$(MAKE) -C ssl $@
+	$(MAKE) -C pki $@
+
+libs::
+	$(MAKE) -C $(topsrcdir)/security/coreconf $(DEFAULT_GMAKE_FLAGS)
+ifeq ($(OS_ARCH),WINNT)
+	cd $(DIST)/lib; cp -f $(LIB_PREFIX)dbm$(MOZ_BITS).$(LIB_SUFFIX) $(LIB_PREFIX)dbm.$(LIB_SUFFIX)
+else
+	cd $(DIST)/lib; cp -f $(LIB_PREFIX)mozdbm_s.$(LIB_SUFFIX) $(LIB_PREFIX)dbm.$(LIB_SUFFIX); $(RANLIB) $(LIB_PREFIX)dbm.$(LIB_SUFFIX)
+endif
+	$(MAKE) -C $(topsrcdir)/security/nss/lib $(DEFAULT_GMAKE_FLAGS)
+ifndef DISABLE_DIST_GRE
+	$(INSTALL) -m 755 $(DIST)/lib/$(LOADABLE_ROOT_MODULE) $(GRE_DIST)
+	$(INSTALL) -m 755 $(DIST)/lib/$(SOFTOKEN3_LIB) $(GRE_DIST)
+	$(INSTALL) -m 755 $(DIST)/lib/$(NSS3_LIB) $(GRE_DIST)
+	$(INSTALL) -m 755 $(DIST)/lib/$(SSL3_LIB) $(GRE_DIST)
+	$(INSTALL) -m 755 $(DIST)/lib/$(SMIME3_LIB) $(GRE_DIST)
+ifdef HAVE_FREEBL_MODULES
+	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_PURE32_MODULE) $(GRE_DIST)
+	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_HYBRID_MODULE) $(GRE_DIST)
+endif
+endif
+ifndef _SKIP_OLD_GRE_INSTALL
+	$(INSTALL) -m 755 $(DIST)/lib/$(LOADABLE_ROOT_MODULE) $(DIST)/bin
+	$(INSTALL) -m 755 $(DIST)/lib/$(SOFTOKEN3_LIB) $(DIST)/bin
+	$(INSTALL) -m 755 $(DIST)/lib/$(NSS3_LIB) $(DIST)/bin
+	$(INSTALL) -m 755 $(DIST)/lib/$(SSL3_LIB) $(DIST)/bin
+	$(INSTALL) -m 755 $(DIST)/lib/$(SMIME3_LIB) $(DIST)/bin
+ifdef HAVE_FREEBL_MODULES
+	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_PURE32_MODULE) $(DIST)/bin
+	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_HYBRID_MODULE) $(DIST)/bin
+endif
+endif
+	$(MAKE) -C boot $@
+	$(MAKE) -C ssl $@
+	$(MAKE) -C pki $@
+
+install::
+	$(SYSINSTALL) -m 755 $(DIST)/lib/$(LOADABLE_ROOT_MODULE) $(DESTDIR)$(mozappdir)
+	$(SYSINSTALL) -m 755 $(DIST)/lib/$(SOFTOKEN3_LIB) $(DESTDIR)$(mozappdir)
+	$(SYSINSTALL) -m 755 $(DIST)/lib/$(NSS3_LIB) $(DESTDIR)$(mozappdir)
+	$(SYSINSTALL) -m 755 $(DIST)/lib/$(SSL3_LIB) $(DESTDIR)$(mozappdir)
+	$(SYSINSTALL) -m 755 $(DIST)/lib/$(SMIME3_LIB) $(DESTDIR)$(mozappdir)
+ifdef HAVE_FREEBL_MODULES
+	$(SYSINSTALL) -m 755 $(DIST)/lib/$(FREEBL_PURE32_MODULE) $(DESTDIR)$(mozappdir)
+	$(SYSINSTALL) -m 755 $(DIST)/lib/$(FREEBL_HYBRID_MODULE) $(DESTDIR)$(mozappdir)
+endif
+	$(MAKE) -C boot $@
+	$(MAKE) -C ssl $@
+	$(MAKE) -C pki $@
+
+clean clobber clobber_all realclean distclean depend::
+	$(MAKE) -C boot $@
+	$(MAKE) -C ssl $@
+	$(MAKE) -C pki $@
+	$(MAKE) -C $(topsrcdir)/security/coreconf $(DEFAULT_GMAKE_FLAGS) clean
+	$(MAKE) -C $(topsrcdir)/security/nss/lib $(DEFAULT_GMAKE_FLAGS) clean

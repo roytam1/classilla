@@ -1,0 +1,155 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+ifdef MOZ_PSM
+BUILD_SMIME=1
+endif
+
+ifdef BUILD_SMIME
+DEFINES		+= -DENABLE_SMIME
+endif
+
+MODULE		= mime
+LIBRARY_NAME	= mime_s
+META_COMPONENT = mail
+REQUIRES	= xpcom \
+		  string \
+		  msgbase \
+		  msgbaseutil \
+		  pref \
+		  js \
+		  necko \
+		  uconv \
+		  unicharutil \
+		  msgcompose \
+		  editor \
+		  dom \
+		  intl \
+		  msgimap \
+		  exthandler \
+		  mailnews \
+		  msgdb \
+		  chardet \
+		  caps \
+		  mimetype \
+		  uriloader \
+		  xpconnect \
+		  nkcache \
+		  pipnss \
+		  imglib2 \
+		  content \
+		  htmlparser \
+		  layout \
+		  $(NULL)
+#content, htmlparser and layout are for HTML*() in mimemoz2.cpp.
+
+ifdef BUILD_SMIME
+REQUIRES += \
+            msgsmime
+endif
+                  
+CPPSRCS		= \
+		nsMimeObjectClassAccess.cpp \
+		nsMimeConverter.cpp \
+		nsMimeAddress.cpp \
+		mimecont.cpp \
+		mimeebod.cpp \
+		mimeenc.cpp \
+		mimeeobj.cpp \
+		mimehdrs.cpp \
+		mimei.cpp \
+		mimeiimg.cpp \
+		mimeleaf.cpp \
+		mimemalt.cpp \
+		mimemapl.cpp \
+		mimemdig.cpp \
+		mimemmix.cpp \
+		mimempar.cpp \
+		mimemrel.cpp \
+		mimemsg.cpp \
+		mimemsig.cpp \
+		mimemult.cpp \
+		mimeobj.cpp \
+		mimepbuf.cpp \
+		mimesun.cpp \
+		mimetenr.cpp \
+		mimetext.cpp \
+		mimethtm.cpp \
+		mimethpl.cpp \
+		mimethsa.cpp \
+		mimetpla.cpp \
+		mimetpfl.cpp \
+		mimetric.cpp \
+		mimeunty.cpp \
+		mimecth.cpp \
+		mimebuf.cpp \
+		mimecom.cpp \
+		mimemoz2.cpp \
+		comi18n.cpp \
+		nsMsgHeaderParser.cpp \
+		nsStreamConverter.cpp \
+		mimedrft.cpp \
+		nsMimeHeaders.cpp \
+                mimecryp.cpp
+
+ifdef BUILD_SMIME
+CPPSRCS += \
+                mimecms.cpp \
+                mimemcms.cpp
+endif
+
+EXPORTS		= \
+		nsMimeObjectClassAccess.h \
+		nsMimeStringResources.h \
+		nsMimeConverter.h \
+		nsMimeHeaders.h \
+		nsStreamConverter.h \
+		nsMsgHeaderParser.h \
+		mimetext.h \
+		mimeleaf.h \
+		mimecth.h \
+		mimeobj.h \
+		mimei.h \
+		modmimee.h \
+		mimecont.h \
+		mimemult.h \
+		mimemsig.h \
+		mimehdrs.h \
+		mimepbuf.h \
+		modlmime.h \
+		comi18n.h \
+		$(NULL)
+
+FORCE_STATIC_LIB = 1
+
+include $(topsrcdir)/config/rules.mk
+
+ifeq ($(OS_ARCH), Linux)
+DEFINES		+= -D_BSD_SOURCE
+endif
+

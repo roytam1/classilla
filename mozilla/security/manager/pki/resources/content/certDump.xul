@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+<!-- 
+   - The contents of this file are subject to the Mozilla Public
+   - License Version 1.1 (the "License"); you may not use this file
+   - except in compliance with the License. You may obtain a copy of
+   - the License at http://www.mozilla.org/MPL/
+   - 
+   - Software distributed under the License is distributed on an "AS
+   - IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+   - implied. See the License for the specific language governing
+   - rights and limitations under the License.
+   - 
+   - The Original Code is mozilla.org code.
+   - 
+   - The Initial Developer of the Original Code is Netscape
+   - Communications Corp.  Portions created by Netscape are
+   - Copyright (C) 2001 Netscape Communications Corp.  All
+   - Rights Reserved.
+   - 
+   - Contributor(s):
+   -   Bob Lord <lord@netscape.com>
+   -   Ian McGreer <mcgreer@netscape.com>
+   -   Javier Delgadillo <javi@netscape.com>
+  -->
+
+<!DOCTYPE overlay SYSTEM "chrome://pippki/locale/certManager.dtd">
+
+<overlay id="certDumpOverlay" 
+         xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" 
+         xmlns:cert="http://netscape.com/rdf-cert#" 
+         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+<vbox class="box-padded" id="certPrettyPrint" flex="1">
+  <label class="header" value="&certmgr.hierarchy.label;"/>
+  <tree id="treesetDump" onselect="updateCertDump();"
+        hidecolumnpicker="true" style="height: 8em;">
+    <treecols>
+      <treecol id="dumpCol" flex="1" primary="true" hideheader="true"/>
+    </treecols>
+  </tree>
+  
+  <label class="header" value="&certmgr.details.label;"/>
+  <tree id="prettyDumpTree" style="height: 15em"
+            onselect="displaySelected();" hidecolumnpicker="true">
+    <treecols>
+      <treecol flex="1" id="certDataCol" primary="true" hideheader="true"/>
+    </treecols>
+    <treechildren/>
+  </tree>
+  
+  <label class="header" value="&certmgr.fields.label;"/>
+  <textbox id="certDumpVal"  multiline="true" rows="8"
+           readonly="true" style="font-family: -moz-fixed;"/>
+</vbox>
+</overlay>

@@ -1,0 +1,84 @@
+<?xml version="1.0"?>
+<!-- 
+  The contents of this file are subject to the Netscape Public
+  License Version 1.1 (the "License"); you may not use this file
+  except in compliance with the License. You may obtain a copy of
+  the License at http://www.mozilla.org/NPL/
+  
+  Software distributed under the License is distributed on an "AS
+  IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+  implied. See the License for the specific language governing
+  rights and limitations under the License.
+  
+  The Original Code is Mozilla Communicator client code, released
+  March 31, 1998.
+  
+  The Initial Developer of the Original Code is Netscape
+  Communications Corporation. Portions created by Netscape are
+  Copyright (C) 1998-1999 Netscape Communications Corporation. All
+  Rights Reserved.
+  
+  Contributor(s):
+    David Drinan (ddrinan@netscape.com)
+-->
+
+<!-- CHANGE THIS WHEN MOVING FILES -->
+<?xml-stylesheet href="chrome://communicator/skin/" type="text/css"?> 
+<?xul-overlay href="chrome://global/content/dialogOverlay.xul"?>
+
+<!-- CHANGE THIS WHEN MOVING FILES -->
+<!DOCTYPE window [
+    <!ENTITY % prefValDTD SYSTEM "chrome://pippki/locale/pref-validation.dtd">
+    %prefValDTD;
+    <!ENTITY % prefCertMgrDTD SYSTEM "chrome://pippki/locale/certManager.dtd">
+    %prefCertMgrDTD;
+]>
+
+<window id="crlviewer"
+        class="dialog"
+        title="&validation.crlmanager.label;"
+        xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+        style="width: 30em;"
+        onload="onLoad();">
+
+  <script type="application/x-javascript" src="chrome://global/content/strres.js"/>
+  <script type="application/x-javascript" src="chrome://pippki/content/crlManager.js"/>
+  <script type="application/x-javascript" src="chrome://help/content/contextHelp.js" />
+
+  <description value="&validation.crlmanager.label;"/>
+  <separator class="thin"/>
+  <tree id="crltree" style="height: 10em;"
+   seltype="multiple" onselect="EnableCrlActions()" flex="1">
+    <treecols>
+      <treecol id="Col1" flex="3" label="&certmgr.certdetail.o;"/>
+      <splitter class="tree-splitter"/>
+      <treecol id="Col2" flex="5" label="&certmgr.certdetail.ou;"/>
+      <splitter class="tree-splitter"/>
+      <treecol id="Col3" flex="2" label="&validation.crllastupdate.label;"/>
+      <splitter class="tree-splitter"/>
+      <treecol id="Col4" flex="2" label="&validation.crlnextupdate.label;"/>
+      <splitter class="tree-splitter"/>
+      <treecol id="Col5" flex="2" label="&validation.crlautoupdateenabled.label;"/>
+      <splitter class="tree-splitter"/>
+      <treecol id="Col6" flex="3" label="&validation.crlautoupdatestatus.label;"/>
+    </treecols>
+
+    <treechildren id="crlList"/>
+  </tree>
+  <hbox>
+    <button id="deleteCrl" disabled="true"
+            label="&validation.deletecrl.label;"
+            oncommand="DeleteCrlSelected();"/>
+    <button id="editPrefs" class="dialog push" disabled="true"
+            label="&validation.advanced.label;"
+            oncommand="EditAutoUpdatePrefs();"/>
+    <button id="updateCRL" class="dialog push" disabled="true"
+            label="&validation.updatecrl.label;"
+            oncommand="UpdateCRL();"/>
+    <spacer flex="2" />
+    <button id="help-button" label="&help.button;"
+            oncommand="openHelp('validation-crl-manage');"/> 
+
+  </hbox>
+  <separator class="thin"/>
+</window>

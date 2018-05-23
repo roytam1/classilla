@@ -1,0 +1,105 @@
+<?xml version="1.0"?>
+<!-- 
+   - The contents of this file are subject to the Mozilla Public
+   - License Version 1.1 (the "License"); you may not use this file
+   - except in compliance with the License. You may obtain a copy of
+   - the License at http://www.mozilla.org/MPL/
+   - 
+   - Software distributed under the License is distributed on an "AS
+   - IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+   - implied. See the License for the specific language governing
+   - rights and limitations under the License.
+   - 
+   - The Original Code is mozilla.org code.
+   - 
+   - The Initial Developer of the Original Code is Netscape
+   - Communications Corp.  Portions created by Netscape are
+   - Copyright (C) 2001 Netscape Communications Corp.  All
+   - Rights Reserved.
+   - 
+   - Contributor(s):
+   -   Bob Lord <lord@netscape.com>
+   -   Ian McGreer <mcgreer@netscape.com>
+  -->
+
+<?xml-stylesheet href="chrome://global/skin/" type="text/css"?>
+
+<!DOCTYPE window [
+<!ENTITY % deviceManangerDTD SYSTEM "chrome://pippki/locale/deviceManager.dtd">
+%deviceManangerDTD;
+<!ENTITY % pippkiDTD SYSTEM "chrome://pippki/locale/pippki.dtd" >
+%pippkiDTD;
+]>
+
+<window id="devicemanager"
+        xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" 
+        title="&devmgr.title;"
+        persist="screenX screenY width height"
+        onload="LoadModules();">
+
+<script type="application/x-javascript" src="chrome://global/content/strres.js"/>
+<script type="application/x-javascript" src="chrome://pippki/content/device_manager.js"/>
+<script type="application/x-javascript" src="chrome://help/content/contextHelp.js"/>
+
+<grid flex="1">
+  <columns>
+    <column flex="1"/> 
+    <column flex="1"/> 
+    <column/>
+  </columns>
+  <rows>
+    <row flex="1">
+      <vbox> <!-- List of devices -->
+        <tree id="device_tree" seltype="single"
+              onselect="enableButtons();" hidecolumnpicker="true"
+              flex="1" style="min-width: 15em">
+          <treecols> 
+            <treecol id="deviceCol" flex="1" primary="true" label="&devmgr.devlist.label;"/>
+          </treecols>
+          <treechildren id="device_list"/>
+        </tree>
+      </vbox> <!-- / List of devices -->
+      <vbox> <!-- Device status -->
+        <tree id="info_tree" seltype="single" hidecolumnpicker="true"
+              flex="1" style="min-width: 10em">
+          <treecols> 
+            <treecol id="title1Col" flex="5" primary="true" label="&devmgr.details.title;"/> 
+            <treecol id="title2Col" flex="7" label="&devmgr.details.title2;"/> 
+          </treecols>
+          <treechildren id="info_list"/>
+        </tree>
+      </vbox> <!-- / Device status -->
+      <vbox> <!-- Buttons for manipulating devices -->
+        <button id="login_button" 
+                label="&devmgr.button.login.label;"
+                oncommand="doLogin();" disabled="true"/> 
+        <button id="logout_button" 
+                label="&devmgr.button.logout.label;"
+                oncommand="doLogout();" disabled="true"/> 
+        <button id="change_pw_button" 
+                label="&devmgr.button.changepw.label;"
+                oncommand="changePassword();" disabled="true"/> 
+        <button id="load_button" 
+                label="&devmgr.button.load.label;"
+                oncommand="doLoad();"/> 
+        <button id="unload_button" 
+                label="&devmgr.button.unload.label;"
+                oncommand="doUnload();" disabled="true"/> 
+        <button id="fipsbutton" 
+                label=""
+                oncommand="toggleFIPS();"/>
+      </vbox> <!-- / Buttons for manipulating devices -->
+    </row>
+  </rows>
+</grid>
+
+<hbox>
+  <button id="help_button" 
+          label="&help.label;" 
+          oncommand="openHelp('sec_devices');"/> 
+  <button id="ok_button" 
+          label="&ok.label;" 
+          oncommand="window.close();"/> 
+</hbox>
+
+</window>

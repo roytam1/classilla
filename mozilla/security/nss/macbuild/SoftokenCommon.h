@@ -1,0 +1,2 @@
+#define RIJNDAEL_INCLUDE_TABLES 1
+#define SHLIB_PREFIX ""

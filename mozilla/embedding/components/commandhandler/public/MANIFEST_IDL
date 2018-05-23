@@ -1,0 +1,6 @@
+nsICommandManager.idl
+nsPICommandUpdater.idl
+nsICommandParams.idl
+nsIControllerCommand.idl
+nsIControllerContext.idl
+nsIControllerCommandManager.idl

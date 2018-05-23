@@ -1,0 +1,243 @@
+<?xml version="1.0"?>
+
+<!--
+
+The contents of this file are subject to the Netscape Public
+License Version 1.1 (the "License"); you may not use this file
+except in compliance with the License. You may obtain a copy of
+the License at http://www.mozilla.org/NPL/
+
+Software distributed under the License is distributed on an "AS
+IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+implied. See the License for the specific language governing
+rights and limitations under the License.
+
+The Original Code is Mozilla Communicator client code, released
+March 31, 1998.
+
+The Initial Developer of the Original Code is Netscape
+Communications Corporation. Portions created by Netscape are
+ Copyright (C) 1998-2001 Netscape Communications Corporation. All
+Rights Reserved.
+
+Contributors:
+  Håkan Waara <hwaara@chello.se>
+
+-->
+
+<?xml-stylesheet href="chrome://messenger/skin/accountManage.css" type="text/css"?>
+
+<!DOCTYPE window SYSTEM "chrome://messenger/locale/am-server-top.dtd" >
+
+<page xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+      onload="parent.onPanelLoaded('am-server.xul');">
+
+  <script type="application/x-javascript" src="chrome://messenger/content/am-server.js"/>
+  <script type="application/x-javascript" src="chrome://messenger/content/am-prefs.js"/>
+  <stringbundle id="bundle_messenger" src="chrome://messenger/locale/messenger.properties"/>
+
+  <broadcaster id="broadcaster_doBiff"/>
+  <broadcaster id="broadcaster_notify"/>
+  
+  <label hidden="true" wsm_persist="true" id="server.type"/>
+
+  <dialogheader title="&serverSettings.label;"/>
+
+  <grid>
+    <columns>
+      <column/>
+      <column/>
+    </columns>
+    <rows>      
+      <row align="center">
+        <label value="&serverType.label;"/>
+        <label id="servertype.verbose"/>
+      </row>
+      <row align="center">
+        <hbox>
+            <label value="&serverName.label;"/>
+        </hbox>
+        <hbox iscontrolcontainer="true" align="center">
+            <label id="fixedServerName" collapsed="true" use="server.realHostName"/>
+            <textbox wsm_persist="true" size="25" id="server.realHostName"
+                     prefstring="mail.server.%serverkey%.realhostname" class="uri-element"/>
+        </hbox>
+      </row>
+      <row align="center">
+        <hbox iscontrolcontainer="true" align="center">
+            <label hidable="true" hidefor="nntp" id="userNameLabel" 
+                  value="&userName.label;"/>
+        </hbox>
+        <hbox iscontrolcontainer="true" align="center">
+            <label id="fixedUserName" collapsed="true" use="server.realUsername"/>
+            <textbox hidable="true" hidefor="nntp" wsm_persist="true"
+                     size="25" id="server.realUsername"
+                     prefstring="mail.server.%serverkey%.realusername"/>
+        </hbox>
+      </row>
+      <row>
+        <hbox align="center">
+            <label hidable="true" hidefor="movemail" value="&port.label;"/>
+        </hbox>
+        <hbox align="center">
+            <label id="fixedServerPort" collapsed="true" use="server.port"/>
+            <textbox wsm_persist="true" size="5" id="server.port"
+                     preftype="int" hidable="true" hidefor="movemail" 
+                     prefstring="mail.server.%serverkey%.port"/>
+        </hbox>
+      </row>
+    </rows>
+  </grid>
+
+  <spacer class="spacer"/>
+
+  <groupbox>
+  <caption label="&serverSettings.label;"/>
+  <vbox flex="1">
+  <checkbox iscontrolcontainer="true" wsm_persist="true" id="server.isSecure"
+            label="&isSecure.label;" oncommand="secureSelect();"
+            prefattribute="value"
+            prefstring="mail.server.%serverkey%.isSecure"/>
+  <checkbox iscontrolcontainer="true" hidable="true" wsm_persist="true"
+            id="server.loginAtStartUp" hidefor="nntp"
+            label="&loginAtStartup.label;"
+            prefattribute="value"
+            prefstring="mail.server.%serverkey%.login_at_startup"/>
+<!--
+  <checkbox iscontrolcontainer="true" hidable="true" wsm_persist="true" id="server.rememberPassword" hidefor="nntp"
+            value="&savePassword.label;"/>
+-->
+  <hbox align="center">
+    <checkbox wsm_persist="true" id="server.doBiff" label="&biffStart.label;"
+              oncommand="setupBiffUI();"
+              prefattribute="value"
+              prefstring="mail.server.%serverkey%.check_new_mail"/>
+    <textbox wsm_persist="true" id="server.biffMinutes" size="3" 
+             observes="broadcaster_doBiff"
+             preftype="int"
+             prefstring="mail.server.%serverkey%.check_time"/>
+    <label id="biffEnd" control="server.biffMinutes" value="&biffEnd.label;"
+           observes="broadcaster_doBiff"/>
+  </hbox>
+  <!-- POP3 -->
+  <vbox iscontrolcontainer="true" align="start">
+    <checkbox hidable="true" hidefor="imap,nntp"
+              wsm_persist="true" id="server.downloadOnBiff"
+              label="&downloadOnBiff.label;" prefattribute="value"
+              prefstring="mail.server.%serverkey%.download_on_biff"/>
+
+    <checkbox wsm_persist="true" id="pop3.leaveMessagesOnServer"
+              label="&leaveOnServer.label;" oncommand="setupMailOnServerUI();"
+              hidable="true" hidefor="imap,nntp,movemail"
+              prefattribute="value"
+              prefstring="mail.server.%serverkey%.leave_on_server"/>
+
+    <checkbox wsm_persist="true" id="pop3.deleteMailLeftOnServer" class="indent"
+              label="&deleteOnServer.label;"
+              hidable="true" hidefor="imap,nntp,movemail"
+              prefattribute="value"
+              prefstring="mail.server.%serverkey%.delete_mail_left_on_server"/>
+  </vbox>
+  <!-- IMAP -->
+  <hbox iscontrolcontainer="true" align="center" id="imap.deleteModel.box">
+    <label value="&deleteMessagePrefix.label;"/>
+    <menulist hidable="true" hidefor="pop3,nntp,movemail" wsm_persist="true" id="imap.deleteModel"
+              prefstring="mail.server.%serverkey%.delete_model">
+      <menupopup>
+        <menuitem value="1" label="&modelMoveToTrash.label;"/>
+        <menuitem value="0" label="&modelMarkDeleted.label;"/>
+        <menuitem value="2" label="&modelDeleteImmediately.label;"/>
+      </menupopup>
+    </menulist>
+    <spacer flex="1"/>
+  </hbox>
+
+  <checkbox hidable="true" hidefor="pop3,nntp,movemail" wsm_persist="true" id="imap.cleanupInboxOnExit"
+            label="&expungeOnExit.label;" iscontrolcontainer="true"
+            prefattribute="value"
+            prefstring="mail.server.%serverkey%.cleanup_inbox_on_exit"/>
+  <checkbox hidable="true" hidefor="nntp" wsm_persist="true" id="server.emptyTrashOnExit" 
+            label="&emptyTrashOnExit.label;" iscontrolcontainer="true"
+            prefattribute="value"
+            prefstring="mail.server.%serverkey%.empty_trash_on_exit"/>
+
+  <hbox iscontrolcontainer="true" flex="1">
+    <hbox flex="1">
+      <spacer flex="1"/>
+      <button label="&advancedButton.label;"
+              oncommand="openImapAdvanced(event);"
+              wsm_persist="true" id="server.advancedbutton" 
+              prefstring="mail.server.%serverkey%.advanced.disable"/>
+    </hbox>
+
+    <checkbox hidable="true" hidefor="pop3,nntp,movemail" hidden="true" wsm_persist="true" id="imap.dualUseFolders"
+              prefattribute="value"
+              prefstring="mail.server.%serverkey%.dual_use_folders"/>
+    <checkbox hidden="true" wsm_persist="true" id="imap.usingSubscription"
+              prefattribute="value"
+              prefstring="mail.server.%serverkey%.using_subscription"/>
+    <label hidden="true" wsm_persist="true" id="imap.maximumConnectionsNumber"/>
+    <label hidden="true" wsm_persist="true" id="imap.personalNamespace"/>
+    <label hidden="true" wsm_persist="true" id="imap.publicNamespace"/>
+    <label hidden="true" wsm_persist="true" id="imap.otherUsersNamespace"/>
+    <label hidden="true" wsm_persist="true" id="imap.serverDirectory"/>
+    <checkbox hidden="true" wsm_persist="true" id="imap.overrideNamespaces"
+              prefattribute="value"
+              prefstring="mail.server.%serverkey%.override_namespaces"/>
+  </hbox>
+
+  <!-- NNTP -->
+  <hbox iscontrolcontainer="true">
+    <checkbox hidable="true" hidefor="pop3,imap,movemail" wsm_persist="true" id="nntp.notifyOn"
+              label="&maxMessagesStart.label;"
+              oncommand="setupNotifyUI();"
+              prefattribute="value"
+              prefstring="mail.server.%serverkey%.notify.on"/>
+    <hbox iscontrolcontainer="true" align="center">
+      <textbox wsm_persist="true" id="nntp.maxArticles" size="6"
+               observes="broadcaster_notify"
+               preftype="int"
+               prefstring="mail.server.%serverkey%.max_articles"/>
+      <label control="nntp.maxArticles" value="&maxMessagesEnd.label;"
+             observes="broadcaster_notify"/>
+    </hbox>
+  </hbox>
+  <hbox iscontrolcontainer="true">
+    <checkbox hidable="true" hidefor="pop3,imap,movemail" wsm_persist="true" id="nntp.pushAuth"
+              label="&alwaysAuthenticate.label;"
+              prefattribute="value"
+              prefstring="mail.server.%serverkey%.always_authenticate"/>
+  </hbox>
+<!-- take out for now - bug 45079
+    <hbox iscontrolcontainer="true" flex="100%">
+      <groupbox>
+         <caption class="header" label="&abbreviate.label;"/>
+
+         <radiogroup hidable="true" hidefor="pop3,imap,movemail" wsm_persist="true"
+                     id="nntp.abbreviate">
+           <radio wsm_persist="true" value="true"
+                  label="&abbreviateOn.label;"/>
+           <radio wsm_persist="true" value="false" 
+                  label="&abbreviateOff.label;"/>
+         </radiogroup>
+      </groupbox>
+    </hbox>
+-->
+
+  <vbox iscontrolcontainer="true">
+    <label value="&newsrcFilePath.label;" control="nntp.newsrcFilePath"/>
+    <textbox hidable="true" hidefor="imap,pop3,movemail" wsm_persist="true" id="nntp.newsrcFilePath"
+               datatype="nsIFileSpec"
+               prefstring="mail.server.%serverkey%.newsrc.file" class="uri-element"/>
+  </vbox>
+  </vbox>
+  </groupbox>
+  <spacer flex="100%"/>
+    <vbox>
+    <label value="&localPath.label;" control="server.localPath"/>
+    <textbox wsm_persist="true" id="server.localPath"
+            datatype="nsIFileSpec"
+            class="uri-element"
+            prefstring="mail.server.%serverkey%.directory"/>
+    </vbox>
+</page>

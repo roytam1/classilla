@@ -1,0 +1,5 @@
+comm.jar:
+   content/communicator/platformBrowserBindings.xul
+   content/communicator/platformEditorBindings.xul
+   content/communicator/platformCommunicatorOverlay.xul
+

@@ -1,0 +1,131 @@
+<?xml version="1.0"?> 
+<!--
+The contents of this file are subject to the Netscape Public
+License Version 1.1 (the "License"); you may not use this file
+except in compliance with the License. You may obtain a copy of
+the License at http://www.mozilla.org/NPL/
+
+Software distributed under the License is distributed on an "AS
+IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+implied. See the License for the specific language governing
+rights and limitations under the License.
+
+The Original Code is Mozilla Communicator client code, released
+March 31, 1998.
+
+The Initial Developer of the Original Code is Netscape
+Communications Corporation. Portions created by Netscape are
+ Copyright (C) 1998-1999 Netscape Communications Corporation. All
+Rights Reserved.
+
+Contributor(s):
+  Seth Spitzer <sspitzer@netscape.com>
+
+--> 
+
+<?xml-stylesheet href="chrome://messenger/skin/addressbook/selectAddressesDialog.css" type="text/css"?>
+
+<?xul-overlay href="chrome://global/content/dialogOverlay.xul"?>
+<?xul-overlay href="chrome://messenger/content/addressbook/abDirTreeOverlay.xul"?>
+<?xul-overlay href="chrome://messenger/content/addressbook/abResultsPaneOverlay.xul"?>
+<?xul-overlay href="chrome://global/content/globalOverlay.xul"?>
+<?xul-overlay href="chrome://communicator/content/utilityOverlay.xul"?>
+
+<!DOCTYPE window [
+<!ENTITY % abSelectAddressesDialogDTD SYSTEM "chrome://messenger/locale/addressbook/abSelectAddressesDialog.dtd" >
+%abSelectAddressesDialogDTD;
+<!ENTITY % abResultsPaneOverlayDTD SYSTEM "chrome://messenger/locale/addressbook/abResultsPaneOverlay.dtd" >
+%abResultsPaneOverlayDTD;
+]>
+
+<window xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+        xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+		xmlns:nc="http://home.netscape.com/NC-rdf#"
+        title="&selectAddressWindow.title;"
+        class="dialog"
+        width="680" height="480"
+        onload="OnLoadSelectAddress()"
+        onunload="OnUnloadSelectAddress()">
+
+  <stringbundle id="bundle_addressBook" src="chrome://messenger/locale/addressbook/addressBook.properties"/>
+  <stringbundle id="bundle_composeMsgs" src="chrome://messenger/locale/messengercompose/composeMsgs.properties"/>
+  <script type="application/x-javascript" src="chrome://messenger/content/addressbook/abCommon.js"/>
+  <script type="application/x-javascript" src="chrome://messenger/content/addressbook/abSelectAddressesDialog.js"/>
+  <script type="application/x-javascript" src="chrome://messenger/content/messengercompose/MsgComposeCommands.js"/>
+  <script type="application/x-javascript" src="chrome://global/content/globalOverlay.js"/>
+
+
+  <keyset id="dialogKeys"/>
+
+  <vbox flex="1">
+  
+    <hbox id="topBox" align="center">
+      <label value="&lookIn.label;" accesskey="&lookIn.accesskey;" control="addressbookList"/>
+      <menulist id="addressbookList" 
+	            ref="moz-abdirectory://" 
+                datasources="rdf:addressdirectory"
+                containment="http://home.netscape.com/NC-rdf#child"
+				oncommand="DirPaneSelectionChangeMenulist(); document.commandDispatcher.updateCommands('addrbook-select');">
+        <template>
+          <rule nc:IsMailList="false">
+            <menupopup>
+              <menuitem label="rdf:http://home.netscape.com/NC-rdf#DirName" uri="..."
+                        IsMailList="rdf:http://home.netscape.com/NC-rdf#IsMailList"
+                        IsRemote="rdf:http://home.netscape.com/NC-rdf#IsRemote"/>
+            </menupopup>
+          </rule>
+        </template>
+      </menulist>  
+	  <label value="&for.label;" accesskey="&for.accesskey;" control="searchInput"/> 
+	  <textbox id="searchInput" flex="1"
+      oninput="onAbSearchInput(false);"
+      onkeypress="onAbSearchKeyPress(event);"/>  
+	  <button id="clear" label="&clearButton.label;" disabled="true" accesskey="&clearButton.accesskey;" oncommand="onAbClearSearch();"/>
+    </hbox>
+    
+    <hbox flex="1">    
+
+       <vbox id="resultsBox" flex="4">
+         <tree id="abResultsTree" flex="1" persist="height" />
+       </vbox>
+        
+      <!--<splitter id="vertical-splitter" collapse="before"  persist="state"/>-->
+      
+      <vbox id="addToBucketButtonBox">
+        <spacer flex="1"/>
+        <button id="toButton" label="&toButton.label;" accesskey="&toButton.accesskey;" oncommand="SelectAddressToButton()"/> 
+        <spacer class="middle-button-spacer"/>
+        <button id="ccButton" label="&ccButton.label;" accesskey="&ccButton.accesskey;" oncommand="SelectAddressCcButton()"/> 
+        <spacer class="middle-button-spacer"/>
+        <button id="bccButton" label="&bccButton.label;" accesskey="&bccButton.accesskey;" oncommand="SelectAddressBccButton()"/>  
+        <spacer class="above-remove-spacer"/>
+        <button id="remove" label="&removeButton.label;" accesskey="&removeButton.accesskey;" class="dialog" oncommand="RemoveSelectedFromBucket()"/> 
+        <spacer flex="1"/>
+      </vbox>
+        
+     <!--<splitter id="bucket-splitter" collapse="before" persist="state"/>-->
+        
+      <vbox id="bucketBox" flex="1">
+        <label value="&addressMessageTo.label;"/>
+        <tree id="addressBucket" flex="1" seltype="multiple" hidecolumnpicker="true"
+            ondragover="DragOverBucketPane(event);"
+            ondragdrop="DropOnBucketPane(event);"
+            onselect="DialogBucketPaneSelectionChanged();">
+          <treecols>
+            <treecol id="addressCol" flex="1" hideheader="true"/>
+          </treecols>
+          <treechildren id="bucketBody" flex="1"/>
+        </tree>
+      </vbox>
+        
+    </hbox>
+
+    <hbox id="newEditButtonBox">
+      <button id="new" label="&newButton.label;" accesskey="&newButton.accesskey;" tooltiptext="&addressPickerNewButton.tooltip;" oncommand="AbNewCard('dirTree')"/> 
+      <button id="edit" label="&editButton.label;" accesskey="&editButton.accesskey;" tooltiptext="&addressPickerEditButton.tooltip;" oncommand="AbEditSelectedCard()"/> 
+    </hbox>
+
+    <hbox id="okCancelButtonsRight"/>
+  </vbox>
+  
+</window>

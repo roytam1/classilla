@@ -1,0 +1,43 @@
+#include "nsIFile.idl"
+#include "nsISupports.idl"
+
+[scriptable, uuid(3ed86dbe-d084-11d4-ba7a-00c04fa0d26b)]
+
+interface nsIProcess : nsISupports
+{
+	void init(in nsIFile executable);
+	void initWithPid(in unsigned long pid);
+	
+	void kill();
+
+    /** XXX what charset? **/
+        /** Executes the file this object was initialized with
+         * @param blocking Whether to wait until the process terminates before returning or not
+         * @param args An array of arguments to pass to the process
+         * @param count The length of the args array
+         * @return the PID of the newly spawned process */
+        unsigned long run(in boolean blocking, [array, size_is(count)] in string args, in unsigned long count);
+
+	readonly attribute nsIFile location;
+	readonly attribute unsigned long pid;
+	readonly attribute string processName;
+	readonly attribute unsigned long processSignature;
+	readonly attribute long exitValue;
+
+        /**
+         * Called to get the value of environment variable
+         * XXX what charset?
+         *
+         * @param aName     The string enviroment variable name 
+         * @exception       NS_ERROR_OUT_OF_MEMORY
+         *
+         * @return 	    The value of the requested string environment variable name
+         */ 
+        string getEnvironment(in string aName);
+};
+
+%{C++
+
+#define NS_PROCESS_CONTRACTID "@mozilla.org/process/util;1"
+#define NS_PROCESS_CLASSNAME "Process Specification"
+%}

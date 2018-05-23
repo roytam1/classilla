@@ -1,0 +1,138 @@
+/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
+ *
+ * The contents of this file are subject to the Mozilla Public
+ * License Version 1.1 (the "License"); you may not use this file
+ * except in compliance with the License. You may obtain a copy of
+ * the License at http://www.mozilla.org/MPL/
+ * 
+ * Software distributed under the License is distributed on an "AS
+ * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * rights and limitations under the License.
+ * 
+ * The Original Code is the Mozilla browser.
+ * 
+ * The Initial Developer of the Original Code is Netscape
+ * Communications Corporation. Portions created by Netscape are
+ * Copyright (C) 1999 Netscape Communications Corporation. All
+ * Rights Reserved.
+ * 
+ * Contributor(s): 
+ *   Stuart Parmenter <pavlov@netscape.com>
+ */
+
+#include "nsISupports.idl"
+
+interface nsILocalFile;
+interface nsIFileURL;
+interface nsIDOMWindowInternal;
+interface nsISimpleEnumerator;
+
+[scriptable, uuid(c47de916-1dd1-11b2-8141-82507fa02b21)]
+interface nsIFilePicker : nsISupports
+{
+  const short modeOpen        = 0;              // Load a file or directory
+  const short modeSave        = 1;              // Save a file or directory
+  const short modeGetFolder   = 2;              // Select a folder/directory
+  const short modeOpenMultiple= 3;              // Load multiple files
+
+  const short returnOK        = 0;              // User hit Ok, process selection
+  const short returnCancel    = 1;              // User hit cancel, ignore selection
+  const short returnReplace   = 2;              // User acknowledged file already exists so ok to replace, process selection
+
+  const long filterAll        = 0x01;           // *.*
+  const long filterHTML       = 0x02;           // *.html; *.htm
+  const long filterText       = 0x04;           // *.txt
+  const long filterImages     = 0x08;           // *.png; *.gif; *.jpg; *.jpeg
+  const long filterXML        = 0x10;           // *.xml
+  const long filterXUL        = 0x20;           // *.xul
+  const long filterApps       = 0x40;           // Applications (per-platform implementation)
+
+ /**
+  * Initialize the file widget.
+  *
+  * @param      parent   nsIDOMWindowInternal parent.  This dialog should be dependent on this parent.
+  * @param      title    The title for the file widget
+  * @param      mode     load, save, or get folder
+  *
+  */
+  void init(in nsIDOMWindowInternal parent, in wstring title, in short mode);
+
+ /**
+  * Append to the  filter list with things from the predefined list
+  *
+  * @param      filters  mask of filters i.e. (filterAll | filterHTML)
+  *
+  */
+  void appendFilters(in long filterMask);
+
+ /**
+  * Add a filter
+  *
+  * @param      title    name of the filter
+  * @param      filter   extensions to filter -- semicolon and space separated
+  *
+  */
+  void appendFilter(in wstring title,
+                    in wstring filter);
+
+ /**
+  * The filename that should be suggested to the user as a default.
+  *
+  * @throws NS_ERROR_FAILURE on attempts to get
+  */
+  attribute wstring defaultString;
+
+ /**
+  * The extension that should be associated with files of the type we
+  * want to work with.  On some platforms, this extension will be
+  * automatically appended to filenames the user enters, if needed.  
+  */
+  attribute wstring defaultExtension;
+  
+ /**
+  * The filter which is currently selected in the File Picker dialog
+  *
+  * @return Returns the index (0 based) of the selected filter in the filter list. 
+  */
+  attribute long filterIndex;
+
+ /**
+  * Set the directory that the file open/save dialog initially displays
+  *
+  * @param      displayDirectory  the name of the directory
+  *
+  */
+  attribute nsILocalFile displayDirectory;
+
+
+ /**
+  * Get the nsILocalFile for the file or directory.
+  *
+  * @return Returns the file currently selected
+  */
+  readonly attribute nsILocalFile file;
+
+ /**
+  * Get the nsIFileURL for the file or directory.
+  *
+  * @return Returns the file currently selected
+  */
+  readonly attribute nsIFileURL fileURL;
+
+ /**
+  * Get the enumerator for the selected files
+  * only works in the modeOpenMultiple mode
+  *
+  * @return Returns the files currently selected
+  */
+  readonly attribute nsISimpleEnumerator files;
+
+ /**
+  * Show File Dialog. The dialog is displayed modally.
+  *
+  * @return returnOK if the user selects OK, returnCancel if the user selects cancel
+  *
+  */
+  short show();
+};

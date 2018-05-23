@@ -1,0 +1,113 @@
+/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: NPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Netscape Public License
+ * Version 1.1 (the "License"); you may not use this file except in
+ * compliance with the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/NPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
+ * The Original Code is mozilla.org code.
+ *
+ * The Initial Developer of the Original Code is 
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998
+ * the Initial Developer. All Rights Reserved.
+ *
+ * Contributor(s):
+ *
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the NPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the NPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
+
+#ifndef nsNodeInfoManager_h___
+#define nsNodeInfoManager_h___
+
+#include "nsINodeInfo.h"
+#include "nsCOMPtr.h"
+#include "plhash.h"
+#include "nsIURI.h"
+#include "nsIPrincipal.h"
+
+class nsNodeInfo;
+
+
+class nsNodeInfoManager : public nsINodeInfoManager
+{
+public:
+  NS_DECL_ISUPPORTS
+
+  // nsINodeInfoManager
+  NS_IMETHOD Init(nsIDocument *aDocument);
+  NS_IMETHOD DropDocumentReference();
+  NS_IMETHOD GetNodeInfo(nsIAtom *aName, nsIAtom *aPrefix,
+                         PRInt32 aNamespaceID, nsINodeInfo*& aNodeInfo);
+  NS_IMETHOD GetNodeInfo(const nsAString& aName, nsIAtom *aPrefix,
+                         PRInt32 aNamespaceID, nsINodeInfo*& aNodeInfo);
+  NS_IMETHOD GetNodeInfo(const nsAString& aName, const nsAString& aPrefix,
+                         PRInt32 aNamespaceID, nsINodeInfo*& aNodeInfo);
+  NS_IMETHOD GetNodeInfo(const nsAString& aName, const nsAString& aPrefix,
+                         const nsAString& aNamespaceURI,
+                         nsINodeInfo*& aNodeInfo);
+  NS_IMETHOD GetNodeInfo(const nsAString& aQualifiedName,
+                         const nsAString& aNamespaceURI,
+                         nsINodeInfo*& aNodeInfo); 
+  NS_IMETHOD GetDocument(nsIDocument*& aDocument);
+  NS_IMETHOD GetDocumentPrincipal(nsIPrincipal** aPrincipal);
+  NS_IMETHOD SetDocumentPrincipal(nsIPrincipal* aPrincipal);
+  NS_IMETHOD GetNodeInfoArray(nsISupportsArray** aArray);
+
+  // nsNodeInfoManager
+  nsNodeInfoManager();
+  virtual ~nsNodeInfoManager();
+
+  void RemoveNodeInfo(nsNodeInfo *aNodeInfo);
+
+  static nsresult GetAnonymousManager(nsINodeInfoManager*& aNodeInfoManager);
+
+private:
+  static PRIntn PR_CALLBACK NodeInfoInnerKeyCompare(const void *key1,
+                                                    const void *key2);
+  static PLHashNumber PR_CALLBACK GetNodeInfoInnerHashValue(const void *key);
+
+  PR_STATIC_CALLBACK(PRIntn) GetNodeInfoArrayEnumerator(PLHashEntry* he,
+                                                        PRIntn i,
+                                                        void* arg);
+
+  PLHashTable *mNodeInfoHash;
+  nsIDocument *mDocument; // WEAK
+  nsCOMPtr<nsIPrincipal> mPrincipal;
+
+  /*
+   * gAnonymousNodeInfoManager is a global nodeinfo manager used for nodes
+   * that are no longer part of a document and for nodes that are created
+   * where no document is accessible.
+   *
+   * gAnonymousNodeInfoManager is allocated when requested for the first time
+   * and once the last nodeinfo manager (appart from gAnonymousNodeInfoManager)
+   * is destroyed gAnonymousNodeInfoManager is destroyed. If the global
+   * nodeinfo manager is the only nodeinfo manager used it can be deleted
+   * and later reallocated if all users of the nodeinfo manager drops the
+   * referernces to it.
+   */
+  static nsNodeInfoManager *gAnonymousNodeInfoManager;
+  static PRUint32 gNodeManagerCount;
+};
+
+#endif /* nsNodeInfoManager_h___ */

@@ -1,0 +1,75 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+REQUIRES	= xpcom \
+		  string \
+		  necko \
+		  content \
+		  layout \
+		  $(NULL)
+
+SIMPLE_PROGRAMS	= $(CPPSRCS:.cpp=$(BIN_SUFFIX))
+
+CPPSRCS		= \
+		ParseCSS.cpp \
+		TestCSSPropertyLookup.cpp \
+		$(NULL)
+
+LOCAL_INCLUDES	= -I$(srcdir)/../style/src
+
+EXTRA_DSO_LIBS += gkgfx
+
+LIBS		= \
+		$(LIBS_DIR) \
+		$(DIST)/lib/$(LIB_PREFIX)gkconhtmlcon_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)gkconhtmldoc_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)gkhtmlforms_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)gkhtmlstyle_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)gkconhtmlstyle_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)gkhtmltable_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)gkhtmlbase_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)gkbase_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)gkconbase_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)gkconevents_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)gkconxmlcon_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)gkconxmldoc_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)gkxulbase_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)gkconshared_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)gkconxsldoc_s.$(LIB_SUFFIX) \
+		$(MOZ_JS_LIBS) \
+		$(EXTRA_DSO_LIBS) \
+		$(TK_LIBS) \
+		$(MOZ_UNICHARUTIL_LIBS) \
+		$(MOZ_COMPONENT_LIBS) \
+		$(NULL)
+
+include $(topsrcdir)/config/config.mk
+
+include $(topsrcdir)/config/rules.mk
+
+DEFINES += -D_IMPL_NS_LAYOUT

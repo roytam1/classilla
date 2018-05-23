@@ -1,0 +1,59 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE		= necko
+XPIDL_MODULE	= necko_socket
+LIBRARY_NAME	= neckosocket_s
+REQUIRES	= xpcom \
+		  string \
+		  $(NULL)
+
+CPPSRCS		= nsSocketProviderService.cpp nsSOCKSSocketProvider.cpp nsSOCKS4SocketProvider.cpp nsSOCKSIOLayer.cpp
+
+XPIDLSRCS	= \
+		nsISocketProvider.idl \
+		nsISocketProviderService.idl \
+		nsISOCKSSocketProvider.idl \
+		nsISOCKSSocketInfo.idl \
+		nsISOCKS4SocketProvider.idl \
+		nsISOCKS4SocketInfo.idl \
+		nsISSLSocketProvider.idl \
+		nsITransportSecurityInfo.idl \
+                nsISSLSocketControl.idl \
+                $(NULL)
+
+ifeq ($(OS_ARCH),WINNT)
+NO_GEN_XPT=1
+endif
+
+# we don't want the shared lib, but we want to force the creation of a
+# static lib.
+FORCE_STATIC_LIB = 1
+
+include $(topsrcdir)/config/rules.mk
+

@@ -1,0 +1,46 @@
+/* -*- Mode: IDL; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
+ *
+ * The contents of this file are subject to the Netscape Public License
+ * Version 1.0 (the "NPL"); you may not use this file except in
+ * compliance with the NPL.  You may obtain a copy of the NPL at
+ * http://www.mozilla.org/NPL/
+ *
+ * Software distributed under the NPL is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the NPL
+ * for the specific language governing rights and limitations under the
+ * NPL.
+ *
+ * The Initial Developer of this code under the NPL is Netscape
+ * Communications Corporation.  Portions created by Netscape are
+ * Copyright (C) 1998 Netscape Communications Corporation.  All Rights
+ * Reserved.
+ *
+ * Contributors:
+ *  Scott MacGregor <mscott@netscape.com>
+ */
+
+#include "nsIURI.idl"
+
+//
+//  moz-icon URLs have the following syntax
+// 
+//  moz-icon:<file-uri>?size=16&contentType=text/html
+// OR
+// moz-icon://dummyfile.html
+// moz-icon://dummyfile.html?size=32
+// 
+//  The content type field is optional. The size field is optional. You only need to specify a file url inside the icon
+// if the file you want the icon for actually exists. Otherwise you can omit the file:// and just place a dummy file name with the extension
+// or content type you want: moz-icon://dummy.html. 
+// 
+
+[scriptable, uuid(733A7A16-2D36-11d5-9907-001083010E9B)]
+interface nsIMozIconURI : nsIURI 
+{
+  // Returns the file URL contained within this -moz-icon url.
+  attribute nsIURI IconFile; // maybe null if there isn't a real file we are trying to fetch
+
+  attribute unsigned long imageSize; // measured by # of pixels in a row. defaults to 16.
+  attribute ACString contentType;      // may be an empty string
+  readonly attribute ACString fileExtension;    
+};

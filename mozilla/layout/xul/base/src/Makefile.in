@@ -1,0 +1,126 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../../../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+DIRS		= tree \
+                  grid
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE		= layout
+LIBRARY_NAME	= gkxulbase_s
+REQUIRES	= xpcom \
+		  string \
+		  dom \
+		  locale \
+		  content \
+		  gfx \
+		  widget \
+		  view \
+		  docshell \
+		  necko \
+		  editor \
+		  htmlparser \
+		  webshell \
+		  pref \
+		  intl \
+		  imglib2 \
+		  unicharutil \
+		  xpconnect \
+		  js \
+		  $(NULL)
+
+CPPSRCS		= \
+		nsScrollBoxObject.cpp \
+		nsScrollBoxFrame.cpp \
+		nsBrowserBoxObject.cpp \
+		nsIFrameBoxObject.cpp \
+		nsEditorBoxObject.cpp \
+		nsMenuBoxObject.cpp \
+		nsPopupBoxObject.cpp \
+		nsListBoxObject.cpp \
+		nsBoxObject.cpp \
+		nsImageBoxFrame.cpp \
+		nsRootBoxFrame.cpp \
+		nsDocElementBoxFrame.cpp \
+		nsBox.cpp \
+		nsBoxLayoutState.cpp \
+		nsBoxToBlockAdaptor.cpp \
+		nsButtonBoxFrame.cpp \
+		nsContainerBox.cpp \
+		nsLeafBoxFrame.cpp \
+		nsSprocketLayout.cpp \
+		nsBoxLayout.cpp \
+		nsStackLayout.cpp \
+		nsTextBoxFrame.cpp \
+		nsStackFrame.cpp \
+		nsSpringFrame.cpp \
+		nsGroupBoxFrame.cpp \
+		nsFrameNavigator.cpp \
+		nsSplitterFrame.cpp \
+		nsGrippyFrame.cpp \
+		nsDeckFrame.cpp \
+		nsBoxFrame.cpp \
+		nsProgressMeterFrame.cpp \
+		nsScrollbarFrame.cpp \
+		nsScrollbarButtonFrame.cpp \
+		nsSliderFrame.cpp \
+		nsMenuPopupFrame.cpp \
+		nsMenuFrame.cpp \
+		nsMenuBarFrame.cpp \
+		nsMenuBarListener.cpp \
+		nsMenuListener.cpp \
+		nsMenuDismissalListener.cpp \
+		nsPopupSetFrame.cpp \
+		nsRepeatService.cpp \
+		nsTitleBarFrame.cpp \
+		nsResizerFrame.cpp \
+		nsXULTooltipListener.cpp \
+		nsListBoxBodyFrame.cpp \
+		nsListItemFrame.cpp \
+		nsListBoxLayout.cpp \
+		nsNativeScrollbarFrame.cpp \
+		$(NULL)
+
+
+include $(topsrcdir)/config/config.mk
+
+# we don't want the shared lib, but we want to force the creation of a static lib.
+FORCE_STATIC_LIB = 1
+
+include $(topsrcdir)/config/rules.mk
+
+LOCAL_INCLUDES	= \
+		-I$(srcdir) \
+		-I$(srcdir)/../../../base/src \
+		-I$(srcdir)/../../../html/style/src \
+		-I$(srcdir)/../../../html/base/src \
+		-I$(srcdir)/../../../html/forms/src \
+		-I$(srcdir)/../../content/src \
+		-I$(srcdir)/../../../xml/content/src \
+		-I$(srcdir)/../../../base/public \
+		$(NULL)
+
+DEFINES += -D_IMPL_NS_LAYOUT

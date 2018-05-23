@@ -1,0 +1,430 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+# This code removes the console from release builds
+# (unless you've set MOZ_WINCONSOLE=1).
+ifndef MOZ_WINCONSOLE
+ifdef MOZ_DEBUG
+MOZ_WINCONSOLE=1
+else
+MOZ_WINCONSOLE=0
+endif
+endif
+
+
+ifeq (,$(filter mac cocoa,$(MOZ_WIDGET_TOOLKIT)))
+ifndef BUILD_STATIC_LIBS
+ifndef MOZ_TIMELINE
+GRE_BUILD       = 1;
+endif
+endif
+endif
+
+ifdef GRE_BUILD
+DEFINES		+= -DXPCOM_GLUE
+endif
+
+MODULE		= apprunner
+REQUIRES	= xpcom \
+		  xpconnect \
+		  string \
+		  webbrwsr \
+		  widget \
+		  dom \
+		  necko \
+		  pref \
+		  appshell \
+		  gfx \
+		  chrome \
+		  xpinstall \
+		  uriloader \
+		  view \
+		  windowwatcher \
+		  embed_base \
+		  embedcomponents \
+		  browser \
+		  docshell \
+		  uconv \
+		  locale \
+		  xremoteservice \
+		  profile \
+		  $(NULL)
+# for jprof
+REQUIRES	+= jprof
+ifeq ($(MOZ_WIDGET_TOOLKIT),os2)
+REQUIRES	+= \
+		  intl \
+		  profile \
+		  $(NULL)
+DIRS		+= os2turbo
+endif
+ifeq ($(MOZ_WIDGET_TOOLKIT),windows)
+REQUIRES	+= intl profile appcomps
+endif
+
+ifdef NS_TRACE_MALLOC
+REQUIRES	+= tracemalloc
+endif
+
+include $(topsrcdir)/config/config.mk
+
+ifeq ($(USE_SHORT_LIBNAME),1)
+PROGRAM		= mozilla$(BIN_SUFFIX)
+else
+PROGRAM		= mozilla-bin$(BIN_SUFFIX)
+endif
+
+CPPSRCS		= \
+		nsAppRunner.cpp \
+		nsWindowCreator.cpp \
+		showOSAlert.cpp \
+		$(NULL)
+
+
+ifneq (,$(filter-out OS2 WINNT,$(OS_ARCH)))
+STACKWALK_SRC_LCSRCS =               \
+		nsStackFrameUnix.cpp \
+		nsStackFrameUnix.h   \
+		$(NULL)
+
+STACKWALK_CPPSRCS := $(addprefix $(topsrcdir)/xpcom/base/, $(STACKWALK_SRC_LCSRCS))
+
+CPPSRCS		+= nsSigHandlers.cpp nsStackFrameUnix.cpp
+endif
+
+LIBS	= $(EXTRA_DSO_LDOPTS) \
+	  $(EXTRA_DSO_LIBS) \
+	  $(NULL)
+
+
+ifndef BUILD_STATIC_LIBS
+
+ifdef NS_TRACE_MALLOC
+EXTRA_DSO_LIBS	+= tracemalloc
+endif
+
+else
+include $(topsrcdir)/config/static-config.mk
+
+EXTRA_DEPS	+= \
+	$(STATIC_EXTRA_DEPS) \
+	$(NULL)
+DEFINES		+= $(STATIC_DEFINES)
+CPPSRCS		+= $(STATIC_CPPSRCS)
+ifneq ($(OS_ARCH),WINNT)
+EXTRA_DSO_LDOPTS+= -L$(DEPTH)/dist/lib/components
+endif # !WINNT
+EXTRA_DSO_LIBS	+= $(STATIC_EXTRA_DSO_LIBS)
+REQUIRES	+= $(STATIC_REQUIRES)
+LIBS		+= $(STATIC_EXTRA_LIBS)
+
+endif
+
+# If you change anything that mozilla links to, please talk to dougt@netscape.com
+ifdef GRE_BUILD
+LIBS            += \
+		$(DIST)/lib/$(LIB_PREFIX)string_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)string_obsolete_s.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)xpcomglue.$(LIB_SUFFIX) \
+		$(DIST)/lib/$(LIB_PREFIX)embedstring_s.$(LIB_SUFFIX) \
+		$(NULL)
+else
+LIBS		+= $(XPCOM_LIBS)
+endif
+
+LIBS		+= \
+		$(MOZ_JS_LIBS) \
+		$(NSPR_LIBS) \
+		$(NULL)
+
+ifdef MOZ_JPROF
+LIBS         += -ljprof
+endif
+
+ifdef GC_LEAK_DETECTOR
+LIBS += -lboehm
+endif
+
+ifdef MOZ_DEMANGLE_SYMBOLS
+LIBS += -liberty
+endif
+
+ifeq ($(MOZ_WIDGET_TOOLKIT),beos)
+BEOS_PROGRAM_RESOURCE = $(srcdir)/apprunner-beos.rsrc
+CPPSRCS += nsNativeAppSupportBeOS.cpp
+CPPSRCS += nsNativeAppSupportBase.cpp
+endif
+
+ifeq ($(MOZ_WIDGET_TOOLKIT),photon)
+CPPSRCS += nsNativeAppSupportPh.cpp
+LIBS += -lphexlib -lph
+endif
+
+ifeq ($(MOZ_WIDGET_TOOLKIT),os2)
+CPPSRCS += nsNativeAppSupportOS2.cpp
+CPPSRCS += nsNativeAppSupportBase.cpp
+RESFILE = splashos2.res
+endif
+
+ifeq ($(MOZ_WIDGET_TOOLKIT),mac)
+CPPSRCS += nsNativeAppSupportMac.cpp
+CPPSRCS += nsNativeAppSupportBase.cpp
+LIBS	+= $(TK_LIBS)
+endif
+
+ifeq ($(MOZ_WIDGET_TOOLKIT),gtk)
+SPLASH_XPM = $(srcdir)/splash.xpm
+CPPSRCS += nsNativeAppSupportGtk.cpp \
+	   nsNativeAppSupportBase.cpp
+DEFINES += -DSPLASH_XPM=\"$(SPLASH_XPM)\"
+LIBS += $(MOZ_GTK_LDFLAGS)
+endif
+
+ifeq ($(MOZ_WIDGET_TOOLKIT),gtk2)
+SPLASH_XPM = $(srcdir)/splash.xpm
+CPPSRCS += nsNativeAppSupportGtk.cpp \
+	   nsNativeAppSupportBase.cpp
+DEFINES += -DSPLASH_XPM=\"$(SPLASH_XPM)\"
+LIBS += $(MOZ_GTK2_LIBS)
+endif
+
+ifeq ($(MOZ_WIDGET_TOOLKIT),windows)
+RCINCLUDE = splash.rc
+CPPSRCS += nsNativeAppSupportWin.cpp nsNativeAppSupportBase.cpp
+OS_LIBS += comctl32.lib comdlg32.lib uuid.lib shell32.lib ole32.lib oleaut32.lib version.lib winspool.lib
+endif
+
+ifneq (,$(filter windows os2 gtk gtk2,$(MOZ_WIDGET_TOOLKIT)))
+ifneq (,$(filter windows os2,$(MOZ_WIDGET_TOOLKIT)))
+ICON_SUFFIX=.ico
+else
+ICON_SUFFIX=.xpm
+endif
+
+ifeq ($(MOZ_WIDGET_TOOLKIT),gtk2)
+ICON_DIR=gtk
+else
+ICON_DIR=$(MOZ_WIDGET_TOOLKIT)
+endif
+
+DESKTOP_ICONS = \
+	abcardWindow \
+	addressbookWindow \
+	bmPropsWindow \
+	bookmark-window \
+	calendar-window \
+	chatzilla-window \
+	downloadManager \
+	editorWindow \
+	findBookmarkWindow \
+	findHistoryWindow \
+	history-window \
+	jsconsoleWindow \
+	main-window \
+	messengerWindow \
+	msgcomposeWindow \
+	venkman-window \
+	winInspectorMain \
+	$(NULL) 
+
+ifeq ($(ICON_DIR),gtk)
+DESKTOP_ICONS_SMALL=$(patsubst %,%16,$(DESKTOP_ICONS))
+endif
+
+DESKTOP_ICON_FILES = $(addsuffix $(ICON_SUFFIX), $(DESKTOP_ICONS) $(DESKTOP_ICONS_SMALL))
+
+GARBAGE	+= $(addprefix $(DIST)/bin/chrome/icons/default/,$(DESKTOP_ICON_FILES))
+
+libs:: $(addprefix icons/$(ICON_DIR)/,$(DESKTOP_ICON_FILES))
+	$(INSTALL) $^ $(DIST)/bin/chrome/icons/default
+
+install:: $(addprefix icons/$(ICON_DIR)/,$(DESKTOP_ICON_FILES))
+	$(SYSINSTALL) $(IFLAGS1) $^ $(DESTDIR)$(mozappdir)/chrome/icons/default
+endif
+
+ifeq ($(MOZ_WIDGET_TOOLKIT),cocoa)
+CMMSRCS += nsNativeAppSupportForCocoa.mm
+LDFLAGS += \
+        -framework Cocoa \
+        $(NULL)   
+endif
+
+ifeq ($(OS_ARCH),OS2)
+ifdef BUILD_STATIC_LIBS
+EXE_DEF_FILE = mozilla.def
+ifeq ($(MOZ_OS2_TOOLS),VACPP)
+OS_LIBS += libuls.lib libconv.lib
+else
+OS_LIBS += -llibuni -luconv
+endif
+endif
+endif
+
+SRCS_IN_OBJDIR=1 
+
+ifneq (,$(filter-out OS2 WINNT,$(OS_ARCH)))
+GARBAGE         += $(STACKWALK_SRC_LCSRCS) $(wildcard *.$(OBJ_SUFFIX))
+endif
+
+include $(topsrcdir)/config/rules.mk
+
+ifneq (,$(filter-out OS2 WINNT,$(OS_ARCH)))
+export:: $(STACKWALK_CPPSRCS)
+	$(INSTALL) $^ .
+endif
+
+ifdef BUILD_STATIC_LIBS
+include $(topsrcdir)/config/static-rules.mk
+endif
+
+ifeq ($(MOZ_WIDGET_TOOLKIT),gtk)
+$(PROGRAM): $(SPLASH_XPM)
+endif
+
+ifeq ($(OS_ARCH),Darwin)
+EXTRA_DSO_LDOPTS := $(subst -dynamiclib -install_name @executable_path/\$@ -compatibility_version 1 -current_version 1,-execute,$(EXTRA_DSO_LDOPTS))
+
+ifdef BUILD_STATIC_LIBS
+LDFLAGS	+= -framework QuickTime $(TK_LIBS)
+endif
+
+endif
+
+ifeq ($(OS_ARCH),WINNT)
+#
+# Control the default heap size.
+# This is the heap returned by GetProcessHeap().
+# As we use the CRT heap, the default size is too large and wastes VM.
+#
+# The default heap size is 1MB on Win32.
+# The heap will grow if need be.
+#
+# Set it to 256k.  See bug 127069.
+#
+LDFLAGS += /HEAP:0x40000
+endif
+
+CXXFLAGS	+= $(MOZ_TOOLKIT_REGISTRY_CFLAGS)
+
+LOCAL_INCLUDES	= -I$(srcdir) -I.
+
+ifneq (,$(filter-out OS2 WINNT,$(OS_ARCH)))
+mozilla.1: mozilla.man.in Makefile.in Makefile $(DEPTH)/config/autoconf.mk
+	@sed -e "s|\@bindir\@|${bindir}|" -e "s|\@libdir\@|${libdir}|" \
+		-e "s|\@mozilla_version\@|${MOZILLA_VERSION}|" < $< > $@
+
+libs:: mozilla.1
+	$(INSTALL) $< $(DIST)/man/man1
+
+install:: mozilla.1
+	$(SYSINSTALL) $(IFLAGS1) $< $(DESTDIR)$(mandir)/man1
+
+MOZILLA_SCRIPT=mozilla
+
+$(MOZILLA_SCRIPT):: mozilla.in Makefile.in Makefile $(DEPTH)/config/autoconf.mk
+	cat $< | sed -e "s|%MOZAPPDIR%|$(mozappdir)|" \
+		-e "s|%MREDIR%|$(mredir)|" \
+		-e "s|mozilla-bin|$(PROGRAM)|g" > $@
+	chmod +x $@
+
+libs:: $(MOZILLA_SCRIPT)
+	$(INSTALL) $< $(DIST)/bin
+
+install:: $(MOZILLA_SCRIPT)
+	$(SYSINSTALL) $(IFLAGS2) $< $(DESTDIR)$(bindir)
+
+GARBAGE += mozilla.1 $(MOZILLA_SCRIPT)
+
+endif
+
+ifeq ($(MOZ_WIDGET_TOOLKIT),photon)
+libs:: $(srcdir)/splash.bmp
+	$(INSTALL) $< $(DIST)/bin
+endif
+
+ifeq ($(OS_ARCH),OS2)
+LDFLAGS += /NOE
+ifdef BUILD_STATIC_LIBS
+$(EXE_DEF_FILE):
+	rm -f $@
+	@echo NAME mozilla >$(EXE_DEF_FILE)
+	@echo IMPORTS >>$(EXE_DEF_FILE)
+	@echo 	WinQueryProperty		= PMMERGE.5450 >>$(EXE_DEF_FILE)
+	@echo 	WinRemoveProperty		= PMMERGE.5451 >>$(EXE_DEF_FILE)
+	@echo 	WinSetProperty			= PMMERGE.5452 >>$(EXE_DEF_FILE)
+
+endif
+endif
+
+ifeq ($(MOZ_REORDER),1)
+
+LDSCRIPT = ldscript
+LDFLAGS += -Wl,-T,$(LDSCRIPT)
+GARBAGE += $(LDSCRIPT)
+ORDERFILE = $(srcdir)/mozilla-bin.order
+
+$(PROGRAM) : $(LDSCRIPT) $(ORDERFILE)
+
+$(LDSCRIPT): $(ORDERFILE)
+	$(PERL) $(topsrcdir)/config/mklinkscript.pl -o $@ $<
+
+endif
+
+libs::
+	touch $(DIST)/bin/.autoreg
+
+ifneq (,$(filter mac cocoa,$(MOZ_WIDGET_TOOLKIT)))
+
+INCLUDES += -I$(srcdir)/../appshell/src -I$(srcdir)/appleevents
+
+ifdef MOZ_DEBUG
+APP_NAME = MozillaDebug
+else
+APP_NAME = Mozilla
+endif
+
+libs:: $(PROGRAM)
+	mkdir -p $(DIST)/$(APP_NAME).app
+	cp -R $(srcdir)/macbuild/Contents $(DIST)/$(APP_NAME).app
+	mkdir -p $(DIST)/$(APP_NAME).app/Contents/MacOS
+	rsync -a -L $(DIST)/bin/ $(DIST)/$(APP_NAME).app/Contents/MacOS
+	cp -RL $(srcdir)/macbuild/mach.icns $(DIST)/$(APP_NAME).app/Contents/Resources/mach.icns
+	echo -n APPLMOZZ > $(DIST)/$(APP_NAME).app/Contents/PkgInfo
+clean clobber::
+	rm -rf $(DIST)/$(APP_NAME).app
+endif
+
+echo_objs:
+	@echo $(OBJS)
+
+README_FILE = $(topsrcdir)/README.txt
+
+libs::
+	$(INSTALL) $(README_FILE) $(DIST)/bin
+	$(INSTALL) $(topsrcdir)/LICENSE $(DIST)/bin
+

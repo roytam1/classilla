@@ -1,0 +1,85 @@
+#
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#
+# The Original Code is mozilla.org code.
+#
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation.  Portions created by Netscape are
+# Copyright (C) 1998 Netscape Communications Corporation. All
+# Rights Reserved.
+#
+# Contributor(s): 
+#
+
+DEPTH		= ../../..
+topsrcdir	= @top_srcdir@
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE		= wallet
+LIBRARY_NAME	= wallet
+EXPORT_LIBRARY = 1
+IS_COMPONENT	= 1
+MODULE_NAME	= nsWalletModule
+GRE_MODULE	= 1
+
+REQUIRES	= xpcom \
+		  string \
+		  necko \
+		  dom \
+		  gfx \
+		  layout \
+		  content \
+		  widget \
+		  uriloader \
+		  pref \
+		  webshell \
+		  docshell \
+		  intl \
+		  unicharutil \
+		  windowwatcher \
+		  $(NULL)
+
+CPPSRCS		= \
+		nsWalletFactory.cpp \
+		nsWalletService.cpp \
+		wallet.cpp \
+		singsign.cpp \
+		nsPassword.cpp \
+		nsPasswordManager.cpp \
+		nsBasicStreamGenerator.cpp \
+		$(NULL)
+
+DEFAULTS_FILES	= \
+		$(srcdir)/DistinguishedSchema.tbl \
+		$(srcdir)/FieldSchema.tbl \
+		$(srcdir)/VcardSchema.tbl \
+		$(srcdir)/SchemaConcat.tbl \
+		$(srcdir)/SchemaStrings.tbl \
+		$(srcdir)/PositionalSchema.tbl \
+		$(srcdir)/StateSchema.tbl \
+		$(NULL)
+
+EXTRA_DSO_LDOPTS = \
+		$(LIBS_DIRS) \
+		$(MOZ_UNICHARUTIL_LIBS) \
+		$(MOZ_COMPONENT_LIBS) \
+		$(NULL)
+
+include $(topsrcdir)/config/rules.mk
+
+libs::
+	$(INSTALL) $(DEFAULTS_FILES) $(DIST)/bin/defaults/wallet
+
+install::
+	$(SYSINSTALL) $(IFLAGS1) $(DEFAULTS_FILES) $(DESTDIR)$(mozappdir)/defaults/wallet

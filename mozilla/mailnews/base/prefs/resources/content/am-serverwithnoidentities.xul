@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+
+<?xml-stylesheet href="chrome://messenger/skin/accountManage.css" type="text/css"?>
+
+<!DOCTYPE window SYSTEM "chrome://messenger/locale/am-serverwithnoidentities.dtd" >
+
+<page xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+      onload="parent.onPanelLoaded('am-serverwithnoidentities.xul');">
+
+  <script src="chrome://messenger/content/am-serverwithnoidentities.js"/>
+
+  <dialogheader title="&accountTitle.label;"/>
+
+  <description class="secDesc">&accountSettingsDesc.label;</description>
+  <grid>
+    <columns>
+      <column flex="1"/>
+      <column flex="2"/>
+    </columns>
+    <rows>
+      <row align="center">
+        <label value="&accountName.label;" control="server.prettyName"/>
+        <textbox wsm_persist="true" size="30" id="server.prettyName"
+                 prefstring="mail.server.%serverkey%.name"/>
+      </row>
+    </rows>
+  </grid>
+  <spacer flex="1"/>
+  <vbox>
+    <label value="&localPath.label;"/>
+    <textbox wsm_persist="true" size="60" id="server.localPath" datatype="nsIFileSpec"
+             prefstring="mail.server.%serverkey%.directory" class="uri-element"/>
+  </vbox>
+</page>

@@ -1,0 +1,43 @@
+/*
+ * The contents of this file are subject to the Mozilla Public License
+ * Version 1.1 (the "License"); you may not use this file except in
+ * compliance with the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS"
+ * basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+ * License for the specific language governing rights and limitations
+ * under the License.
+ *
+ * The Original Code is the Mozilla OS/2 libraries.
+ *
+ * The Initial Developer of the Original Code is John Fairhurst,
+ * <john_fairhurst@iname.com>.  Portions created by John Fairhurst are
+ * Copyright (C) 1999 John Fairhurst. All Rights Reserved.
+ *
+ * Contributor(s): 
+ *
+ */
+
+#include <os2.h>
+#include "resource.h"
+
+/* pointers */
+POINTER IDC_SELECTANCHOR   res\select.ptr
+POINTER IDC_ARROWNORTH     res\arrow_north.ptr
+POINTER IDC_ARROWNORTHPLUS res\arrow_north_plus.ptr
+POINTER IDC_ARROWSOUTH     res\arrow_south.ptr
+POINTER IDC_ARROWSOUTHPLUS res\arrow_south_plus.ptr
+POINTER IDC_ARROWWEST      res\arrow_west.ptr
+POINTER IDC_ARROWWESTPLUS  res\arrow_west_plus.ptr
+POINTER IDC_ARROWEAST      res\arrow_east.ptr
+POINTER IDC_ARROWEASTPLUS  res\arrow_east_plus.ptr
+POINTER IDC_COPY           res\copy.ptr
+POINTER IDC_ALIAS          res\aliasb.ptr
+POINTER IDC_CELL           res\cell.ptr
+POINTER IDC_GRAB           res\grab.ptr
+POINTER IDC_GRABBING       res\grabbing.ptr
+POINTER IDC_ARROWWAIT      res\arrow_wait.ptr
+POINTER IDC_CROSS          res\crosshair.ptr
+POINTER IDC_HELP           res\help.ptr
+
