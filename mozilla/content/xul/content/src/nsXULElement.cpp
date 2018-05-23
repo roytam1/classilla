@@ -2499,23 +2499,56 @@ nsXULElement::SetAttr(nsINodeInfo* aNodeInfo,
     aNodeInfo->GetNameAtom(*getter_AddRefs(attrName));
     aNodeInfo->GetNamespaceID(attrns);
 
+// bug 209634
+#if(0)
     // XXXwaterson should likely also be conditioned on aNotify. Do we
     // need to BeginUpdate() here as well?
     if (mDocument) {
         mDocument->AttributeWillChange(this, attrns, attrName);
     }
+#endif
+// end bug
 
     rv = EnsureAttributes();
     if (NS_FAILED(rv)) return rv;
 
     // XXX Class and Style attribute setting should be checking for the XUL namespace!
+    // now they do: bug 209634
+    nsAutoString oldValue;
+    nsXULAttribute* attr = FindLocalAttribute(aNodeInfo);
+    nsXULPrototypeAttribute *protoattr = nsnull;
+    if (attr) {
+        attr->GetValue(oldValue);
+    } else {
+        // Don't have it locally, but might be shadowing a prototype attribute.
+        protoattr = FindPrototypeAttribute(aNodeInfo);
+        if (protoattr) {
+            protoattr->mValue.GetValue(oldValue);
+        }
+    }
+    // end bug
 
+
+// bug 209634
+    if ((attr || protoattr) && oldValue.Equals(aValue)) {
+        // do nothing if there is no change
+        return NS_OK;
+    }
+
+    // Send the update notification _before_ changing anything
+    if (mDocument && aNotify) {
+        mDocument->BeginUpdate();
+        mDocument->AttributeWillChange(this, attrns, attrName);
+    }
+// end bug
     // Check to see if the CLASS attribute is being set.  If so, we need to rebuild our
     // class list.
     if (aNodeInfo->Equals(nsXULAtoms::clazz, kNameSpaceID_None)) {
         Attributes()->UpdateClassList(aValue);
     }
 
+// bug 209634
+#if(0)
     // Check to see if the STYLE attribute is being set.  If so, we need to create a new
     // style rule based off the value of this attribute, and we need to let the document
     // know about the StyleRule change.
@@ -2526,30 +2559,54 @@ nsXULElement::SetAttr(nsINodeInfo* aNodeInfo,
         Attributes()->UpdateStyleRule(docURL, aValue);
         // XXX Some kind of special document update might need to happen here.
     }
+#else
+    // Check to see if the STYLE attribute is being set.  If so, we need to
+    // create a new style rule based off the value of this attribute, and we
+    // need to let the document know about the StyleRule change.
+    // XXXbz this should not be checking for mDocument; it should get
+    // the document off the nodeinfo
+    if (aNodeInfo->Equals(nsXULAtoms::style, kNameSpaceID_None) && mDocument) {
+        nsCOMPtr <nsIURI> docURL;
+        // modified for 1.3.1
+        //mDocument->GetBaseURL(getter_AddRefs(docURL));
+        mDocument->GetBaseURL(*getter_AddRefs(docURL));
+        Attributes()->UpdateStyleRule(docURL, aValue);
+    }
+#endif
+// end bug
 
     nsCOMPtr<nsIAtom> tag;
     GetTag(*getter_AddRefs(tag));
 
     if (tag == nsXULAtoms::window &&
         aNodeInfo->Equals(nsXULAtoms::hidechrome)) {
-      nsAutoString val;
-      val.Assign(aValue);
+      //nsAutoString val;
+      //val.Assign(aValue);
+      nsAutoString val(aValue);
       HideWindowChrome(val.EqualsIgnoreCase("true"));
     }
 
     // XXX need to check if they're changing an event handler: if so, then we need
     // to unhook the old one.
 
-    nsXULAttribute* attr = FindLocalAttribute(aNodeInfo);
-    PRBool modification;
-    nsAutoString oldValue;
+// bug 209634
+    //nsXULAttribute* attr = FindLocalAttribute(aNodeInfo);
+    //PRBool modification;
+    //nsAutoString oldValue;
+    
+    // Save whether this is a modification before we muck with the attr pointer.
+    PRBool modification = attr || protoattr; 
+// end bug
 
     if (attr) {
-        attr->GetValue(oldValue);
+    // bug 209634
+        //attr->GetValue(oldValue);
         attr->SetValueInternal(aValue);
-        modification = PR_TRUE;
+        //modification = PR_TRUE;
     }
     else {
+// bug 209634
+#if(0)
         // Don't have it locally, but might be shadowing a prototype attribute.
         nsXULPrototypeAttribute *protoattr = FindPrototypeAttribute(aNodeInfo);
         if (protoattr) {
@@ -2558,7 +2615,9 @@ nsXULElement::SetAttr(nsINodeInfo* aNodeInfo,
         } else {
             modification = PR_FALSE;
         }
-            
+#endif
+// end bug
+		// Need to create a local attr    
         rv = nsXULAttribute::Create(NS_STATIC_CAST(nsIStyledContent*, this),
                                     aNodeInfo, aValue, &attr);
         if (NS_FAILED(rv)) return rv;
@@ -2621,6 +2680,8 @@ nsXULElement::SetAttr(nsINodeInfo* aNodeInfo,
                                     StyleHintFor(NodeInfo()));
 
         // XXXwaterson do we need to mDocument->EndUpdate() here?
+        // YUP! bug 209634
+        mDocument->EndUpdate();
       }
     }
 

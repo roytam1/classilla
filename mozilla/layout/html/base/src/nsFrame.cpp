@@ -2641,6 +2641,7 @@ nsFrame::Invalidate(nsIPresContext* aPresContext,
 //  the Viewport, GFXScroll, ScrollPort, and Canvas
 #define MAX_FRAME_DEPTH (MAX_REFLOW_DEPTH+4)
 
+
 PRBool
 nsFrame::IsFrameTreeTooDeep(const nsHTMLReflowState& aReflowState,
                             nsHTMLReflowMetrics& aMetrics)
@@ -4399,6 +4400,49 @@ nsFrame::GetAccessible(nsIAccessible** aAccessible)
   return NS_ERROR_NOT_IMPLEMENTED;
 }
 #endif
+
+// bug 173277 modified for 1.3.1 + Clecko
+void
+nsFrame::ConsiderChildOverflow(nsIPresContext* aPresContext,
+                               nsRect&         aOverflowArea,
+                               nsIFrame*       aChildFrame)
+{
+  //if (GetStyleDisplay()->mOverflow != NS_STYLE_OVERFLOW_HIDDEN) {
+  const nsStyleDisplay* display;
+  ::GetStyleData(mStyleContext, &display);
+  // check here also for scrollbar none as table frames (table, tr and td) currently 
+  // don't wrap their content into a scrollable frame if overflow is specified
+
+  //if (display->mOverflow != NS_STYLE_OVERFLOW_HIDDEN) {
+  if (NS_STYLE_OVERFLOW_CLIP != display->mOverflow &&
+      NS_STYLE_OVERFLOW_HIDDEN != display->mOverflow) { // bug 69355 + backbugs
+
+    //nsRect* overflowArea = aChildFrame->GetOverflowAreaProperty(aPresContext);
+  	nsRect *overflowArea = aChildFrame->GetOverflowAreaProperty(aPresContext, PR_FALSE);
+
+    if (overflowArea) {
+      nsRect childOverflow(*overflowArea);
+      
+      //childOverflow.MoveBy(aChildFrame->GetPosition());
+      nsIView *view;
+	  nsresult rv = aChildFrame->GetView(aPresContext, &view);
+	  if(NS_SUCCEEDED(rv) && view) {
+	  	int x, y;
+	  	nsresult rv = view->GetPosition(&x, &y);
+      	childOverflow.MoveBy(x, y);
+      	
+      aOverflowArea.UnionRect(aOverflowArea, childOverflow);
+      }
+    }
+    else {
+      //aOverflowArea.UnionRect(aOverflowArea, aChildFrame->GetRect());
+      nsRect childRect;
+      aChildFrame->GetRect(childRect);
+      aOverflowArea.UnionRect(aOverflowArea, childRect);
+    }
+  }
+}
+// end bug
 
 NS_IMETHODIMP 
 nsFrame::GetParentStyleContextFrame(nsIPresContext* aPresContext,

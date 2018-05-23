@@ -322,6 +322,7 @@ nsViewManager::nsViewManager()
   // assumed to be cleared here.
   mX = 0;
   mY = 0;
+  mLastUpdateFlags = 0;
   mCachingWidgetChanges = 0;
   mDefaultBackgroundColor = NS_RGBA(0, 0, 0, 0);
   mAllowDoubleBuffering = PR_TRUE; 
@@ -676,7 +677,9 @@ void nsViewManager::Refresh(nsView *aView, nsIRenderingContext *aContext, nsIReg
       aUpdateFlags &= ~NS_VMREFRESH_DOUBLE_BUFFER;
   }
   
-  if (PR_FALSE == mAllowDoubleBuffering) {
+  if (
+  		//1 || // hit this to completely disable double buffering for display analysis
+  		PR_FALSE == mAllowDoubleBuffering) {
     // Turn off double-buffering of the display
     aUpdateFlags &= ~NS_VMREFRESH_DOUBLE_BUFFER;
   }
@@ -712,6 +715,77 @@ void nsViewManager::Refresh(nsView *aView, nsIRenderingContext *aContext, nsIReg
   aRegion->GetBoundingBox(&damageRectInPixels.x, &damageRectInPixels.y,
                           &damageRectInPixels.width, &damageRectInPixels.height);
 
+#if(0)
+// Test stubs I use(d) for debugging double buffering.
+
+/* These are written this way because if I don't, then the optimizer optimizes them
+   away as dummy bodies and nothing is left to attach breakpoints to. -- Cameron */
+#define DRIPTESTLT(_x, _z) \
+  if (damageRectInPixels.##_x## <= ##_z##)
+#define DRBODY \
+    PRInt32 xqz = damageRectInPixels.x ; \
+    damageRectInPixels.x = 60 ; \
+    damageRectInPixels.x = xqz ;
+#define DRIPTESTGT(_x, _z) \
+  if (damageRectInPixels.##_x## >= ##_z##)
+
+DRIPTESTLT(y, -1) {
+	DRBODY
+}
+DRIPTESTLT(height, 0) {
+	DRBODY
+}
+DRIPTESTGT(y, 1080) {
+	DRBODY
+}
+DRIPTESTGT(height, 1080) {
+	DRBODY
+}
+#endif
+
+// Do this first so that we have damageRect in appunits in case we need
+// Classilla issue 65 to become relevant. Won't hurt anything else.
+  nsRect damageRect;
+  float  p2t;
+  mContext->GetDevUnitsToAppUnits(p2t);
+  damageRect.x = NSToIntRound(damageRectInPixels.x * p2t);
+  damageRect.y = NSToIntRound(damageRectInPixels.y * p2t);
+  damageRect.width = NSToIntRound(damageRectInPixels.width * p2t);
+  damageRect.height = NSToIntRound(damageRectInPixels.height * p2t);
+  
+// This works around the double buffering problem that caused
+// issue 65
+// OS X doesn't need this, because OS X has no double buffering (the wm does it).
+#if defined(XP_MAC) && !defined(TARGET_CARBON)
+/* If our damageRect goes off the screen, then double buffering fails. For those
+	damageRects we simply disable double buffering. This is good enough in most
+	practical cases. -- Cameron */
+   
+  if (
+  		//0 && 
+  		(aUpdateFlags & NS_VMREFRESH_DOUBLE_BUFFER)) {
+  	// Figure out how tall the screen is by asking our device context for dimensions.
+  	nsCOMPtr<nsIDeviceContext> dc;
+  	localcx->GetDeviceContext(*getter_AddRefs(dc));
+  	if (dc == nsnull) { // this is a big WTF. can't think where it would occur tho.
+  		NS_WARNING("wtf: RenderingContext has no DeviceContext");
+  		return;
+  	}
+  	PRInt32 dc_width, dc_height;
+  	dc->GetDeviceSurfaceDimensions(dc_width, dc_height); // IN APP UNITS! NOT PIXELS.
+  	if ((dc_height > 0 && // mild paranoia: ensure valid hgt, and no rect part outside it
+  		(damageRect.y >= dc_height || 
+  		 damageRect.y + damageRect.height >= dc_height)) ||
+  	    (dc_width > 0 && // ditto for width
+  	  	(damageRect.x >= dc_width ||
+  	  	 damageRect.x + damageRect.width >= dc_width))) {
+  	   // Fail. Remove the double buffer flag and render straight out.
+  	   aUpdateFlags &= ~NS_VMREFRESH_DOUBLE_BUFFER;
+  	}
+  }
+#endif
+// end issue
+
   if (aUpdateFlags & NS_VMREFRESH_DOUBLE_BUFFER)
   {
     nsRect maxWidgetSize;
@@ -725,19 +799,11 @@ void nsViewManager::Refresh(nsView *aView, nsIRenderingContext *aContext, nsIReg
   nsRect viewRect;
   aView->GetDimensions(viewRect);
 
-  nsRect damageRect;
-  nsRect paintRect;
-  float  p2t;
-  mContext->GetDevUnitsToAppUnits(p2t);
-  damageRect.x = NSToIntRound(damageRectInPixels.x * p2t);
-  damageRect.y = NSToIntRound(damageRectInPixels.y * p2t);
-  damageRect.width = NSToIntRound(damageRectInPixels.width * p2t);
-  damageRect.height = NSToIntRound(damageRectInPixels.height * p2t);
-  
   // move the view rect into widget coordinates
   viewRect.x = 0;
   viewRect.y = 0;
-
+  
+  nsRect paintRect;
   if (paintRect.IntersectRect(damageRect, viewRect)) {
 
     if ((aUpdateFlags & NS_VMREFRESH_DOUBLE_BUFFER) && ds) {  
@@ -803,6 +869,7 @@ void nsViewManager::Refresh(nsView *aView, nsIRenderingContext *aContext, nsIReg
   }
 
   localcx->ReleaseBackbuffer();
+  mLastUpdateFlags = aUpdateFlags; // issue 28
 
 #ifdef NS_VM_PERF_METRICS
   MOZ_TIMER_DEBUGLOG(("Stop: nsViewManager::Refresh(region), this=%p\n", this));
@@ -1427,14 +1494,34 @@ void nsViewManager::ProcessPendingUpdates(nsView* aView)
   if (nsnull == aView) {
     return;
   }
+  
   PRBool hasWidget;
   aView->HasWidget(&hasWidget);
   if (hasWidget) {
+// bug 141901
+    // Check to see if the visibility matches between the view and widget.
+    // If they dont match then showing/hiding the widget was deferred.
+    nsViewVisibility viewVisibility = aView->GetVisibility();
+    nsCOMPtr<nsIWidget> widget;
+    aView->GetWidget(*getter_AddRefs(widget));
+    if (widget) {
+      PRBool widgetVisibility;
+      widget->IsVisible(widgetVisibility);
+      if (((viewVisibility == nsViewVisibility_kShow) != widgetVisibility)) {
+        // Process the deferred show/hide of the view's widget
+        widget->Show(viewVisibility == nsViewVisibility_kShow);
+      }
+    }
+// end bug
     nsCOMPtr<nsIRegion> dirtyRegion;
     aView->GetDirtyRegion(*getter_AddRefs(dirtyRegion));
     if (dirtyRegion != nsnull && !dirtyRegion->IsEmpty()) {
+// bug 141901
+#if(0)
       nsCOMPtr<nsIWidget> widget;
       aView->GetWidget(*getter_AddRefs(widget));
+#endif
+// end bug
       if (widget) {
         widget->InvalidateRegion(dirtyRegion, PR_FALSE);
       }
@@ -1537,6 +1624,8 @@ PRBool nsViewManager::UpdateWidgetArea(nsView *aWidgetView, const nsRect &aDamag
   nsViewVisibility visible;
   aWidgetView->GetVisibility(visible);
   if (nsViewVisibility_kHide == visible) {
+#if(0)
+// removed by byg 141901
 #ifdef DEBUG
     // Assert if view is hidden but widget is visible
     nsCOMPtr<nsIWidget> widget;
@@ -1546,6 +1635,7 @@ PRBool nsViewManager::UpdateWidgetArea(nsView *aWidgetView, const nsRect &aDamag
       widget->IsVisible(visible);
       NS_ASSERTION(!visible, "View is hidden but widget is visible!");
     }
+#endif
 #endif
     return PR_FALSE;
   }
@@ -3217,6 +3307,13 @@ NS_IMETHODIMP nsViewManager::EnableRefresh(PRUint32 aUpdateFlags)
   return NS_OK;
 }
 
+// bug 141901
+PRBool nsViewManager::IsBatchingUpdates(void)
+{ 
+  return mUpdateBatchCnt > 0;
+}
+// end bug
+
 NS_IMETHODIMP nsViewManager::BeginUpdateViewBatch(void)
 {
   nsresult result = NS_OK;
@@ -3689,7 +3786,8 @@ nsresult nsViewManager::OptimizeDisplayList(const nsRect& aDamageRect, nsRect& a
         tmpRgn.GetBoundRect(element->mBounds);
 
         // a view is opaque if it is neither transparent nor transluscent
-        if (!(element->mFlags & (VIEW_TRANSPARENT | VIEW_TRANSLUCENT))) {
+        if (!(element->mFlags & (VIEW_TRANSPARENT | VIEW_TRANSLUCENT))
+        	&& !(element->mFlags & VIEW_TRANSLUCENT)) { // bug 231585
           aOpaqueRegion.Or(aOpaqueRegion, element->mBounds);
         }
       }

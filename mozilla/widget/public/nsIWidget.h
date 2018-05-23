@@ -42,6 +42,8 @@
 #include "nsColor.h"
 #include "nsIMouseListener.h"
 #include "nsIMenuListener.h"
+#include "nsIScrollableView.h" // issue 28
+#include "nsIViewManager.h" // issue 28
 #include "nsCoord.h"
 
 #include "prthread.h"
@@ -89,6 +91,9 @@ typedef nsEventStatus (*PR_CALLBACK EVENT_CALLBACK)(nsGUIEvent *event);
 #define NS_NATIVE_OFFSETY		7
 #define NS_NATIVE_PLUGIN_PORT	8
 #define NS_NATIVE_SCREEN      9
+
+// Flags for ::Scroll.
+#define NS_WIDGET_ALWAYS_FAST_SCROLL	1
 
 // {18032AD5-B265-11d1-AA2A-000000000000}
 #define NS_IWIDGET_IID \
@@ -695,7 +700,8 @@ class nsIWidget : public nsISupports {
      *
      */
 
-    NS_IMETHOD Scroll(PRInt32 aDx, PRInt32 aDy, nsRect *aClipRect) = 0;
+    NS_IMETHOD Scroll(PRInt32 aDx, PRInt32 aDy, nsRect *aClipRect,
+    	nsIScrollableView *scrollView, nsIViewManager *viewManager, PRUint32 aFlags) = 0;
 
     /**
      * Scroll the contents of the widget. 

@@ -552,21 +552,28 @@ nsBlockReflowState::RecoverFloaters(nsLineList::iterator aLine,
   } else if (aLine->IsBlock()) {
     nsBlockFrame *kid = nsnull;
     aLine->mFirstChild->QueryInterface(kBlockFrameCID, (void**)&kid);
-//    nsFrameState frameState;
-//    kid->GetFrameState(&frameState); // kid->GetStateBits()
-//   if (kid && (frameState & NS_BLOCK_SPACE_MGR)) { // pull up 1.7.1
-	 if(kid) { 
-      nscoord kidx = kid->mRect.x, kidy = kid->mRect.y;
 
-#if(0)      
-      // pull up to 1.7.1
+// bug 205087 modified for Classilla
+#if(0)
+    if (kid) {
+      nscoord kidx = kid->mRect.x, kidy = kid->mRect.y;
+      mSpaceManager->Translate(kidx, kidy);
+#else
+    // don't recover any state inside a block that has its own space
+    // manager (we don't currently have any blocks like this, though,
+    // thanks to our use of extra frames for 'overflow')
+    nsFrameState frameState;
+    kid->GetFrameState(&frameState); // kid->GetStateBits()
+    if (kid && !(frameState & NS_BLOCK_SPACE_MGR)) { // pull up 1.7.1
+      nscoord kidx = kid->mRect.x, kidy = kid->mRect.y;
+     
       // If the element is relatively positioned, then adjust x and y
       // accordingly so that we consider relatively positioned frames
       // at their original position.
       //if (NS_STYLE_POSITION_RELATIVE == kid->GetStyleDisplay()->mPosition) {
       const nsStyleDisplay* display;
       kid->GetStyleData(eStyleStruct_Display, (const nsStyleStruct*&)display);
-	  if (display->mPosition == NS_STYLE_POSITION_RELATIVE)
+	  if (display->mPosition == NS_STYLE_POSITION_RELATIVE) {
         //nsPoint *offsets = NS_STATIC_CAST(nsPoint*,
           //mPresContext->FrameManager()->GetFrameProperty(kid,
           //                          nsLayoutAtoms::computedOffsetProperty, 0));    	  
@@ -576,17 +583,16 @@ nsBlockReflowState::RecoverFloaters(nsLineList::iterator aLine,
     	nsCOMPtr<nsIFrameManager> frameManager;
     	presShell->GetFrameManager(getter_AddRefs(frameManager));
     	frameManager->GetFrameProperty(kid, nsLayoutAtoms::computedOffsetProperty, 0,
-    		&offsets);
-        if (offsets) {
+    		(void **)&offsets);
+    	if (offsets) {
           kidx -= offsets->x; // tx -= offsets->x;
           kidy -= offsets->y; // ty -= offsets->y;
         }
       }
-      // end pull up
-#endif
-// we don't have computedOffsetProperty.
       
       mSpaceManager->Translate(kidx, kidy);
+#endif
+// end bug
       for (nsBlockFrame::line_iterator line = kid->begin_lines(),
                                    line_end = kid->end_lines();
            line != line_end;
@@ -1095,8 +1101,11 @@ nsBlockReflowState::FlowAndPlaceFloater(nsFloaterCache* aFloaterCache,
   else {
     isLeftFloater = PR_FALSE;
     if (NS_UNCONSTRAINEDSIZE != mAvailSpaceRect.width) {
+    // bug 205087
+#if(0)
       nsIFrame* prevInFlow;
       floater->GetPrevInFlow(&prevInFlow);
+#endif
       if (prevInFlow) {
         region.x = prevRect.x;
       }

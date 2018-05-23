@@ -578,10 +578,10 @@ sub ProcessJarManifests()
     # a hash of jars passed as context to the following calls
     my(%jars);
     
-    if ($main::options{chatzilla})
-    {
-      CreateJarFromManifest(":mozilla:extensions:irc:jar.mn", $chrome_dir, \%jars);
-    }
+    #if ($main::options{chatzilla})
+    #{
+    #  CreateJarFromManifest(":mozilla:extensions:irc:jar.mn", $chrome_dir, \%jars);
+    #}
     if ($main::options{content_packs})
     {
       CreateJarFromManifest(":mozilla:extensions:content-packs:resources:jar.mn", $chrome_dir, \%jars);
@@ -628,7 +628,7 @@ sub ProcessJarManifests()
     CreateJarFromManifest(":mozilla:embedding:browser:chrome:locale:en-US:jar.mn", $chrome_dir, \%jars);
     CreateJarFromManifest(":mozilla:extensions:cookie:jar.mn", $chrome_dir, \%jars);
     CreateJarFromManifest(":mozilla:extensions:pref:autoconfig:resources:jar.mn", $chrome_dir, \%jars);
-    CreateJarFromManifest(":mozilla:extensions:irc:jar.mn", $chrome_dir, \%jars);
+    #CreateJarFromManifest(":mozilla:extensions:irc:jar.mn", $chrome_dir, \%jars);
     CreateJarFromManifest(":mozilla:extensions:wallet:jar.mn", $chrome_dir, \%jars);
     CreateJarFromManifest(":mozilla:intl:uconv:src:jar.mn", $chrome_dir, \%jars);
     CreateJarFromManifest(":mozilla:htmlparser:src:jar.mn", $chrome_dir, \%jars);
@@ -2293,10 +2293,11 @@ sub BuildExtensionsProjects()
     my($packages_chrome_dir) = "$chrome_dir" . "packages:";
 
     # Chatzilla
-    if ($main::options{chatzilla})
-    {
-      InstallResources(":mozilla:extensions:irc:js:lib:MANIFEST_COMPONENTS", "$components_dir");
-    }
+    #... is now unconditionally disabled
+    #if ($main::options{chatzilla})
+    #{
+    #  InstallResources(":mozilla:extensions:irc:js:lib:MANIFEST_COMPONENTS", "$components_dir");
+    #}
     
     # XML-RPC
     if ($main::options{xml_rpc})
@@ -2609,8 +2610,10 @@ sub BuildProjects()
     }
 
     BuildXPIDLCompiler();
-    BuildIDLProjects();    
-    #BuildStubs();
+    BuildIDLProjects();
+    
+    #print "\007Stubs ARE NOT BUILT\n";    
+    BuildStubs();
     
     BuildRuntimeProjects();
     BuildCommonProjects();

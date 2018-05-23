@@ -305,6 +305,7 @@ function StyleRuleView(aObject)
   if (doesQI(aObject, "nsIDOMCSSStyleSheet")) {
     this.mSheetRules = aObject.cssRules;
   } else {
+/* bug 188803
     this.mRules = this.mDOMUtils.getStyleRules(aObject);
   }
 
@@ -316,7 +317,8 @@ function StyleRuleView(aObject)
       } catch (ex) {
         this.mRules.RemoveElement(rule);
       }
-    }
+    } */
+    this.mRules = this.mDOMUtils.getCSSStyleRules(aObject);
   }
 }
 

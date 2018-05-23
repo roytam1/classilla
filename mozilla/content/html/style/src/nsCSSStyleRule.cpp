@@ -59,8 +59,10 @@
 #include "nsUnitConversion.h"
 #include "nsIFontMetrics.h"
 #include "nsIDOMCSSStyleSheet.h"
-#include "nsIDOMCSSRule.h"
-#include "nsIDOMCSSStyleRule.h"
+// bug 188803
+#include "nsICSSStyleRuleDOMWrapper.h"
+//#include "nsIDOMCSSRule.h"
+//#include "nsIDOMCSSStyleRule.h"
 #include "nsIDOMCSSStyleDeclaration.h"
 #include "nsDOMCSSDeclaration.h"
 #include "nsINameSpaceManager.h"
@@ -74,6 +76,8 @@
 
 #include "nsContentUtils.h"
 
+// bug 125246
+#if(0)
 // #define DEBUG_REFS
  
 static NS_DEFINE_IID(kISupportsIID, NS_ISUPPORTS_IID);
@@ -94,6 +98,8 @@ static NS_DEFINE_IID(kCSSXULSID, NS_CSS_XUL_SID);
 #ifdef MOZ_SVG
 static NS_DEFINE_IID(kCSSSVGSID, NS_CSS_SVG_SID);
 #endif
+#endif
+// end bug
 
 // -- nsCSSSelector -------------------------------
 
@@ -215,9 +221,13 @@ PRBool nsAtomStringList::Equals(const nsAtomStringList* aOther) const
 
 MOZ_DECL_CTOR_COUNTER(nsAttrSelector)
 
+// bug 125246
+#if(0)
 #ifdef DEBUG_REFS
 PRUint32 gAttrSelectorCount=0;
 #endif
+#endif
+// end bug
 
 nsAttrSelector::nsAttrSelector(PRInt32 aNameSpace, const nsString& aAttr)
   : mNameSpace(aNameSpace),
@@ -229,10 +239,14 @@ nsAttrSelector::nsAttrSelector(PRInt32 aNameSpace, const nsString& aAttr)
 {
   MOZ_COUNT_CTOR(nsAttrSelector);
 
+// bug 125246
+#if(0)
 #ifdef DEBUG_REFS
   gAttrSelectorCount++;
   printf( "nsAttrSelector Instances (ctor): %ld\n", (long)gAttrSelectorCount);
 #endif
+#endif
+// end bug
 
   mAttr = NS_NewAtom(aAttr);
 }
@@ -248,10 +262,14 @@ nsAttrSelector::nsAttrSelector(PRInt32 aNameSpace, const nsString& aAttr, PRUint
 {
   MOZ_COUNT_CTOR(nsAttrSelector);
 
+// bug 125246
+#if(0)
 #ifdef DEBUG_REFS
   gAttrSelectorCount++;
   printf( "nsAttrSelector Instances (ctor): %ld\n", (long)gAttrSelectorCount);
 #endif
+#endif
+// end bug
 
   mAttr = NS_NewAtom(aAttr);
 }
@@ -266,10 +284,14 @@ nsAttrSelector::nsAttrSelector(const nsAttrSelector& aCopy)
 {
   MOZ_COUNT_CTOR(nsAttrSelector);
 
+// bug 125246
+#if(0)
 #ifdef DEBUG_REFS
   gAttrSelectorCount++;
   printf( "nsAttrSelector Instances (cp-ctor): %ld\n", (long)gAttrSelectorCount);
 #endif
+#endif
+// end bug
 
   NS_IF_ADDREF(mAttr);
   NS_IF_COPY(mNext, aCopy.mNext, nsAttrSelector);
@@ -279,9 +301,12 @@ nsAttrSelector::~nsAttrSelector(void)
 {
   MOZ_COUNT_DTOR(nsAttrSelector);
 
+// bug 125246
+#if(0)
 #ifdef DEBUG_REFS
   gAttrSelectorCount--;
   printf( "nsAttrSelector Instances (dtor): %ld\n", (long)gAttrSelectorCount);
+#endif
 #endif
 
   NS_IF_RELEASE(mAttr);
@@ -355,8 +380,11 @@ void nsAttrSelector::SizeOf(nsISizeOfHandler *aSizeOfHandler, PRUint32 &aSize)
 
 MOZ_DECL_CTOR_COUNTER(nsCSSSelector)
 
+// bug 125246
+#if(0)
 #ifdef DEBUG_REFS
 PRUint32 gSelectorCount=0;
+#endif
 #endif
 
 nsCSSSelector::nsCSSSelector(void)
@@ -371,10 +399,14 @@ nsCSSSelector::nsCSSSelector(void)
 {
   MOZ_COUNT_CTOR(nsCSSSelector);
 
+// bug 125246
+#if(0)
 #ifdef DEBUG_REFS
   gSelectorCount++;
   printf( "nsCSSSelector Instances (ctor): %ld\n", (long)gSelectorCount);
 #endif
+#endif
+// end bug
 }
 
 nsCSSSelector::nsCSSSelector(const nsCSSSelector& aCopy) 
@@ -393,11 +425,15 @@ nsCSSSelector::nsCSSSelector(const nsCSSSelector& aCopy)
   NS_IF_COPY(mPseudoClassList, aCopy.mPseudoClassList, nsAtomStringList);
   NS_IF_COPY(mAttrList, aCopy.mAttrList, nsAttrSelector);
   NS_IF_COPY(mNegations, aCopy.mNegations, nsCSSSelector);
-  
+
+// bug 125246
+#if(0)  
 #ifdef DEBUG_REFS
   gSelectorCount++;
   printf( "nsCSSSelector Instances (cp-ctor): %ld\n", (long)gSelectorCount);
 #endif
+#endif
+// end bug
 }
 
 nsCSSSelector::~nsCSSSelector(void)  
@@ -405,10 +441,14 @@ nsCSSSelector::~nsCSSSelector(void)
   MOZ_COUNT_DTOR(nsCSSSelector);
   Reset();
 
+// bug 125246
+#if(0)
 #ifdef DEBUG_REFS
   gSelectorCount--;
   printf( "nsCSSSelector Instances (dtor): %ld\n", (long)gSelectorCount);
 #endif
+#endif
+// end bug
 }
 
 nsCSSSelector& nsCSSSelector::operator=(const nsCSSSelector& aCopy)
@@ -1007,6 +1047,8 @@ nsCSSSelectorList::Clone()
 
 // -- CSSImportantRule -------------------------------
 
+// bug 125246
+#if(0)
 // New map helpers shared by both important and regular rules.
 static nsresult MapFontForDeclaration(nsCSSDeclaration* aDecl, nsRuleDataFont& aFont);
 static nsresult MapDisplayForDeclaration(nsCSSDeclaration* aDecl, const nsStyleStructID& aID, nsRuleDataDisplay& aDisplay);
@@ -1026,6 +1068,8 @@ static nsresult MapXULForDeclaration(nsCSSDeclaration* aDecl, nsRuleDataXUL& aXU
 #ifdef MOZ_SVG
 static nsresult MapSVGForDeclaration(nsCSSDeclaration* aDecl, nsRuleDataSVG& aSVG);
 #endif
+#endif
+// end bug
 
 class CSSStyleRuleImpl;
 
@@ -1079,6 +1123,8 @@ CSSImportantRule::GetStyleSheet(nsIStyleSheet*& aSheet) const
 NS_IMETHODIMP
 CSSImportantRule::MapRuleInfoInto(nsRuleData* aRuleData)
 {
+// bug 125246
+#if(0)
   if (!aRuleData)
     return NS_OK;
 
@@ -1112,6 +1158,10 @@ CSSImportantRule::MapRuleInfoInto(nsRuleData* aRuleData)
 #endif
 
   return NS_OK;
+#else
+  return mDeclaration->MapImportantRuleInfoInto(aRuleData);
+#endif
+// end bug
 }
 
 #ifdef DEBUG
@@ -1176,20 +1226,27 @@ void CSSImportantRule::SizeOf(nsISizeOfHandler *aSizeOfHandler, PRUint32 &aSize)
 #endif
 
 // -- nsDOMStyleRuleDeclaration -------------------------------
+// -- nsDOMCSSDeclarationImpl ---------------------------------
 
+class DOMCSSStyleRuleImpl; // bug 188803
 class DOMCSSDeclarationImpl : public nsDOMCSSDeclaration
 {
 public:
   DOMCSSDeclarationImpl(nsICSSStyleRule *aRule);
-  ~DOMCSSDeclarationImpl(void);
+  //~DOMCSSDeclarationImpl(void);
+  virtual ~DOMCSSDeclarationImpl(void); // bug 188803
 
-  NS_IMETHOD RemoveProperty(const nsAString& aPropertyName, 
-                            nsAString& aReturn);
+// bug 188803
+//  NS_IMETHOD RemoveProperty(const nsAString& aPropertyName, 
+//                            nsAString& aReturn);
 
+  virtual nsresult GetParentRule(nsIDOMCSSRule **aParent); // bug 188803
   virtual void DropReference(void);
   virtual nsresult GetCSSDeclaration(nsCSSDeclaration **aDecl,
                                      PRBool aAllocate);
 //  virtual nsresult SetCSSDeclaration(nsCSSDeclaration *aDecl); // bug 171830
+// bug 188803
+#if(0)
   virtual nsresult GetCSSParsingEnvironment(nsICSSStyleRule* aRule,
                                             nsICSSStyleSheet** aSheet,
                                             nsIDocument** aDocument,
@@ -1201,28 +1258,85 @@ public:
   virtual nsresult ParseDeclaration(const nsAString& aDecl,
                                     PRBool aParseOnlyOneDecl,
                                     PRBool aClearOldDecl);
-  virtual nsresult GetParent(nsISupports **aParent);
+#else
+  virtual nsresult GetCSSParsingEnvironment(nsIURI** aURI,
+                                            nsICSSLoader** aCSSLoader,
+                                            nsICSSParser** aCSSParser);
+#endif
+// end bug
+  // virtual nsresult GetParent(nsISupports **aParent); // bug 188803
+  virtual nsresult DeclarationChanged(); // bug 188803
 
+// bug 188803
+  // Override |AddRef| and |Release| for being a member of
+  // |DOMCSSStyleRuleImpl|.
+  NS_IMETHOD_(nsrefcnt) AddRef(void);
+  NS_IMETHOD_(nsrefcnt) Release(void);
+
+  friend class DOMCSSStyleRuleImpl;
+// end bug
+  
 protected:
   nsICSSStyleRule *mRule;
+// inserted by bug 188803
+  // This reference is not reference-counted. The rule object tells us
+  // when it's about to go away.
+
+  inline DOMCSSStyleRuleImpl* DomRule();
+
+private:
+  // NOT TO BE IMPLEMENTED
+  // This object cannot be allocated on its own.  It must be a member of
+  // DOMCSSStyleRuleImpl.
+  void* operator new(size_t size) CPP_THROW_NEW;
+};
+
+class DOMCSSStyleRuleImpl : public nsICSSStyleRuleDOMWrapper
+{
+public:
+  DOMCSSStyleRuleImpl(nsICSSStyleRule *aRule);
+  virtual ~DOMCSSStyleRuleImpl();
+
+  NS_DECL_ISUPPORTS
+  NS_DECL_NSIDOMCSSRULE
+  NS_DECL_NSIDOMCSSSTYLERULE
+
+  // nsICSSStyleRuleDOMWrapper
+  NS_IMETHOD GetCSSStyleRule(nsICSSStyleRule **aResult);
+
+  DOMCSSDeclarationImpl* DOMDeclaration() { return &mDOMDeclaration; }
+
+  friend class DOMCSSDeclarationImpl;
+
+protected:
+  DOMCSSDeclarationImpl mDOMDeclaration;
+
+  nsICSSStyleRule* Rule() {
+    return mDOMDeclaration.mRule;
+  }
+// end bug
 };
 
 MOZ_DECL_CTOR_COUNTER(DOMCSSDeclarationImpl)
 
 DOMCSSDeclarationImpl::DOMCSSDeclarationImpl(nsICSSStyleRule *aRule)
+: mRule(aRule) // bug 188803
 {
   MOZ_COUNT_CTOR(DOMCSSDeclarationImpl);
 
   // This reference is not reference-counted. The rule
   // object tells us when its about to go away.
-  mRule = aRule;
+  // no it doesn't. bug 188803 // mRule = aRule;
 }
 
 DOMCSSDeclarationImpl::~DOMCSSDeclarationImpl(void)
 {
+  NS_ASSERTION(!mRule, "DropReference not called.");
   MOZ_COUNT_DTOR(DOMCSSDeclarationImpl);
 }
 
+// bug 188803
+#if(0)
 NS_IMETHODIMP
 DOMCSSDeclarationImpl::RemoveProperty(const nsAString& aPropertyName, 
                                       nsAString& aReturn)
@@ -1247,14 +1361,22 @@ DOMCSSDeclarationImpl::RemoveProperty(const nsAString& aPropertyName,
       owningDoc->BeginUpdate();
     }
     nsCSSProperty prop = nsCSSProps::LookupProperty(aPropertyName);
+// bug 125246
+#if(0)
     nsCSSValue val;
 
     rv = decl->RemoveProperty(prop, val);
+#else
+    decl->GetValue(prop, aReturn);
+
+    rv = decl->RemoveProperty(prop);
+#endif
+// end bug
 
     if (NS_SUCCEEDED(rv)) {
       // We pass in eCSSProperty_UNKNOWN here so that we don't get the
       // property name in the return string.
-      val.ToString(aReturn, eCSSProperty_UNKNOWN);
+      //val.ToString(aReturn, eCSSProperty_UNKNOWN); // ... but not after bug 125246
       if (cssSheet) {
         cssSheet->SetModified(PR_TRUE);
       }
@@ -1273,6 +1395,19 @@ DOMCSSDeclarationImpl::RemoveProperty(const nsAString& aPropertyName,
 
   return rv;
 }
+#else
+
+inline DOMCSSStyleRuleImpl* DOMCSSDeclarationImpl::DomRule()
+{
+  return NS_REINTERPRET_CAST(DOMCSSStyleRuleImpl*,
+           NS_REINTERPRET_CAST(char*, this) -
+           offsetof(DOMCSSStyleRuleImpl, mDOMDeclaration));
+}
+
+NS_IMPL_ADDREF_USING_AGGREGATOR(DOMCSSDeclarationImpl, DomRule())
+NS_IMPL_RELEASE_USING_AGGREGATOR(DOMCSSDeclarationImpl, DomRule())
+#endif
+// end bug 188803
 
 void 
 DOMCSSDeclarationImpl::DropReference(void)
@@ -1312,36 +1447,56 @@ DOMCSSDeclarationImpl::SetCSSDeclaration(nsCSSDeclaration *aDecl)
  * This is a utility function.  It will only fail if it can't get a
  * parser.  This means it can return NS_OK without all of aSheet,
  *  aDocument, aURI, aCSSLoader being initialized
+ * after bug 188803:
+ This means it can return NS_OK without aURI or aCSSLoader being initialized.
  */
+ // bug 188803
 nsresult
-DOMCSSDeclarationImpl::GetCSSParsingEnvironment(nsICSSStyleRule* aRule,
-                                                nsICSSStyleSheet** aSheet,
-                                                nsIDocument** aDocument,
+DOMCSSDeclarationImpl::GetCSSParsingEnvironment(//nsICSSStyleRule* aRule,
+                                                //nsICSSStyleSheet** aSheet,
+                                                //nsIDocument** aDocument,
                                                 nsIURI** aURI,
                                                 nsICSSLoader** aCSSLoader,
                                                 nsICSSParser** aCSSParser)
 {
   // null out the out params since some of them may not get initialized below
-  *aSheet = nsnull;
-  *aDocument = nsnull;
+  //*aSheet = nsnull; // bug 188803
+  //*aDocument = nsnull; // bug 188803
   *aURI = nsnull;
   *aCSSLoader = nsnull;
   *aCSSParser = nsnull;
   nsresult result;
   nsCOMPtr<nsIStyleSheet> sheet;
-  if (aRule) {
-    aRule->GetStyleSheet(*getter_AddRefs(sheet));
+  // mRule from aRule bug 188803
+  if (mRule) { //(aRule) {
+    //aRule->
+    mRule->GetStyleSheet(*getter_AddRefs(sheet));
     if (sheet) {
-      CallQueryInterface(sheet, aSheet);
-      sheet->GetOwningDocument(*aDocument);
+      // bug 188803
+      //CallQueryInterface(sheet, aSheet);
+      //sheet->GetOwningDocument(*aDocument);
       sheet->GetURL(*aURI);
+      // bug 188803
+      nsCOMPtr<nsIDocument> document;
+      sheet->GetOwningDocument(*getter_AddRefs(document));
+      nsCOMPtr<nsIHTMLContentContainer> htmlContainer =
+        do_QueryInterface(document);
+      if (htmlContainer) {
+        htmlContainer->GetCSSLoader(*aCSSLoader);
+        NS_ASSERTION(*aCSSLoader, "Document with no CSS loader!");
+      }
+      // end bug
     }
   }
+// bug 188803
+#if(0)
   nsCOMPtr<nsIHTMLContentContainer> htmlContainer(do_QueryInterface(*aDocument));
   if (htmlContainer) {
     htmlContainer->GetCSSLoader(*aCSSLoader);
   }
   NS_ASSERTION(*aCSSLoader || !*aDocument, "Document with no CSS loader!");
+#endif
+// end bug
   if (*aCSSLoader) {
     result = (*aCSSLoader)->GetParserFor(nsnull, aCSSParser);
   } else {
@@ -1350,6 +1505,198 @@ DOMCSSDeclarationImpl::GetCSSParsingEnvironment(nsICSSStyleRule* aRule,
 
   return result;
 }
+
+// bug 188803
+// PATCH IS FIRST
+#if(1)
+
+// this got done up again by bug 188803 part 2. sorry about that. patch first
+// again.
+#if(1)
+nsresult 
+DOMCSSDeclarationImpl::GetParentRule(nsIDOMCSSRule **aParent)
+{
+  NS_ENSURE_ARG_POINTER(aParent);
+ 
+  if (!mRule) {
+    *aParent = nsnull;
+    return NS_OK;
+  }
+
+  return mRule->GetDOMRule(aParent);
+}
+#else
+nsresult 
+DOMCSSDeclarationImpl::GetParent(nsISupports **aParent)
+{
+  NS_ENSURE_ARG_POINTER(aParent);
+
+  if (mRule) {
+    return CallQueryInterface(mRule, aParent);
+  }
+
+  *aParent = nsnull;
+
+  return NS_OK;
+}
+#endif
+// end patch 2. now back to part 1.
+
+nsresult
+DOMCSSDeclarationImpl::DeclarationChanged()
+{
+  NS_PRECONDITION(mRule,
+         "can only be called when |GetCSSDeclaration| returned a declaration");
+
+  nsCOMPtr<nsIDocument> owningDoc;
+  nsCOMPtr<nsIStyleSheet> sheet;
+  mRule->GetStyleSheet(*getter_AddRefs(sheet));
+  if (sheet) {
+    sheet->GetOwningDocument(*getter_AddRefs(owningDoc));
+  }
+  if (owningDoc) {
+    // XXXldb Do we need to bother with this?  We're now doing it in
+    // more places than we used to, but it probably doesn't matter...
+    owningDoc->BeginUpdate();
+  }
+
+  nsCOMPtr<nsICSSStyleRule> oldRule = mRule;
+  mRule = oldRule->DeclarationChanged(PR_TRUE).get();
+  nsrefcnt cnt = mRule->Release();
+  // bug 188803 patch 2
+  //NS_ASSERTION(cnt != 0, "container didn't take ownership");
+  if (cnt == 0) {
+    NS_NOTREACHED("container didn't take ownership");
+    mRule = nsnull;
+    return NS_ERROR_UNEXPECTED;
+  }
+  // end bug
+
+  if (owningDoc) {
+    owningDoc->StyleRuleChanged(sheet, oldRule, mRule);
+    owningDoc->EndUpdate();
+  }
+  return NS_OK;
+}
+
+// this came from patch 2.
+
+DOMCSSStyleRuleImpl::DOMCSSStyleRuleImpl(nsICSSStyleRule* aRule)
+  : mDOMDeclaration(aRule)
+{
+}
+
+DOMCSSStyleRuleImpl::~DOMCSSStyleRuleImpl()
+{
+}
+
+NS_INTERFACE_MAP_BEGIN(DOMCSSStyleRuleImpl)
+  NS_INTERFACE_MAP_ENTRY(nsICSSStyleRuleDOMWrapper)
+  NS_INTERFACE_MAP_ENTRY(nsIDOMCSSStyleRule)
+  NS_INTERFACE_MAP_ENTRY(nsIDOMCSSRule)
+  NS_INTERFACE_MAP_ENTRY(nsISupports)
+  NS_INTERFACE_MAP_ENTRY_CONTENT_CLASSINFO(CSSStyleRule)
+NS_INTERFACE_MAP_END
+
+NS_IMPL_ADDREF(DOMCSSStyleRuleImpl)
+NS_IMPL_RELEASE(DOMCSSStyleRuleImpl)
+
+NS_IMETHODIMP    
+DOMCSSStyleRuleImpl::GetType(PRUint16* aType)
+{
+  *aType = nsIDOMCSSRule::STYLE_RULE;
+  
+  return NS_OK;
+}
+
+NS_IMETHODIMP    
+DOMCSSStyleRuleImpl::GetCssText(nsAString& aCssText)
+{
+  if (!Rule()) {
+    aCssText.Truncate();
+    return NS_OK;
+  }
+  return Rule()->GetCssText(aCssText);
+}
+
+NS_IMETHODIMP    
+DOMCSSStyleRuleImpl::SetCssText(const nsAString& aCssText)
+{
+  if (!Rule()) {
+    return NS_OK;
+  }
+  return Rule()->SetCssText(aCssText);
+}
+
+NS_IMETHODIMP    
+DOMCSSStyleRuleImpl::GetParentStyleSheet(nsIDOMCSSStyleSheet** aSheet)
+{
+  if (!Rule()) {
+    *aSheet = nsnull;
+    return NS_OK;
+  }
+  nsCOMPtr<nsICSSStyleSheet> sheet;
+  Rule()->GetParentStyleSheet(getter_AddRefs(sheet));
+  if (!sheet) {
+    *aSheet = nsnull;
+    return NS_OK;
+  }
+  return CallQueryInterface(sheet, aSheet);
+}
+
+NS_IMETHODIMP    
+DOMCSSStyleRuleImpl::GetParentRule(nsIDOMCSSRule** aParentRule)
+{
+  if (!Rule()) {
+    *aParentRule = nsnull;
+    return NS_OK;
+  }
+  nsCOMPtr<nsICSSGroupRule> rule;
+  Rule()->GetParentRule(getter_AddRefs(rule));
+  if (!rule) {
+    *aParentRule = nsnull;
+    return NS_OK;
+  }
+  return rule->GetDOMRule(aParentRule);
+}
+
+NS_IMETHODIMP    
+DOMCSSStyleRuleImpl::GetSelectorText(nsAString& aSelectorText)
+{
+  if (!Rule()) {
+    aSelectorText.Truncate();
+    return NS_OK;
+  }
+  return Rule()->GetSelectorText(aSelectorText);
+}
+
+NS_IMETHODIMP    
+DOMCSSStyleRuleImpl::SetSelectorText(const nsAString& aSelectorText)
+{
+  if (!Rule()) {
+    return NS_OK;
+  }
+  return Rule()->SetSelectorText(aSelectorText);
+}
+
+NS_IMETHODIMP    
+DOMCSSStyleRuleImpl::GetStyle(nsIDOMCSSStyleDeclaration** aStyle)
+{
+  *aStyle = &mDOMDeclaration;
+  NS_ADDREF(*aStyle);
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+DOMCSSStyleRuleImpl::GetCSSStyleRule(nsICSSStyleRule **aResult)
+{
+  *aResult = Rule();
+  NS_IF_ADDREF(*aResult);
+  return NS_OK;
+}
+
+
+#else 
 
 nsresult
 DOMCSSDeclarationImpl::ParsePropertyValue(const nsAString& aPropName,
@@ -1420,6 +1767,8 @@ DOMCSSDeclarationImpl::ParseDeclaration(const nsAString& aDecl,
                                       getter_AddRefs(cssParser));
 
     if (NS_SUCCEEDED(result)) {
+// bug 125246 plus backbugs
+#if(0)
       nsCSSDeclaration* declClone = decl->Clone();
       NS_ENSURE_TRUE(declClone, NS_ERROR_OUT_OF_MEMORY);
 
@@ -1439,10 +1788,12 @@ DOMCSSDeclarationImpl::ParseDeclaration(const nsAString& aDecl,
           decl->RemoveProperty(prop, val);
         }
       }
-
+#endif
       nsChangeHint hint;
       result = cssParser->ParseAndAppendDeclaration(aDecl, baseURI, decl,
-                                                    aParseOnlyOneDecl, &hint);
+                                                    aParseOnlyOneDecl, &hint,
+                                                    aClearOldDecl); // bug 125246
+// end bug
 
 // bug 171830
 #if(0)
@@ -1486,17 +1837,27 @@ DOMCSSDeclarationImpl::GetParent(nsISupports **aParent)
   return NS_OK;
 }
 
+#endif
+// end bug 188803 BIG PATCH!
+
+
 // -- nsCSSStyleRule -------------------------------
 
 class CSSStyleRuleImpl : public nsCSSRule,
-                         public nsICSSStyleRule, 
-                         public nsIDOMCSSStyleRule
+                         public nsICSSStyleRule // bug 188803 , 
+                         //public nsIDOMCSSStyleRule
 {
 public:
   //CSSStyleRuleImpl(const nsCSSSelector& aSelector);
-  CSSStyleRuleImpl(nsCSSSelectorList* aSelector); // bug 98765
-  
+  CSSStyleRuleImpl(nsCSSSelectorList* aSelector, // bug 98765
+  	nsCSSDeclaration *aDeclaration); // bug 188803
+private: // bug 188803
+  // for |Clone|
   CSSStyleRuleImpl(const CSSStyleRuleImpl& aCopy); 
+  // for |DeclarationChanged| (bug 188803)
+  CSSStyleRuleImpl(CSSStyleRuleImpl& aCopy,
+  			nsCSSDeclaration *aDeclaration); 
+public: // bug 188803
 
   NS_DECL_ISUPPORTS_INHERITED
 
@@ -1516,7 +1877,7 @@ public:
   virtual void SetLineNumber(PRUint32 aLineNumber);
 
   virtual nsCSSDeclaration* GetDeclaration(void) const;
-  virtual void SetDeclaration(nsCSSDeclaration* aDeclaration);
+  //virtual void SetDeclaration(nsCSSDeclaration* aDeclaration); // bug 188803
 
   // bug 98765
   //virtual PRInt32 GetWeight(void) const;
@@ -1531,9 +1892,24 @@ public:
   NS_IMETHOD SetStyleSheet(nsICSSStyleSheet* aSheet);
   
   NS_IMETHOD SetParentRule(nsICSSGroupRule* aRule);
+  
+  // bug 188803
+  virtual nsresult GetCssText(nsAString& aCssText);
+  virtual nsresult SetCssText(const nsAString& aCssText);
+  virtual nsresult GetParentStyleSheet(nsICSSStyleSheet** aSheet);
+  virtual nsresult GetParentRule(nsICSSGroupRule** aParentRule);
+  virtual nsresult GetSelectorText(nsAString& aSelectorText);
+  virtual nsresult SetSelectorText(const nsAString& aSelectorText);
 
   NS_IMETHOD GetType(PRInt32& aType) const;
   NS_IMETHOD Clone(nsICSSRule*& aClone) const;
+  
+  // bug 188803
+  NS_IMETHOD GetDOMRule(nsIDOMCSSRule** aDOMRule);
+  
+  // bug 188803
+  virtual already_AddRefed<nsICSSStyleRule>
+    DeclarationChanged(PRBool aHandleContainer);
 
   // The new mapping function.
   NS_IMETHOD MapRuleInfoInto(nsRuleData* aRuleData);
@@ -1544,11 +1920,15 @@ public:
   virtual void SizeOf(nsISizeOfHandler *aSizeOfHandler, PRUint32 &aSize);
 #endif
 
+// bug 188803
+#if(0)
   // nsIDOMCSSRule interface
   NS_DECL_NSIDOMCSSRULE
 
   // nsIDOMCSSStyleRule interface
   NS_DECL_NSIDOMCSSSTYLERULE
+#endif
+// end bug
 
 private: 
   // These are not supported and are not implemented! 
@@ -1565,41 +1945,60 @@ protected:
   nsCSSDeclaration*       mDeclaration;
 
   CSSImportantRule*       mImportantRule;
-  DOMCSSDeclarationImpl*  mDOMDeclaration;                          
+  // bug 188803
+  DOMCSSStyleRuleImpl*    mDOMRule; 
+  //DOMCSSDeclarationImpl*  mDOMDeclaration;                          
   PRUint32                mLineNumber;
 };
 
+// bug 125246
+#if(0)
 #ifdef DEBUG_REFS
 PRUint32 gStyleRuleCount=0;
 #endif
+#endif
+// end bug
 
-CSSStyleRuleImpl::CSSStyleRuleImpl(nsCSSSelectorList* aSelector) // bug 98765 // const nsCSSSelector& aSelector)
+CSSStyleRuleImpl::CSSStyleRuleImpl(nsCSSSelectorList* aSelector, // bug 98765 // const nsCSSSelector& aSelector)
+                                   nsCSSDeclaration* aDeclaration) // bug 188803
   : nsCSSRule(),
     mSelector(aSelector),
-    mDeclaration(nsnull), 
+    mDeclaration(aDeclaration), // bug 188803 // nsnull), 
     //mWeight(0), 
     mImportantRule(nsnull),
-    mDOMDeclaration(nsnull)
+    mDOMRule(nsnull) // bug 188803 //mDOMDeclaration(nsnull)
 {
+// bug 125246
+#if(0)
 #ifdef DEBUG_REFS
   gStyleRuleCount++;
   printf( "CSSStyleRuleImpl Instances (ctor): %ld\n", (long)gStyleRuleCount);
 #endif
+#endif
+// end bug
+
+// bug 188803
+   if (mDeclaration) mDeclaration->AddRef();
 }
 
+// for |Clone|
 CSSStyleRuleImpl::CSSStyleRuleImpl(const CSSStyleRuleImpl& aCopy)
   : nsCSSRule(aCopy),
     //mSelector(aCopy.mSelector),
     mSelector(aCopy.mSelector ? aCopy.mSelector->Clone() : nsnull),
-    mDeclaration(nsnull),
+    mDeclaration(aCopy.mDeclaration ? aCopy.mDeclaration->Clone() : nsnull), // bug 188803 //nsnull),
     //mWeight(aCopy.mWeight),
     mImportantRule(nsnull),
-    mDOMDeclaration(nsnull)
+    mDOMRule(nsnull) // bug 188803 // mDOMDeclaration(nsnull)
 {
+// bug 125246
+#if(0)
 #ifdef DEBUG_REFS
   gStyleRuleCount++;
   printf( "CSSStyleRuleImpl Instances (cp-ctor): %ld\n", (long)gStyleRuleCount);
 #endif
+#endif
+// end bug
 
 // bug 98765
 #if(0)
@@ -1613,22 +2012,57 @@ CSSStyleRuleImpl::CSSStyleRuleImpl(const CSSStyleRuleImpl& aCopy)
   }
 #endif
 
+// bug 188803
+#if(0)
   if (aCopy.mDeclaration) {
     mDeclaration = aCopy.mDeclaration->Clone();
     if (nsnull != mDeclaration) {
       mDeclaration->AddRef();
     }
   }
+#else
+  if (mDeclaration) mDeclaration->AddRef();
+#endif
+// end bug
+
   // rest is constructed lazily on existing data
 }
 
+// bug 188803
+// for |DeclarationChanged|
+CSSStyleRuleImpl::CSSStyleRuleImpl(CSSStyleRuleImpl& aCopy,
+                                   nsCSSDeclaration* aDeclaration)
+  : nsCSSRule(aCopy),
+    mSelector(aCopy.mSelector),
+    mDeclaration(aDeclaration),
+    mImportantRule(nsnull),
+    mDOMRule(aCopy.mDOMRule) // bug 188803 // mDOMDeclaration(aCopy.mDOMDeclaration)
+{
+  // The DOM declaration is replacing |aCopy| with |this|, so transfer
+  // the reverse pointer as well.
+  // bug 188803
+  // The DOM rule is replacing |aCopy| with |this|, so transfer
+  // the reverse pointer as well (and transfer ownership).
+  aCopy.mDOMRule = nsnull;
+  //aCopy.mDOMDeclaration = nsnull;
+
+  // Transfer ownership of selector and declaration:
+  NS_ASSERTION(aDeclaration == aCopy.mDeclaration, "declaration mismatch");
+  aCopy.mSelector = nsnull;
+  aCopy.mDeclaration = nsnull;
+}
+// end bug
 
 CSSStyleRuleImpl::~CSSStyleRuleImpl(void)
 {
+// bug 125246
+#if(0)
 #ifdef DEBUG_REFS
   gStyleRuleCount--;
   printf( "CSSStyleRuleImpl Instances (dtor): %ld\n", (long)gStyleRuleCount);
 #endif
+#endif
+// end bug
 
 // bug 98765
 #if(0)
@@ -1656,9 +2090,17 @@ CSSStyleRuleImpl::~CSSStyleRuleImpl(void)
     NS_RELEASE(mImportantRule);
     mImportantRule = nsnull;
   }
+// bug 188803
+#if(0)
   if (nsnull != mDOMDeclaration) {
     mDOMDeclaration->DropReference();
   }
+#else
+  if (mDOMRule) {
+    mDOMRule->DOMDeclaration()->DropReference();
+    NS_RELEASE(mDOMRule);
+  }
+#endif
 }
 
 // QueryInterface implementation for CSSStyleRuleImpl
@@ -1666,12 +2108,18 @@ NS_INTERFACE_MAP_BEGIN(CSSStyleRuleImpl)
   NS_INTERFACE_MAP_ENTRY(nsICSSStyleRule)
   NS_INTERFACE_MAP_ENTRY(nsICSSRule)
   NS_INTERFACE_MAP_ENTRY(nsIStyleRule)
+// bug 188803
+#if(0)
   NS_INTERFACE_MAP_ENTRY(nsIDOMCSSRule)
   NS_INTERFACE_MAP_ENTRY(nsIDOMCSSStyleRule)
+#endif
   NS_INTERFACE_MAP_ENTRY_AMBIGUOUS(nsISupports, nsICSSStyleRule)
+// bug 188803
+#if(0)
   NS_INTERFACE_MAP_ENTRY_CONTENT_CLASSINFO(CSSStyleRule)
+#endif
+// end bug
 NS_INTERFACE_MAP_END
-
 
 NS_IMPL_ADDREF_INHERITED(CSSStyleRuleImpl, nsCSSRule);
 NS_IMPL_RELEASE_INHERITED(CSSStyleRuleImpl, nsCSSRule);
@@ -1753,10 +2201,13 @@ void CSSStyleRuleImpl::SetLineNumber(PRUint32 aLineNumber)
 
 nsCSSDeclaration* CSSStyleRuleImpl::GetDeclaration(void) const
 {
-  nsCSSDeclaration* result = mDeclaration;
-  return result;
+  return mDeclaration; // bug 188803
+  //nsCSSDeclaration* result = mDeclaration;
+  //return result;
 }
 
+// bug 188803
+#if(0)
 void CSSStyleRuleImpl::SetDeclaration(nsCSSDeclaration* aDeclaration)
 {
   if (mDeclaration != aDeclaration) {
@@ -1768,6 +2219,8 @@ void CSSStyleRuleImpl::SetDeclaration(nsCSSDeclaration* aDeclaration)
     mDeclaration->AddRef();
   }
 }
+#endif
+// end bug
 
 // bug 98765
 #if(0)
@@ -1786,9 +2239,13 @@ void CSSStyleRuleImpl::SetWeight(PRInt32 aWeight)
 already_AddRefed<nsIStyleRule> CSSStyleRuleImpl::GetImportantRule(void)
 {
   if (!mImportantRule && mDeclaration) {
-    nsCSSDeclaration*  important = mDeclaration->GetImportantValues();
-    if (important) {
-      mImportantRule = new CSSImportantRule(mSheet, important);
+  // bug 125246
+  //  nsCSSDeclaration*  important = mDeclaration->GetImportantValues();
+  //  if (important) {
+  //    mImportantRule = new CSSImportantRule(mSheet, important);
+  if (mDeclaration->HasImportantData()) {
+      mImportantRule = new CSSImportantRule(mSheet, mDeclaration);
+  // end bug
       NS_ADDREF(mImportantRule);
     }
   }
@@ -1799,7 +2256,8 @@ already_AddRefed<nsIStyleRule> CSSStyleRuleImpl::GetImportantRule(void)
 nsresult
 CSSStyleRuleImpl::GetValue(nsCSSProperty aProperty, nsCSSValue& aValue)
 {
-  return mDeclaration->GetValue(aProperty, aValue);
+  //return mDeclaration->GetValue(aProperty, aValue);
+  return mDeclaration->GetValueOrImportantValue(aProperty, aValue); // bug 125246
 }
 
 NS_IMETHODIMP
@@ -1831,6 +2289,8 @@ CSSStyleRuleImpl::GetType(PRInt32& aType) const
   return NS_OK;
 }
 
+// bug 188830
+#if(0)
 NS_IMETHODIMP
 CSSStyleRuleImpl::Clone(nsICSSRule*& aClone) const
 {
@@ -1842,6 +2302,69 @@ CSSStyleRuleImpl::Clone(nsICSSRule*& aClone) const
   return NS_ERROR_OUT_OF_MEMORY;
 }
 
+#else
+
+NS_IMETHODIMP
+CSSStyleRuleImpl::Clone(nsICSSRule*& aClone) const
+{
+  CSSStyleRuleImpl* clone = new CSSStyleRuleImpl(*this);
+  if (!clone) {
+    aClone = nsnull;
+    return NS_ERROR_OUT_OF_MEMORY;
+  }
+  return CallQueryInterface(clone, &aClone);
+}
+
+NS_IMETHODIMP
+CSSStyleRuleImpl::GetDOMRule(nsIDOMCSSRule** aDOMRule)
+{
+  if (!mDOMRule) {
+    mDOMRule = new DOMCSSStyleRuleImpl(this);
+    if (!mDOMRule) {
+      *aDOMRule = nsnull;
+      return NS_ERROR_OUT_OF_MEMORY;
+    }
+    NS_ADDREF(mDOMRule);
+  }
+  *aDOMRule = mDOMRule;
+  NS_ADDREF(*aDOMRule);
+  return NS_OK;
+}
+
+/* virtual */ already_AddRefed<nsICSSStyleRule>
+CSSStyleRuleImpl::DeclarationChanged(PRBool aHandleContainer)
+{
+  CSSStyleRuleImpl* clone = new CSSStyleRuleImpl(*this, mDeclaration);
+  if (!clone) {
+    return nsnull;
+  }
+
+  NS_ADDREF(clone); // for return
+
+  if (aHandleContainer && mSheet) { // mSheet from bug 2
+    if (mParentRule) {
+      mSheet->ReplaceRuleInGroup(mParentRule, this, clone);
+    } else {
+      mSheet->ReplaceStyleRule(this, clone);
+    }
+  }
+
+  return clone;
+}
+
+#endif
+// end bug
+
+// bug 125246
+// BIG PATCH!
+// PATCH IS FIRST!
+#if(1)
+NS_IMETHODIMP
+CSSStyleRuleImpl::MapRuleInfoInto(nsRuleData* aRuleData)
+{
+  return mDeclaration->MapRuleInfoInto(aRuleData);
+}
+#else
 NS_IMETHODIMP
 CSSStyleRuleImpl::MapRuleInfoInto(nsRuleData* aRuleData)
 {
@@ -2532,6 +3055,8 @@ MapUIForDeclaration(nsCSSDeclaration* aDecl, const nsStyleStructID& aID, nsRuleD
   return NS_OK;
 
 }
+#endif
+// end bug 125246
 
 #ifdef DEBUG
 NS_IMETHODIMP
@@ -2614,6 +3139,8 @@ void CSSStyleRuleImpl::SizeOf(nsISizeOfHandler *aSizeOfHandler, PRUint32 &aSize)
 }
 #endif
 
+// bug 188803
+#if(0)
 NS_IMETHODIMP    
 CSSStyleRuleImpl::GetType(PRUint16* aType)
 {
@@ -2621,8 +3148,12 @@ CSSStyleRuleImpl::GetType(PRUint16* aType)
   
   return NS_OK;
 }
+#endif
+// end bug
 
-NS_IMETHODIMP    
+// bug 188803
+//NS_IMETHODIMP
+/* virtual */ nsresult    
 CSSStyleRuleImpl::GetCssText(nsAString& aCssText)
 {
 
@@ -2651,13 +3182,54 @@ CSSStyleRuleImpl::GetCssText(nsAString& aCssText)
   aCssText.Append(PRUnichar('}'));
   return NS_OK;
 }
-
-NS_IMETHODIMP    
+// bug 188803
+//NS_IMETHODIMP
+/* virtual */ nsresult     
 CSSStyleRuleImpl::SetCssText(const nsAString& aCssText)
 {
   // XXX TBI - need to re-parse rule & declaration
   return NS_OK;
 }
+
+// bug 188803
+// PATCH IS FIRST!
+#if(1)
+/* virtual */ nsresult    
+CSSStyleRuleImpl::GetParentStyleSheet(nsICSSStyleSheet** aSheet)
+{
+  *aSheet = mSheet;
+  NS_IF_ADDREF(*aSheet);
+  return NS_OK;
+}
+
+/* virtual */ nsresult    
+CSSStyleRuleImpl::GetParentRule(nsICSSGroupRule** aParentRule)
+{
+  *aParentRule = mParentRule;
+  NS_IF_ADDREF(*aParentRule);
+  return NS_OK;
+}
+
+/* virtual */ nsresult    
+CSSStyleRuleImpl::GetSelectorText(nsAString& aSelectorText)
+{
+  if (mSelector)
+    mSelector->ToString(aSelectorText, mSheet);
+  else
+    aSelectorText.Truncate();
+  return NS_OK;
+}
+
+/* virtual */ nsresult    
+CSSStyleRuleImpl::SetSelectorText(const nsAString& aSelectorText)
+{
+  // XXX TBI - get a parser and re-parse the selectors, 
+  // XXX then need to re-compute the cascade
+  // XXX and dirty sheet
+  return NS_OK;
+}
+
+#else
 
 NS_IMETHODIMP    
 CSSStyleRuleImpl::GetParentStyleSheet(nsIDOMCSSStyleSheet** aSheet)
@@ -2721,16 +3293,27 @@ CSSStyleRuleImpl::GetStyle(nsIDOMCSSStyleDeclaration** aStyle)
   return NS_OK;
 }
 
+#endif
+// end bug 188803
+
 NS_EXPORT nsresult
   NS_NewCSSStyleRule(nsICSSStyleRule** aInstancePtrResult, 
   	//const nsCSSSelector& aSelector)
-  	nsCSSSelectorList* aSelector)
+  	nsCSSSelectorList* aSelector,
+  	nsCSSDeclaration* aDeclaration) // bug 188803
 {
+// bug 188803
+#if(0)
   if (aInstancePtrResult == nsnull) {
     return NS_ERROR_NULL_POINTER;
   }
 
   CSSStyleRuleImpl *it = new CSSStyleRuleImpl(aSelector);
+#else
+  CSSStyleRuleImpl *it = new CSSStyleRuleImpl(aSelector, aDeclaration);
+#endif
+// end bug
+
   if (!it) {
     return NS_ERROR_OUT_OF_MEMORY;
   }

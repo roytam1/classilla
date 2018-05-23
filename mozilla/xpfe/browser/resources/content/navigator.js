@@ -24,7 +24,7 @@
  *   Peter Annema <disttsc@bart.nl>
  *   Dean Tessman <dean_tessman@hotmail.com>
  *
- * Changes for Classilla (C)2009 Cameron Kaiser
+ * Changes for Classilla (C)2009, 2010 Cameron Kaiser
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either the GNU General Public License Version 2 or later (the "GPL"), or 
@@ -888,6 +888,8 @@ function addGroupmarkAs()
 
 function updateGroupmarkMenuitem(id)
 {
+  if (!gBrowser)
+  	return;
   const disabled = gBrowser.browsers.length == 1;
   document.getElementById(id).setAttribute("disabled", disabled);
 }
@@ -1176,6 +1178,8 @@ function BrowserEditBookmarks()
 function updateCloseItems()
 {
   var browser = getBrowser();
+  if (!browser)
+  	return;
   if (browser.getStripVisibility()) {
     document.getElementById('menu_close').setAttribute('label', gNavigatorBundle.getString('tabs.closeTab'));
     document.getElementById('menu_closeWindow').hidden = false;
@@ -1225,11 +1229,13 @@ function BrowserCloseWindow()
 
   // Store these into the window attributes (for persistence).
   var win = document.getElementById( "main-window" );
+
   win.setAttribute( "x", x );
   win.setAttribute( "y", y );
   win.setAttribute( "height", h );
   win.setAttribute( "width", w );
 
+  // window.closed = true; // this doesn't actually work.
   window.close();
 }
 
@@ -2276,6 +2282,26 @@ function WindowIsClosing()
   return reallyClose;
 }
 
+// utility function for updateViewStates
+function fixCheckBox(broadcaster, prefb) {
+	var bc = document.getElementById(broadcaster);
+	try {
+		bc.removeAttribute('checked');
+		if(pref.getBoolPref(prefb))
+			bc.setAttribute('checked', 'true');
+	} catch(e) {
+		// well, shoot.
+	}
+}
+
+function toggleBoolPref(prefb) {
+	try {
+		pref.setBoolPref(prefb, (pref.getBoolPref(prefb) ? false : true));
+	} catch(e) {
+		// sigh
+	}
+}
+
 // for fixups (classilla.layout.fixup) -- see navigatorOverlay.xul, plus nsBrowserStatusHandler.js
 // "Use Experimental Renderer" menu option is handled here.
 function updateViewStates(t)
@@ -2287,22 +2313,22 @@ function updateViewStates(t)
   // we don't do anything with the menu object, but we might later.
   
   // fix up the fixup option, narf narf narf
-  var fixupBroadcaster = document.getElementById('isFixupRender');
-  fixupBroadcaster.removeAttribute('checked');
-  try {
-  	if (pref.getBoolPref("classilla.layout.fixup")) {
-  		fixupBroadcaster.setAttribute('checked', 'true');
-  	}
-  } catch(e) {
-  	// hmmmmmm
-  }
-
+  // THIS IS DISABLED IN 9.1
+  //fixCheckBox('isFixupRender', 'classilla.layout.fixup');
+  
+  // fix up the slow scroll option
+  fixCheckBox('isSlowScroll', 'classilla.layout.slowscroll');
 }
 
 function BrowserToggleFixups()
 {
 //	alert("we're fixed up");
-	pref.setBoolPref("classilla.layout.fixup",
-		(pref.getBoolPref("classilla.layout.fixup") ? false : true));
+	toggleBoolPref('classilla.layout.fixup');
+	BrowserReload();
+}
+
+function BrowserToggleSlowScroll()
+{
+	toggleBoolPref('classilla.layout.slowscroll');
 	BrowserReload();
 }

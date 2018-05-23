@@ -84,7 +84,8 @@ nsStyleStructID_Length /* one past the end; length of 0-based list */
 #define NS_RULE_NODE_GC_MARK              0x02000000
 
 #define NS_DEFINE_STATIC_STYLESTRUCTID_ACCESSOR(the_sid) \
-  static const nsStyleStructID GetStyleStructID() {return the_sid;}
+  static nsStyleStructID GetStyleStructID() {return the_sid;}
+// const removed by bug 69355
 
 #define NS_GET_STYLESTRUCTID(type) (type::GetStyleStructID())
 
@@ -1116,6 +1117,7 @@ struct nsStyleXUL : public nsStyleStruct {
   nsChangeHint CalcDifference(const nsStyleXUL& aOther) const;
   
   float         mBoxFlex;               // [reset] see nsStyleConsts.h
+  PRUint32		mBoxFlexGroup; // fwiw?
   PRUint32      mBoxOrdinal;            // [reset] see nsStyleConsts.h
   PRUint8       mBoxAlign;              // [reset] see nsStyleConsts.h
   PRUint8       mBoxDirection;          // [reset] see nsStyleConsts.h

@@ -36,21 +36,32 @@
  * the terms of any one of the NPL, the GPL or the LGPL.
  *
  * ***** END LICENSE BLOCK ***** */
-#ifndef nsCSSDeclaration_h___
-#define nsCSSDeclaration_h___
+// bug 201681
+#ifndef nsCSSStruct_h___
+#define nsCSSStruct_h___
+//#ifndef nsCSSDeclaration_h___
+//#define nsCSSDeclaration_h___
 
+// bug 125246
+#if(0)
 #include "nsISupports.h"
 #include "nsColor.h"
 #include <stdio.h>
 #include "nsString.h"
 #include "nsCoord.h"
 #include "nsCSSValue.h"
-#include "nsCSSProps.h"
-#include "nsVoidArray.h"
-#include "nsValueArray.h"
+// bug 201681
+//#include "nsCSSProps.h"
+//#include "nsVoidArray.h"
+//#include "nsValueArray.h"
+#else
+#include "nsCSSValue.h"
+#include <stdio.h>
+#endif
+// end bug
 
-class nsISizeOfHandler;
-class nsStringArray;
+//class nsISizeOfHandler; // this was already gone by bug 201681.
+//class nsStringArray; // bug 201681
 
 struct nsCSSStruct {
   // EMPTY on purpose.  ABSTRACT with no virtuals (typedef void nsCSSStruct?)
@@ -61,9 +72,18 @@ struct nsCSSStruct {
 // we'll still want to use them for nsRuleData.  So, for now, use
 // typedefs and inheritance (forwards, when the rule data needs extra
 // data) to make the rule data structs from the declaration structs.
+// after bug 125246:
+// We use the nsCSS* structures for storing nsCSSDeclaration's
+// *temporary* data during parsing and modification.  (They are too big
+// for permanent storage.)  We also use them for nsRuleData, with some
+// additions of things that the style system must cascade, but that
+// aren't CSS properties.  Thus we use typedefs and inheritance
+// (forwards, when the rule data needs extra data) to make the rule data
+// structs from the declaration structs.
 typedef nsCSSStruct nsRuleDataStruct;
 
-
+// bug 125246
+#if(0)
 // SID for the nsCSSFont struct {f645dbf8-b48a-11d1-9ca5-0060088f9ff7}
 #define NS_CSS_FONT_SID   \
 {0xf645dbf8, 0xb48a, 0x11d1, {0x9c, 0xa5, 0x00, 0x60, 0x08, 0x8f, 0x9f, 0xf7}}
@@ -127,12 +147,14 @@ typedef nsCSSStruct nsRuleDataStruct;
 #define NS_CSS_SVG_SID \
 { 0x9a41a036, 0x27b, 0x45ef, { 0x89, 0xc9, 0x6e, 0x32, 0x79, 0x78, 0x39, 0xe7 } }
 #endif
+#endif
+// end bug
 
 struct nsCSSFont : public nsCSSStruct {
   nsCSSFont(void);
   nsCSSFont(const nsCSSFont& aCopy);
   ~nsCSSFont(void);
-  const nsID& GetID(void);
+  // const nsID& GetID(void); // bug 125246
 #ifdef DEBUG
   void List(FILE* out = stdout, PRInt32 aIndent = 0) const;
 #endif
@@ -163,7 +185,7 @@ struct nsCSSColor : public nsCSSStruct  {
   nsCSSColor(void);
   nsCSSColor(const nsCSSColor& aCopy);
   ~nsCSSColor(void);
-  const nsID& GetID(void);
+  // const nsID& GetID(void); // bug 125246
 #ifdef DEBUG
   void List(FILE* out = stdout, PRInt32 aIndent = 0) const;
 #endif
@@ -200,7 +222,7 @@ struct nsCSSText : public nsCSSStruct  {
   nsCSSText(const nsCSSText& aCopy);
   ~nsCSSText(void);
 
-  const nsID& GetID(void);
+  // const nsID& GetID(void); // bug 125246
 #ifdef DEBUG
   void List(FILE* out = stdout, PRInt32 aIndent = 0) const;
 #endif
@@ -221,6 +243,9 @@ struct nsCSSText : public nsCSSStruct  {
 struct nsRuleDataText : public nsCSSText {
 };
 
+// bug 125246
+#define FOR_CSS_SIDES(var_) for (PRInt32 var_ = 0; var_ < 4; ++var_)
+
 struct nsCSSRect {
   nsCSSRect(void);
   nsCSSRect(const nsCSSRect& aCopy);
@@ -230,18 +255,62 @@ struct nsCSSRect {
   void List(FILE* out, PRInt32 aIndent, const nsCSSProperty aTRBL[]) const;
 #endif
 
+// bug 125246
+  PRBool operator==(const nsCSSRect& aOther) const {
+    return mTop == aOther.mTop &&
+           mRight == aOther.mRight &&
+           mBottom == aOther.mBottom &&
+           mLeft == aOther.mLeft;
+  }
+
+  PRBool operator!=(const nsCSSRect& aOther) const {
+    return mTop != aOther.mTop ||
+           mRight != aOther.mRight ||
+           mBottom != aOther.mBottom ||
+           mLeft != aOther.mLeft;
+  }
+
+  void SetAllSidesTo(const nsCSSValue& aValue);
+// end bug
+
   nsCSSValue mTop;
   nsCSSValue mRight;
   nsCSSValue mBottom;
   nsCSSValue mLeft;
+  
+// bug 125246
+  typedef nsCSSValue nsCSSRect::*side_type;
+  static const side_type sides[4];
+// end bug
 };
+
+// bug 125246
+struct nsCSSValueListRect {
+  nsCSSValueListRect(void);
+  nsCSSValueListRect(const nsCSSValueListRect& aCopy);
+  ~nsCSSValueListRect();
+#ifdef DEBUG
+  void List(FILE* out = 0, nsCSSProperty aPropID = eCSSProperty_UNKNOWN, PRInt32 aIndent = 0) const;
+  void List(FILE* out, PRInt32 aIndent, const nsCSSProperty aTRBL[]) const;
+#endif
+
+  nsCSSValueList* mTop;
+  nsCSSValueList* mRight;
+  nsCSSValueList* mBottom;
+  nsCSSValueList* mLeft;
+
+  typedef nsCSSValueList* nsCSSValueListRect::*side_type;
+  static const side_type sides[4];
+};
+// end bug
+
 
 struct nsCSSDisplay : public nsCSSStruct  {
   nsCSSDisplay(void);
   nsCSSDisplay(const nsCSSDisplay& aCopy);
   ~nsCSSDisplay(void);
 
-  const nsID& GetID(void);
+  // const nsID& GetID(void); // bug 125246
 #ifdef DEBUG
   void List(FILE* out = stdout, PRInt32 aIndent = 0) const;
 #endif
@@ -253,7 +322,8 @@ struct nsCSSDisplay : public nsCSSStruct  {
   nsCSSValue mPosition;
   nsCSSValue mFloat;
   nsCSSValue mClear;
-  nsCSSRect* mClip;
+  //nsCSSRect* mClip;
+  nsCSSRect  mClip; // bug 125246
   nsCSSValue mOverflow;
   nsCSSValue mVisibility;
   nsCSSValue mOpacity;
@@ -273,11 +343,13 @@ struct nsCSSMargin : public nsCSSStruct  {
   nsCSSMargin(const nsCSSMargin& aCopy);
   ~nsCSSMargin(void);
 
-  const nsID& GetID(void);
+  // const nsID& GetID(void); // bug 125246
 #ifdef DEBUG
   void List(FILE* out = stdout, PRInt32 aIndent = 0) const;
 #endif
 
+// bug 125246
+#if(0)
   void EnsureBorderColors();
 
   nsCSSRect*  mMargin;
@@ -292,6 +364,21 @@ struct nsCSSMargin : public nsCSSStruct  {
   nsCSSValue  mOutlineStyle;
   nsCSSRect*  mOutlineRadius; // (extension)
   nsCSSValue  mFloatEdge; // NEW
+#else
+  nsCSSRect   mMargin;
+  nsCSSRect   mPadding;
+  nsCSSRect   mBorderWidth;
+  nsCSSRect   mBorderColor;
+  nsCSSValueListRect mBorderColors;
+  nsCSSRect   mBorderStyle;
+  nsCSSRect   mBorderRadius;  // (extension)
+  nsCSSValue  mOutlineWidth;
+  nsCSSValue  mOutlineColor;
+  nsCSSValue  mOutlineStyle;
+  nsCSSRect   mOutlineRadius; // (extension)
+  nsCSSValue  mFloatEdge; // NEW
+#endif
+// end bug
 };
 
 struct nsRuleDataMargin : public nsCSSMargin {
@@ -302,7 +389,7 @@ struct nsCSSPosition : public nsCSSStruct  {
   nsCSSPosition(const nsCSSPosition& aCopy);
   ~nsCSSPosition(void);
 
-  const nsID& GetID(void);
+  // const nsID& GetID(void); // bug 125246
 #ifdef DEBUG
   void List(FILE* out = stdout, PRInt32 aIndent = 0) const;
 #endif
@@ -314,7 +401,8 @@ struct nsCSSPosition : public nsCSSStruct  {
   nsCSSValue  mMinHeight;
   nsCSSValue  mMaxHeight;
   nsCSSValue  mBoxSizing; // NEW
-  nsCSSRect*  mOffset;
+//  nsCSSRect*  mOffset;
+  nsCSSRect   mOffset; // bug 125246
   nsCSSValue  mZIndex;
 };
 
@@ -326,7 +414,7 @@ struct nsCSSList : public nsCSSStruct  {
   nsCSSList(const nsCSSList& aCopy);
   ~nsCSSList(void);
 
-  const nsID& GetID(void);
+  // const nsID& GetID(void); // bug 125246
 #ifdef DEBUG
   void List(FILE* out = stdout, PRInt32 aIndent = 0) const;
 #endif
@@ -334,7 +422,8 @@ struct nsCSSList : public nsCSSStruct  {
   nsCSSValue mType;
   nsCSSValue mImage;
   nsCSSValue mPosition;
-  nsCSSRect*  mImageRegion;
+  //nsCSSRect*  mImageRegion;
+  nsCSSRect  mImageRegion; // bug 125246
 };
 
 struct nsRuleDataList : public nsCSSList {
@@ -345,7 +434,7 @@ struct nsCSSTable : public nsCSSStruct  { // NEW
   nsCSSTable(const nsCSSTable& aCopy);
   ~nsCSSTable(void);
 
-  const nsID& GetID(void);
+  // const nsID& GetID(void); // bug 125246
 #ifdef DEBUG
   void List(FILE* out = stdout, PRInt32 aIndent = 0) const;
 #endif
@@ -371,7 +460,7 @@ struct nsCSSBreaks : public nsCSSStruct  { // NEW
   nsCSSBreaks(const nsCSSBreaks& aCopy);
   ~nsCSSBreaks(void);
 
-  const nsID& GetID(void);
+  // const nsID& GetID(void); // bug 125246
 #ifdef DEBUG
   void List(FILE* out = stdout, PRInt32 aIndent = 0) const;
 #endif
@@ -379,8 +468,9 @@ struct nsCSSBreaks : public nsCSSStruct  { // NEW
   nsCSSValue mOrphans;
   nsCSSValue mWidows;
   nsCSSValue mPage;
-  nsCSSValue mPageBreakAfter;
-  nsCSSValue mPageBreakBefore;
+  // temp fix for bug 24000 (introduced by bug 125246)
+  //nsCSSValue mPageBreakAfter;
+  //nsCSSValue mPageBreakBefore;
   nsCSSValue mPageBreakInside;
 };
 
@@ -392,7 +482,7 @@ struct nsCSSPage : public nsCSSStruct  { // NEW
   nsCSSPage(const nsCSSPage& aCopy);
   ~nsCSSPage(void);
 
-  const nsID& GetID(void);
+  //const nsID& GetID(void); // bug 125246
 #ifdef DEBUG
   void List(FILE* out = stdout, PRInt32 aIndent = 0) const;
 #endif
@@ -430,7 +520,7 @@ struct nsCSSContent : public nsCSSStruct  {
   nsCSSContent(const nsCSSContent& aCopy);
   ~nsCSSContent(void);
 
-  const nsID& GetID(void);
+  //const nsID& GetID(void); // bug 125246
 #ifdef DEBUG
   void List(FILE* out = stdout, PRInt32 aIndent = 0) const;
 #endif
@@ -450,7 +540,7 @@ struct nsCSSUserInterface : public nsCSSStruct  { // NEW
   nsCSSUserInterface(const nsCSSUserInterface& aCopy);
   ~nsCSSUserInterface(void);
 
-  const nsID& GetID(void);
+  //const nsID& GetID(void); // bug 125246
 #ifdef DEBUG
   void List(FILE* out = stdout, PRInt32 aIndent = 0) const;
 #endif
@@ -474,7 +564,7 @@ struct nsCSSAural : public nsCSSStruct  { // NEW
   nsCSSAural(const nsCSSAural& aCopy);
   ~nsCSSAural(void);
 
-  const nsID& GetID(void);
+  //const nsID& GetID(void); // bug 125246
 #ifdef DEBUG
   void List(FILE* out = stdout, PRInt32 aIndent = 0) const;
 #endif
@@ -509,7 +599,7 @@ struct nsCSSXUL : public nsCSSStruct  {
   nsCSSXUL(const nsCSSXUL& aCopy);
   ~nsCSSXUL(void);
 
-  const nsID& GetID(void);
+  //const nsID& GetID(void); // bug 125246
 #ifdef DEBUG
   void List(FILE* out = stdout, PRInt32 aIndent = 0) const;
 #endif
@@ -517,6 +607,7 @@ struct nsCSSXUL : public nsCSSStruct  {
   nsCSSValue  mBoxAlign;
   nsCSSValue  mBoxDirection;
   nsCSSValue  mBoxFlex;
+  nsCSSValue  mBoxFlexGroup;
   nsCSSValue  mBoxOrient;
   nsCSSValue  mBoxPack;
   nsCSSValue  mBoxOrdinal;
@@ -532,7 +623,7 @@ struct nsCSSSVG : public nsCSSStruct {
   nsCSSSVG(const nsCSSSVG& aCopy);
   ~nsCSSSVG(void);
 
-  const nsID& GetID(void);
+  // const nsID& GetID(void); // bug 125246
 #ifdef DEBUG
   void List(FILE* out = stdout, PRInt32 aIndent = 0) const;
 #endif
@@ -553,6 +644,10 @@ struct nsCSSSVG : public nsCSSStruct {
 struct nsRuleDataSVG : public nsCSSSVG {
 };
 #endif
+
+// bug 125246
+#warning CLEAN ALL THIS CRAP OUT
+#if(0)
 
 //
 // Some useful types.
@@ -614,6 +709,12 @@ struct nsCSSDeclContains
 #if defined(MOZ_SVG)
 #define CSSDECLIDX_SVG(decl)           ((decl).mContains.mHasSVG + CSSDECLIDX_Aural(decl))
 #endif
+
+#endif
+
+// bug 201681
+#warning CLEAN ALL THIS CRAP OUT
+#if(0)
 
 // --- nsCSSDeclaration -----------------
 
@@ -767,4 +868,7 @@ extern NS_EXPORT nsresult
   NS_NewCSSDeclaration(nsCSSDeclaration** aInstancePtrResult);
 
 
-#endif /* nsCSSDeclaration_h___ */
+//#endif /* nsCSSDeclaration_h___ */
+#endif
+// end bug
+#endif /* nsCSSStruct_h___ */

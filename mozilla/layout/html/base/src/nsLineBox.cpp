@@ -375,23 +375,27 @@ nsLineBox::GetCarriedOutBottomMargin() const
     : nsCollapsingMargin();
 }
 
-void
+PRBool // bug 257612 // void
 nsLineBox::SetCarriedOutBottomMargin(nsCollapsingMargin aValue)
 {
+  PRBool changed = PR_FALSE; // bug 257612
   if (IsBlock()) {
     if (! aValue.IsZero()) {
       if (!mBlockData) {
         mBlockData = new ExtraBlockData(mBounds);
       }
       if (mBlockData) {
+        changed = aValue != mBlockData->mCarriedOutBottomMargin; // bug 257612
         mBlockData->mCarriedOutBottomMargin = aValue;
       }
     }
     else if (mBlockData) {
+      changed = aValue != mBlockData->mCarriedOutBottomMargin; // bug 257612
       mBlockData->mCarriedOutBottomMargin = aValue;
       MaybeFreeData();
     }
   }
+  return changed; // bug 257612
 }
 
 void

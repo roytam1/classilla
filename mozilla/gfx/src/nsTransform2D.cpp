@@ -433,6 +433,8 @@ void nsTransform2D :: TransformCoord(nscoord *ptX, nscoord *ptY)
       break;
 
     case MG_2DSCALE | MG_2DTRANSLATION:
+// bug 173051
+#if(0)
       // You can not use a translation that is not rounded to calculate a 
       // final destination and get consistent results.  The translation is rounded 
       // seperatly only for the final coordinate location.  Its ok 
@@ -441,6 +443,10 @@ void nsTransform2D :: TransformCoord(nscoord *ptX, nscoord *ptY)
       // on output since .33 pixel is not a valid output unit and can cause inconsistencies. (dcone)
       *ptX = NSToCoordRound(*ptX * m00) + NSToCoordRound(m20);
       *ptY = NSToCoordRound(*ptY * m11) + NSToCoordRound(m21);
+#else
+      *ptX = NSToCoordRound(*ptX * m00 + m20);
+      *ptY = NSToCoordRound(*ptY * m11 + m21);
+#endif
       break;
 
     default:
@@ -455,8 +461,10 @@ void nsTransform2D :: TransformCoord(nscoord *ptX, nscoord *ptY)
   }
 }
 
+// bug 173051 calls this TransformCoord also (with a different signature).
 void nsTransform2D :: Transform(float *aX, float *aY, float *aWidth, float *aHeight)
 {
+#if(0)
   float x, y;
 
   switch (type)
@@ -514,6 +522,18 @@ void nsTransform2D :: Transform(float *aX, float *aY, float *aWidth, float *aHei
 
       break;
   }
+#else
+  nscoord x2 = *aX + *aWidth;
+  nscoord y2 = *aY + *aHeight;
+  // needed for 1.3.1
+  nscoord nX = NSToCoordRound(*aX);
+  nscoord nY = NSToCoordRound(*aY);
+  TransformCoord(&nX, &nY); // TransformCoord(aX, aY);
+  TransformCoord(&x2, &y2);
+  *aWidth = x2 - nX; // *aX;
+  *aHeight = y2 - nY; // *aY;
+#endif
+// end bug
 }
 
 void nsTransform2D :: TransformCoord(nscoord *aX, nscoord *aY, nscoord *aWidth, nscoord *aHeight)

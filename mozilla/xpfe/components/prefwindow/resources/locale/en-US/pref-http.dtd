@@ -16,5 +16,10 @@
 <!ENTITY prefEnablePipelining.label          "Enable Pipelining">
 <!ENTITY prefEnablePipelining.accesskey      "P">
 <!ENTITY prefEnablePipeliningProxy.accesskey "I">
-<!ENTITY prefPara                            "HTTP connections may be fine-tuned using these options to enhance either performance or compatibility. Some proxy servers, for example, are known to require HTTP/1.0 (see the release notes for details), and some sites may be broken by using Keep-Alive. If you don't know what to do, use the default settings.">
-<!ENTITY prefPipeWarning                     "WARNING: pipelining is an experimental feature, designed to improve page-load performance, that is unfortunately not well supported by some web servers and proxies.">
+<!ENTITY prefPara                            "HTTP connections may be fine-tuned using these options to enhance either performance or compatibility. Some proxy servers, for example, are known to require HTTP/1.0, and some sites may be broken by using Keep-Alive. If you don't know what to do, use the default settings.">
+<!ENTITY prefPipeWarning                     "WARNING: Pipelining is an experimental feature and may not be supported by all servers or proxies.">
+<!ENTITY prefMaxHTTP.label					 "Advanced users only: HTTP connection limits">
+<!ENTITY prefMaxHTTPTotal					 "Maximum overall total">
+<!ENTITY prefMaxHTTPPerServer				 "Maximum per server">
+<!ENTITY prefMaxHTTPPersPerServer			 "Max persistent per server">
+<!ENTITY prefMaxHTTPProxPersPerServer		 "Max proxied persistent/server">

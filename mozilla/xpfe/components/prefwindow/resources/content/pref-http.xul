@@ -1,5 +1,6 @@
 <?xml version="1.0"?> 
 <!-- ***** BEGIN LICENSE BLOCK *****
+Modified for Classilla by Cameron Kaiser
    - Version: MPL 1.1/GPL 2.0/LGPL 2.1
    -
    - The contents of this file are subject to the Mozilla Public License Version
@@ -51,11 +52,14 @@
   <![CDATA[
     var _elementIDs = ["httpVersion", "enableKeepAlive", "enablePipelining",
                        "httpVersionProxy",
-                       "enableKeepAliveProxy", "enablePipeliningProxy"];
+                       "enableKeepAliveProxy", "enablePipeliningProxy",
+                       "maxHTTP", "maxHTTPperserv", "maxHTTPpersperserv",
+                       "maxHTTPproxpersperserv"];
   ]]>
   </script>
 
   <description>&prefPara;</description>
+  <description>&prefPipeWarning;</description>
 
   <hbox align="start">
   <groupbox flex="1">
@@ -69,8 +73,6 @@
         <radio value="1.1" label="&prefEnableHTTP11.label;" 
                accesskey="&prefEnableHTTP11.accesskey;" id="httpVersion11"/>
       </radiogroup>
-
-      <separator/>
 
       <checkbox id="enableKeepAlive" label="&prefEnableKeepAlive.label;"
                 accesskey="&prefEnableKeepAlive.accesskey;" 
@@ -94,8 +96,6 @@
                accesskey="&prefEnableHTTP11Proxy.accesskey;" id="httpVersion11Proxy"/>
       </radiogroup>
 
-      <separator/>
-
       <checkbox id="enableKeepAliveProxy" label="&prefEnableKeepAlive.label;"
                 accesskey="&prefEnableKeepAliveProxy.accesskey;" 
                 prefstring="network.http.proxy.keep-alive" oncommand="checkPipeliningProxy();"/>
@@ -106,8 +106,48 @@
     </vbox>
   </groupbox>
   </hbox>
-
-  <description>&prefPipeWarning;</description>
+  
+  <hbox align="start">
+  <groupbox flex="1">
+    <caption label="&prefMaxHTTP.label;"/>
+    
+    <grid class="indent" flex="1">
+      <columns>
+        <column/>
+        <column flex="1"/>
+      </columns>
+      <rows>
+        <row align="center">
+          <hbox align="center" pack="end">
+            <label value="&prefMaxHTTPTotal;"/>
+          </hbox>
+          <hbox align="center">
+            <textbox id="maxHTTP" preftype="int" prefstring="network.http.max-connections"
+              size="3"/>
+            <label value="&prefMaxHTTPPerServer;"/>
+            <textbox id="maxHTTPperserv" preftype="int" prefstring="network.http.max-connections-per-server"
+              size="3"/>
+          </hbox>
+        </row>
+        <row align="center">
+          <hbox align="center" pack="end">
+            <label value="&prefMaxHTTPPersPerServer;"/>
+          </hbox>
+          <hbox align="center">
+            <textbox id="maxHTTPpersperserv" preftype="int"
+             prefstring="network.http.max-persistent-connections-per-server"
+             size="3"/>
+            <label value="&prefMaxHTTPProxPersPerServer;"/>
+            <textbox id="maxHTTPproxpersperserv" preftype="int"
+             prefstring="network.http.max-persistent-connections-per-proxy"
+             size="3"/>
+          </hbox>
+        </row>
+      </rows>
+    </grid>
+    
+  </groupbox>
+  </hbox>
 
 </page>
 

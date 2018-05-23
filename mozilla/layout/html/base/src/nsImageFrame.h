@@ -164,6 +164,14 @@ public:
   NS_IMETHOD OnStopDecode(imgIRequest *aRequest, nsIPresContext *aCX, nsresult aStatus, const PRUnichar *aStatusArg);
   NS_IMETHOD FrameChanged(imgIContainer *aContainer, nsIPresContext *aCX, gfxIImageFrame *aNewframe, nsRect *aDirtyRect);
 
+// modified from bug 222901
+  /**
+   * Function to convert a dirty rect in the source image to a dirty
+   * rect for the image frame.
+   */
+  nsRect SourceRectToDest(const nsRect& aRect, nsIPresContext *aPresContext, int whichLoad);
+// end bug
+
 protected:
   // nsISupports
   NS_IMETHOD_(nsrefcnt) AddRef(void);

@@ -48,29 +48,31 @@
 #define ROUND_CONST_FLOAT             0.5f
 #define CEIL_CONST_FLOAT              0.9999999999999999f   // XXX this should be derived from platform FLOAT_MIN
 
+// bug 368280 wanted to replace this with floor(). It doesn't work. -- Cameron
+#define FLOOR_STUB(x) x
 
 /*
  * Coord Rounding Functions
  */
 inline nscoord NSToCoordFloor(float aValue)
 {
-  return ((0.0f <= aValue) ? nscoord(aValue) : nscoord(aValue - CEIL_CONST_FLOAT));
+  return ((0.0f <= aValue) ? nscoord(FLOOR_STUB(aValue)) : nscoord(FLOOR_STUB(aValue - CEIL_CONST_FLOAT)));
 }
 
 inline nscoord NSToCoordCeil(float aValue)
 {
-  return ((0.0f <= aValue) ? nscoord(aValue + CEIL_CONST_FLOAT) : nscoord(aValue));
+  return ((0.0f <= aValue) ? nscoord(FLOOR_STUB(aValue + CEIL_CONST_FLOAT)) : nscoord(FLOOR_STUB(aValue)));
 }
 
 inline nscoord NSToCoordRound(float aValue)
 {
-  return ((0.0f <= aValue) ? nscoord(aValue + ROUND_CONST_FLOAT) : nscoord(aValue - ROUND_CONST_FLOAT));
+  return ((0.0f <= aValue) ? nscoord(FLOOR_STUB(aValue + ROUND_CONST_FLOAT)) : nscoord(FLOOR_STUB(aValue - ROUND_CONST_FLOAT)));
 }
 
 inline nscoord NSToCoordRoundExclusive(float aValue)
 {
-  return ((0.0f <= aValue) ? nscoord(aValue + ROUND_EXCLUSIVE_CONST_FLOAT) :
-                             nscoord(aValue - ROUND_EXCLUSIVE_CONST_FLOAT));
+  return ((0.0f <= aValue) ? nscoord(FLOOR_STUB(aValue + ROUND_EXCLUSIVE_CONST_FLOAT)) :
+                             nscoord(FLOOR_STUB(aValue - ROUND_EXCLUSIVE_CONST_FLOAT)));
 }
 
 

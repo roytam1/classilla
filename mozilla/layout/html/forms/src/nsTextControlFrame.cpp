@@ -1683,12 +1683,41 @@ nsTextControlFrame::CreateAnonymousContent(nsIPresContext* aPresContext,
   if (!divContent)
     return NS_ERROR_FAILURE;
 
+  // Set the div native anonymous, so CSS will be its style language
+  // no matter what.
+  divContent->SetNativeAnonymous(PR_TRUE); // backbugs from bug 69355 and bug 234761
 
   // Set the neccessary style attributes on the text control.
 
   if (IsSingleLineTextControl())
     rv = divContent->SetAttr(kNameSpaceID_None,nsHTMLAtoms::style, NS_ConvertASCIItoUCS2(DIV_STRING_SINGLELINE), PR_FALSE);
   else {
+// bug 69355 modified for Clecko
+// We need to split the difference between M69355 and the old 1.3.1 code because certain
+// other functions rely on something in the attribute string. So I've decided to merge the
+// two blocks that trail this one by letting the 1.3.1 code work in the default case, but
+// add on an overflow: inherit if the overflow is something other than the ones 1.3.1 covers.
+// -- Cameron
+#if(1)
+    nsAutoString divStr; divStr.AssignWithConversion(DIV_STRING);
+    const nsStyleDisplay* disp = (const nsStyleDisplay*)
+    							  mStyleContext->GetStyleData(eStyleStruct_Display);
+    if (disp->mOverflow == NS_STYLE_OVERFLOW_SCROLL)
+      divStr += NS_LITERAL_STRING("overflow:scroll;");
+    else if (disp->mOverflow == NS_STYLE_OVERFLOW_HIDDEN)
+      divStr += NS_LITERAL_STRING("overflow:hidden;");
+	else if (disp->mOverflow == NS_STYLE_OVERFLOW_AUTO || 
+				disp->mOverflow == NS_STYLE_OVERFLOW_VISIBLE
+				|| disp->mOverflow == nsnull || !disp->mOverflow)
+	  divStr += NS_LITERAL_STRING("overflow:auto;"); // this will invariably be the default.
+	else divStr += NS_LITERAL_STRING("overflow:inherit;"); // fallthru for M69355
+	rv = divContent->SetAttr(kNameSpaceID_None,nsHTMLAtoms::style, divStr, PR_FALSE);
+#else
+//NOW FOR THE OLD STUFF!
+
+#if(0)
+// This is the original code that worked in 9.0 and 9.0.4, and also works in 9.1, but
+// seems incomplete.
     nsAutoString divStr; divStr.AssignWithConversion(DIV_STRING);
     const nsStyleDisplay* disp = (const nsStyleDisplay*)
     mStyleContext->GetStyleData(eStyleStruct_Display);
@@ -1698,6 +1727,22 @@ nsTextControlFrame::CreateAnonymousContent(nsIPresContext* aPresContext,
       divStr += NS_LITERAL_STRING("overflow:hidden;");
     else divStr += NS_LITERAL_STRING("overflow:auto;");
     rv = divContent->SetAttr(kNameSpaceID_None,nsHTMLAtoms::style, divStr, PR_FALSE);
+#else
+// This was the first pass at bug 69355, which crashes 9.1 when textboxes stretch
+// and the scrollbars are turned on.
+    const nsStyleDisplay* disp = (const nsStyleDisplay*)
+    mStyleContext->GetStyleData(eStyleStruct_Display);
+    if (disp->mOverflow != NS_STYLE_OVERFLOW_AUTO &&  // this is the default
+        disp->mOverflow != NS_STYLE_OVERFLOW_VISIBLE &&
+        disp->mOverflow != NS_STYLE_OVERFLOW_CLIP) {
+      rv = divContent->SetAttr(kNameSpaceID_None, nsHTMLAtoms::style,
+                               NS_LITERAL_STRING("overflow: inherit;"),
+                               PR_FALSE);
+    }
+#endif
+//END THE OLD STUFF!
+#endif
+// end bug
   }
 
   if (NS_FAILED(rv))

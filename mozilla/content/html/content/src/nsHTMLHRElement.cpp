@@ -222,7 +222,8 @@ MapAttributesIntoRule(const nsIHTMLMappedAttributes* aAttributes,
     return;
 
   if (aData->mSID == eStyleStruct_Margin) {
-    nsCSSRect* margin = aData->mMarginData->mMargin;
+    //nsCSSRect* margin = aData->mMarginData->mMargin;
+    nsCSSRect& margin = aData->mMarginData->mMargin; // bug 125246
     nsHTMLValue value;
     // align: enum
     aAttributes->GetAttribute(nsHTMLAtoms::align, value);
@@ -230,22 +231,45 @@ MapAttributesIntoRule(const nsIHTMLMappedAttributes* aAttributes,
       // Map align attribute into auto side margins
       switch (value.GetIntValue()) {
       case NS_STYLE_TEXT_ALIGN_LEFT:
+// bug 125246
+#if(0)
         if (margin->mLeft.GetUnit() == eCSSUnit_Null)
           margin->mLeft.SetFloatValue(0.0f, eCSSUnit_Pixel);
         if (margin->mRight.GetUnit() == eCSSUnit_Null)
           margin->mRight.SetAutoValue();
+#else
+        if (margin.mLeft.GetUnit() == eCSSUnit_Null)
+          margin.mLeft.SetFloatValue(0.0f, eCSSUnit_Pixel);
+        if (margin.mRight.GetUnit() == eCSSUnit_Null)
+          margin.mRight.SetAutoValue();
+#endif
         break;
       case NS_STYLE_TEXT_ALIGN_RIGHT:
+#if(0)
         if (margin->mLeft.GetUnit() == eCSSUnit_Null)
           margin->mLeft.SetAutoValue();
         if (margin->mRight.GetUnit() == eCSSUnit_Null)
           margin->mRight.SetFloatValue(0.0f, eCSSUnit_Pixel);
+#else
+        if (margin.mLeft.GetUnit() == eCSSUnit_Null)
+          margin.mLeft.SetAutoValue();
+        if (margin.mRight.GetUnit() == eCSSUnit_Null)
+          margin.mRight.SetFloatValue(0.0f, eCSSUnit_Pixel);
+#endif
         break;
       case NS_STYLE_TEXT_ALIGN_CENTER:
+#if(0)
         if (margin->mLeft.GetUnit() == eCSSUnit_Null)
           margin->mLeft.SetAutoValue();
         if (margin->mRight.GetUnit() == eCSSUnit_Null)
           margin->mRight.SetAutoValue();
+#else
+        if (margin.mLeft.GetUnit() == eCSSUnit_Null)
+          margin.mLeft.SetAutoValue();
+        if (margin.mRight.GetUnit() == eCSSUnit_Null)
+          margin.mRight.SetAutoValue();
+#endif
+// end bug
         break;
       }
     }

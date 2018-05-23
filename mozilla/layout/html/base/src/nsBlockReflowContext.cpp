@@ -41,6 +41,7 @@
 #include "nsSpaceManager.h"
 #include "nsIFontMetrics.h"
 #include "nsIPresContext.h"
+#include "nsIFrameManager.h" // bug 205087
 #include "nsIContent.h"
 #include "nsIStyleContext.h"
 #include "nsHTMLReflowCommand.h"
@@ -377,6 +378,17 @@ ComputeShrinkwrapMargins(const nsStyleMargin* aStyleMargin, nscoord aWidth, nsMa
   }
 }
 
+// bug 205087
+static void
+nsPointDtor(nsIPresContext *aPresContext, nsIFrame *aFrame,
+             nsIAtom *aPropertyName, void *aPropertyValue)
+{
+  nsPoint *point = NS_STATIC_CAST(nsPoint*, aPropertyValue);
+  delete point;
+}
+// end bug
+
+
 nsresult
 nsBlockReflowContext::ReflowBlock(const nsRect&       aSpace,
                                   PRBool              aApplyTopMargin,
@@ -469,6 +481,33 @@ nsBlockReflowContext::ReflowBlock(const nsRect&       aSpace,
   mFrame->GetStyleData(eStyleStruct_Display, (const nsStyleStruct*&)display);
 
   aComputedOffsets = aFrameRS.mComputedOffsets;
+// bug 205087 modified for Classilla
+#if(1)
+  if (NS_STYLE_POSITION_RELATIVE == display->mPosition) {
+    //nsIFrameManager *frameManager = mPresContext->GetFrameManager();
+    nsCOMPtr<nsIPresShell> presShell;
+    mPresContext->GetShell(getter_AddRefs(presShell));
+    // this better not fail
+    
+    nsCOMPtr<nsIFrameManager> frameManager;
+    presShell->GetFrameManager(getter_AddRefs(frameManager));
+    
+    nsPoint *offsets;
+    frameManager->GetFrameProperty(mFrame,
+                                   nsLayoutAtoms::computedOffsetProperty, 0,
+                                   (void**)&offsets);
+    if (offsets)
+      offsets->MoveTo(aComputedOffsets.left, aComputedOffsets.top);
+    else {
+      offsets = new nsPoint(aComputedOffsets.left, aComputedOffsets.top);
+      if (offsets)
+        frameManager->SetFrameProperty(mFrame,
+                                       nsLayoutAtoms::computedOffsetProperty,
+                                       offsets, nsPointDtor);
+    }
+  }
+#endif
+// end bug
   aFrameRS.mLineLayout = nsnull;
   if (!aIsAdjacentWithTop) {
     aFrameRS.mFlags.mIsTopOfPage = PR_FALSE;  // make sure this is cleared
@@ -563,7 +602,7 @@ nsBlockReflowContext::ReflowBlock(const nsRect&       aSpace,
    // are not (recall that frame coordinates are relative to the parents
    // origin and that the parents border/padding is <b>inside</b> the
    // parent frame. Therefore we have to subtract out the parents
-   // border+padding before translating.
+   // border+padding before translating. (this was bug 205087 but I guess I backbugged it)
    nscoord tx = x - mOuterReflowState.mComputedBorderPadding.left;
    nscoord ty = y - mOuterReflowState.mComputedBorderPadding.top;
 
@@ -592,7 +631,7 @@ nsBlockReflowContext::ReflowBlock(const nsRect&       aSpace,
   }
 #endif
 
-// moved above by pull up
+// moved above by pull up (actually bug 205087)
 #if(0)
   // Adjust spacemanager coordinate system for the frame. The
   // spacemanager coordinates are <b>inside</b> the callers
@@ -767,6 +806,9 @@ nsBlockReflowContext::PlaceBlock(const nsHTMLReflowState& aReflowState,
   // Consider the case where we clip off the overflow with
   // 'overflow: hidden' (which doesn't currently affect mOverflowArea,
   // but probably should.
+  // bug 69355
+  // 'overflow: -moz-hidden-unscrollable' (which doesn't currently
+  // affect mOverflowArea, but probably should.
   if ((0 == mMetrics.height) && (0 == mMetrics.mOverflowArea.height)) 
 #endif
   // Check whether the block's bottom margin collapses with its top

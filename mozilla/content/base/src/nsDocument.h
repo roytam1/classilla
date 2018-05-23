@@ -209,8 +209,11 @@ public:
                                               PRBool aApplicable) { return NS_OK; }
   NS_IMETHOD StyleRuleChanged(nsIDocument *aDocument,
                               nsIStyleSheet* aStyleSheet,
-                              nsIStyleRule* aStyleRule,
-                              nsChangeHint aHint) { return NS_OK; }
+                              /*nsIStyleRule* aStyleRule,
+                              nsChangeHint aHint) { return NS_OK; }*/
+                              nsIStyleRule* aOldStyleRule,
+                              nsIStyleRule* aNewStyleRule) { return NS_OK; } // bug 188803
+
   NS_IMETHOD StyleRuleAdded(nsIDocument *aDocument,
                             nsIStyleSheet* aStyleSheet,
                             nsIStyleRule* aStyleRule) { return NS_OK; }
@@ -517,8 +520,10 @@ public:
                             PRInt32 aIndexInContainer);
 
   NS_IMETHOD StyleRuleChanged(nsIStyleSheet* aStyleSheet,
-                              nsIStyleRule* aStyleRule,
-                              nsChangeHint aHint); // See nsStyleConsts fot hint values
+                              //nsIStyleRule* aStyleRule,
+                              //nsChangeHint aHint); // See nsStyleConsts fot hint values
+                              nsIStyleRule* aOldStyleRule,
+                              nsIStyleRule* aNewStyleRule); // bug 188803
   NS_IMETHOD StyleRuleAdded(nsIStyleSheet* aStyleSheet,
                             nsIStyleRule* aStyleRule);
   NS_IMETHOD StyleRuleRemoved(nsIStyleSheet* aStyleSheet,

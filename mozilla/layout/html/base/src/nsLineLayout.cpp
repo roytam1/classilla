@@ -331,7 +331,7 @@ nsLineLayout::BeginLineReflow(nscoord aX, nscoord aY,
     }
     else if (eStyleUnit_Percent == unit) {
       nscoord width =
-        nsHTMLReflowState::GetContainingBlockContentWidth(mBlockReflowState->parentReflowState);
+        nsHTMLReflowState::GetContainingBlockContentWidth(mBlockReflowState); // bug 135082 // mBlockReflowState->parentReflowState);
       if ((0 != width) && (NS_UNCONSTRAINEDSIZE != width)) {
         indent = nscoord(mStyleText->mTextIndent.GetPercentValue() * width);
       }
@@ -3318,7 +3318,7 @@ nsLineLayout::RelativePositionFrames(PerSpanData* psd, nsRect& aCombinedArea)
 // bug 213591
 // however, we seem to be better off using the original code
 //f(0)
-      frame->GetOrigin(origin);
+      frame->GetOrigin(origin); // should this use the equivalent GetPosition() from nsFrame::ConsiderChildOverflow??
       // XXX what about right and bottom?
       nscoord dx = pfd->mOffsets.left;
       nscoord dy = pfd->mOffsets.top;

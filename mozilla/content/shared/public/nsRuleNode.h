@@ -45,7 +45,9 @@
 #include "nsIFrame.h"
 #include "nsFixedSizeAllocator.h"
 #include "nsIPresContext.h"
-#include "nsCSSDeclaration.h"
+// bug 201681
+#include "nsCSSStruct.h"
+//#include "nsCSSDeclaration.h"
 #include "nsILanguageAtomService.h"
 
 class nsIStyleContext;
@@ -256,7 +258,7 @@ struct nsRuleData
   nsRuleDataColor* mColorData;
   nsRuleDataContent* mContentData;
   nsRuleDataText* mTextData;
-  nsRuleDataUserInterface* mUIData;
+  nsRuleDataUserInterface* mUserInterfaceData; // bug 125246 // mUIData;
 
 #ifdef INCLUDE_XUL
   nsRuleDataXUL* mXULData;
@@ -270,7 +272,7 @@ struct nsRuleData
     :mSID(aSID), mPresContext(aContext), mStyleContext(aStyleContext), mPostResolveCallback(nsnull),
      mFontData(nsnull), mDisplayData(nsnull), mMarginData(nsnull), mListData(nsnull), 
      mPositionData(nsnull), mTableData(nsnull), mColorData(nsnull), mContentData(nsnull), mTextData(nsnull),
-     mUIData(nsnull)
+     mUserInterfaceData(nsnull) // bug 125246 // mUIData(nsnull)
   {
     mCanStoreInRuleTree = PR_TRUE;
 
@@ -419,8 +421,8 @@ protected:
 
   const nsStyleStruct* WalkRuleTree(const nsStyleStructID aSID, nsIStyleContext* aContext, 
                                     nsRuleData* aRuleData,
-                                    nsRuleDataStruct* aSpecificData,
-                                    PRBool aComputeData);
+                                    nsRuleDataStruct* aSpecificData); // ,
+                                    // PRBool aComputeData); // bug 188803
 
   const nsStyleStruct* ComputeDisplayData(nsStyleStruct* aStartDisplay, const nsRuleDataStruct& aDisplayData, 
                                           nsIStyleContext* aContext, nsRuleNode* aHighestNode,
@@ -515,6 +517,8 @@ protected:
   inline RuleDetail CheckSpecifiedProperties(const nsStyleStructID aSID, const nsRuleDataStruct& aRuleDataStruct);
 
   const nsStyleStruct* GetParentData(const nsStyleStructID aSID);
+// bug 188803
+#if(0)
   const nsStyleStruct* GetDisplayData(nsIStyleContext* aContext, PRBool aComputeData);
   const nsStyleStruct* GetVisibilityData(nsIStyleContext* aContext, PRBool aComputeData);
   const nsStyleStruct* GetFontData(nsIStyleContext* aContext, PRBool aComputeData);
@@ -542,6 +546,37 @@ protected:
 #endif
 
   typedef const nsStyleStruct* (nsRuleNode::*GetStyleDataFn)(nsIStyleContext*, PRBool);
+
+#else
+// these were changed from nsStyleContext to nsIStyleContext.
+
+  const nsStyleStruct* GetDisplayData(nsIStyleContext* aContext);
+  const nsStyleStruct* GetVisibilityData(nsIStyleContext* aContext);
+  const nsStyleStruct* GetFontData(nsIStyleContext* aContext);
+  const nsStyleStruct* GetColorData(nsIStyleContext* aContext);
+  const nsStyleStruct* GetBackgroundData(nsIStyleContext* aContext);
+  const nsStyleStruct* GetMarginData(nsIStyleContext* aContext);
+  const nsStyleStruct* GetBorderData(nsIStyleContext* aContext);
+  const nsStyleStruct* GetPaddingData(nsIStyleContext* aContext);
+  const nsStyleStruct* GetOutlineData(nsIStyleContext* aContext);
+  const nsStyleStruct* GetListData(nsIStyleContext* aContext);
+  const nsStyleStruct* GetPositionData(nsIStyleContext* aContext);
+  const nsStyleStruct* GetTableData(nsIStyleContext* aContext);
+  const nsStyleStruct* GetTableBorderData(nsIStyleContext* aContext);
+  const nsStyleStruct* GetContentData(nsIStyleContext* aContext);
+  const nsStyleStruct* GetQuotesData(nsIStyleContext* aContext);
+  const nsStyleStruct* GetTextData(nsIStyleContext* aContext);
+  const nsStyleStruct* GetTextResetData(nsIStyleContext* aContext);
+  const nsStyleStruct* GetUserInterfaceData(nsIStyleContext* aContext);
+  const nsStyleStruct* GetUIResetData(nsIStyleContext* aContext);
+  const nsStyleStruct* GetXULData(nsIStyleContext* aContext);
+#ifdef MOZ_SVG
+  const nsStyleStruct* GetSVGData(nsIStyleContext* aContext);
+#endif
+
+  typedef const nsStyleStruct* (nsRuleNode::*GetStyleDataFn)(nsIStyleContext*);
+#endif
+// end bug
   static GetStyleDataFn gGetStyleDataFn[];
 
 public:
@@ -570,8 +605,14 @@ public:
     return mPresContext;
   }
 
+// bug 188803
+#if(0)
   nsresult ClearCachedData(nsIStyleRule* aRule);
   nsresult ClearCachedDataInSubtree(nsIStyleRule* aRule);
+#else
+  nsresult ClearStyleData();
+#endif
+// end bug
   nsresult GetPresContext(nsIPresContext** aResult);
   nsresult PathContainsRule(nsIStyleRule* aRule, PRBool* aMatched);
   const nsStyleStruct* GetStyleData(nsStyleStructID aSID, 

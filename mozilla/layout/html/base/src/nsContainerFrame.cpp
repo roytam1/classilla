@@ -603,7 +603,9 @@ SyncFrameViewGeometryDependentProperties(nsIPresContext*  aPresContext,
   //   in the style context...
   PRBool isBlockLevel = display->IsBlockLevel() || (kidState & NS_FRAME_OUT_OF_FLOW);
   PRBool hasClip = display->IsAbsolutelyPositioned() && (display->mClipFlags & NS_STYLE_CLIP_RECT);
-  PRBool hasOverflowClip = isBlockLevel && (display->mOverflow == NS_STYLE_OVERFLOW_HIDDEN);
+  //PRBool hasOverflowClip = isBlockLevel && (display->mOverflow == NS_STYLE_OVERFLOW_HIDDEN);
+  PRBool hasOverflowClip = isBlockLevel && (display->mOverflow == NS_STYLE_OVERFLOW_CLIP); // bug 69355
+#warning put height calc here maybe
   if (hasClip || hasOverflowClip) {
     nsSize frameSize;
     aFrame->GetSize(frameSize);
@@ -705,12 +707,15 @@ nsContainerFrame::SyncFrameViewAfterReflow(nsIPresContext* aPresContext,
     aView->GetBounds(oldBounds);
     nsFrameState kidState;
     aFrame->GetFrameState(&kidState);
+    
+    // The PR_TRUEs were part of bug 190193 and were commented out originally.
+    // -- Cameron
 
     // If the frame has child frames that stick outside the content
     // area, then size the view large enough to include those child
     // frames
     if ((kidState & NS_FRAME_OUTSIDE_CHILDREN) && aCombinedArea) {
-      vm->ResizeView(aView, *aCombinedArea); // , PR_TRUE);
+      vm->ResizeView(aView, *aCombinedArea, PR_TRUE);
     } else {
       // If the width is unchanged and the height is not decreased
       // then repaint only the newly exposed or contracted area,
@@ -725,8 +730,8 @@ nsContainerFrame::SyncFrameViewAfterReflow(nsIPresContext* aPresContext,
       nsSize frameSize;
       aFrame->GetSize(frameSize);
       nsRect newSize(0, 0, frameSize.width, frameSize.height);
-      vm->ResizeView(aView, newSize, //PR_TRUE);
-                     (frameSize.width == oldBounds.width && frameSize.height >= oldBounds.height));
+      vm->ResizeView(aView, newSize, PR_TRUE);
+                     //(frameSize.width == oldBounds.width && frameSize.height >= oldBounds.height));
     }
 
     // Even if the size hasn't changed, we need to sync up the
@@ -899,7 +904,8 @@ nsContainerFrame::FrameNeedsView(nsIPresContext* aPresContext,
   // block-level, but we can't trust that the style context 'display' value is
   // set correctly
   if ((display->IsBlockLevel() || display->IsFloating()) &&
-      (display->mOverflow == NS_STYLE_OVERFLOW_HIDDEN)) {
+      //(display->mOverflow == NS_STYLE_OVERFLOW_HIDDEN)) {
+      (display->mOverflow == NS_STYLE_OVERFLOW_CLIP)) { // bug 69355
     // XXX Check for the frame being a block frame and only force a view
     // in that case, because adding a view for box frames seems to cause
     // problems for XUL...

@@ -41,6 +41,8 @@
 #include "nsString.h"
 #include "nsChangeHint.h"
 
+// bug 125246
+#if(0)
 /*
    Declare the enum list using the magic of preprocessing
    enum values are "eCSSProperty_foo" (where foo is the property)
@@ -55,7 +57,10 @@ enum nsCSSProperty {
   eCSSProperty_COUNT
 };
 #undef CSS_PROP
-
+#else
+#include "nsCSSProperty.h"
+#include "nsStyleStruct.h"
+#endif
 
 class nsCSSProps {
 public:
@@ -65,6 +70,14 @@ public:
   // Given a property string, return the enum value
   static nsCSSProperty LookupProperty(const nsAString& aProperty);
   static nsCSSProperty LookupProperty(const nsACString& aProperty);
+
+// bug 125246
+  static inline PRBool IsShorthand(nsCSSProperty aProperty) {
+    NS_ASSERTION(0 <= aProperty && aProperty < eCSSProperty_COUNT,
+                 "out of range");
+    return (aProperty >= eCSSProperty_COUNT_no_shorthands);
+  }
+// end bug
 
   // Given a property enum, get the string value
   static const nsAFlatCString& GetStringValue(nsCSSProperty aProperty);
@@ -81,7 +94,35 @@ public:
   static PRInt32 SearchKeywordTableInt(PRInt32 aValue, const PRInt32 aTable[]);
   static const nsAFlatCString& SearchKeywordTable(PRInt32 aValue, const PRInt32 aTable[]);
 
+// bug 125246
+#if(0)
   static const nsChangeHint  kHintTable[];
+#else
+  static const nsChangeHint    kHintTable[eCSSProperty_COUNT];
+  static const nsCSSType       kTypeTable[eCSSProperty_COUNT_no_shorthands];
+  static const nsStyleStructID kSIDTable[eCSSProperty_COUNT_no_shorthands];
+
+  // A table for shorthand properties.  The appropriate index is the
+  // property ID minus eCSSProperty_COUNT_no_shorthands.
+private:
+  static const nsCSSProperty *const
+    kSubpropertyTable[eCSSProperty_COUNT - eCSSProperty_COUNT_no_shorthands];
+
+public:
+  static inline
+  const nsCSSProperty *const SubpropertyEntryFor(nsCSSProperty aProperty) {
+    NS_ASSERTION(eCSSProperty_COUNT_no_shorthands <= aProperty &&
+                 aProperty < eCSSProperty_COUNT,
+                 "out of range");
+    return nsCSSProps::kSubpropertyTable[aProperty -
+                                         eCSSProperty_COUNT_no_shorthands];
+  }
+
+#define CSSPROPS_FOR_SHORTHAND_SUBPROPERTIES(iter_, prop_)                    \
+  for (const nsCSSProperty* iter_ = nsCSSProps::SubpropertyEntryFor(prop_);   \
+       *iter_ != eCSSProperty_UNKNOWN; ++iter_)
+#endif
+// end bug
 
   // Keyword/Enum value tables
   static const PRInt32 kAppearanceKTable[];

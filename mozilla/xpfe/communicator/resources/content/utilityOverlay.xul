@@ -92,6 +92,12 @@
        key="&newNavigatorCmd.key;"
        command="cmd_newNavigator"
        modifiers="accel"/>
+  <key id="key_preferences"
+       key="&prefCmd.commandkey;"
+       command="cmd_preferences"
+       modifiers="accel"/>
+  <command id="cmd_preferences"
+       oncommand="goPreferences('navigator', 'chrome://communicator/content/pref/pref-navigator.xul', 'navigator')"/>
 
   <!-- Edit Menu -->
   <menu id="menu_Edit"
@@ -226,6 +232,9 @@
             label="&preferencesCmd.label;"
             key="key_preferences"
             accesskey="&preferencesCmd.accesskey;"/>
+  <!-- menuitem id="menu_preferences"
+            label="&preferencesCmd.label;"
+            accesskey="&preferencesCmd.accesskey;" -->
 
   <!-- View Menu -->
   <menu id="menu_View"
@@ -262,6 +271,10 @@
                 label="&aboutCmd.label;"
                 id="aboutName"
                 oncommand="goAboutDialog();"/>
+      <menuitem accesskey="&checkForUpdates.accesskey;"
+      			label="&checkForUpdates.label;"
+      			id="checkForUpdates"
+      			oncommand="goCheckForUpdates();"/>
     </menupopup>
   </menu>
         

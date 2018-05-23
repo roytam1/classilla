@@ -466,6 +466,8 @@ MapAttributesIntoRule(const nsIHTMLMappedAttributes* aAttributes,
       if (NS_STYLE_FRAME_0 == frameborder ||
           NS_STYLE_FRAME_NO == frameborder ||
           NS_STYLE_FRAME_OFF == frameborder) {
+// bug 125246
+#if(0)
         if (aData->mMarginData->mBorderWidth->mLeft.GetUnit() == eCSSUnit_Null)
           aData->mMarginData->mBorderWidth->mLeft.SetFloatValue(0.0f, eCSSUnit_Pixel);
         if (aData->mMarginData->mBorderWidth->mRight.GetUnit() == eCSSUnit_Null)
@@ -474,6 +476,17 @@ MapAttributesIntoRule(const nsIHTMLMappedAttributes* aAttributes,
           aData->mMarginData->mBorderWidth->mTop.SetFloatValue(0.0f, eCSSUnit_Pixel);
         if (aData->mMarginData->mBorderWidth->mBottom.GetUnit() == eCSSUnit_Null)
           aData->mMarginData->mBorderWidth->mBottom.SetFloatValue(0.0f, eCSSUnit_Pixel);
+#else
+        if (aData->mMarginData->mBorderWidth.mLeft.GetUnit() == eCSSUnit_Null)
+          aData->mMarginData->mBorderWidth.mLeft.SetFloatValue(0.0f, eCSSUnit_Pixel);
+        if (aData->mMarginData->mBorderWidth.mRight.GetUnit() == eCSSUnit_Null)
+          aData->mMarginData->mBorderWidth.mRight.SetFloatValue(0.0f, eCSSUnit_Pixel);
+        if (aData->mMarginData->mBorderWidth.mTop.GetUnit() == eCSSUnit_Null)
+          aData->mMarginData->mBorderWidth.mTop.SetFloatValue(0.0f, eCSSUnit_Pixel);
+        if (aData->mMarginData->mBorderWidth.mBottom.GetUnit() == eCSSUnit_Null)
+          aData->mMarginData->mBorderWidth.mBottom.SetFloatValue(0.0f, eCSSUnit_Pixel);
+#endif
+// end bug
       }
     }
   }

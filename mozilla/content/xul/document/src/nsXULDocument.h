@@ -315,9 +315,12 @@ public:
                                    nsIAtom* aAttribute);
 
     NS_IMETHOD StyleRuleChanged(nsIStyleSheet* aStyleSheet,
+    /*
                                 nsIStyleRule* aStyleRule,
-                                nsChangeHint aHint);
-
+                                nsChangeHint aHint); */
+                                nsIStyleRule *aOldStyleRule,
+                                nsIStyleRule *aNewStyleRule); // bug 188803
+                            
     NS_IMETHOD StyleRuleAdded(nsIStyleSheet* aStyleSheet,
                               nsIStyleRule* aStyleRule);
 

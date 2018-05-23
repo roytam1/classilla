@@ -466,7 +466,8 @@ public:
    * @param aValue the value to parse
    * @param aResult the resulting HTMLValue [OUT]
    */
-  nsresult  ParseStyleAttribute(const nsAString& aValue,
+  nsresult  ParseStyleAttribute(nsIContent *aContent, // backbug from 1.7 for bug 234761
+  								const nsAString& aValue,
                                 nsHTMLValue& aResult);
 
   /*

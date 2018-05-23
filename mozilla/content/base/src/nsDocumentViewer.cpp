@@ -2715,6 +2715,14 @@ NS_IMETHODIMP DocumentViewerImpl::SizeToContent()
    GetPresShell(*getter_AddRefs(presShell));
    NS_ENSURE_TRUE(presShell, NS_ERROR_FAILURE);
 
+// bug 244235 modified for Clecko
+   // Flush out all content and style updates.  Note that we don't need to
+   // flush layout since we're about to do a top-level resize reflow, and we
+   // shouldn't have any parents to propagate the flush to.
+   //mDocument->FlushPendingNotifications(Flush_Style);
+   mDocument->FlushPendingNotifications(PR_TRUE, PR_TRUE);
+// end bug
+
    NS_ENSURE_SUCCESS(presShell->ResizeReflow(NS_UNCONSTRAINEDSIZE,
       NS_UNCONSTRAINEDSIZE), NS_ERROR_FAILURE);
 

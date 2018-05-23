@@ -395,9 +395,11 @@ protected:
 
   void InvalidateDamage(nsIPresContext* aPresContext,
                         PRUint8         aCaptionSide,
+                        const // bug 221140
                         nsSize&         aOuterSize,
                         PRBool          aInnerChanged,
-                        PRBool          aCaptionChanged);
+                        PRBool          aCaptionChanged,
+                        nsRect*         aOldOverflowArea); // bug 173277
   
   // Get the margin and padding, aMarginNoAuto is aMargin, but with auto 
   // margins set to 0

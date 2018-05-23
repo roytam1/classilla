@@ -268,13 +268,14 @@ nsBrowserStatusHandler.prototype =
           msg = gNavigatorBundle.getString("nv_done");
           // figure out if Classilla rendered with fixups, as a reminder to the user.
           // we don't care if this fails, but we don't want failure to wreck the browser.
-          try {
-          	var isfixup = pref.getBoolPref("classilla.layout.fixup") ? "nv_done_didfix" :
-          				"nv_done_didntfix";
-          	msg += " " + gNavigatorBundle.getString(isfixup);
-          } catch(e) {
-          	// damn
-          }
+          // DISABLED IN 9.1
+          //try {
+          //	var isfixup = pref.getBoolPref("classilla.layout.fixup") ? "nv_done_didfix" :
+          //				"nv_done_didntfix";
+          //	msg += " " + gNavigatorBundle.getString(isfixup);
+          //} catch(e) {
+          //	// damn
+          //}
         }
         this.status = "";
         this.setDefaultStatus(msg);

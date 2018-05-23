@@ -858,7 +858,8 @@ nsBoxFrame::Reflow(nsIPresContext*          aPresContext,
   nsSize prefSize(0,0);
 
   // if we are told to layout intrinic then get our preferred size.
-  if (computedSize.width == NS_INTRINSICSIZE || computedSize.height == NS_INTRINSICSIZE) {
+  if (computedSize.width == NS_INTRINSICSIZE || computedSize.height == NS_INTRINSICSIZE ||
+  		aReflowState.mComputedHeight == 0) { // test.
      nsSize minSize(0,0);
      nsSize maxSize(0,0);
      GetPrefSize(state, prefSize);
@@ -925,6 +926,11 @@ nsBoxFrame::Reflow(nsIPresContext*          aPresContext,
   aDesiredSize.height = r.height;
   aDesiredSize.ascent = ascent;
   aDesiredSize.descent = r.height - ascent;
+
+  // bug 276286
+  if(aDesiredSize.mFlags & NS_REFLOW_CALC_MAX_WIDTH) {
+    aDesiredSize.mMaximumWidth = prefSize.width;
+  }
 
   // max sure the max element size reflects
   // our min width
@@ -1646,7 +1652,8 @@ nsBoxFrame::PaintChildren(nsIPresContext*      aPresContext,
   
   // If overflow is hidden then set the clip rect so that children
   // don't leak out of us
-  if (NS_STYLE_OVERFLOW_HIDDEN == disp->mOverflow) {
+  //if (NS_STYLE_OVERFLOW_HIDDEN == disp->mOverflow) {
+  if (NS_STYLE_OVERFLOW_CLIP == disp->mOverflow) { // bug 69355
     nsMargin im(0,0,0,0);
     GetInset(im);
     r.Deflate(im);
@@ -1659,7 +1666,8 @@ nsBoxFrame::PaintChildren(nsIPresContext*      aPresContext,
     nsIFrame* frame = nsnull;
     kid->GetFrame(&frame);
 
-    if (!hasClipped && NS_STYLE_OVERFLOW_HIDDEN == disp->mOverflow) {
+    //if (!hasClipped && NS_STYLE_OVERFLOW_HIDDEN == disp->mOverflow) {
+    if (!hasClipped && NS_STYLE_OVERFLOW_CLIP == disp->mOverflow) { // bug 69355
         // if we haven't already clipped and we should
         // check to see if the child is in out bounds. If not then
         // we begin clipping.
@@ -1692,7 +1700,8 @@ nsBoxFrame::PaintChildren(nsIPresContext*      aPresContext,
 
     GetContentRect(r);
 
-    if (NS_STYLE_OVERFLOW_HIDDEN == disp->mOverflow) {
+    //if (NS_STYLE_OVERFLOW_HIDDEN == disp->mOverflow) {
+    if (NS_STYLE_OVERFLOW_CLIP == disp->mOverflow) { // bug 69355
       GetDebugMargin(debugMargin);
       PixelMarginToTwips(aPresContext, debugMargin);
       r.Deflate(debugMargin);
@@ -1702,7 +1711,8 @@ nsBoxFrame::PaintChildren(nsIPresContext*      aPresContext,
 
     GetChildBox(&kid);
     while (nsnull != kid) {
-         if (!hasClipped && NS_STYLE_OVERFLOW_HIDDEN == disp->mOverflow) {
+         //if (!hasClipped && NS_STYLE_OVERFLOW_HIDDEN == disp->mOverflow) {
+         if (!hasClipped && NS_STYLE_OVERFLOW_CLIP == disp->mOverflow) { // bug 69355
             // if we haven't already clipped and we should
             // check to see if the child is in out bounds. If not then
             // we begin clipping.

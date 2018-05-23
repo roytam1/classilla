@@ -125,7 +125,8 @@ struct nsTableReflowState {
     reason = aReason;
 
     nsTableFrame* table = (nsTableFrame*)aTableFrame.GetFirstInFlow();
-    nsMargin borderPadding = table->GetChildAreaOffset(aPresContext, &reflowState);
+    //nsMargin borderPadding = table->GetChildAreaOffset(aPresContext, &reflowState);
+    nsMargin borderPadding = table->GetChildAreaOffset(&aPresContext, &reflowState); // bug 173277
 
     x = borderPadding.left;
     y = borderPadding.top;
@@ -1433,17 +1434,30 @@ nsTableFrame::PaintChildren(nsIPresContext*      aPresContext,
 {
   const nsStyleDisplay* disp = (const nsStyleDisplay*)
     mStyleContext->GetStyleData(eStyleStruct_Display);
+// bug 221140 modified for Clecko
   // If overflow is hidden then set the clip rect so that children don't
   // leak out of us. Note that because overflow'-clip' only applies to
   // the content area we do this after painting the border and background
+#if(0)
   if (NS_STYLE_OVERFLOW_HIDDEN == disp->mOverflow) {
     aRenderingContext.PushState();
     SetOverflowClipRect(aRenderingContext);
   }
+#else
+  PRUint8 overflow = disp->mOverflow; //GetStyleDisplay()->mOverflow;
+  PRBool clip = overflow == NS_STYLE_OVERFLOW_HIDDEN ||
+                //overflow == NS_STYLE_OVERFLOW_SCROLLBARS_NONE;
+                overflow == NS_STYLE_OVERFLOW_CLIP; // backwards from bug 69355
+  if (clip) {
+    aRenderingContext.PushState();
+    SetOverflowClipRect(aRenderingContext);
+  }
+#endif
+// end bug
 
   nsHTMLContainerFrame::PaintChildren(aPresContext, aRenderingContext, aDirtyRect, aWhichLayer, aFlags);
 
-  if (NS_STYLE_OVERFLOW_HIDDEN == disp->mOverflow) {
+  if (clip) { // bug 221140 // NS_STYLE_OVERFLOW_HIDDEN == disp->mOverflow) {
     PRBool clipState;
     aRenderingContext.PopState(clipState);
   }
@@ -1990,18 +2004,33 @@ NS_METHOD nsTableFrame::Reflow(nsIPresContext*          aPresContext,
       if ((eReflowReason_Initial == aReflowState.reason) && HadInitialReflow()) {
         // XXX put this back in when bug 70150 is fixed
         // NS_ASSERTION(PR_FALSE, "intial reflow called twice");
+        // XXX this could be an assertion and the if removed
+        NS_NOTREACHED("intial reflow called twice"); // bug 173277
       }
       else {
         if (!mPrevInFlow) { // only do pass1 on a first in flow
           if (IsAutoLayout()) {     
             // only do pass1 reflow on an auto layout table
+// bug 173277
+#if(0)
             nsReflowReason reason = (eReflowReason_Initial == aReflowState.reason)
                                     ? eReflowReason_Initial : eReflowReason_StyleChange;
             nsTableReflowState reflowState(*aPresContext, aReflowState, *this, reason,
                                            NS_UNCONSTRAINEDSIZE, NS_UNCONSTRAINEDSIZE); 
+#else
+            nsTableReflowState reflowState(*aPresContext, aReflowState, *this,
+                                           aReflowState.reason,
+                                           NS_UNCONSTRAINEDSIZE,
+                                           NS_UNCONSTRAINEDSIZE);
+#endif
+
             // reflow the children
             nsIFrame *lastReflowed;
-            ReflowChildren(aPresContext, reflowState, !HaveReflowedColGroups(), PR_FALSE, aStatus, lastReflowed);
+            //ReflowChildren(aPresContext, reflowState, !HaveReflowedColGroups(), PR_FALSE, aStatus, lastReflowed);
+            ReflowChildren(aPresContext, reflowState, !HaveReflowedColGroups(),
+                           PR_FALSE, aStatus, lastReflowed,
+                           aDesiredSize.mOverflowArea);
+// end bug
           }
           mTableLayoutStrategy->Initialize(aPresContext, aReflowState);
         }
@@ -2026,9 +2055,13 @@ NS_METHOD nsTableFrame::Reflow(nsIPresContext*          aPresContext,
       // do the resize reflow below
       if (!HadInitialReflow()) {
         // NS_ASSERTION(HadInitialReflow(), "intial reflow not called");
+        NS_ASSERTION(HadInitialReflow(), "intial reflow not called"); // bug 173277
         nextReason = eReflowReason_Initial;
       }
       //NS_ASSERTION(NS_UNCONSTRAINEDSIZE != aReflowState.availableWidth, "this doesn't do anything");
+      NS_ASSERTION(NS_UNCONSTRAINEDSIZE != aReflowState.availableWidth,
+                   "this doesn't do anything"); // bug 173277
+
       SetNeedStrategyBalance(PR_TRUE); 
       break; 
     default:
@@ -2077,7 +2110,8 @@ NS_METHOD nsTableFrame::Reflow(nsIPresContext*          aPresContext,
                                  (aReflowState.mFlags.mSpecialHeightReflow || !NeedSpecialReflow()));
     if (willInitiateSpecialReflow && NS_FRAME_IS_COMPLETE(aStatus)) {
       // distribute extra vertical space to rows
-      aDesiredSize.height = CalcDesiredHeight(aPresContext, aReflowState); 
+      //aDesiredSize.height = CalcDesiredHeight(aPresContext, aReflowState); 
+      CalcDesiredHeight(aPresContext, aReflowState, aDesiredSize);  // bug 231275 modified for Clecko
       ((nsHTMLReflowState::ReflowStateFlags&)aReflowState.mFlags).mSpecialHeightReflow = PR_TRUE;
       // save the previous special height reflow initiator, install us as the new one
       nsIFrame* specialReflowInitiator = aReflowState.mPercentHeightReflowInitiator;
@@ -2093,10 +2127,21 @@ NS_METHOD nsTableFrame::Reflow(nsIPresContext*          aPresContext,
       
       if (lastChildReflowed && NS_FRAME_IS_NOT_COMPLETE(aStatus)) {
         // if there is an incomplete child, then set the desired height to include it but not the next one
+// bug 173277 modified for 1.3.1
+#if(0)
         nsRect childRect;
         lastChildReflowed->GetRect(childRect);
         nsMargin borderPadding = GetChildAreaOffset(*aPresContext, &aReflowState);
         aDesiredSize.height = borderPadding.top + GetCellSpacingY() + childRect.height;
+#else
+		nsSize childSize;
+		lastChildReflowed->GetSize(childSize);
+        nsMargin borderPadding = GetChildAreaOffset(aPresContext, &aReflowState);
+        aDesiredSize.height = borderPadding.top + GetCellSpacingY() +
+                              //lastChildReflowed->GetSize().height;
+                              childSize.height;
+#endif
+// end bug
       }
       haveDesiredHeight = PR_TRUE;
       reflowedChildren  = PR_TRUE;
@@ -2115,13 +2160,15 @@ NS_METHOD nsTableFrame::Reflow(nsIPresContext*          aPresContext,
 
   aDesiredSize.width = GetDesiredWidth();
   if (!haveDesiredHeight) {
-    aDesiredSize.height = CalcDesiredHeight(aPresContext, aReflowState); 
+    //aDesiredSize.height = CalcDesiredHeight(aPresContext, aReflowState); 
+    CalcDesiredHeight(aPresContext, aReflowState, aDesiredSize); // bug 231275 modified for Clecko
   }
   if (IsRowInserted()) {
     ProcessRowInserted(aPresContext, *this, PR_TRUE, aDesiredSize.height);
   }
 
-  nsMargin borderPadding = GetChildAreaOffset(*aPresContext, &aReflowState);
+  //nsMargin borderPadding = GetChildAreaOffset(*aPresContext, &aReflowState);
+  nsMargin borderPadding = GetChildAreaOffset(aPresContext, &aReflowState); // bug 173277
   SetColumnDimensions(aPresContext, aDesiredSize.height, borderPadding);
   if (doCollapse) {
     AdjustForCollapsingRows(aPresContext, aDesiredSize.height);
@@ -2155,6 +2202,16 @@ NS_METHOD nsTableFrame::Reflow(nsIPresContext*          aPresContext,
   if (aDesiredSize.mFlags & NS_REFLOW_CALC_MAX_WIDTH) {
     aDesiredSize.mMaximumWidth = GetPreferredWidth();
   }
+  // bug 173277
+  //if (NS_STYLE_OVERFLOW_HIDDEN != aReflowState.mStyleDisplay->mOverflow) {
+  if (NS_STYLE_OVERFLOW_CLIP != aReflowState.mStyleDisplay->mOverflow) { // bug 69355
+    // collapsed border may leak out
+    nsMargin bcMargin = GetBCMargin(aPresContext);
+    nsRect tableRect(0, 0, aDesiredSize.width, aDesiredSize.height) ;
+    tableRect.Inflate(bcMargin);
+    aDesiredSize.mOverflowArea.UnionRect(aDesiredSize.mOverflowArea, tableRect);
+  }
+  // end bug
 
   if (aReflowState.mFlags.mSpecialHeightReflow) {
     SetNeedSpecialReflow(PR_FALSE);
@@ -2167,10 +2224,24 @@ NS_METHOD nsTableFrame::Reflow(nsIPresContext*          aPresContext,
   // If we reflowed all the rows, then invalidate the largest possible area that either the
   // table occupied before this reflow or will occupy after.
   if (reflowedChildren) {
+// bug 173277
+#if(0)
     Invalidate(aPresContext, nsRect(0, 0, PR_MAX(mRect.width, aDesiredSize.width), 
                                           PR_MAX(mRect.height, aDesiredSize.height)));
+#else
+    nsRect damage(0, 0, PR_MAX(mRect.width, aDesiredSize.width),
+                  PR_MAX(mRect.height, aDesiredSize.height));
+    damage.UnionRect(damage, aDesiredSize.mOverflowArea);
+    nsRect* oldOverflowArea = GetOverflowAreaProperty(aPresContext);
+    if (oldOverflowArea) {
+      damage.UnionRect(damage, *oldOverflowArea);
+    }
+    Invalidate(aPresContext, damage);
+#endif
+// end bug
   }
 
+  StoreOverflow(aPresContext, aDesiredSize); // bug 173277
   NS_FRAME_SET_TRUNCATION(aStatus, aReflowState, aDesiredSize);
   return rv;
 }
@@ -2212,7 +2283,9 @@ nsTableFrame::ReflowTable(nsIPresContext*          aPresContext,
   aDesiredSize.width = GetDesiredWidth();
   nsTableReflowState reflowState(*aPresContext, aReflowState, *this, aReason, 
                                  aDesiredSize.width, aAvailHeight);
-  ReflowChildren(aPresContext, reflowState, haveReflowedColGroups, PR_FALSE, aStatus, aLastChildReflowed);
+  //ReflowChildren(aPresContext, reflowState, haveReflowedColGroups, PR_FALSE, aStatus, aLastChildReflowed);
+  ReflowChildren(aPresContext, reflowState, haveReflowedColGroups, PR_FALSE,
+                 aStatus, aLastChildReflowed, aDesiredSize.mOverflowArea); // bug 173277
 
   if (eReflowReason_Resize == aReflowState.reason) {
     if (!DidResizeReflow()) {
@@ -2796,7 +2869,11 @@ nsTableFrame::IR_TargetIsMe(nsIPresContext*      aPresContext,
                                      aReflowState.availSize.width, aReflowState.availSize.height); 
       nsIFrame* lastReflowed;
       PRBool reflowedAtLeastOne; 
-      ReflowChildren(aPresContext, reflowState, PR_FALSE, PR_TRUE, aStatus, lastReflowed, &reflowedAtLeastOne);
+      //ReflowChildren(aPresContext, reflowState, PR_FALSE, PR_TRUE, aStatus, lastReflowed, &reflowedAtLeastOne);
+      nsRect overflowArea;
+      ReflowChildren(aPresContext, reflowState, PR_FALSE, PR_TRUE, aStatus,
+                     lastReflowed, overflowArea, &reflowedAtLeastOne); // bug 173277
+
       if (!reflowedAtLeastOne)
         // XXX For now assume the worse
         SetNeedStrategyInit(PR_TRUE);
@@ -2830,6 +2907,8 @@ DivideBCBorderSize(nscoord  aPixelSize,
   aLargeHalf = ((aSmallHalf + aSmallHalf) < aPixelSize) ? aSmallHalf + 1 : aSmallHalf;
 }
 
+// bug 173277
+#if(0)
 nsMargin*  
 nsTableFrame::GetBCBorder(nsIPresContext& aPresContext,
                           PRBool          aInnerBorderOnly,
@@ -2868,8 +2947,80 @@ nsTableFrame::GetBCBorder(nsIPresContext& aPresContext,
   return &aBorder;
 }
 
+#else
+
+nsMargin
+nsTableFrame::GetBCBorder(nsIPresContext* aPresContext) const
+{
+  nsMargin border(0, 0, 0, 0);
+
+  GET_PIXELS_TO_TWIPS(aPresContext, p2t);
+  BCPropertyData* propData = 
+    (BCPropertyData*)nsTableFrame::GetProperty(aPresContext, (nsIFrame*)this, 
+    	nsLayoutAtoms::tableBCProperty, PR_FALSE);
+  if (propData) {
+    nsCompatibility mode;
+    aPresContext->GetCompatibilityMode(&mode);
+    if (eCompatibility_NavQuirks != mode) {
+      nscoord smallHalf, largeHalf;
+
+      DivideBCBorderSize(propData->mTopBorderWidth, smallHalf, largeHalf);
+      border.top += NSToCoordRound(p2t * (float)smallHalf);
+
+      DivideBCBorderSize(propData->mRightBorderWidth, smallHalf, largeHalf);
+      border.right += NSToCoordRound(p2t * (float)largeHalf);
+
+      DivideBCBorderSize(propData->mBottomBorderWidth, smallHalf, largeHalf);
+      border.bottom += NSToCoordRound(p2t * (float)largeHalf);
+
+      DivideBCBorderSize(propData->mLeftBorderWidth, smallHalf, largeHalf);
+      border.left += NSToCoordRound(p2t * (float)smallHalf);
+    }
+    else {
+      border.top    += NSToCoordRound(p2t * (float)propData->mTopBorderWidth);
+      border.right  += NSToCoordRound(p2t * (float)propData->mRightBorderWidth);
+      border.bottom += NSToCoordRound(p2t * (float)propData->mBottomBorderWidth);
+      border.left   += NSToCoordRound(p2t * (float)propData->mLeftBorderWidth);
+    }
+  }
+  return border;
+}
+
+nsMargin
+nsTableFrame::GetBCMargin(nsIPresContext*  aPresContext) const
+{
+  nsMargin overflow(0, 0, 0, 0);
+  GET_PIXELS_TO_TWIPS(aPresContext, p2t);
+  BCPropertyData* propData =
+    (BCPropertyData*)nsTableFrame::GetProperty(aPresContext, (nsIFrame*)this,
+                                               nsLayoutAtoms::tableBCProperty,
+                                               PR_FALSE);
+  if (propData) {
+    nsCompatibility mode;
+    aPresContext->GetCompatibilityMode(&mode);
+    if (eCompatibility_NavQuirks != mode) {
+      nscoord smallHalf, largeHalf;
+
+      DivideBCBorderSize(propData->mTopBorderWidth, smallHalf, largeHalf);
+      overflow.top += NSToCoordRound(p2t * (float)largeHalf);
+
+      DivideBCBorderSize(propData->mRightBorderWidth, smallHalf, largeHalf);
+      overflow.right += NSToCoordRound(p2t * (float)smallHalf);
+
+      DivideBCBorderSize(propData->mBottomBorderWidth, smallHalf, largeHalf);
+      overflow.bottom += NSToCoordRound(p2t * (float)smallHalf);
+
+      DivideBCBorderSize(propData->mLeftBorderWidth, smallHalf, largeHalf);
+      overflow.left += NSToCoordRound(p2t * (float)largeHalf);
+    }
+  }
+  return overflow;
+}
+#endif
+// bug 173277
+
 static
-void GetSeparateModelBorderPadding(nsIPresContext&          aPresContext,
+void GetSeparateModelBorderPadding(//nsIPresContext&          aPresContext, // bug 173277
                                    const nsHTMLReflowState* aReflowState,
                                    nsIStyleContext&         aStyleContext,
                                    nsMargin&                aBorderPadding)
@@ -2883,19 +3034,20 @@ void GetSeparateModelBorderPadding(nsIPresContext&          aPresContext,
 }
 
 nsMargin 
-nsTableFrame::GetChildAreaOffset(nsIPresContext&          aPresContext,
+nsTableFrame::GetChildAreaOffset(nsIPresContext*          aPresContext, // & -> * bug 173277
                                  const nsHTMLReflowState* aReflowState) const
 {
   nsMargin offset(0,0,0,0);
   if (IsBorderCollapse()) {
     nsCompatibility mode;
-    aPresContext.GetCompatibilityMode(&mode);
+    aPresContext->GetCompatibilityMode(&mode); // . to -> bug 173277
     if (eCompatibility_NavQuirks == mode) {
       nsTableFrame* firstInFlow = (nsTableFrame*)GetFirstInFlow(); if (!firstInFlow) ABORT1(offset);
       nscoord smallHalf, largeHalf;
-      GET_PIXELS_TO_TWIPS(&aPresContext, p2t);
+      GET_PIXELS_TO_TWIPS(aPresContext, p2t); // & removed by bug 173277
       BCPropertyData* propData = 
-        (BCPropertyData*)nsTableFrame::GetProperty(&aPresContext, (nsIFrame*)firstInFlow, nsLayoutAtoms::tableBCProperty, PR_FALSE);
+        (BCPropertyData*)nsTableFrame::GetProperty(aPresContext, // ditto bug 173277
+         (nsIFrame*)firstInFlow, nsLayoutAtoms::tableBCProperty, PR_FALSE);
       if (!propData) ABORT1(offset);
 
       DivideBCBorderSize(propData->mTopBorderWidth, smallHalf, largeHalf);
@@ -2912,23 +3064,26 @@ nsTableFrame::GetChildAreaOffset(nsIPresContext&          aPresContext,
     }
   }
   else {
-    if (!mStyleContext) ABORT1(offset);
-    GetSeparateModelBorderPadding(aPresContext, aReflowState, *mStyleContext, offset);
+    //if (!mStyleContext) ABORT1(offset);
+    //GetSeparateModelBorderPadding(aPresContext, aReflowState, *mStyleContext, offset);
+    GetSeparateModelBorderPadding(aReflowState, *mStyleContext, offset); // bug 173277
   }
   return offset;
 }
 
 nsMargin 
-nsTableFrame::GetContentAreaOffset(nsIPresContext&          aPresContext,
+nsTableFrame::GetContentAreaOffset(nsIPresContext*          aPresContext, // & to * bug 173277
                                    const nsHTMLReflowState* aReflowState) const
 {
   nsMargin offset(0,0,0,0);
   if (IsBorderCollapse()) {
-    GetBCBorder(aPresContext, PR_FALSE, offset);
+    //GetBCBorder(aPresContext, PR_FALSE, offset);
+    offset = GetBCBorder(aPresContext); // bug 173277
   }
   else {
-    if (!mStyleContext) ABORT1(offset);
-    GetSeparateModelBorderPadding(aPresContext, aReflowState, *mStyleContext, offset);
+    //if (!mStyleContext) ABORT1(offset);
+    //GetSeparateModelBorderPadding(aPresContext, aReflowState, *mStyleContext, offset);
+    GetSeparateModelBorderPadding(aReflowState, *mStyleContext, offset); // bug 173277
   }
   return offset;
 }
@@ -2941,7 +3096,8 @@ nsTableFrame::RecoverState(nsIPresContext&     aPresContext,
                            nsTableReflowState& aReflowState,
                            nsIFrame*           aKidFrame)
 {
-  nsMargin borderPadding = GetChildAreaOffset(aPresContext, &aReflowState.reflowState);
+  //nsMargin borderPadding = GetChildAreaOffset(aPresContext, &aReflowState.reflowState);
+  nsMargin borderPadding = GetChildAreaOffset(&aPresContext, &aReflowState.reflowState); // bug 173277
   aReflowState.y = borderPadding.top;
 
   nscoord cellSpacingY = GetCellSpacingY();
@@ -3031,7 +3187,8 @@ nsTableFrame::IR_TargetIsChild(nsIPresContext*      aPresContext,
   aNextFrame->GetRect(oldKidRect);
 
   // Pass along the reflow command, don't request a max element size, rows will do that
-  nsHTMLReflowMetrics desiredSize(nsnull);
+  //nsHTMLReflowMetrics desiredSize(nsnull);
+  nsHTMLReflowMetrics desiredSize(PR_FALSE); // bug 173277
   nsSize kidAvailSize(aReflowState.availSize);
   nsHTMLReflowState kidReflowState(aPresContext, aReflowState.reflowState, aNextFrame, 
                                    kidAvailSize, aReflowState.reason);
@@ -3088,17 +3245,21 @@ nsTableFrame::IR_TargetIsChild(nsIPresContext*      aPresContext,
 void nsTableFrame::PlaceChild(nsIPresContext*      aPresContext,
                               nsTableReflowState&  aReflowState,
                               nsIFrame*            aKidFrame,
-                              nsHTMLReflowMetrics& aDesiredSize)
+                              nsHTMLReflowMetrics& aKidDesiredSize) // aDesired -> aKid bug 173277
 {
   // Place and size the child
-  FinishReflowChild(aKidFrame, aPresContext, nsnull, aDesiredSize, aReflowState.x, aReflowState.y, 0);
+  //FinishReflowChild(aKidFrame, aPresContext, nsnull, aDesiredSize, aReflowState.x, aReflowState.y, 0);
+  FinishReflowChild(aKidFrame, aPresContext, nsnull, aKidDesiredSize,
+                    aReflowState.x, aReflowState.y, 0); // bug 173277
 
   // Adjust the running y-offset
-  aReflowState.y += aDesiredSize.height;
+  //aReflowState.y += aDesiredSize.height;
+  aReflowState.y += aKidDesiredSize.height; // bug 173277
 
   // If our height is constrained, then update the available height
   if (NS_UNCONSTRAINEDSIZE != aReflowState.availSize.height) {
-    aReflowState.availSize.height -= aDesiredSize.height;
+    //aReflowState.availSize.height -= aDesiredSize.height;
+    aReflowState.availSize.height -= aKidDesiredSize.height; // bug 173277
   }
 
   const nsStyleDisplay *childDisplay;
@@ -3226,6 +3387,7 @@ nsTableFrame::ReflowChildren(nsIPresContext*     aPresContext,
                              PRBool              aDirtyOnly,
                              nsReflowStatus&     aStatus,
                              nsIFrame*&          aLastChildReflowed,
+                             nsRect&             aOverflowArea, // bug 173277
                              PRBool*             aReflowedAtLeastOne)
 {
   aStatus = NS_FRAME_COMPLETE;
@@ -3237,6 +3399,8 @@ nsTableFrame::ReflowChildren(nsIPresContext*     aPresContext,
 
   PRBool isPaginated;
   aPresContext->IsPaginated(&isPaginated);
+  
+  aOverflowArea = nsRect (0, 0, 0, 0); // bug 173277
 
   nsAutoVoidArray rowGroups;
   PRUint32 numRowGroups;
@@ -3287,7 +3451,8 @@ nsTableFrame::ReflowChildren(nsIPresContext*     aPresContext,
         }
       }
 
-      nsHTMLReflowMetrics desiredSize(nsnull);
+      //nsHTMLReflowMetrics desiredSize(nsnull);
+      nsHTMLReflowMetrics desiredSize(PR_FALSE); // bug 173277
       desiredSize.width = desiredSize.height = desiredSize.ascent = desiredSize.descent = 0;
   
       if (childX < numRowGroups) {  
@@ -3386,11 +3551,13 @@ nsTableFrame::ReflowChildren(nsIPresContext*     aPresContext,
       }
       aReflowState.y += cellSpacingY + kidRect.height;
     }
+    ConsiderChildOverflow(aPresContext, aOverflowArea, kidFrame); // bug 173277
   }
 
   // if required, give the colgroups their initial reflows
   if (aDoColGroups) {
-    nsHTMLReflowMetrics kidMet(nsnull);
+    //nsHTMLReflowMetrics kidMet(nsnull);
+    nsHTMLReflowMetrics kidMet(PR_FALSE); // bug 173277
     for (nsIFrame* kidFrame = mColGroups.FirstChild(); kidFrame; kidFrame->GetNextSibling(&kidFrame)) {
       nsHTMLReflowState kidReflowState(aPresContext, aReflowState.reflowState, kidFrame,
                                        aReflowState.availSize, aReflowState.reason);
@@ -3492,30 +3659,57 @@ nsTableFrame::CalcDesiredWidth(nsIPresContext&          aPresContext,
     tableWidth = PR_MAX(tableWidth, compWidth);
 
   // Add the width between the border edge and the child area
-  nsMargin childOffset = GetChildAreaOffset(aPresContext, &aReflowState);
+  //nsMargin childOffset = GetChildAreaOffset(aPresContext, &aReflowState);
+  nsMargin childOffset = GetChildAreaOffset(&aPresContext, &aReflowState); // bug 173277
   tableWidth += childOffset.left + childOffset.right;
 
   return tableWidth;
 }
 
 
+// bug 231275 modified for Clecko
+#if(0)
 nscoord 
 nsTableFrame::CalcDesiredHeight(nsIPresContext*          aPresContext,
                                 const nsHTMLReflowState& aReflowState) 
+#else
+void
+nsTableFrame::CalcDesiredHeight(nsIPresContext*          aPresContext, // we still NEED THIS!!!
+const nsHTMLReflowState& aReflowState, nsHTMLReflowMetrics& aDesiredSize) 
+#endif
 {
   nsTableCellMap* cellMap = GetCellMap();
   if (!cellMap) {
     NS_ASSERTION(PR_FALSE, "never ever call me until the cell map is built!");
-    return 0;
+    //return 0;
+    aDesiredSize.height = 0;
+    return; // bug 231275
   }
   nscoord  cellSpacingY = GetCellSpacingY();
-  nsMargin borderPadding = GetChildAreaOffset(*aPresContext, &aReflowState);
+  //nsMargin borderPadding = GetChildAreaOffset(*aPresContext, &aReflowState);
+  nsMargin borderPadding = GetChildAreaOffset(aPresContext, &aReflowState); // bug 173277
 
   // get the natural height based on the last child's (row group or scroll frame) rect
   nsAutoVoidArray rowGroups;
   PRUint32 numRowGroups;
   OrderRowGroups(rowGroups, numRowGroups, nsnull);
-  if (numRowGroups <= 0) return 0;
+  if (numRowGroups <= 0) //return 0;
+  { // bug 231275 plus backbugs modified for Clecko
+    // tables can be used as rectangular items without content
+    nscoord tableSpecifiedHeight = CalcBorderBoxHeight(aPresContext, aReflowState);
+    nsCompatibility mode;
+    aPresContext->GetCompatibilityMode(&mode);
+    if ((NS_UNCONSTRAINEDSIZE != tableSpecifiedHeight) &&
+        (tableSpecifiedHeight > 0) &&
+        //eCompatibility_NavQuirks != GetPresContext()->CompatibilityMode()) {
+        eCompatibility_NavQuirks != mode) {
+         // empty tables should not have a size in quirks mode
+      aDesiredSize.height = tableSpecifiedHeight;
+    } 
+    else
+     aDesiredSize.height = 0;
+    return;
+  } // end bug  
 
   nscoord desiredHeight = borderPadding.top + cellSpacingY + borderPadding.bottom;
   for (PRUint32 rgX = 0; rgX < numRowGroups; rgX++) {
@@ -3537,11 +3731,21 @@ nsTableFrame::CalcDesiredHeight(nsIPresContext*          aPresContext,
       // unconstrained row group.We don't need to do this if it's an unconstrained reflow
       if (NS_UNCONSTRAINEDSIZE != aReflowState.availableWidth) { 
         DistributeHeightToRows(aPresContext, aReflowState, tableSpecifiedHeight - desiredHeight);
+        // this might have changed the overflow area incorporate the childframe overflow area.
+        // bug 231275 modified for Clecko
+        //nsPresContext* presContext = GetPresContext();
+        //for (nsIFrame* kidFrame = mFrames.FirstChild(); kidFrame; kidFrame = kidFrame->GetNextSibling()) {
+        for (nsIFrame* kidFrame = mFrames.FirstChild(); kidFrame;
+        	kidFrame->GetNextSibling(&kidFrame)) {
+          ConsiderChildOverflow(aPresContext, // presContext, 
+          		aDesiredSize.mOverflowArea, kidFrame);
+        } 
+        // end bug
       }
       desiredHeight = tableSpecifiedHeight;
     }
   }
-  return desiredHeight;
+  aDesiredSize.height = desiredHeight; // bug 231275 // return desiredHeight;
 }
 
 static
@@ -3552,15 +3756,53 @@ void ResizeCells(nsTableFrame&            aTableFrame,
   nsAutoVoidArray rowGroups;
   PRUint32 numRowGroups;
   aTableFrame.OrderRowGroups(rowGroups, numRowGroups, nsnull);
+// bug 173277 modified for Clecko
+  nsHTMLReflowMetrics tableDesiredSize(PR_FALSE);
+  //nsRect tableRect = aTableFrame.GetRect();
+  nsRect tableRect;
+  aTableFrame.GetRect(tableRect);
+  tableDesiredSize.width = tableRect.width;
+  tableDesiredSize.height = tableRect.height;
+  tableDesiredSize.mOverflowArea = nsRect(0, 0, tableRect.width,
+                                          tableRect.height);
+// end bug
 
   for (PRUint32 rgX = 0; (rgX < numRowGroups); rgX++) {
     nsTableRowGroupFrame* rgFrame = aTableFrame.GetRowGroupFrame((nsIFrame*)rowGroups.ElementAt(rgX));
+    
+    // bug 173277 modified for Clecko
+    //nsRect rowGroupRect = rgFrame->GetRect();
+    nsRect rowGroupRect;
+    rgFrame->GetRect(rowGroupRect);
+    nsHTMLReflowMetrics groupDesiredSize(PR_FALSE);
+    groupDesiredSize.width = rowGroupRect.width;
+    groupDesiredSize.height = rowGroupRect.height;
+    groupDesiredSize.mOverflowArea = nsRect(0, 0, groupDesiredSize.width,
+                                      groupDesiredSize.height);
+    // end bug
+    
     nsTableRowFrame* rowFrame = rgFrame->GetFirstRow();
     while (rowFrame) {
       rowFrame->DidResize(aPresContext, aReflowState);
+      rgFrame->ConsiderChildOverflow(aPresContext, groupDesiredSize.mOverflowArea, rowFrame); // bug 173277
       rowFrame = rowFrame->GetNextRow();
     }
+    // bug 173277 modified for Clecko
+    rgFrame->StoreOverflow(aPresContext, groupDesiredSize);
+    // make the coordinates of |desiredSize.mOverflowArea| incorrect
+    // since it's about to go away:
+    //groupDesiredSize.mOverflowArea.MoveBy(rgFrame->GetPosition());
+    nsIView *view;
+    rgFrame->GetView(aPresContext, &view);
+    int x, y;
+    if (view) {
+    	view->GetPosition(&x, &y);
+    	groupDesiredSize.mOverflowArea.MoveBy(x, y);
+    }
+    tableDesiredSize.mOverflowArea.UnionRect(tableDesiredSize.mOverflowArea, groupDesiredSize.mOverflowArea);
+	// end bug        
   }
+  aTableFrame.StoreOverflow(aPresContext, tableDesiredSize); // bug 173277
 }
 
 void
@@ -3573,7 +3815,8 @@ nsTableFrame::DistributeHeightToRows(nsIPresContext*          aPresContext,
 
   nscoord cellSpacingY = GetCellSpacingY();
 
-  nsMargin borderPadding = GetChildAreaOffset(*aPresContext, &aReflowState);
+  //nsMargin borderPadding = GetChildAreaOffset(*aPresContext, &aReflowState);
+  nsMargin borderPadding = GetChildAreaOffset(aPresContext, &aReflowState); // bug 173277
   
   nsVoidArray rowGroups;
   PRUint32 numRowGroups;
@@ -4223,7 +4466,8 @@ nsTableFrame::CalcBorderBoxWidth(nsIPresContext*          aPresContext,
     }
   }
   else if (width != NS_UNCONSTRAINEDSIZE) {
-    nsMargin borderPadding = GetContentAreaOffset(*aPresContext, &aState);
+    //nsMargin borderPadding = GetContentAreaOffset(*aPresContext, &aState);
+    nsMargin borderPadding = GetContentAreaOffset(aPresContext, &aState); // bug 173277
     width += borderPadding.left + borderPadding.right;
   }
   width = PR_MAX(width, 0);
@@ -4243,7 +4487,8 @@ nsTableFrame::CalcBorderBoxHeight(nsIPresContext*          aPresContext,
 {
   nscoord height = aState.mComputedHeight;
   if (NS_AUTOHEIGHT != height) {
-    nsMargin borderPadding = GetContentAreaOffset(*aPresContext, &aState);
+    //nsMargin borderPadding = GetContentAreaOffset(*aPresContext, &aState);
+    nsMargin borderPadding = GetContentAreaOffset(aPresContext, &aState); // bug 173277
     height += borderPadding.top + borderPadding.bottom;
   }
   height = PR_MAX(0, height);
@@ -4313,7 +4558,8 @@ nsTableFrame::CalcMinAndPreferredWidths(nsIPresContext* aPresContext,
   }
   // if it is not a degenerate table, add the last spacing on the right and the borderPadding
   if (numCols > 0) {
-    nsMargin childAreaOffset = GetChildAreaOffset(*aPresContext, &aReflowState);
+    //nsMargin childAreaOffset = GetChildAreaOffset(*aPresContext, &aReflowState);
+    nsMargin childAreaOffset = GetChildAreaOffset(aPresContext, &aReflowState); // bug 173277
     nscoord extra = spacingX + childAreaOffset.left + childAreaOffset.right;
     aMinWidth  += extra;
     aPrefWidth += extra;
@@ -4340,7 +4586,8 @@ nsTableFrame::CalcMinAndPreferredWidths(nsIPresContext* aPresContext,
   else { // a specified fix width becomes the min or preferred width
     nscoord compWidth = aReflowState.mComputedWidth;
     if ((NS_UNCONSTRAINEDSIZE != compWidth) && (0 != compWidth) && !isPctWidth) {
-      nsMargin contentOffset = GetContentAreaOffset(*aPresContext, &aReflowState);
+      //nsMargin contentOffset = GetContentAreaOffset(*aPresContext, &aReflowState);
+      nsMargin contentOffset = GetContentAreaOffset(aPresContext, &aReflowState); // bug 173277
       compWidth += contentOffset.left + contentOffset.right;
       aMinWidth = PR_MAX(aMinWidth, compWidth);
       aPrefWidth = PR_MAX(aMinWidth, compWidth);
@@ -6670,7 +6917,8 @@ nsTableFrame::PaintBCBorders(nsIPresContext*      aPresContext,
                              nsIRenderingContext& aRenderingContext,
                              const nsRect&        aDirtyRect)
 {
-  nsMargin childAreaOffset = GetChildAreaOffset(*aPresContext, nsnull); 
+  //nsMargin childAreaOffset = GetChildAreaOffset(*aPresContext, nsnull); 
+  nsMargin childAreaOffset = GetChildAreaOffset(aPresContext, nsnull); // bug 173277
   nsTableFrame* firstInFlow = (nsTableFrame*)GetFirstInFlow(); if (!firstInFlow) ABORT0();
   GET_PIXELS_TO_TWIPS(aPresContext, p2t);
 

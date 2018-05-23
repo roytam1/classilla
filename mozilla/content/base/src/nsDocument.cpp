@@ -2195,10 +2195,14 @@ nsDocument::AttributeChanged(nsIContent* aChild,
   return result;
 }
 
-
+// bug 188803
 NS_IMETHODIMP
-nsDocument::StyleRuleChanged(nsIStyleSheet* aStyleSheet, nsIStyleRule* aStyleRule,
-                             nsChangeHint aHint)
+nsDocument::StyleRuleChanged(nsIStyleSheet* aStyleSheet, 
+//nsIStyleRule* aStyleRule,
+//                             nsChangeHint aHint)
+                             nsIStyleRule* aOldStyleRule,
+                             nsIStyleRule* aNewStyleRule)
+
 {
   PRInt32 i;
   // Get new value of count for every iteration in case
@@ -2206,7 +2210,10 @@ nsDocument::StyleRuleChanged(nsIStyleSheet* aStyleSheet, nsIStyleRule* aStyleRul
   for (i = 0; i < mObservers.Count(); i++) {
     nsIDocumentObserver*  observer = (nsIDocumentObserver*)mObservers[i];
     observer->BeginUpdate(this);
-    observer->StyleRuleChanged(this, aStyleSheet, aStyleRule, aHint);
+    // bug 188803
+    //observer->StyleRuleChanged(this, aStyleSheet, aStyleRule, aHint);
+    observer->StyleRuleChanged(this, aStyleSheet, aOldStyleRule, aNewStyleRule);
+    
     // Make sure that the observer didn't remove itself during the
     // notification. If it did, update our index and count.
     if (i < mObservers.Count() &&

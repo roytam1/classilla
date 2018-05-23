@@ -273,6 +273,7 @@ protected:
 
   void DidResizeRows(nsIPresContext&          aPresContext,
                      const nsHTMLReflowState& aReflowState,
+                     nsHTMLReflowMetrics&     aDesiredSize, // bug 173277
                      nsTableRowFrame*         aStartRowFrameIn = nsnull);
 
   /** Incremental Reflow attempts to do column balancing with the minimum number of reflow

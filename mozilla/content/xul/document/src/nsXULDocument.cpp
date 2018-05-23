@@ -2325,14 +2325,17 @@ nsXULDocument::AttributeWillChange(nsIContent* aChild,
     return NS_OK;
 }
 
+// updated for bug 188803 from nsDocument.cpp
 NS_IMETHODIMP
 nsXULDocument::StyleRuleChanged(nsIStyleSheet* aStyleSheet,
-                                nsIStyleRule* aStyleRule,
-                                nsChangeHint aHint)
+                                /* nsIStyleRule* aStyleRule,
+                                nsChangeHint aHint) */
+                                nsIStyleRule *aOldStyleRule,
+                                nsIStyleRule *aNewStyleRule)
 {
     for (PRInt32 i = mObservers.Count() - 1; i >= 0; --i) {
         nsIDocumentObserver*  observer = (nsIDocumentObserver*)mObservers[i];
-        observer->StyleRuleChanged(this, aStyleSheet, aStyleRule, aHint);
+        observer->StyleRuleChanged(this, aStyleSheet, aOldStyleRule, aNewStyleRule); // aStyleRule, aHint);
     }
     return NS_OK;
 }

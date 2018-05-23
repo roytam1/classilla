@@ -70,13 +70,17 @@
     <key id="key_paste"/>
     <key id="key_delete"/>
     <key id="key_selectAll"/>
+    <!-- key id="key_prefPref" key="&prefCmd.commandkey;"
+     oncommand="goPreferences('navigator', 'chrome://communicator/content/pref/pref-navigator.xul', 'navigator')"
+     modifiers="accel" --><!-- this is in utilityOverlay.xul -->
   
           <!-- View Menu -->
     <key id="key_reload"  key="&reloadCmd.commandkey;" oncommand="BrowserReload();" modifiers="accel"/>
     <key key="&reloadCmd.commandkey;" oncommand="BrowserReloadSkipCache();" modifiers="accel,shift"/>
     <key id="key_viewSource" key="&pageSourceCmd.commandkey;" command="View:PageSource" modifiers="accel"/>
     <key id="key_viewInfo"   key="&pageInfoCmd.commandkey;"   command="View:PageInfo"   modifiers="accel"/>
-    <key id="key_viewFixups" key="&viewFixups.commandkey;" command="View:Fixups" modifiers="accel,shift"/>
+    <key id="key_viewSlowScroll" key="&viewSlowScroll.commandkey;" command="View:SlowScroll" modifiers="accel,shift"/>
+    <!-- key id="key_viewFixups" key="&viewFixups.commandkey;" command="View:Fixups" modifiers="accel,shift" -->
     <key id="key_viewNextSidebarPanel" keycode="VK_PAGE_DOWN"  oncommand="SidebarGetRelativePanel(1);"  modifiers="alt" />
     <key id="key_viewPrevSidebarPanel" keycode="VK_PAGE_UP"  oncommand="SidebarGetRelativePanel(-1);"  modifiers="alt" />
 
@@ -115,9 +119,11 @@
     <command id="cmd_newTabWithTarget" oncommand="contentAreaClick(event);"/>
 
     <command id="cmd_newEditor"/>
+    
     <!-- NOT IMPLEMENTED
     <command id="cmd_newEditorTemplate"/>
     <command id="cmd_newEditorDraft"/> -->
+    
     <command id="Browser:OpenFile"  oncommand="BrowserOpenFileWindow();"/>
     <command id="Browser:SavePage" oncommand="saveDocument(window._content.document);"/>
     <command id="Browser:EditPage" oncommand="editPageOrFrame();" observes="isImage"/>
@@ -138,6 +144,9 @@
     <command id="cmd_paste"/>
     <command id="cmd_delete"/>
     <command id="cmd_selectAll" observes="isImage"/>
+    <!-- command id="cmd_prefPref" oncommand="goPreferences('navigator', 'chrome://communicator/content/pref/pref-navigator.xul', 'navigator')" -->
+    <!-- this is now in utilityOverlay.xul -->
+    
 
     <!-- Content area context menu -->
     <command id="cmd_copyLink"/>
@@ -148,7 +157,8 @@
     <command id="View:PageSource" oncommand="BrowserViewSourceOfDocument(content.document);" observes="isImage"/>
     <command id="View:PageInfo"   oncommand="BrowserPageInfo();"/>
     <command id="View:FullScreen" oncommand="BrowserFullScreen();"/>
-    <command id="View:Fixups" oncommand="BrowserToggleFixups();"/>
+    <!-- command id="View:Fixups" oncommand="BrowserToggleFixups();" -->
+    <command id="View:SlowScroll" oncommand="BrowserToggleSlowScroll();"/>
   
     <!-- Search Menu -->
     <command id="Browser:Find" oncommand="BrowserFind();" observes="isImage"/>
@@ -185,6 +195,7 @@
     <broadcaster id="canGoBack"    disabled="true"/>
     <broadcaster id="canGoForward" disabled="true"/>
     <broadcaster id="isFixupRender"/>
+    <broadcaster id="isSlowScroll"/>
     <broadcaster id="Communicator:WorkMode"/>
     <broadcaster id="cmd_viewnavbar" oncommand="goToggleToolbar( 'nav-bar','cmd_viewnavbar');" checked="true"/>
     <broadcaster id="cmd_viewpersonaltoolbar" oncommand="goToggleToolbar('PersonalToolbar','cmd_viewpersonaltoolbar');" checked="true"/>
@@ -280,7 +291,8 @@
             <menuitem label="&useStyleSheetPersistentOnly.label;" accesskey="&useStyleSheetPersistentOnly.accesskey;" type="radio"/>
           </menupopup>
         </menu>
-        <menuitem accesskey="&viewFixups.commandkey;"   label="&viewFixups.label;"   key="key_viewFixups"   command="View:Fixups"  type="checkbox"  observes="isFixupRender" />
+        <menuitem accesskey="&viewSlowScroll.commandkey;"   label="&viewSlowScroll.label;" key="key_viewSlowScroll" command="View:SlowScroll" type="checkbox" observes="isSlowScroll"/>
+        <!-- menuitem accesskey="&viewFixups.commandkey;"   label="&viewFixups.label;"   key="key_viewFixups"   command="View:Fixups"  type="checkbox"  observes="isFixupRender" -->
         <menu id="charsetMenu" observes="isImage"/>
         <menuseparator />
         <menuitem accesskey="&pageSourceCmd.accesskey;" label="&pageSourceCmd.label;" key="key_viewSource" command="View:PageSource"/>

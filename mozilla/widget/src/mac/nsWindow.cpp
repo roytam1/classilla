@@ -1,6 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* ***** BEGIN LICENSE BLOCK *****
  * Version: NPL 1.1/GPL 2.0/LGPL 2.1
+ * Changes for Classilla by Cameron Kaiser
  *
  * The contents of this file are subject to the Netscape Public License
  * Version 1.1 (the "License"); you may not use this file except in
@@ -70,6 +71,17 @@
 
 #include <Gestalt.h>
 
+/* for choosing the scroll strategy */
+#include "nsIPrefService.h"
+#include "nsIPrefBranch.h"
+//#include "nsIStringBundle.h"
+#include "nsIServiceManager.h"
+#include "nsIView.h"
+
+//#include "nsViewManager.h"
+// this is not a good idea, but *I'm* sure as hell not changing it! -- Cameron
+#define NS_VMREFRESH_DOUBLE_BUFFER      0x0001
+
 #if PINK_PROFILING
 #include "profilerutils.h"
 #endif
@@ -83,6 +95,9 @@ nsIWidget         * gRollupWidget   = nsnull;
 // these static
 static NMRec	gNMRec;
 static Boolean	gNotificationInstalled = false;
+
+// Also, since scrolling preference is global, we make that static too.
+static PRBool	preferSlowScroll = PR_FALSE;
 
 // Routines for iterating over the rects of a region. Carbon and pre-Carbon
 // do this differently so provide a way to do both.
@@ -99,8 +114,9 @@ void EachRegionRect (RgnHandle r, void (* proc)(Rect *, void *), void* data) ;
 
 //#define PAINT_DEBUGGING         // flash areas as they are painted
 //#define INVALIDATE_DEBUGGING    // flash areas as they are invalidated
+//#define CAMERON_DEBUGGING	// Classilla issue 65
 
-#if defined(INVALIDATE_DEBUGGING) || defined(PAINT_DEBUGGING)
+#if defined(INVALIDATE_DEBUGGING) || defined(PAINT_DEBUGGING) || defined(CAMERON_DEBUGGING)
 static void blinkRect(const Rect* r, PRBool isPaint);
 static void blinkRgn(RgnHandle rgn, PRBool isPaint);
 #endif
@@ -113,10 +129,11 @@ static Boolean KeyDown(const UInt8 theKey)
 	return ((*((UInt8 *)map + (theKey >> 3)) >> (theKey & 7)) & 1) != 0;
 }
 
-#if defined(INVALIDATE_DEBUGGING) || defined(PAINT_DEBUGGING)
+#if defined(INVALIDATE_DEBUGGING) || defined(PAINT_DEBUGGING) || defined(CAMERON_DEBUGGING)
 
 static Boolean caps_lock()
 {
+  return true; // sigh
   return KeyDown(0x39);
 }
 
@@ -248,6 +265,10 @@ nsWindow::nsWindow() : nsBaseWidget() , nsDeleteObserved(this), nsIKBStateContro
 	WIDGET_SET_CLASSNAME("nsWindow");
 
   mParent = nsnull;
+  mLastYScroll = 0; // issue 28
+  mComputedXScroll = 0; // issue 28
+  mWidthInTwips = 0.0; // issue 28
+  fPixelsToTwips = 0.0; // issue 28
   mIsTopWidgetWindow = PR_FALSE;
   mBounds.SetRect(0,0,0,0);
 
@@ -273,6 +294,21 @@ nsWindow::nsWindow() : nsBaseWidget() , nsDeleteObserved(this), nsIKBStateContro
   mPluginPort = nsnull;
 
   AcceptFocusOnClick(PR_TRUE);
+  
+  // Get fast scroll preference. Only do this when the window is opened. -- Cameron
+  // This fails gracefully if the prefBranch is mucked up or we're starting up.
+  // issue 100
+  nsresult rrv;
+  nsCOMPtr<nsIPrefBranch> prefBranch;
+  nsCOMPtr<nsIPrefService> prefs = do_GetService(NS_PREFSERVICE_CONTRACTID, &rrv);
+  if (NS_SUCCEEDED(rrv))
+  	rrv = prefs->GetBranch(nsnull, getter_AddRefs(prefBranch));
+  if (NS_SUCCEEDED(rrv))
+  	rrv = prefBranch->GetBoolPref("classilla.layout.slowscroll", &preferSlowScroll);
+  if (!NS_SUCCEEDED(rrv)) // covers all cases! what a genius I am
+  	preferSlowScroll = PR_FALSE;
+  // end issue
+  
   
 #if TARGET_CARBON
   if ( !sUpdateRectProc ) {
@@ -854,10 +890,13 @@ NS_IMETHODIMP nsWindow::Move(PRInt32 aX, PRInt32 aY)
 {
 	if ((mBounds.x != aX) || (mBounds.y != aY))
 	{
+
 		// Invalidate the current location (unless it's the top-level window)
-		if ((mParent != nsnull) && (!mIsTopWidgetWindow))
+		if ((mParent != nsnull) && (!mIsTopWidgetWindow)) {
 			Invalidate(PR_FALSE);
-	  	
+			mLastYScroll = 0; // issue 28
+		}
+	
 		// Set the bounds
 		mBounds.x = aX;
 		mBounds.y = aY;
@@ -883,10 +922,14 @@ NS_IMETHODIMP nsWindow::Resize(PRInt32 aWidth, PRInt32 aHeight, PRBool aRepaint)
     // Set the bounds
     mBounds.width  = aWidth;
     mBounds.height = aHeight;
+    
+    // Reset width in twips (just query again, just in case)
+    fPixelsToTwips = 0.0;
+    mWidthInTwips = 0.0; // issue 28
 
 	// Recalculate the regions
 	CalcWindowRegions();
-	
+
     // Invalidate the new location
     if (aRepaint)
       Invalidate(PR_FALSE);
@@ -899,10 +942,14 @@ NS_IMETHODIMP nsWindow::Resize(PRInt32 aWidth, PRInt32 aHeight, PRBool aRepaint)
     // changed, hence changing our notion of visibility. We then also should make
     // sure that we invalidate ourselves correctly. Fixes bug 18240 (pinkerton).
     CalcWindowRegions();
+
     if (aRepaint)
       Invalidate(PR_FALSE);
+
   }
 
+  if (aRepaint)
+  	mLastYScroll = 0; // issue 28
   return NS_OK;
 }
 
@@ -1086,7 +1133,9 @@ void nsWindow::StartDraw(nsIRenderingContext* aRenderingContext)
 		return;
 	mDrawing = PR_TRUE;
 
-	CalcWindowRegions();	//¥REVISIT
+// We shouldn't be calling this EVERY DAMN TIME. -- Cameron
+// issue 99
+	//CalcWindowRegions();	//¥REVISIT
 
 	if (aRenderingContext == nsnull)
 	{
@@ -1200,6 +1249,7 @@ NS_IMETHODIMP	nsWindow::Update()
     return NS_OK;
 
   static PRBool  reentrant = PR_FALSE;
+  mLastYScroll = 0; // issue 28
 
   if (reentrant)
     HandleUpdateEvent(nil);
@@ -1233,11 +1283,20 @@ NS_IMETHODIMP	nsWindow::Update()
     ::EndUpdate(mWindowPtr);
 
     // restore the window update rgn
+// backed out
+// tbh, I'm not sure which one is faster, so we'll stick with bug 89734 for now
+// rather than restoring the old copy code. -- Cameron
+// bug 89734
+#if(1)
     // saveUpdateRgn is in global coords, so we need to shift it to local coords
     Point origin = {0, 0};
     ::GlobalToLocal(&origin);
     ::OffsetRgn(saveUpdateRgn, origin.h, origin.v);
     ::InvalWindowRgn(mWindowPtr, saveUpdateRgn);
+#else
+	::CopyRgn(saveUpdateRgn, ((WindowRecord*)mWindowPtr)->updateRgn);
+#endif
+// end bug
 
     ::ValidWindowRgn(mWindowPtr, regionToValidate);
     
@@ -1422,12 +1481,12 @@ else
 		return NS_ERROR_OUT_OF_MEMORY;
 	::GetPortVisibleRegion(::GetWindowPort(mWindowPtr), damagedRgn);
 
-/*
+
 #ifdef PAINT_DEBUGGING	
 	if (caps_lock())
   	blinkRgn(damagedRgn, PR_TRUE);
 #endif
-*/
+
 	// calculate the update region relatively to the window port rect
 	// (at this point, the grafPort origin should always be 0,0
 	// so mWindowRegion has to be converted to window coordinates)
@@ -1507,8 +1566,9 @@ else
       PaintUpdateRect ( &boundingBox, this );
     }
 #else
+
     EachRegionRect ( updateRgn, CountRect, &numRects );
-    if ( numRects <= kMaxUpdateRects ) {
+    if (numRects <= kMaxUpdateRects ) {
       Rect rectList[kMaxUpdateRects];
       TRectArray rectWrapper ( rectList );
        
@@ -1530,6 +1590,9 @@ else
       else {
         Rect boundingBox;
         ::GetRegionBounds(updateRgn, &boundingBox);
+#ifdef CAMERON_DEBUGGING
+        blinkRgn(updateRgn, PR_TRUE);
+#endif
         PaintUpdateRect ( &boundingBox, this );
       }
     }
@@ -1538,6 +1601,7 @@ else
       ::GetRegionBounds(updateRgn, &boundingBox);
       PaintUpdateRect ( &boundingBox, this );
     }
+
 #endif
 
 #if DEBUG
@@ -1684,6 +1748,7 @@ void nsWindow::UpdateWidget(nsRect& aRect, nsIRenderingContext* aContext)
 	paintEvent.rect						= &aRect;
 
 	// draw the widget
+	CalcWindowRegions();
 	StartDraw(aContext);
 
 	if ( OnPaint(paintEvent) ) {
@@ -1755,12 +1820,93 @@ void nsWindow::UpdateWidget(nsRect& aRect, nsIRenderingContext* aContext)
 // our prayers with ::ScrollWindowRect().
 //
 void
-nsWindow::ScrollBits ( Rect & inRectToScroll, PRInt32 inLeftDelta, PRInt32 inTopDelta )
-{                        
+nsWindow::ScrollBits ( Rect & inRectToScroll, PRInt32 inLeftDelta, PRInt32 inTopDelta,
+	nsIScrollableView *scrollableView, nsIViewManager *viewManager, PRUint32 aFlags ) // issue 28
+{
+
+/* It seems that a lot of the assumptions made for widget updating don't work right
+   on Mac OS 9. For that reason, I'm forcing more repaints, but invoking CopyBits less so
+   that we have less double painting. See issue 28. -- Cameron */
+   
 #if TARGET_CARBON
   ::ScrollWindowRect ( mWindowPtr, &inRectToScroll, inLeftDelta, inTopDelta, 
                         kScrollWindowInvalidate, NULL );
 #else
+#if(1)
+// issue 28
+// This makes scrolling less smooth, but really fixes a multitude of repaint problems.
+// It does NOT replace ::InvalWindowRgn -- we still need that.
+#define OHCRAP Invalidate(doCopyBits = PR_FALSE)
+// dynamically adjust this based on screen repaint speed and user speed.
+#define SGN(x) ((x > 0) ? 1 : (x < 0) ? -1 : 0)
+	
+	static int last_direction = 0; // catch user changing scroll direction
+	
+	// we don't want this -- we would like to repaint given any chance to do so.
+	//if (inLeftDelta == 0 && inTopDelta == 0)
+	//	return;
+		
+	PRBool doCopyBits = PR_TRUE; // don't CopyBits if we're just going to invalidate anyway,
+		// because otherwise we'll be painting a second time unnecessarily.
+		
+	// We can fast scroll IFF:
+	// - The user says it's okay to
+	// - AND we are not clipped horizontally (i.e., a horizontal scroll bar is showing)
+	//   and, by extension, we are not scrolling horizontally (used as a quick case)
+	// - AND the view manager says we are still double buffered.
+	// This still gets it wrong, but not often.
+	// To catch most of the rest, we force overpainting when we do the final InvalWindowRgn.
+	// We'll get to that in a second. As a final insult, if the user changes direction, we
+	// just invalidate the window entirely right now.
+
+  if (!(aFlags & NS_WIDGET_ALWAYS_FAST_SCROLL)) { // this generally means an XUL element.
+  	int this_direction = last_direction;
+  	last_direction = SGN(inTopDelta);
+	if (inLeftDelta != 0 || preferSlowScroll == PR_TRUE || last_direction != this_direction) {
+			OHCRAP;
+	} else {
+		// If we have no scrolling view, or view manager, we'll rely on the user default.
+		if (scrollableView == nsnull || viewManager == nsnull) {
+			if (preferSlowScroll == PR_TRUE)
+				OHCRAP;
+		} else {
+			PRUint32 lastFlags;
+			// did the view manager turn off double buffering?
+			viewManager->GetLastUpdateFlags(&lastFlags);
+			if (
+				//0 &&
+				!(lastFlags & NS_VMREFRESH_DOUBLE_BUFFER)) {
+				OHCRAP;
+			} else {
+				// are we smaller than our content? just checking for the presence of
+				// a horizontal bar is no good, because we get nsScrollPortViews often
+				// and these have no idea at all.
+				nscoord x, y;
+				scrollableView->GetContainerSize(&x, &y);
+				// This is in app units, so we need to get this back into pixels.
+				// We might have this cached, giving us a little speed back.
+				if (fPixelsToTwips == 0.0) {
+					nsIDeviceContext *dc;
+					viewManager->GetDeviceContext(dc);
+					if (dc)
+						dc->GetDevUnitsToAppUnits(fPixelsToTwips);
+					mWidthInTwips = (float)mBounds.width * fPixelsToTwips;
+				}
+				if (fPixelsToTwips != 0.0) {
+					if(x > mWidthInTwips)
+						OHCRAP;
+				}
+			}
+		}
+	}
+
+  }
+	// did we survive?
+#else
+  PRBool doCopyBits = PR_TRUE;
+#endif
+// end issue
+
   // Get Frame in local coords from clip rect (there might be a border around view)
   StRegionFromPool clipRgn;
   if ( !clipRgn ) return;
@@ -1796,6 +1942,8 @@ nsWindow::ScrollBits ( Rect & inRectToScroll, PRInt32 inLeftDelta, PRInt32 inTop
 
   if(::EmptyRgn(mWindowPtr->visRgn))    
   {
+
+	if (doCopyBits) // issue 28
     ::CopyBits ( 
       &mWindowPtr->portBits, 
       &mWindowPtr->portBits, 
@@ -1803,9 +1951,11 @@ nsWindow::ScrollBits ( Rect & inRectToScroll, PRInt32 inLeftDelta, PRInt32 inTop
       &dest, 
       srcCopy, 
       nil);
+
   }
   else
   {
+
     // compute the non-visible region by subtracting what's currently
     // visible (the window's visRgn) from the whole area we're updating
     StRegionFromPool nonVisibleRgn;
@@ -1816,10 +1966,12 @@ nsWindow::ScrollBits ( Rect & inRectToScroll, PRInt32 inLeftDelta, PRInt32 inTop
     // scoll the non-visible region to determine what needs updating
     ::OffsetRgn ( nonVisibleRgn, inLeftDelta, inTopDelta );
     
+    if (doCopyBits) { // issue 28
     // calculate a mask region to not copy the non-visble portions of the window from the port
     StRegionFromPool copyMaskRgn;
     if ( !copyMaskRgn ) return;
     ::DiffRgn(totalVisRgn, nonVisibleRgn, copyMaskRgn);
+    
     
     // use copybits to simulate a ScrollRect()
     RGBColor black = { 0, 0, 0 };
@@ -1837,6 +1989,8 @@ nsWindow::ScrollBits ( Rect & inRectToScroll, PRInt32 inLeftDelta, PRInt32 inTop
 
     // union the update regions together and invalidate them
     ::UnionRgn(nonVisibleRgn, updateRgn, updateRgn);
+
+   }
   }
   
   // If the region to be scrolled contains regions which are currently dirty,
@@ -1863,8 +2017,37 @@ nsWindow::ScrollBits ( Rect & inRectToScroll, PRInt32 inLeftDelta, PRInt32 inTop
   // and add it to the dirty region
   ::UnionRgn(updateRgn, localVisRgn, updateRgn);
   
-  ::InvalWindowRgn(mWindowPtr, updateRgn);
+  // issue 28
+  // finally, widen our dirty region AGAIN by scroll size and force overpainting
+  // of the scrolled area to whitewash over any accumulated rounding errors.
+  // we only need to do this if we are fast scrolling, and we only need to do
+  // this in the Y direction, and we only need to do it in the direction we are
+  // scrolling.
+  if (doCopyBits == PR_TRUE && inTopDelta != 0) {
+  	StRegionFromPool  biggerSlice;
+  	if (!biggerSlice) return;
+  	
+  	PRInt32 absTop = abs(inTopDelta);
+  	absTop += absTop;
+  	Rect  makeBiggerSlice;  	
+  	::GetRegionBounds(updateRgn, &makeBiggerSlice);
+
+	//if (inTopDelta > 0)
+		makeBiggerSlice.bottom += absTop;
+	//if (inTopDelta < 0)
+  		makeBiggerSlice.top -= absTop;
+  	makeBiggerSlice.top = (makeBiggerSlice.top < 0) ? 0 : makeBiggerSlice.top;
   
+  	::RectRgn(biggerSlice, &makeBiggerSlice);
+  	::UnionRgn(updateRgn, biggerSlice, updateRgn);
+  }
+  // end issue
+  
+  // as the last step, invalidate everything that needs to be repainted in our dirty region.
+  ::InvalWindowRgn(mWindowPtr, updateRgn);
+  // DON'T REMOVE THIS. Even when we invalidate everything, this freaks if you
+  // take it out. -- Cameron
+
 #endif // !TARGET_CARBON
 }
 
@@ -1874,7 +2057,8 @@ nsWindow::ScrollBits ( Rect & inRectToScroll, PRInt32 inLeftDelta, PRInt32 inTop
 // Scroll the bits of a window
 //
 //-------------------------------------------------------------------------
-NS_IMETHODIMP nsWindow::Scroll(PRInt32 aDx, PRInt32 aDy, nsRect *aClipRect)
+NS_IMETHODIMP nsWindow::Scroll(PRInt32 aDx, PRInt32 aDy, nsRect *aClipRect,
+		nsIScrollableView *scrollView, nsIViewManager *viewManager, PRUint32 aFlags)
 {
 
   
@@ -1885,9 +2069,10 @@ NS_IMETHODIMP nsWindow::Scroll(PRInt32 aDx, PRInt32 aDy, nsRect *aClipRect)
     // XXX ?
 	  if (!IsRegionRectangular(mWindowRegion)) {
 		  Invalidate(PR_FALSE); // PR_TRUE); // modified bug 289353
+		  mLastYScroll = 0; // issue 28
 		  goto scrollChildren;
 	  }
-
+	  
 	  //--------
 	  // Scroll this widget
 	  if (aClipRect)
@@ -1910,7 +2095,7 @@ NS_IMETHODIMP nsWindow::Scroll(PRInt32 aDx, PRInt32 aDy, nsRect *aClipRect)
 		::SetClip(mWindowRegion);
 
 		// Scroll the bits now. We've rolled our own because ::ScrollRect looks ugly
-		ScrollBits(macRect,aDx,aDy);
+		ScrollBits(macRect,aDx,aDy, scrollView, viewManager, aFlags);
 
 	EndDraw();
   }
@@ -2169,6 +2354,10 @@ void nsWindow::CalcWindowRegions()
 	{
     if (parent->mWindowRegion)
     {
+
+// bug 162885
+// I made this Carbon only. we're faster in OS 9 to just OffsetRgn. -- Cameron
+#ifdef TARGET_CARBON
       // Under 10.2, if we offset a region beyond the coordinate space,
       // OffsetRgn() will silently fail and restoring it will then cause the
       // widget to be out of place (visible as 'shearing' when scrolling).
@@ -2179,7 +2368,14 @@ void nsWindow::CalcWindowRegions()
       ::CopyRgn(parent->mWindowRegion, shiftedParentWindowRgn); 
       ::OffsetRgn(shiftedParentWindowRgn, origin.x, origin.y);
       ::SectRgn(mWindowRegion, shiftedParentWindowRgn, mWindowRegion);
+#else
+			::OffsetRgn(parent->mWindowRegion, origin.x, origin.y);
+			::SectRgn(mWindowRegion, parent->mWindowRegion, mWindowRegion);
+			::OffsetRgn(parent->mWindowRegion, -origin.x, -origin.y);
+#endif
+// end bug
     }
+
 		origin.x -= parent->mBounds.x;
 		origin.y -= parent->mBounds.y;
 		parent = (nsWindow*)parent->mParent;

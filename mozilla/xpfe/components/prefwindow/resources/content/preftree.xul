@@ -136,6 +136,11 @@
       <treechildren id="advancedChildren">
         <treeitem>
           <treerow>
+            <treecell url="chrome://communicator/content/pref/pref-performance.xul" label="&performance.label;"/>
+          </treerow>
+        </treeitem>
+        <treeitem>
+          <treerow>
             <treecell url="chrome://communicator/content/pref/pref-scripts.xul" label="&scriptsAndWindows.label;"/> 
           </treerow>
         </treeitem>

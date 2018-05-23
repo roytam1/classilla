@@ -52,7 +52,9 @@
 #include "nsRuleNode.h"
 #include "nsIStyleRule.h"
 #include "nsICSSStyleRule.h"
-#include "nsIDOMCSSStyleRule.h"
+// bug 188803
+#include "nsICSSStyleRuleDOMWrapper.h"
+//#include "nsIDOMCSSStyleRule.h"
 #include "nsIDOMWindowInternal.h"
 
 static NS_DEFINE_CID(kInspectorCSSUtilsCID, NS_INSPECTORCSSUTILS_CID);
@@ -122,6 +124,8 @@ inDOMUtils::IsIgnorableWhitespace(nsIDOMCharacterData *aDataNode,
   return NS_OK;
 }
 
+// bug 188803
+#if(0)
 NS_IMETHODIMP
 inDOMUtils::GetStyleRules(nsIDOMElement *aElement, nsISupportsArray **_retval)
 {
@@ -151,6 +155,45 @@ inDOMUtils::GetStyleRules(nsIDOMElement *aElement, nsISupportsArray **_retval)
 
   return NS_OK;
 }
+#else
+NS_IMETHODIMP
+inDOMUtils::GetCSSStyleRules(nsIDOMElement *aElement,
+                             nsISupportsArray **_retval)
+{
+  if (!aElement) return NS_ERROR_NULL_POINTER;
+
+  *_retval = nsnull;
+
+  nsCOMPtr<nsISupportsArray> rules;
+  NS_NewISupportsArray(getter_AddRefs(rules));
+  if (!rules) return NS_ERROR_OUT_OF_MEMORY;
+
+  nsRuleNode* ruleNode = nsnull;
+  nsCOMPtr<nsIContent> content = do_QueryInterface(aElement);
+  mCSSUtils->GetRuleNodeForContent(content, &ruleNode);
+
+  nsCOMPtr<nsIStyleRule> srule;
+  nsCOMPtr<nsICSSStyleRule> cssRule;
+  nsCOMPtr<nsIDOMCSSRule> domRule;
+  for (PRBool isRoot;
+       mCSSUtils->IsRuleNodeRoot(ruleNode, &isRoot), !isRoot;
+       mCSSUtils->GetRuleNodeParent(ruleNode, &ruleNode))
+  {
+    mCSSUtils->GetRuleNodeRule(ruleNode, getter_AddRefs(srule));
+    cssRule = do_QueryInterface(srule);
+    if (cssRule) {
+      cssRule->GetDOMRule(getter_AddRefs(domRule));
+      rules->InsertElementAt(domRule, 0);
+    }
+  }
+
+  *_retval = rules;
+  NS_ADDREF(*_retval);
+
+  return NS_OK;
+}
+#endif
+// end bug
 
 // bug 98765
 #if(0)
@@ -166,6 +209,8 @@ inDOMUtils::GetRuleWeight(nsIDOMCSSStyleRule *aRule, PRUint32 *_retval)
 #endif
 // end bug
 
+// bug 188803
+#if(0)
 NS_IMETHODIMP
 inDOMUtils::GetRuleLine(nsIDOMCSSStyleRule *aRule, PRUint32 *_retval)
 {
@@ -175,6 +220,22 @@ inDOMUtils::GetRuleLine(nsIDOMCSSStyleRule *aRule, PRUint32 *_retval)
   *_retval = cssrule->GetLineNumber();
   return NS_OK;
 }
+#else
+NS_IMETHODIMP
+inDOMUtils::GetRuleLine(nsIDOMCSSStyleRule *aRule, PRUint32 *_retval)
+{
+  *_retval = 0;
+  if (!aRule)
+    return NS_OK;
+  nsCOMPtr<nsICSSStyleRuleDOMWrapper> rule = do_QueryInterface(aRule);
+  nsCOMPtr<nsICSSStyleRule> cssrule;
+  rule->GetCSSStyleRule(getter_AddRefs(cssrule));
+  if (cssrule)
+    *_retval = cssrule->GetLineNumber();
+  return NS_OK;
+}
+#endif
+// end bug
 
 NS_IMETHODIMP 
 inDOMUtils::GetBindingURLs(nsIDOMElement *aElement, nsISimpleEnumerator **_retval)

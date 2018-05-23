@@ -105,8 +105,19 @@ CSSFirstLineRule::MapRuleInfoInto(nsRuleData* aData)
   if (!aData)
     return NS_OK;
 
-  if (aData->mSID == eStyleStruct_Border && aData->mMarginData) {
-    // Disable the border.
+  // we do not have CommonMapRuleInfoInto(aData);
+  // do we want this too?
+  
+   // Disable 'float'. (backbug from 125246)
+   if (aData->mSID == eStyleStruct_Display) {
+     nsCSSValue none(eCSSUnit_None);
+     aData->mDisplayData->mFloat = none;
+   }
+  
+  // Disable border properties, margin properties, and padding
+  // backbugs and bugs from bug 125246
+  if (aData->mSID == eStyleStruct_Border) { //  && aData->mMarginData) {
+#if(0)
     nsCSSValue styleVal(NS_STYLE_BORDER_STYLE_NONE, eCSSUnit_Enumerated);
     if (aData->mMarginData->mBorderStyle->mLeft.GetUnit() == eCSSUnit_Null)
       aData->mMarginData->mBorderStyle->mLeft = styleVal;
@@ -116,7 +127,32 @@ CSSFirstLineRule::MapRuleInfoInto(nsRuleData* aData)
       aData->mMarginData->mBorderStyle->mTop = styleVal;
     if (aData->mMarginData->mBorderStyle->mBottom.GetUnit() == eCSSUnit_Null)
       aData->mMarginData->mBorderStyle->mBottom = styleVal;
+#else
+    nsCSSValue none(NS_STYLE_BORDER_STYLE_NONE, eCSSUnit_Enumerated);
+    aData->mMarginData->mBorderStyle.mTop = none;
+    aData->mMarginData->mBorderStyle.mRight = none;
+    aData->mMarginData->mBorderStyle.mBottom = none;
+    aData->mMarginData->mBorderStyle.mLeft = none;
+#endif
   }
+  
+// more backbugs.
+  if (aData->mSID == eStyleStruct_Margin) {
+    nsCSSValue zero(0.0f, eCSSUnit_Point);
+    aData->mMarginData->mMargin.mTop = zero;
+    aData->mMarginData->mMargin.mRight = zero;
+    aData->mMarginData->mMargin.mBottom = zero;
+    aData->mMarginData->mMargin.mLeft = zero;
+  }
+
+  if (aData->mSID == eStyleStruct_Padding) {
+    nsCSSValue zero(0.0f, eCSSUnit_Point);
+    aData->mMarginData->mPadding.mTop = zero;
+    aData->mMarginData->mPadding.mRight = zero;
+    aData->mMarginData->mPadding.mBottom = zero;
+    aData->mMarginData->mPadding.mLeft = zero;
+  }
+// end bug
 
   return NS_OK;
 }
@@ -589,3 +625,6 @@ NS_EXPORT nsresult
   *aInstancePtrResult = it;
   return NS_OK;
 }
+
+#warning we do not have CSSDisableProps
+#warning if we add them, we must reapply the relevant parts from bug 125246.

@@ -79,6 +79,18 @@ struct nsCollapsingMargin {
       {
       }
 
+// bug 257612
+    PRBool operator==(const nsCollapsingMargin& aOther)
+      {
+        return mMostPos == aOther.mMostPos &&
+          mMostNeg == aOther.mMostNeg;
+      }
+
+    PRBool operator!=(const nsCollapsingMargin& aOther)
+      {
+        return !(*this == aOther);
+      }
+
     nsCollapsingMargin& operator=(const nsCollapsingMargin& aOther)
       {
         mMostPos = aOther.mMostPos;

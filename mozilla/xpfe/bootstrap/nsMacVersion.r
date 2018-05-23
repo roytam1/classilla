@@ -28,19 +28,19 @@
 // Version Numbers //
 
 #define		VERSION_MAJOR			9
-#define		VERSION_MINOR			0x04	// revision & fix in BCD
+#define		VERSION_MINOR			0x10	// revision & fix in BCD
 #define		VERSION_KIND			alpha	// alpha, beta, or final
 #define		VERSION_MICRO			1		// internal stage: alpha or beta number
 
 
 // Version Strings (Finder's Get Info dialog box) //
 
-#define		VERSION_STRING			"9.0.4"
+#define		VERSION_STRING			"9.1"
 //#define 	VERSION_LANG			"en"	// e.g. en, ja, de, fr
 //#define 	VERSION_COUNTRY			"_US"	// e.g.,  _JP, _DE, _FR, _US
 //#define	VERSION_LOCALE			"[" VERSION_LANG "_" VERSION_COUNTRY "]"
 
-#define		COPYRIGHT_STRING		"© 2009 Contributors to Classilla"
+#define		COPYRIGHT_STRING		"© 2009, 2010 Contributors to Classilla"
 #define		GETINFO_VERSION			VERSION_STRING ", " COPYRIGHT_STRING
 #define		PACKAGE_NAME			"Classilla " VERSION_STRING
 

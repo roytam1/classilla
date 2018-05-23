@@ -1557,8 +1557,13 @@ GlobalWindowImpl::SetInnerHeight(PRInt32 aInnerHeight)
     return NS_OK;
   }
 
+// bug 244235
+// The content viewer does a check to make sure that it's a content
+// viewer for a toplevel docshell.
+// These lines were taken out by the bug, but we need them.
   nsCOMPtr<nsIDocShellTreeItem> docShellAsItem(do_QueryInterface(mDocShell));
   NS_ENSURE_TRUE(docShellAsItem, NS_ERROR_FAILURE);
+#if(0)
 
   nsCOMPtr<nsIDocShellTreeItem> docShellParent;
   docShellAsItem->GetSameTypeParent(getter_AddRefs(docShellParent));
@@ -1567,6 +1572,8 @@ GlobalWindowImpl::SetInnerHeight(PRInt32 aInnerHeight)
   // sub-frames.
   if (docShellParent)
     return NS_OK; // Silent failure
+#endif
+// end bug
 
   nsCOMPtr<nsIDocShellTreeOwner> treeOwner;
   docShellAsItem->GetTreeOwner(getter_AddRefs(treeOwner));

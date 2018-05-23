@@ -37,7 +37,9 @@
  *
  * ***** END LICENSE BLOCK ***** */
 #include "nscore.h"
-#include "nsCSSDeclaration.h"
+// bug 201681
+#include "nsCSSStruct.h"
+//#include "nsCSSDeclaration.h"
 #include "nsString.h"
 #include "nsIAtom.h"
 #include "nsUnicharUtils.h"
@@ -55,7 +57,8 @@
 
 // #define DEBUG_REFS
 
-
+// bug 125246
+#if(0)
 static NS_DEFINE_IID(kCSSFontSID, NS_CSS_FONT_SID);
 static NS_DEFINE_IID(kCSSColorSID, NS_CSS_COLOR_SID);
 static NS_DEFINE_IID(kCSSDisplaySID, NS_CSS_DISPLAY_SID);
@@ -76,6 +79,9 @@ static NS_DEFINE_IID(kCSSXULSID, NS_CSS_XUL_SID);
 #ifdef MOZ_SVG
 static NS_DEFINE_IID(kCSSSVGSID, NS_CSS_SVG_SID);
 #endif
+
+#endif
+// end bug
 
 #define CSS_IF_DELETE(ptr)  if (nsnull != ptr)  { delete ptr; ptr = nsnull; }
 
@@ -103,10 +109,14 @@ nsCSSFont::~nsCSSFont(void)
   MOZ_COUNT_DTOR(nsCSSFont);
 }
 
+// bug 125246
+#if(0)
 const nsID& nsCSSFont::GetID(void)
 {
   return kCSSFontSID;
 }
+#endif
+// end bug
 
 #ifdef DEBUG
 void nsCSSFont::List(FILE* out, PRInt32 aIndent) const
@@ -180,10 +190,14 @@ nsCSSColor::~nsCSSColor(void)
   MOZ_COUNT_DTOR(nsCSSColor);
 }
 
+// bug 125246
+#if(0)
 const nsID& nsCSSColor::GetID(void)
 {
   return kCSSColorSID;
 }
+#endif
+// end bug
 
 #ifdef DEBUG
 void nsCSSColor::List(FILE* out, PRInt32 aIndent) const
@@ -261,10 +275,14 @@ nsCSSText::~nsCSSText(void)
   CSS_IF_DELETE(mTextShadow);
 }
 
+// bug 125246
+#if(0)
 const nsID& nsCSSText::GetID(void)
 {
   return kCSSTextSID;
 }
+#endif
+// end bug
 
 #ifdef DEBUG
 void nsCSSText::List(FILE* out, PRInt32 aIndent) const
@@ -283,11 +301,21 @@ void nsCSSText::List(FILE* out, PRInt32 aIndent) const
   if (nsnull != mTextShadow) {
     if (mTextShadow->mXOffset.IsLengthUnit()) {
       nsCSSShadow*  shadow = mTextShadow;
+      // XXX This prints the property name many times, but nobody cares.
       while (nsnull != shadow) {
+// bug 125246
+#if(0)
         shadow->mColor.AppendToString(buffer, eCSSProperty_text_shadow_color);
         shadow->mXOffset.AppendToString(buffer, eCSSProperty_text_shadow_x);
         shadow->mYOffset.AppendToString(buffer, eCSSProperty_text_shadow_y);
         shadow->mRadius.AppendToString(buffer, eCSSProperty_text_shadow_radius);
+#else
+        shadow->mColor.AppendToString(buffer, eCSSProperty_text_shadow);
+        shadow->mXOffset.AppendToString(buffer, eCSSProperty_text_shadow);
+        shadow->mYOffset.AppendToString(buffer, eCSSProperty_text_shadow);
+        shadow->mRadius.AppendToString(buffer, eCSSProperty_text_shadow);
+#endif
+// end bug
         shadow = shadow->mNext;
       }
     }
@@ -323,6 +351,26 @@ nsCSSRect::~nsCSSRect()
   MOZ_COUNT_DTOR(nsCSSRect);
 }
 
+// bug 125246
+void nsCSSRect::SetAllSidesTo(const nsCSSValue& aValue)
+{
+  mTop = aValue;
+  mRight = aValue;
+  mBottom = aValue;
+  mLeft = aValue;
+}
+
+#if (NS_SIDE_TOP != 0) || (NS_SIDE_RIGHT != 1) || (NS_SIDE_BOTTOM != 2) || (NS_SIDE_LEFT != 3)
+#error "Somebody changed the side constants."
+#endif
+
+/* static */ const nsCSSRect::side_type nsCSSRect::sides[4] = {
+  &nsCSSRect::mTop,
+  &nsCSSRect::mRight,
+  &nsCSSRect::mBottom,
+  &nsCSSRect::mLeft,
+};
+// end bug
 
 #ifdef DEBUG
 void nsCSSRect::List(FILE* out, nsCSSProperty aPropID, PRInt32 aIndent) const
@@ -374,10 +422,102 @@ void nsCSSRect::List(FILE* out, PRInt32 aIndent, const nsCSSProperty aTRBL[]) co
 }
 #endif
 
+// bug 125246
+// --- nsCSSValueListRect -----------------
+
+MOZ_DECL_CTOR_COUNTER(nsCSSValueListRect)
+
+nsCSSValueListRect::nsCSSValueListRect(void)
+  : mTop(nsnull),
+    mRight(nsnull),
+    mBottom(nsnull),
+    mLeft(nsnull)
+{
+  MOZ_COUNT_CTOR(nsCSSValueListRect);
+}
+
+nsCSSValueListRect::nsCSSValueListRect(const nsCSSValueListRect& aCopy)
+  : mTop(aCopy.mTop),
+    mRight(aCopy.mRight),
+    mBottom(aCopy.mBottom),
+    mLeft(aCopy.mLeft)
+{
+  MOZ_COUNT_CTOR(nsCSSValueListRect);
+}
+
+nsCSSValueListRect::~nsCSSValueListRect()
+{
+  MOZ_COUNT_DTOR(nsCSSValueListRect);
+}
+
+/* static */ const nsCSSValueListRect::side_type
+nsCSSValueListRect::sides[4] = {
+  &nsCSSValueListRect::mTop,
+  &nsCSSValueListRect::mRight,
+  &nsCSSValueListRect::mBottom,
+  &nsCSSValueListRect::mLeft,
+};
+
+#ifdef DEBUG
+void nsCSSValueListRect::List(FILE* out, nsCSSProperty aPropID, PRInt32 aIndent) const
+{
+#if 0
+  for (PRInt32 index = aIndent; --index >= 0; ) fputs("  ", out);
+
+  nsAutoString buffer;
+
+  if (eCSSProperty_UNKNOWN < aPropID) {
+    buffer.AppendWithConversion(nsCSSProps::GetStringValue(aPropID).get());
+    buffer.Append(NS_LITERAL_STRING(": "));
+  }
+
+  mTop.AppendToString(buffer);
+  mRight.AppendToString(buffer);
+  mBottom.AppendToString(buffer); 
+  mLeft.AppendToString(buffer);
+  fputs(NS_LossyConvertUCS2toASCII(buffer).get(), out);
+#endif
+}
+
+void nsCSSValueListRect::List(FILE* out, PRInt32 aIndent, const nsCSSProperty aTRBL[]) const
+{
+#if 0
+  for (PRInt32 index = aIndent; --index >= 0; ) fputs("  ", out);
+
+  nsAutoString buffer;
+
+  if (eCSSUnit_Null != mTop.GetUnit()) {
+    buffer.AppendWithConversion(nsCSSProps::GetStringValue(aTRBL[0]).get());
+    buffer.Append(NS_LITERAL_STRING(": "));
+    mTop.AppendToString(buffer);
+  }
+  if (eCSSUnit_Null != mRight.GetUnit()) {
+    buffer.AppendWithConversion(nsCSSProps::GetStringValue(aTRBL[1]).get());
+    buffer.Append(NS_LITERAL_STRING(": "));
+    mRight.AppendToString(buffer);
+  }
+  if (eCSSUnit_Null != mBottom.GetUnit()) {
+    buffer.AppendWithConversion(nsCSSProps::GetStringValue(aTRBL[2]).get());
+    buffer.Append(NS_LITERAL_STRING(": "));
+    mBottom.AppendToString(buffer); 
+  }
+  if (eCSSUnit_Null != mLeft.GetUnit()) {
+    buffer.AppendWithConversion(nsCSSProps::GetStringValue(aTRBL[3]).get());
+    buffer.Append(NS_LITERAL_STRING(": "));
+    mLeft.AppendToString(buffer);
+  }
+
+  fputs(NS_LossyConvertUCS2toASCII(buffer).get(), out);
+#endif
+}
+#endif
+// end bug
+
+
 // --- nsCSSDisplay -----------------
 
 nsCSSDisplay::nsCSSDisplay(void)
-  : mClip(nsnull)
+//  : mClip(nsnull) // bug 125246
 {
   MOZ_COUNT_CTOR(nsCSSDisplay);
 }
@@ -389,7 +529,7 @@ nsCSSDisplay::nsCSSDisplay(const nsCSSDisplay& aCopy)
     mPosition(aCopy.mPosition),
     mFloat(aCopy.mFloat),
     mClear(aCopy.mClear),
-    mClip(nsnull),
+    mClip(aCopy.mClip), // bug 125246 // nsnull),
     mOverflow(aCopy.mOverflow),
     mVisibility(aCopy.mVisibility),
     mOpacity(aCopy.mOpacity),
@@ -399,19 +539,23 @@ nsCSSDisplay::nsCSSDisplay(const nsCSSDisplay& aCopy)
     // end temp
 {
   MOZ_COUNT_CTOR(nsCSSDisplay);
-  CSS_IF_COPY(mClip, nsCSSRect);
+  // bug 125246 // CSS_IF_COPY(mClip, nsCSSRect);
 }
 
 nsCSSDisplay::~nsCSSDisplay(void)
 {
   MOZ_COUNT_DTOR(nsCSSDisplay);
-  CSS_IF_DELETE(mClip);
+  // bug 125246 // CSS_IF_DELETE(mClip);
 }
 
+// bug 125246
+#if(0)
 const nsID& nsCSSDisplay::GetID(void)
 {
   return kCSSDisplaySID;
 }
+#endif
+// end bug
 
 #ifdef DEBUG
 void nsCSSDisplay::List(FILE* out, PRInt32 aIndent) const
@@ -431,9 +575,15 @@ void nsCSSDisplay::List(FILE* out, PRInt32 aIndent) const
   mOpacity.AppendToString(buffer, eCSSProperty_opacity);
 
   fputs(NS_LossyConvertUCS2toASCII(buffer).get(), out);
+// bug 125246
+#if(0)
   if (nsnull != mClip) {
     mClip->List(out, eCSSProperty_clip);
   }
+#else
+  mClip.List(out, eCSSProperty_clip);
+#endif
+// end bug
   buffer.SetLength(0);
   mOverflow.AppendToString(buffer, eCSSProperty_overflow);
   fputs(NS_LossyConvertUCS2toASCII(buffer).get(), out);
@@ -442,6 +592,8 @@ void nsCSSDisplay::List(FILE* out, PRInt32 aIndent) const
 
 // --- nsCSSMargin -----------------
 
+// bug 125246
+#if(0)
 inline void nsCSSMargin::EnsureBorderColors()
 {
   if (!mBorderColors) {
@@ -451,26 +603,46 @@ inline void nsCSSMargin::EnsureBorderColors()
       mBorderColors[i] = nsnull;
   }
 }
+#endif
+// end bug
 
 nsCSSMargin::nsCSSMargin(void)
+// bug 125246
+#if(0)
   : mMargin(nsnull), mPadding(nsnull), 
     mBorderWidth(nsnull), mBorderColor(nsnull), mBorderColors(nsnull),
     mBorderStyle(nsnull), mBorderRadius(nsnull), mOutlineRadius(nsnull)
+#endif
+// end bug
 {
   MOZ_COUNT_CTOR(nsCSSMargin);
 }
 
 nsCSSMargin::nsCSSMargin(const nsCSSMargin& aCopy)
+// bug 125246
+#if(0)
   : mMargin(nsnull), mPadding(nsnull), 
     mBorderWidth(nsnull), mBorderColor(nsnull), mBorderColors(nsnull),
     mBorderStyle(nsnull), mBorderRadius(nsnull),
+#else
+  : mMargin(aCopy.mMargin),
+    mPadding(aCopy.mPadding), 
+    mBorderWidth(aCopy.mBorderWidth),
+    mBorderColor(aCopy.mBorderColor),
+    mBorderColors(aCopy.mBorderColors),
+    mBorderStyle(aCopy.mBorderStyle),
+    mBorderRadius(aCopy.mBorderRadius),
+#endif
+// end bug
     mOutlineWidth(aCopy.mOutlineWidth),
     mOutlineColor(aCopy.mOutlineColor),
     mOutlineStyle(aCopy.mOutlineStyle),
-    mOutlineRadius(nsnull),
+    mOutlineRadius(aCopy.mOutlineRadius), // bug 125246 // nsnull),
     mFloatEdge(aCopy.mFloatEdge)
 {
   MOZ_COUNT_CTOR(nsCSSMargin);
+// bug 125246
+#if(0)
   CSS_IF_COPY(mMargin, nsCSSRect);
   CSS_IF_COPY(mPadding, nsCSSRect);
   CSS_IF_COPY(mBorderWidth, nsCSSRect);
@@ -483,11 +655,15 @@ nsCSSMargin::nsCSSMargin(const nsCSSMargin& aCopy)
     for (PRInt32 i = 0; i < 4; i++)
       CSS_IF_COPY(mBorderColors[i], nsCSSValueList);
   }
+#endif
+// end bug
 }
 
 nsCSSMargin::~nsCSSMargin(void)
 {
   MOZ_COUNT_DTOR(nsCSSMargin);
+// bug 125246
+#if(0)
   CSS_IF_DELETE(mMargin);
   CSS_IF_DELETE(mPadding);
   CSS_IF_DELETE(mBorderWidth);
@@ -500,33 +676,39 @@ nsCSSMargin::~nsCSSMargin(void)
       CSS_IF_DELETE(mBorderColors[i]);
     delete []mBorderColors;
   }
+#endif
+// end bug
 }
 
+// bug 125246
+#if(0)
 const nsID& nsCSSMargin::GetID(void)
 {
   return kCSSMarginSID;
 }
+#endif
+// end bug
 
 #ifdef DEBUG
 void nsCSSMargin::List(FILE* out, PRInt32 aIndent) const
 {
-  if (nsnull != mMargin) {
+  { // bug 125246 // if (nsnull != mMargin) { // this seems iffy but that's the patch ...
     static const nsCSSProperty trbl[] = {
       eCSSProperty_margin_top,
       eCSSProperty_margin_right,
       eCSSProperty_margin_bottom,
       eCSSProperty_margin_left
     };
-    mMargin->List(out, aIndent, trbl);
+    mMargin.List(out, aIndent, trbl); // bug 125246 // mMargin->List(out, aIndent, trbl);
   }
-  if (nsnull != mPadding) {
+  { // bug 125246 again // if (nsnull != mPadding) {
     static const nsCSSProperty trbl[] = {
       eCSSProperty_padding_top,
       eCSSProperty_padding_right,
       eCSSProperty_padding_bottom,
       eCSSProperty_padding_left
     };
-    mPadding->List(out, aIndent, trbl);
+    mPadding.List(out, aIndent, trbl); // bug 125246 // mPadding->List(out, aIndent, trbl);
   }
   if (nsnull != mBorderWidth) {
     static const nsCSSProperty trbl[] = {
@@ -535,22 +717,29 @@ void nsCSSMargin::List(FILE* out, PRInt32 aIndent) const
       eCSSProperty_border_bottom_width,
       eCSSProperty_border_left_width
     };
-    mBorderWidth->List(out, aIndent, trbl);
+    mBorderWidth.List(out, aIndent, trbl); // bug 125246 // mBorderWidth->List(out, aIndent, trbl);
   }
+// bug 125246
+#if(0)
   if (nsnull != mBorderColor) {
     mBorderColor->List(out, eCSSProperty_border_color, aIndent);
   }
   if (nsnull != mBorderStyle) {
     mBorderStyle->List(out, eCSSProperty_border_style, aIndent);
   }
-  if (nsnull != mBorderRadius) {
+#else
+  mBorderColor.List(out, eCSSProperty_border_color, aIndent);
+  mBorderStyle.List(out, eCSSProperty_border_style, aIndent);
+#endif
+  { // bug 125246 // if (nsnull != mBorderRadius) {
+// end bug
     static const nsCSSProperty trbl[] = {
       eCSSProperty__moz_border_radius_topLeft,
       eCSSProperty__moz_border_radius_topRight,
       eCSSProperty__moz_border_radius_bottomRight,
       eCSSProperty__moz_border_radius_bottomLeft
     };
-    mBorderRadius->List(out, aIndent, trbl);
+    mBorderRadius.List(out, aIndent, trbl); // bug 125246 // mBorderRadius->List(out, aIndent, trbl);
   }
 
   for (PRInt32 index = aIndent; --index >= 0; ) fputs("  ", out);
@@ -559,14 +748,14 @@ void nsCSSMargin::List(FILE* out, PRInt32 aIndent) const
   mOutlineWidth.AppendToString(buffer, eCSSProperty__moz_outline_width);
   mOutlineColor.AppendToString(buffer, eCSSProperty__moz_outline_color);
   mOutlineStyle.AppendToString(buffer, eCSSProperty__moz_outline_style);
-  if (nsnull != mOutlineRadius) {
+  { // bug 125246 // if (nsnull != mOutlineRadius) {
     static const nsCSSProperty trbl[] = {
       eCSSProperty__moz_outline_radius_topLeft,
       eCSSProperty__moz_outline_radius_topRight,
       eCSSProperty__moz_outline_radius_bottomRight,
       eCSSProperty__moz_outline_radius_bottomLeft
     };
-    mOutlineRadius->List(out, aIndent, trbl);
+    mOutlineRadius.List(out, aIndent, trbl); // bug 125246 //mOutlineRadius->List(out, aIndent, trbl);
   }
   mFloatEdge.AppendToString(buffer, eCSSProperty_float_edge);
   fputs(NS_LossyConvertUCS2toASCII(buffer).get(), out);
@@ -576,7 +765,7 @@ void nsCSSMargin::List(FILE* out, PRInt32 aIndent) const
 // --- nsCSSPosition -----------------
 
 nsCSSPosition::nsCSSPosition(void)
-  : mOffset(nsnull)
+//  : mOffset(nsnull) // bug 125246
 {
   MOZ_COUNT_CTOR(nsCSSPosition);
 }
@@ -589,23 +778,27 @@ nsCSSPosition::nsCSSPosition(const nsCSSPosition& aCopy)
     mMinHeight(aCopy.mMinHeight),
     mMaxHeight(aCopy.mMaxHeight),
     mBoxSizing(aCopy.mBoxSizing),
-    mOffset(nsnull),
+    mOffset(aCopy.mOffset), // bug 125246 // nsnull),
     mZIndex(aCopy.mZIndex)
 {
   MOZ_COUNT_CTOR(nsCSSPosition);
-  CSS_IF_COPY(mOffset, nsCSSRect);
+  // CSS_IF_COPY(mOffset, nsCSSRect); // bug 125246
 }
 
 nsCSSPosition::~nsCSSPosition(void)
 {
   MOZ_COUNT_DTOR(nsCSSPosition);
-  CSS_IF_DELETE(mOffset);
+  // CSS_IF_DELETE(mOffset); // bug 125246
 }
 
+// bug 125246
+#if(0)
 const nsID& nsCSSPosition::GetID(void)
 {
   return kCSSPositionSID;
 }
+#endif
+// end bug
 
 #ifdef DEBUG
 void nsCSSPosition::List(FILE* out, PRInt32 aIndent) const
@@ -624,6 +817,8 @@ void nsCSSPosition::List(FILE* out, PRInt32 aIndent) const
   mZIndex.AppendToString(buffer, eCSSProperty_z_index);
   fputs(NS_LossyConvertUCS2toASCII(buffer).get(), out);
 
+// bug 125246
+#if(0)
   if (nsnull != mOffset) {
     static const nsCSSProperty trbl[] = {
       eCSSProperty_top,
@@ -633,13 +828,23 @@ void nsCSSPosition::List(FILE* out, PRInt32 aIndent) const
     };
     mOffset->List(out, aIndent, trbl);
   }
+#else
+  static const nsCSSProperty trbl[] = {
+    eCSSProperty_top,
+    eCSSProperty_right,
+    eCSSProperty_bottom,
+    eCSSProperty_left
+  };
+  mOffset.List(out, aIndent, trbl);
+#endif
+// end bug
 }
 #endif
 
 // --- nsCSSList -----------------
 
 nsCSSList::nsCSSList(void)
-:mImageRegion(nsnull)
+//:mImageRegion(nsnull) // bug 125246
 {
   MOZ_COUNT_CTOR(nsCSSList);
 }
@@ -648,22 +853,26 @@ nsCSSList::nsCSSList(const nsCSSList& aCopy)
   : mType(aCopy.mType),
     mImage(aCopy.mImage),
     mPosition(aCopy.mPosition),
-    mImageRegion(nsnull)
+    mImageRegion(aCopy.mImageRegion) // bug 125246 // nsnull)
 {
   MOZ_COUNT_CTOR(nsCSSList);
-  CSS_IF_COPY(mImageRegion, nsCSSRect);
+  // CSS_IF_COPY(mImageRegion, nsCSSRect); // bug 125246
 }
 
 nsCSSList::~nsCSSList(void)
 {
   MOZ_COUNT_DTOR(nsCSSList);
-  CSS_IF_DELETE(mImageRegion);
+  // CSS_IF_DELETE(mImageRegion); // bug 125246
 }
 
+// bug 125246
+#if(0)
 const nsID& nsCSSList::GetID(void)
 {
   return kCSSListSID;
 }
+#endif
+// end bug
 
 #ifdef DEBUG
 void nsCSSList::List(FILE* out, PRInt32 aIndent) const
@@ -677,6 +886,8 @@ void nsCSSList::List(FILE* out, PRInt32 aIndent) const
   mPosition.AppendToString(buffer, eCSSProperty_list_style_position);
   fputs(NS_LossyConvertUCS2toASCII(buffer).get(), out);
 
+// bug 125246
+#if(0)
   if (mImageRegion) {
     static const nsCSSProperty trbl[] = {
       eCSSProperty_top,
@@ -686,6 +897,16 @@ void nsCSSList::List(FILE* out, PRInt32 aIndent) const
     };
     mImageRegion->List(out, aIndent, trbl);
   }
+#else
+  static const nsCSSProperty trbl[] = {
+    eCSSProperty_top,
+    eCSSProperty_right,
+    eCSSProperty_bottom,
+    eCSSProperty_left
+  };
+  mImageRegion.List(out, aIndent, trbl);
+#endif
+// end bug
 }
 #endif
 
@@ -712,10 +933,14 @@ nsCSSTable::~nsCSSTable(void)
   MOZ_COUNT_DTOR(nsCSSTable);
 }
 
+// bug 125246
+#if(0)
 const nsID& nsCSSTable::GetID(void)
 {
   return kCSSTableSID;
 }
+#endif
+// end bug
 
 #ifdef DEBUG
 void nsCSSTable::List(FILE* out, PRInt32 aIndent) const
@@ -746,9 +971,18 @@ nsCSSBreaks::nsCSSBreaks(const nsCSSBreaks& aCopy)
   : mOrphans(aCopy.mOrphans),
     mWidows(aCopy.mWidows),
     mPage(aCopy.mPage),
+// bug 125246. ironically this bug introduced a fix for 24000. go figure.
+#if(0)
     mPageBreakAfter(aCopy.mPageBreakAfter),
     mPageBreakBefore(aCopy.mPageBreakBefore),
+#else
+    // temp fix for bug 24000
+    //mPageBreakAfter(aCopy.mPageBreakAfter),
+    //mPageBreakBefore(aCopy.mPageBreakBefore),
+#endif
+// end bug
     mPageBreakInside(aCopy.mPageBreakInside)
+
 {
   MOZ_COUNT_CTOR(nsCSSBreaks);
 }
@@ -758,10 +992,14 @@ nsCSSBreaks::~nsCSSBreaks(void)
   MOZ_COUNT_DTOR(nsCSSBreaks);
 }
 
+// bug 125246
+#if(0)
 const nsID& nsCSSBreaks::GetID(void)
 {
   return kCSSBreaksSID;
 }
+#endif
+// end bug
 
 #ifdef DEBUG
 void nsCSSBreaks::List(FILE* out, PRInt32 aIndent) const
@@ -773,8 +1011,9 @@ void nsCSSBreaks::List(FILE* out, PRInt32 aIndent) const
   mOrphans.AppendToString(buffer, eCSSProperty_orphans);
   mWidows.AppendToString(buffer, eCSSProperty_widows);
   mPage.AppendToString(buffer, eCSSProperty_page);
-  mPageBreakAfter.AppendToString(buffer, eCSSProperty_page_break_after);
-  mPageBreakBefore.AppendToString(buffer, eCSSProperty_page_break_before);
+  // temp fix for bug 24000 (from bug 125246)
+  //mPageBreakAfter.AppendToString(buffer, eCSSProperty_page_break_after);
+  //mPageBreakBefore.AppendToString(buffer, eCSSProperty_page_break_before);
   mPageBreakInside.AppendToString(buffer, eCSSProperty_page_break_inside);
 
   fputs(NS_LossyConvertUCS2toASCII(buffer).get(), out);
@@ -801,10 +1040,14 @@ nsCSSPage::~nsCSSPage(void)
   MOZ_COUNT_DTOR(nsCSSPage);
 }
 
+// bug 125246
+#if(0)
 const nsID& nsCSSPage::GetID(void)
 {
   return kCSSPageSID;
 }
+#endif
+// end bug
 
 #ifdef DEBUG
 void nsCSSPage::List(FILE* out, PRInt32 aIndent) const
@@ -899,10 +1142,14 @@ nsCSSContent::~nsCSSContent(void)
   CSS_IF_DELETE(mQuotes);
 }
 
+// bug 125246
+#if(0)
 const nsID& nsCSSContent::GetID(void)
 {
   return kCSSContentSID;
 }
+#endif
+// end bug
 
 #ifdef DEBUG
 void nsCSSContent::List(FILE* out, PRInt32 aIndent) const
@@ -929,10 +1176,14 @@ void nsCSSContent::List(FILE* out, PRInt32 aIndent) const
     counter = counter->mNext;
   }
   mMarkerOffset.AppendToString(buffer, eCSSProperty_marker_offset);
+  // XXX This prints the property name many times, but nobody cares.
   nsCSSQuotes*  quotes = mQuotes;
   while (nsnull != quotes) {
-    quotes->mOpen.AppendToString(buffer, eCSSProperty_quotes_open);
-    quotes->mClose.AppendToString(buffer, eCSSProperty_quotes_close);
+  // bug 125246
+    //quotes->mOpen.AppendToString(buffer, eCSSProperty_quotes_open);
+    //quotes->mClose.AppendToString(buffer, eCSSProperty_quotes_close);
+    quotes->mOpen.AppendToString(buffer, eCSSProperty_quotes);
+    quotes->mClose.AppendToString(buffer, eCSSProperty_quotes);
     quotes = quotes->mNext;
   }
 
@@ -970,10 +1221,14 @@ nsCSSUserInterface::~nsCSSUserInterface(void)
   CSS_IF_DELETE(mCursor);
 }
 
+// bug 125246
+#if(0)
 const nsID& nsCSSUserInterface::GetID(void)
 {
   return kCSSUserInterfaceSID;
 }
+#endif
+// end bug
 
 #ifdef DEBUG
 void nsCSSUserInterface::List(FILE* out, PRInt32 aIndent) const
@@ -1041,10 +1296,14 @@ nsCSSAural::~nsCSSAural(void)
   MOZ_COUNT_DTOR(nsCSSAural);
 }
 
+// bug 125246
+#if(0)
 const nsID& nsCSSAural::GetID(void)
 {
   return kCSSAuralSID;
 }
+#endif
+// end bug
 
 #ifdef DEBUG
 void nsCSSAural::List(FILE* out, PRInt32 aIndent) const
@@ -1098,10 +1357,14 @@ nsCSSXUL::~nsCSSXUL(void)
   MOZ_COUNT_DTOR(nsCSSXUL);
 }
 
+// bug 125246
+#if(0)
 const nsID& nsCSSXUL::GetID(void)
 {
   return kCSSXULSID;
 }
+#endif
+// end bug
 
 #ifdef DEBUG
 void nsCSSXUL::List(FILE* out, PRInt32 aIndent) const
@@ -1151,10 +1414,14 @@ nsCSSSVG::~nsCSSSVG(void)
   MOZ_COUNT_DTOR(nsCSSSVG);
 }
 
+// bug 125246
+#if(0)
 const nsID& nsCSSSVG::GetID(void)
 {
   return kCSSSVGSID;
 }
+#endif
+// end bug
 
 #ifdef DEBUG
 void nsCSSSVG::List(FILE* out, PRInt32 aIndent) const
@@ -1180,6 +1447,9 @@ void nsCSSSVG::List(FILE* out, PRInt32 aIndent) const
 
 #endif // MOZ_SVG
 
+// bug 201681
+#warning CLEAN ME UP PLEASE AND ELIMINATE ALL THE REDUNDANT CRAP IN THIS!
+#if(0)
 
 #ifdef DEBUG_REFS
 static PRInt32 gInstanceCount;
@@ -6264,3 +6534,6 @@ NS_EXPORT nsresult
   *aInstancePtrResult = it;
   return NS_OK;
 }
+#endif
+// end bug 201681
+// THIS IS A HUGE BUG

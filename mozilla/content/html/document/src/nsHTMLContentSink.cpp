@@ -5448,10 +5448,12 @@ HTMLContentSink::StyleSheetApplicableStateChanged(nsIDocument *aDocument,
   return NS_OK;
 }
 
+// bug 188803
 NS_IMETHODIMP
 HTMLContentSink::StyleRuleChanged(nsIDocument *aDocument,
                                   nsIStyleSheet* aStyleSheet,
-                                  nsIStyleRule* aStyleRule, nsChangeHint aHint)
+                                  nsIStyleRule* aOldStyleRule, nsIStyleRule* aNewStyleRule)
+                                  //nsIStyleRule* aStyleRule, nsChangeHint aHint)
 {
   return NS_OK;
 }

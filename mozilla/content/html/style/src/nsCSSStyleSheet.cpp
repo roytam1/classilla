@@ -79,7 +79,9 @@
 #include "nsIDOMHTMLOptionElement.h"
 #include "nsIDOMStyleSheetList.h"
 #include "nsIDOMCSSStyleSheet.h"
-#include "nsIDOMCSSStyleRule.h"
+// bug 188803
+#include "nsIDOMCSSRule.h"
+//#include "nsIDOMCSSStyleRule.h"
 #include "nsIDOMCSSImportRule.h"
 #include "nsIDOMCSSRuleList.h"
 #include "nsIDOMMediaList.h"
@@ -915,6 +917,7 @@ public:
   NS_IMETHOD ClearMedia(void);
   NS_IMETHOD DeleteRuleFromGroup(nsICSSGroupRule* aGroup, PRUint32 aIndex);
   NS_IMETHOD InsertRuleIntoGroup(const nsAString& aRule, nsICSSGroupRule* aGroup, PRUint32 aIndex, PRUint32* _retval);
+  NS_IMETHOD ReplaceRuleInGroup(nsICSSGroupRule* aGroup, nsICSSRule* aOld, nsICSSRule* aNew); // bug 188803
   
   NS_IMETHOD GetApplicable(PRBool& aApplicable) const;
   
@@ -929,6 +932,7 @@ public:
   NS_IMETHOD SetOwningDocument(nsIDocument* aDocument);
   NS_IMETHOD SetOwningNode(nsIDOMNode* aOwningNode);
   NS_IMETHOD SetOwnerRule(nsICSSImportRule* aOwnerRule);
+  NS_IMETHOD GetOwnerRule(nsICSSImportRule** aOwnerRule); // bug 188803
 
   NS_IMETHOD GetStyleRuleProcessor(nsIStyleRuleProcessor*& aProcessor,
                                    nsIStyleRuleProcessor* aPrevProcessor);
@@ -952,6 +956,7 @@ public:
   // XXX do these belong here or are they generic?
   NS_IMETHOD PrependStyleRule(nsICSSRule* aRule);
   NS_IMETHOD AppendStyleRule(nsICSSRule* aRule);
+  NS_IMETHOD ReplaceStyleRule(nsICSSRule* aOld, nsICSSRule* aNew); // bug 188803
 
   NS_IMETHOD  StyleRuleCount(PRInt32& aCount) const;
   NS_IMETHOD  GetStyleRuleAt(PRInt32 aIndex, nsICSSRule*& aRule) const;
@@ -1106,7 +1111,9 @@ CSSRuleListImpl::Item(PRUint32 aIndex, nsIDOMCSSRule** aReturn)
 
       result = mStyleSheet->GetStyleRuleAt(aIndex, *getter_AddRefs(rule));
       if (rule) {
-        result = CallQueryInterface(rule, aReturn);
+        // bug 188803
+        //result = CallQueryInterface(rule, aReturn);
+        result = rule->GetDOMRule(aReturn);
         mRulesAccessed = PR_TRUE; // signal to never share rules again
       } else if (result == NS_ERROR_ILLEGAL_VALUE) {
         result = NS_OK; // per spec: "Return Value ... null if ... not a valid index."
@@ -1461,7 +1468,8 @@ DOMMediaListImpl::EndMediaChange(void)
     mStyleSheet->DidDirty();
     rv = mStyleSheet->GetOwningDocument(*getter_AddRefs(doc));
     NS_ENSURE_SUCCESS(rv, rv);
-    rv = doc->StyleRuleChanged(mStyleSheet, nsnull, NS_STYLE_HINT_RECONSTRUCT_ALL);
+    // XXXldb Pass something meaningful? // bug 188803
+    rv = doc->StyleRuleChanged(mStyleSheet, nsnull, nsnull); // NS_STYLE_HINT_RECONSTRUCT_ALL);
     NS_ENSURE_SUCCESS(rv, rv);
     rv = doc->EndUpdate();
     NS_ENSURE_SUCCESS(rv, rv);
@@ -2191,6 +2199,16 @@ CSSStyleSheetImpl::SetOwnerRule(nsICSSImportRule* aOwnerRule)
   return NS_OK;
 }
 
+// bug 188803
+NS_IMETHODIMP
+CSSStyleSheetImpl::GetOwnerRule(nsICSSImportRule** aOwnerRule)
+{
+  *aOwnerRule = mOwnerRule;
+  NS_IF_ADDREF(*aOwnerRule);
+  return NS_OK;
+}
+// end bug
+
 NS_IMETHODIMP
 CSSStyleSheetImpl::ContainsStyleSheet(nsIURI* aURL, PRBool& aContains, nsIStyleSheet** aTheChild /*=nsnull*/)
 {
@@ -2486,6 +2504,34 @@ CSSStyleSheetImpl::CheckRuleForAttributes(nsICSSRule *aRule)
 #endif
 // end bug
 }
+
+// bug 188803
+NS_IMETHODIMP
+CSSStyleSheetImpl::ReplaceStyleRule(nsICSSRule* aOld, nsICSSRule* aNew)
+{
+  NS_PRECONDITION(mInner->mOrderedRules, "can't have old rule");
+  NS_PRECONDITION(mInner && mInner->mComplete,
+                  "No replacing in an incomplete sheet!");
+
+  if (NS_SUCCEEDED(WillDirty())) {
+    PRInt32 index = mInner->mOrderedRules->IndexOf(aOld);
+    NS_ENSURE_TRUE(index != -1, NS_ERROR_UNEXPECTED);
+    mInner->mOrderedRules->ReplaceElementAt(aNew, index);
+
+    aNew->SetStyleSheet(this);
+    aOld->SetStyleSheet(nsnull);
+    DidDirty();
+#ifdef DEBUG
+    PRInt32 type = nsICSSRule::UNKNOWN_RULE;
+    aNew->GetType(type);
+    NS_ASSERTION(nsICSSRule::NAMESPACE_RULE != type, "not yet implemented");
+    aOld->GetType(type);
+    NS_ASSERTION(nsICSSRule::NAMESPACE_RULE != type, "not yet implemented");
+#endif
+  }
+  return NS_OK;
+}
+// end bug
 
 NS_IMETHODIMP
 CSSStyleSheetImpl::StyleRuleCount(PRInt32& aCount) const
@@ -2924,7 +2970,9 @@ NS_IMETHODIMP
 CSSStyleSheetImpl::GetOwnerRule(nsIDOMCSSRule** aOwnerRule)
 {
   if (mOwnerRule) {
-    return CallQueryInterface(mOwnerRule, aOwnerRule);
+    // bug 188803
+    return mOwnerRule->GetDOMRule(aOwnerRule);
+    //return CallQueryInterface(mOwnerRule, aOwnerRule);
   }
 
   *aOwnerRule = nsnull;
@@ -3237,6 +3285,8 @@ CSSStyleSheetImpl::DeleteRuleFromGroup(nsICSSGroupRule* aGroup, PRUint32 aIndex)
   NS_ENSURE_SUCCESS(result, result);
   
   // check that the rule actually belongs to this sheet!
+// bug 188803
+#if(0)
   nsCOMPtr<nsIDOMCSSRule> domRule(do_QueryInterface(rule));
   nsCOMPtr<nsIDOMCSSStyleSheet> ruleSheet;
   result = domRule->GetParentStyleSheet(getter_AddRefs(ruleSheet));
@@ -3245,6 +3295,12 @@ CSSStyleSheetImpl::DeleteRuleFromGroup(nsICSSGroupRule* aGroup, PRUint32 aIndex)
   this->QueryInterface(NS_GET_IID(nsIDOMCSSStyleSheet), getter_AddRefs(thisSheet));
 
   if (thisSheet != ruleSheet) {
+#else
+  nsCOMPtr<nsIStyleSheet> ruleSheet;
+  rule->GetStyleSheet(*getter_AddRefs(ruleSheet));
+  if (this != ruleSheet) {
+#endif
+// end bug
     return NS_ERROR_INVALID_ARG;
   }
 
@@ -3281,6 +3337,8 @@ CSSStyleSheetImpl::InsertRuleIntoGroup(const nsAString & aRule, nsICSSGroupRule*
   NS_ASSERTION(mInner && mInner->mComplete,
                "No inserting into an incomplete sheet!");
   // check that the group actually belongs to this sheet!
+// bug 188803
+#if(0)
   nsCOMPtr<nsIDOMCSSRule> domGroup(do_QueryInterface(aGroup));
   nsCOMPtr<nsIDOMCSSStyleSheet> groupSheet;
   result = domGroup->GetParentStyleSheet(getter_AddRefs(groupSheet));
@@ -3289,6 +3347,12 @@ CSSStyleSheetImpl::InsertRuleIntoGroup(const nsAString & aRule, nsICSSGroupRule*
   this->QueryInterface(NS_GET_IID(nsIDOMCSSStyleSheet), getter_AddRefs(thisSheet));
 
   if (thisSheet != groupSheet) {
+#else
+  nsCOMPtr<nsIStyleSheet> groupSheet;
+  aGroup->GetStyleSheet(*getter_AddRefs(groupSheet));
+  if (this != groupSheet) {
+#endif
+// end bug
     return NS_ERROR_INVALID_ARG;
   }
 
@@ -3374,6 +3438,39 @@ CSSStyleSheetImpl::InsertRuleIntoGroup(const nsAString & aRule, nsICSSGroupRule*
   return NS_OK;
 }
 
+// bug 188803
+NS_IMETHODIMP
+CSSStyleSheetImpl::ReplaceRuleInGroup(nsICSSGroupRule* aGroup,
+                                      nsICSSRule* aOld, nsICSSRule* aNew)
+{
+  nsresult result;
+  NS_PRECONDITION(mInner && mInner->mComplete,
+                  "No replacing in an incomplete sheet!");
+#ifdef DEBUG
+  {
+// bug 188803 patch 2
+#if(0)
+    nsCOMPtr<nsIDOMCSSRule> domGroup(do_QueryInterface(aGroup));
+    nsCOMPtr<nsIDOMCSSStyleSheet> groupSheet;
+    domGroup->GetParentStyleSheet(getter_AddRefs(groupSheet));
+#else
+    nsCOMPtr<nsIStyleSheet> groupSheet;
+    aGroup->GetStyleSheet(*getter_AddRefs(groupSheet));
+#endif
+// end bug
+    NS_ASSERTION(this == groupSheet, "group doesn't belong to this sheet");
+  }
+#endif
+  result = WillDirty();
+  NS_ENSURE_SUCCESS(result, result);
+
+  result = aGroup->ReplaceStyleRule(aOld, aNew);
+  DidDirty();
+  return result;
+}
+// end bug
+
+
 // nsICSSLoaderObserver implementation
 NS_IMETHODIMP
 CSSStyleSheetImpl::StyleSheetLoaded(nsICSSStyleSheet*aSheet, PRBool aNotify)
@@ -3389,16 +3486,25 @@ CSSStyleSheetImpl::StyleSheetLoaded(nsICSSStyleSheet*aSheet, PRBool aNotify)
 #endif
   
   if (mDocument && aNotify) {
+// bug 188803
+#if(0)
     nsCOMPtr<nsIDOMCSSStyleSheet> domSheet(do_QueryInterface(aSheet));
     NS_ENSURE_TRUE(domSheet, NS_ERROR_UNEXPECTED);
 
     nsCOMPtr<nsIDOMCSSRule> ownerRule;
     domSheet->GetOwnerRule(getter_AddRefs(ownerRule));
     NS_ENSURE_TRUE(ownerRule, NS_ERROR_UNEXPECTED);
+#else
+    nsCOMPtr<nsICSSImportRule> ownerRule;
+    aSheet->GetOwnerRule(getter_AddRefs(ownerRule));
+#endif
+// end bug
     
     nsresult rv = mDocument->BeginUpdate();
     NS_ENSURE_SUCCESS(rv, rv);
 
+    // XXXldb @import rules shouldn't even implement nsIStyleRule (but
+    // they do)!
     nsCOMPtr<nsIStyleRule> styleRule(do_QueryInterface(ownerRule));
     
     rv = mDocument->StyleRuleAdded(this, styleRule);

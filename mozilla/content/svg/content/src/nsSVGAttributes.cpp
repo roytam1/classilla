@@ -576,20 +576,24 @@ nsSVGAttributes::SetAttr(nsINodeInfo* aNodeInfo,
                          const nsAString& aValue,
                          PRBool aNotify)
 {
+// bug 209634 changes below.
+#warning this is not tested
+
   NS_ENSURE_ARG_POINTER(aNodeInfo);
-  PRBool modification = PR_FALSE;
+  //PRBool modification = PR_FALSE;
   nsAutoString oldValue;
-  nsresult rv = NS_ERROR_OUT_OF_MEMORY;
+  //nsresult rv = NS_ERROR_OUT_OF_MEMORY;
 
   nsCOMPtr<nsIDocument> document;
   if (mContent)
     mContent->GetDocument(*getter_AddRefs(document));
   
-  if (aNotify && document) {
+  /* if (aNotify && document) {
     document->BeginUpdate();
   }
 
-  nsSVGAttribute* attr;
+  nsSVGAttribute* attr; */
+  nsSVGAttribute* attr = nsnull;
   PRInt32 index;
   PRInt32 count;
 
@@ -598,34 +602,59 @@ nsSVGAttributes::SetAttr(nsINodeInfo* aNodeInfo,
     attr = ElementAt(index);
     if (attr->GetNodeInfo() == aNodeInfo) {
       attr->GetValue()->GetValueString(oldValue);
-      modification = PR_TRUE;
-      attr->GetValue()->SetValueString(aValue);
-      rv = NS_OK;
+      //modification = PR_TRUE;
+      //attr->GetValue()->SetValueString(aValue);
+      //rv = NS_OK;
+      if (oldValue.Equals(aValue)) {
+        // Do nothing if the value is not changing
+        return NS_OK;
+      }
       break;
     }
   }
   
-  if (index >= count) { // didn't find it
+  //if (index >= count) { // didn't find it
+  PRInt32 nameSpaceID = aNodeInfo->GetNamespaceID();
+  nsCOMPtr<nsIAtom> name = aNodeInfo->GetNameAtom();
 
+  // Send the notification before making any updates
+  if (aNotify && document) {
+    document->BeginUpdate();
+    document->AttributeWillChange(mContent, nameSpaceID, name);
+  }
+
+  nsresult rv = NS_OK;
+
+  PRBool modification = PR_FALSE;
+
+  if (index < count) {  // found the attr in the list
+    NS_ASSERTION(attr, "How did we get here with a null attr pointer?");
+    modification = PR_TRUE;
+    attr->GetValue()->SetValueString(aValue);
+  } else  { // didn't find it
+    // GetMappedAttribute and nsSVGAttribute::Create both addref, so we release
+    // after this if block.  It's safe to use attr after the Release(), since
+    // AppendElement also addrefs it.
     if (GetMappedAttribute(aNodeInfo, &attr)) {
-      AppendElement(attr);
+      //AppendElement(attr);
       attr->GetValue()->SetValueString(aValue);
     }
     else {
       rv = nsSVGAttribute::Create(aNodeInfo, aValue, &attr);
       NS_ENSURE_TRUE(attr, rv);
-      AppendElement(attr);
+      //AppendElement(attr);
     }
+    AppendElement(attr);
     attr->Release();
     rv = NS_OK;
   }
 
   if (document && NS_SUCCEEDED(rv)) {
-    nsCOMPtr<nsIAtom> name;
+    /* nsCOMPtr<nsIAtom> name;
     PRInt32 nameSpaceID;
     
     aNodeInfo->GetNameAtom(*getter_AddRefs(name));
-    aNodeInfo->GetNamespaceID(nameSpaceID);
+    aNodeInfo->GetNamespaceID(nameSpaceID); */
 
     nsCOMPtr<nsIBindingManager> bindingManager;
     document->GetBindingManager(getter_AddRefs(bindingManager));

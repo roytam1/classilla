@@ -217,6 +217,7 @@ NS_NewDocumentFragment(nsIDOMDocumentFragment** aInstancePtrResult,
   rv = nimgr->GetNodeInfo(NS_LITERAL_STRING("#document-fragment"),
                           nsnull, kNameSpaceID_None,
                           *getter_AddRefs(nodeInfo));
+
   NS_ENSURE_SUCCESS(rv, rv);
 
   nsDocumentFragment* it = new nsDocumentFragment(aOwnerDocument);

@@ -20,6 +20,9 @@
  *
  * Contributor(s): Michael Lowe <michael.lowe@bigfoot.com>
  *                 Blake Ross   <blaker@netscape.com>
+ *
+ * Modified for Classilla by Cameron Kaiser
+ *
  */
 
 var browser;
@@ -32,6 +35,13 @@ try {
   // not critical, remain silent
 }
 
+// modified from bug 528732
+function isFullBrowserWindow(win)
+{
+	return win && (!win.closed || win.closed == false) &&
+		   !win.document.documentElement.getAttribute("chromehidden"); }
+// end bug
+
 function onLoad()
 {
   dialog.input          = document.getElementById("dialog.input");
@@ -41,11 +51,15 @@ function onLoad()
   dialog.openEditWindow = document.getElementById("editWindow");
   dialog.bundle         = document.getElementById("openLocationBundle");
 
+  browser = null;
   if ("arguments" in window && window.arguments.length >= 1)
     browser = window.arguments[0];
+    
+  //if (isFullBrowserWindow(browser))
+  //	alert("damn it");
    
-  if (!browser) {
-    // No browser supplied - we are calling from Composer
+  if (!browser || !isFullBrowserWindow(browser)) { 
+    // No browser supplied - we are calling from Composer (or we have no windows open)
     dialog.openAppList.selectedItem = dialog.openEditWindow;
 
     // Change string to make more sense for Composer
@@ -56,11 +70,27 @@ function onLoad()
     var windowManagerInterface = windowManager.QueryInterface( Components.interfaces.nsIWindowMediator);
     if (windowManagerInterface)
       browser = windowManagerInterface.getMostRecentWindow( "navigator:browser" );
+    
+    //alert("found a browser");  
+    // modified from bug 528732  
+    if (browser && !isFullBrowserWindow(browser)) {
+    	browser = null;
+    	var windowList = wm.getEnumerator("navigator:browser");
+    	while(windowList.hasMoreElements()) {
+    		var nextWin = windowList.getNext();
+    		if (isFullBrowserWindow(nextWin)) {
+    			//alert("found a window");
+    			browser = nextWin;
+    		}
+    	}
+    }
+    // end bug
 
     // Disable "current browser" item if no browser is open
     if (!browser)
       dialog.openTopWindow.setAttribute("disabled", "true");
   }
+  	
   else {
     dialog.openAppList.selectedItem = dialog.openTopWindow;
   }
@@ -98,6 +128,8 @@ function open()
     url = browser.getShortcutOrURI(dialog.input.value);
   else
     url = dialog.input.value;
+  if (!browser && dialog.openAppList && dialog.openAppList.value != "2")
+    dialog.openAppList.value = "1";
 
   try {
     switch (dialog.openAppList.value) {

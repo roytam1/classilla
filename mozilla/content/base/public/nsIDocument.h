@@ -419,8 +419,10 @@ public:
   // Observation hooks for style data to propagate notifications
   // to document observers
   NS_IMETHOD StyleRuleChanged(nsIStyleSheet* aStyleSheet,
-                              nsIStyleRule* aStyleRule,
-                              nsChangeHint aHint) = 0;
+                              /* nsIStyleRule* aStyleRule,
+                              nsChangeHint aHint) = 0; */
+                              nsIStyleRule* aOldStyleRule,
+                              nsIStyleRule* aNewStyleRule) = 0; // bug 188803
   NS_IMETHOD StyleRuleAdded(nsIStyleSheet* aStyleSheet,
                             nsIStyleRule* aStyleRule) = 0;
   NS_IMETHOD StyleRuleRemoved(nsIStyleSheet* aStyleSheet,

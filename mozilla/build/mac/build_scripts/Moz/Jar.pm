@@ -224,7 +224,7 @@ sub addToJarFile($$$$$$$)
 
         $member->fileName($file_jar_path);    
     
-        my($compress) = 1;
+        my($compress) = 0;
         if ($compress) {
             $member->desiredCompressionMethod(Archive::Zip::COMPRESSION_DEFLATED);            
             $member->desiredCompressionLevel(Archive::Zip::COMPRESSION_LEVEL_DEFAULT);   # defaults to 6

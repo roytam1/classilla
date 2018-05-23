@@ -232,7 +232,23 @@ public:
   virtual void SetLineNumber(PRUint32 aLineNumber) = 0;
 
   virtual nsCSSDeclaration* GetDeclaration(void) const = 0;
+// bug 188803
+#if(0)
   virtual void SetDeclaration(nsCSSDeclaration* aDeclaration) = 0;
+#else
+  /**
+   * Return a new |nsIStyleRule| instance that replaces the current one,
+   * due to a change in the |nsCSSDeclaration|.  Due to the
+   * |nsIStyleRule| contract of immutability, this must be called if the
+   * declaration is modified.
+   *
+   * |DeclarationChanged| handles replacing the object in the container
+   * sheet or group rule if |aHandleContainer| is true.
+   */
+  virtual already_AddRefed<nsICSSStyleRule>
+    DeclarationChanged(PRBool aHandleContainer) = 0;
+#endif
+// end bug
 
   // bug 98765
   //virtual PRInt32 GetWeight(void) const = 0;
@@ -242,10 +258,21 @@ public:
 
   // Hook for inspector.
   virtual nsresult GetValue(nsCSSProperty aProperty, nsCSSValue& aValue) = 0;
+  
+// bug 188803
+  // hooks for DOM rule
+  virtual nsresult GetCssText(nsAString& aCssText) = 0;
+  virtual nsresult SetCssText(const nsAString& aCssText) = 0;
+  virtual nsresult GetParentStyleSheet(nsICSSStyleSheet** aSheet) = 0;
+  virtual nsresult GetParentRule(nsICSSGroupRule** aParentRule) = 0;
+  virtual nsresult GetSelectorText(nsAString& aSelectorText) = 0;
+  virtual nsresult SetSelectorText(const nsAString& aSelectorText) = 0;
+// end bug
 };
 
 extern NS_EXPORT nsresult
   NS_NewCSSStyleRule(nsICSSStyleRule** aInstancePtrResult, //const nsCSSSelector& aSelector);
-  	nsCSSSelectorList* aSelector); // bug 98765
+  	nsCSSSelectorList* aSelector, // bug 98765
+  	nsCSSDeclaration* aDeclaration); // bug 188803
 
 #endif /* nsICSSStyleRule_h___ */

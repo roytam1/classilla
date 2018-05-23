@@ -126,7 +126,9 @@ public:
 
   // Used to clear away the style data for a given style context if it matches the specified |aRule|.
   // If |aRule| is null, then the style data is always blown away.
-  virtual nsresult ClearStyleData(nsIPresContext* aPresContext, nsIStyleRule* aRule) = 0;
+  // bug 188803 modified for 1.3.1
+  //virtual nsresult ClearStyleData(nsIPresContext* aPresContext, nsIStyleRule* aRule) = 0;
+  virtual nsresult ClearStyleData(nsIPresContext* aPresContext) = 0;
 };
 
 

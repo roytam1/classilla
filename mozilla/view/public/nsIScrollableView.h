@@ -251,6 +251,7 @@ public:
    * Removes a scroll position listener.
    */
   NS_IMETHOD RemoveScrollPositionListener(nsIScrollPositionListener* aListener) = 0;
+  
 };
 
 //regardless of the transparency or opacity settings

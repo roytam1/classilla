@@ -141,6 +141,10 @@ public:
 #define NS_FREE_XPCOM_ISUPPORTS_POINTER_ARRAY(size, array)                    \
     NS_FREE_XPCOM_POINTER_ARRAY((size), (array), NS_IF_RELEASE)
 
+/* Macro for NS_ARRAY_LENGTH, since some later patches depend on it.
+   Cameron */
+   
+#define NS_ARRAY_LENGTH(array_) (sizeof(array_)/sizeof(array_[0]))
 
 #endif // nsMemory_h__
 

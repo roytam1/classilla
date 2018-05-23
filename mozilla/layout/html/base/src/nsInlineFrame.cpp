@@ -1363,20 +1363,34 @@ nsPositionedInlineFrame::Reflow(nsIPresContext*          aPresContext,
        aReflowState.path->mReflowCommand ||
        mRect != oldRect) */
        ) {
-// backbugs from bug 252771
+// backbugs from bug 252771 (actually, these are from bug 135082)
 #if(0)
     nscoord containingBlockWidth = -1;
     nscoord containingBlockHeight = -1;
-    nsRect  childBounds;
 #endif
-    // The containing block for the abs pos kids is formed by our padding edge.
+// superseded by bug 300816 modified for Classilla
+#if(0)
+    // The containing block for the abs pos kids is formed by our content edge.
     nscoord containingBlockWidth = aDesiredSize.width -
       (aReflowState.mComputedBorderPadding.left +
        aReflowState.mComputedBorderPadding.right);
     nscoord containingBlockHeight = aDesiredSize.height -
       (aReflowState.mComputedBorderPadding.top +
        aReflowState.mComputedBorderPadding.bottom);
+#else
+    // The containing block for the abs pos kids is formed by our padding edge.
+    nsMargin computedBorder =
+      aReflowState.mComputedBorderPadding - aReflowState.mComputedPadding;
+    nscoord containingBlockWidth =
+      aDesiredSize.width - //computedBorder.LeftRight();
+	  (computedBorder.left + computedBorder.right);
+    nscoord containingBlockHeight =
+      aDesiredSize.height - //computedBorder.TopBottom();
+      (computedBorder.top + computedBorder.bottom);
+#endif
+// end bug 300816
 // end backbugs
+    nsRect  childBounds;
 
 // pull up from 1.8.1
     // Do any incremental reflows ... would be nice to merge with

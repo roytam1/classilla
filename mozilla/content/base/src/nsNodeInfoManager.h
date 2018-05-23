@@ -68,6 +68,7 @@ public:
   NS_IMETHOD GetNodeInfo(const nsAString& aQualifiedName,
                          const nsAString& aNamespaceURI,
                          nsINodeInfo*& aNodeInfo); 
+
   NS_IMETHOD GetDocument(nsIDocument*& aDocument);
   NS_IMETHOD GetDocumentPrincipal(nsIPrincipal** aPrincipal);
   NS_IMETHOD SetDocumentPrincipal(nsIPrincipal* aPrincipal);

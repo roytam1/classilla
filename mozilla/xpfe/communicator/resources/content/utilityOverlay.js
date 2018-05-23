@@ -253,6 +253,13 @@ function openTopWin( url )
     return window.openDialog( getBrowserURL(), "_blank", "chrome,all,dialog=no", url );
 }
 
+function goCheckForUpdates()
+{
+	// for future expansion
+	//openTopWin('http://www.classilla.org/start/');
+	window.openDialog( getBrowserURL(), "_blank", "chrome,all,dialog=no", 'http://www.classilla.org/start/' );
+}
+
 function goAboutDialog()
 {
   var defaultAboutState = false;

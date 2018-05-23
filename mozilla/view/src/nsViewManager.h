@@ -233,6 +233,20 @@ public:
   NS_IMETHOD GetRectVisibility(nsIView *aView, const nsRect &aRect, 
                                PRUint16 aMinTwips, 
                                nsRectVisibility *aRectVisibility);
+                               
+  /* For Classilla: figure out if we had to bail out on double buffering. issue 28 */
+  NS_IMETHOD GetLastUpdateFlags(PRUint32 *aUpdateFlags) {
+  	*aUpdateFlags = mLastUpdateFlags;
+  	return NS_OK;
+  }
+
+// bug 141901
+  /* Determine if invalidates are being batched through the use
+   * of BeginUpdateViewBatch
+   * @returns PR_TRUE if current batching updates, PR_FALSE otherwise
+   */
+  PRBool IsBatchingUpdates(void);
+// end bug
 
 protected:
   virtual ~nsViewManager();
@@ -372,6 +386,7 @@ private:
   nsIWidget         *mRootWindow;
   PRIntervalTime    mLastRefresh;
   PRInt32           mTransCnt;
+  PRUint32			mLastUpdateFlags; // issue 28
   PRBool            mRefreshEnabled;
   PRBool            mPainting;
   PRBool            mRecursiveRefreshPending;

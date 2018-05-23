@@ -4036,7 +4036,7 @@ nsCSSFrameConstructor::ConstructRootFrame(nsIPresShell*        aPresShell,
           PRInt32 scrolling = -1;
           // XXX We should get prefs for X and Y and deal with these independently!
           scrollableContainer->GetCurrentScrollbarPreferences(nsIScrollable::ScrollOrientation_Y,&scrolling);
-          if (NS_STYLE_OVERFLOW_HIDDEN == scrolling) {
+          if (NS_STYLE_OVERFLOW_HIDDEN == scrolling || NS_STYLE_OVERFLOW_CLIP == scrolling) { // added for bug 69355
             isScrollable = PR_FALSE;
           }
           // XXX NS_STYLE_OVERFLOW_SCROLL should create 'always on' scrollbars
@@ -6695,6 +6695,16 @@ nsCSSFrameConstructor::ConstructFrameByDisplayType(nsIPresShell*            aPre
   nsresult  rv = NS_OK;
   PRBool    addNewFrameToChildList = PR_TRUE; 
 
+// used by several routines below  
+  nsINodeInfo *nodeInfo;
+  aContent->GetNodeInfo(nodeInfo);
+
+// for future usage
+  PRBool honourInline = PR_TRUE;
+  if(nodeInfo && nodeInfo->Equals(nsHTMLAtoms::li)) {
+  	//honourInline = PR_FALSE;
+  }
+
 // bug 210873
 #if(0)
   // The frame is also a block if it's an inline frame that's floated or
@@ -6741,8 +6751,6 @@ nsCSSFrameConstructor::ConstructFrameByDisplayType(nsIPresShell*            aPre
   // and that might need to be propagated.
   PRBool propagatedScrollToViewport = PR_FALSE;
   //if (aContent->GetNodeInfo()->Equals(nsHTMLAtoms::body)) {
-  nsINodeInfo *nodeInfo;
-  aContent->GetNodeInfo(nodeInfo);
   if (nodeInfo && nodeInfo->Equals(nsHTMLAtoms::body) &&
       aContent->IsContentOfType(nsIContent::eHTML)) {
     propagatedScrollToViewport =
@@ -6857,8 +6865,8 @@ nsCSSFrameConstructor::ConstructFrameByDisplayType(nsIPresShell*            aPre
   // See if the frame is absolute or fixed positioned
   else if (aDisplay->IsAbsolutelyPositioned() &&
            ((NS_STYLE_DISPLAY_BLOCK == aDisplay->mDisplay) ||
-            (NS_STYLE_DISPLAY_INLINE == aDisplay->mDisplay) ||
-            (NS_STYLE_DISPLAY_LIST_ITEM == aDisplay->mDisplay))) {
+            (NS_STYLE_DISPLAY_INLINE == aDisplay->mDisplay) || // && honourInline) ||
+            (NS_STYLE_DISPLAY_LIST_ITEM == aDisplay->mDisplay))) { // || !honourInline))) {
 
     if (!pseudoParent && !aState.mPseudoFrames.IsEmpty()) { // process pending pseudo frames
       ProcessPseudoFrames(aPresContext, aState.mPseudoFrames, aFrameItems); 
@@ -6921,8 +6929,8 @@ nsCSSFrameConstructor::ConstructFrameByDisplayType(nsIPresShell*            aPre
 //  else if (isFloating &&
   else if (aDisplay->IsFloating() &&
            ((NS_STYLE_DISPLAY_BLOCK == aDisplay->mDisplay) ||
-            (NS_STYLE_DISPLAY_INLINE == aDisplay->mDisplay) ||
-            (NS_STYLE_DISPLAY_LIST_ITEM == aDisplay->mDisplay))) {
+            (NS_STYLE_DISPLAY_INLINE == aDisplay->mDisplay) ||// && honourInline) ||
+            (NS_STYLE_DISPLAY_LIST_ITEM == aDisplay->mDisplay))) {// || !honourInline))) {
     if (!pseudoParent && !aState.mPseudoFrames.IsEmpty()) { // process pending pseudo frames
       ProcessPseudoFrames(aPresContext, aState.mPseudoFrames, aFrameItems); 
     }
@@ -6977,15 +6985,15 @@ nsCSSFrameConstructor::ConstructFrameByDisplayType(nsIPresShell*            aPre
   // See if it's relatively positioned
   else if ((NS_STYLE_POSITION_RELATIVE == aDisplay->mPosition) &&
            ((NS_STYLE_DISPLAY_BLOCK == aDisplay->mDisplay) ||
-            (NS_STYLE_DISPLAY_INLINE == aDisplay->mDisplay) ||
-            (NS_STYLE_DISPLAY_LIST_ITEM == aDisplay->mDisplay))) {
+            (NS_STYLE_DISPLAY_INLINE == aDisplay->mDisplay) ||// && honourInline) ||
+            (NS_STYLE_DISPLAY_LIST_ITEM == aDisplay->mDisplay))){ // || !honourInline))) {
     if (!pseudoParent && !aState.mPseudoFrames.IsEmpty()) { // process pending pseudo frames
       ProcessPseudoFrames(aPresContext, aState.mPseudoFrames, aFrameItems); 
     }
     // Is it block-level or inline-level?
 //    PRBool isBlockFrame = PR_FALSE; // bug 210873
     if ((NS_STYLE_DISPLAY_BLOCK == aDisplay->mDisplay) ||
-        (NS_STYLE_DISPLAY_LIST_ITEM == aDisplay->mDisplay)) {
+        (NS_STYLE_DISPLAY_LIST_ITEM == aDisplay->mDisplay)){ // || !honourInline)) {
       // Create a wrapper frame. No space manager, though
       NS_NewRelativeItemWrapperFrame(aPresShell, &newFrame);
 //      isBlockFrame = PR_TRUE; // bug 210873
@@ -7004,7 +7012,7 @@ nsCSSFrameConstructor::ConstructFrameByDisplayType(nsIPresShell*            aPre
   }
   // See if it's a block frame of some sort
   else if ((NS_STYLE_DISPLAY_BLOCK == aDisplay->mDisplay) ||
-           (NS_STYLE_DISPLAY_LIST_ITEM == aDisplay->mDisplay) ||
+           (NS_STYLE_DISPLAY_LIST_ITEM == aDisplay->mDisplay)||// || !honourInline) ||
            (NS_STYLE_DISPLAY_RUN_IN == aDisplay->mDisplay) ||
            (NS_STYLE_DISPLAY_COMPACT == aDisplay->mDisplay) ||
            (NS_STYLE_DISPLAY_INLINE_BLOCK == aDisplay->mDisplay)) {
@@ -7027,7 +7035,7 @@ nsCSSFrameConstructor::ConstructFrameByDisplayType(nsIPresShell*            aPre
     }
   }
   // See if it's an inline frame of some sort
-  else if ((NS_STYLE_DISPLAY_INLINE == aDisplay->mDisplay) ||
+  else if ((NS_STYLE_DISPLAY_INLINE == aDisplay->mDisplay)|| // && honourInline) ||
            (NS_STYLE_DISPLAY_MARKER == aDisplay->mDisplay)) {
     if (!pseudoParent && !aState.mPseudoFrames.IsEmpty()) { // process pending pseudo frames
       ProcessPseudoFrames(aPresContext, aState.mPseudoFrames, aFrameItems); 
@@ -7244,7 +7252,8 @@ nsCSSFrameConstructor::IsScrollable(nsIPresContext*       aPresContext,
   switch (aDisplay->mOverflow) {
   	case NS_STYLE_OVERFLOW_SCROLL:
   	case NS_STYLE_OVERFLOW_AUTO:
-  	case NS_STYLE_OVERFLOW_SCROLLBARS_NONE:
+  	//case NS_STYLE_OVERFLOW_SCROLLBARS_NONE:
+  	case NS_STYLE_OVERFLOW_HIDDEN: // bug 69355
   	case NS_STYLE_OVERFLOW_SCROLLBARS_HORIZONTAL:
   	case NS_STYLE_OVERFLOW_SCROLLBARS_VERTICAL:
 	    return PR_TRUE;
@@ -9922,7 +9931,7 @@ nsCSSFrameConstructor::ContentReplaced(nsIPresContext* aPresContext,
 
   if (NS_SUCCEEDED(res)) {
     res = ContentInserted(aPresContext, aContainer, 
-                          aOldChild, // should == aNewChild, 
+                          aNewChild, // should == aOldChild, but does not. Classilla issue 69 
                           ix, // aIndexInContainer,
                           nsnull, PR_TRUE);
   }
@@ -11330,6 +11339,9 @@ nsCSSFrameConstructor::AttributeChanged(nsIPresContext* aPresContext,
   return result;
 }
 
+// bug 188803
+#if(0)
+
   // Style change notifications
 NS_IMETHODIMP
 nsCSSFrameConstructor::StyleRuleChanged(nsIPresContext* aPresContext,
@@ -11401,6 +11413,9 @@ nsCSSFrameConstructor::StyleRuleRemoved(nsIPresContext* aPresContext,
   ReconstructDocElementHierarchy(aPresContext);
   return NS_OK;
 }
+
+#endif
+// end bug
 
 //STATIC
 void nsCSSFrameConstructor::GetAlternateTextFor(nsIContent* aContent,
@@ -13501,7 +13516,8 @@ nsCSSFrameConstructor::WrapFramesInFirstLetterFrame(
       }
     }
     else if ((nsLayoutAtoms::inlineFrame == frameType.get()) ||
-             (nsLayoutAtoms::lineFrame == frameType.get())) {
+             (nsLayoutAtoms::lineFrame == frameType.get()) ||
+             (nsLayoutAtoms::positionedInlineFrame == frameType.get())) { // bug 264799
       nsIFrame* kids;
       frame->FirstChild(aPresContext, nsnull, &kids);
       WrapFramesInFirstLetterFrame(aPresShell, aPresContext, aState, frame, kids,
@@ -13712,7 +13728,8 @@ nsCSSFrameConstructor::RemoveFirstLetterFrames(nsIPresContext* aPresContext,
       break;
     }
     else if ((nsLayoutAtoms::inlineFrame == frameType.get()) ||
-             (nsLayoutAtoms::lineFrame == frameType.get())) {
+             (nsLayoutAtoms::lineFrame == frameType.get()) ||
+             (nsLayoutAtoms::positionedInlineFrame == frameType)) { // bug 264799
       // Look inside child inline frame for the letter frame
       RemoveFirstLetterFrames(aPresContext, aPresShell, aFrameManager, kid,
                               aStopLooking);
@@ -14355,14 +14372,20 @@ nsCSSFrameConstructor::ProcessInlineChildren(nsIPresShell* aPresShell,
     }
   }
 
-  *aKidsAllInline = allKidsInline;
+// bug 135994
+// partially backed out; this doesn't fix the problem.
+  //*aKidsAllInline = allKidsInline; // removed by bug 135994
 
   // process the current pseudo frame state
   if (!aState.mPseudoFrames.IsEmpty()) {
     ProcessPseudoFrames(aPresContext, aState.mPseudoFrames, aFrameItems);
+    //allKidsInline = AreAllKidsInline(aFrameItems.childList); // added by bug
   }
   // restore the pseudo frame state
   aState.mPseudoFrames = prevPseudoFrames;
+  
+  *aKidsAllInline = allKidsInline; // moved here instead
+// end bug
 
   return rv;
 }

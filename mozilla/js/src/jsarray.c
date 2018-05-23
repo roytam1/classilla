@@ -628,6 +628,7 @@ typedef struct HSortArgs {
     void         *pivot;
     JSComparator cmp;
     void         *arg;
+        JSBool       fastcopy; // bug 181828
 } HSortArgs;
 
 static int
@@ -637,13 +638,18 @@ static int
 sort_compare_strings(const void *a, const void *b, void *arg);
 
 static void
-HeapSortHelper(HSortArgs *qa, int lo, int hi)
+//HeapSortHelper(HSortArgs *qa, int lo, int hi)
+HeapSortHelper(JSBool building, HSortArgs *hsa, size_t lo, size_t hi) // bug 181828
 {
     void *pivot, *vec, *vec2, *arg, *a, *b;
     size_t elsize;
     JSComparator cmp;
+// bug 181828
+#if(0)
     JSBool fastmove;
     int j, hiDiv2;
+    JSBool fastcopy;
+    size_t j, hiDiv2;
 
     pivot = qa->pivot;
     vec = qa->vec;
@@ -656,22 +662,51 @@ HeapSortHelper(HSortArgs *qa, int lo, int hi)
 #define MEMMOVE(p,q,n) \
     (fastmove ? (void)(*(jsval*)(p) = *(jsval*)(q)) : (void)memmove(p, q, n))
 
+#else
+
+    JSBool fastcopy;
+    size_t j, hiDiv2;
+    pivot = hsa->pivot;
+    vec = hsa->vec;
+    elsize = hsa->elsize;
+    vec2 =  (char *)vec - 2 * elsize;
+    cmp = hsa->cmp;
+    arg = hsa->arg;
+    fastcopy = hsa->fastcopy;
+#define MEMCPY(p,q,n) \
+    (fastcopy ? (void)(*(jsval*)(p) = *(jsval*)(q)) : (void)memcpy(p, q, n))
+
+#endif
+// end bug
+
     if (lo == 1) {
         j = 2;
         b = (char *)vec + elsize;
-        if (j < hi && cmp((char *)vec, b, arg) < 0)
+        //if (j < hi && cmp((char *)vec, b, arg) < 0)
+        if (j < hi && cmp(vec, b, arg) < 0)
             j++;
         a = (char *)vec + (hi - 1) * elsize;
         b = (char *)vec2 + j * elsize;
-        if (cmp(a, b, arg) >= 0)
+        
+        /* 
+         * During sorting phase b points to a member of heap that cannot be
+         * bigger then biggest of vec[0] and vec[1], and cmp(a, b, arg) <= 0
+         * always holds.
+         */
+        //if (cmp(a, b, arg) >= 0)
+        if ((building || hi == 2) && cmp(a, b, arg) >= 0) // bug 181828
+        
             return;
 
-        MEMMOVE(pivot, a, elsize);
-        MEMMOVE(a, b, elsize);
+        //MEMMOVE(pivot, a, elsize);
+        //MEMMOVE(a, b, elsize);
+        MEMCPY(pivot, a, elsize);
+        MEMCPY(a, b, elsize);
         lo = j;
     } else {
         a = (char *)vec2 + lo * elsize;
-        MEMMOVE(pivot, a, elsize);
+        //MEMMOVE(pivot, a, elsize);
+        MEMCPY(pivot, a, elsize);
     }
 
     hiDiv2 = hi/2;
@@ -686,18 +721,23 @@ HeapSortHelper(HSortArgs *qa, int lo, int hi)
             break;
 
         a = (char *)vec2 + lo * elsize;
-        MEMMOVE(a, b, elsize);
+        //MEMMOVE(a, b, elsize);
+        MEMCPY(a, b, elsize);
         lo = j;
     }
 
     a = (char *)vec2 + lo * elsize;
-    MEMMOVE(a, pivot, elsize);
-#undef MEMMOVE
+    //MEMMOVE(a, pivot, elsize);
+    MEMCPY(a, pivot, elsize);
+//#undef MEMMOVE
+#undef MEMCPY
 }
 
 JSBool
 js_HeapSort(void *vec, size_t nel, size_t elsize, JSComparator cmp, void *arg) 
 {
+// bug 181828
+#if(0)
     void *pivot;
     HSortArgs qa;
     int i;
@@ -718,6 +758,30 @@ js_HeapSort(void *vec, size_t nel, size_t elsize, JSComparator cmp, void *arg)
 
     free(pivot);
     return JS_TRUE;
+#else
+    void *pivot;
+    HSortArgs hsa;
+    size_t i;
+
+    pivot = malloc(elsize);
+    if (!pivot)
+		return JS_FALSE;
+    hsa.vec = vec;
+    hsa.elsize = elsize;
+    hsa.pivot = pivot;
+    hsa.cmp = cmp;
+    hsa.arg = arg;
+    hsa.fastcopy = (cmp == sort_compare || cmp == sort_compare_strings);
+ 
+    for (i = nel/2; i != 0; i--)
+        HeapSortHelper(JS_TRUE, &hsa, i, nel);
+    while (nel > 2)
+        HeapSortHelper(JS_FALSE, &hsa, 1, --nel);
+ 
+    free(pivot);
+    return JS_TRUE;
+#endif
+// end bug
 }
 
 typedef struct CompareArgs {
@@ -789,11 +853,13 @@ sort_compare_strings(const void *a, const void *b, void *arg)
  * that 2^32 * 32 is too large to worry about?)  Something dumps when I change
  * to unsigned int; is qsort using -1 as a fencepost?
  */
+// IS NO PROBLEM TOVARICH VE HAZ BUK 224128 KOMRAD! -- Cameron "Lennon + Marx"
+
 static JSBool
 array_sort(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
 {
     jsval fval;
-    jsval *pivotroot; // bug 312069
+    //jsval *pivotroot; // bug 312069
     CompareArgs ca;
     jsuint len, newlen, i;
     jsval *vec;
@@ -825,6 +891,9 @@ array_sort(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
         *rval = OBJECT_TO_JSVAL(obj);
         return JS_TRUE;
     }
+    
+// pull up to Mozilla 1.8
+
 
     /*
      * Test for size_t overflow, which could lead to indexing beyond the end
@@ -833,14 +902,15 @@ array_sort(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
     // bug 312069
     //nbytes = len * sizeof(jsval);
     //if (nbytes != (double) len * sizeof(jsval)) {
-    if (len > ((size_t) -1) / sizeof(jsval)) {
+    if (len > ((size_t) -1) / (sizeof(jsval))) {
     // end bug
         JS_ReportOutOfMemory(cx);
         return JS_FALSE;
     }
     nbytes = ((size_t) len) * sizeof(jsval); // bug 312069
     
-    vec = (jsval *) JS_malloc(cx, nbytes);
+    //vec = (jsval *) JS_malloc(cx, nbytes);
+    vec = (jsval *) JS_malloc(cx, ((size_t) len) * sizeof(jsval)); // pull up to 1.8
     if (!vec)
 		return JS_FALSE;
 

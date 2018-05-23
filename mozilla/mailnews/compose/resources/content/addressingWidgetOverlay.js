@@ -98,6 +98,7 @@ function awSelectElementName()
 
 function awGetSelectItemIndex(itemData)
 {
+
     if (selectElementIndexTable == null)
     {
       selectElementIndexTable = new Object();
@@ -113,6 +114,7 @@ function awGetSelectItemIndex(itemData)
 
 function Recipients2CompFields(msgCompFields)
 {
+
   if (msgCompFields)
   {
     var i = 1;
@@ -192,6 +194,9 @@ function Recipients2CompFields(msgCompFields)
 
 function CompFields2Recipients(msgCompFields, msgType)
 {
+//alert("3overlay");
+//return;
+
   if (msgCompFields) {
     gMimeHeaderParser = Components.classes["@mozilla.org/messenger/headerparser;1"].getService(Components.interfaces.nsIMsgHeaderParser);
 
@@ -232,10 +237,12 @@ function CompFields2Recipients(msgCompFields, msgType)
     if (!msgTo && !msgNewsgroups)
       _awSetInputAndPopup("", "addr_to", newListBoxNode, templateNode);
     // dump("replacing child in comp fields 2 recips \n");
+    //if(0){
     var parent = listbox.parentNode;
     parent.replaceChild(newListBoxNode, listbox);
     awFitDummyRows(2);
     setTimeout("awFinishCopyNodes();", 0);
+    //}
 
     gMimeHeaderParser = null; //Release the mime parser
   }
@@ -243,6 +250,7 @@ function CompFields2Recipients(msgCompFields, msgType)
 
 function awSetInputAndPopupValue(inputElem, inputValue, popupElem, popupValue, rowNumber)
 {
+
   // remove leading spaces
   while (inputValue && inputValue[0] == " " )
     inputValue = inputValue.substring(1, inputValue.length);
@@ -263,6 +271,7 @@ function awSetInputAndPopupValue(inputElem, inputValue, popupElem, popupValue, r
 
 function _awSetInputAndPopup(inputValue, popupValue, parentNode, templateNode)
 {
+
     top.MAX_RECIPIENTS++;
 
     var newNode = templateNode.cloneNode(true);
@@ -332,6 +341,7 @@ function awRemoveRecipients(msgCompFields, recipientType, recipientsList)
 
 function awAddRecipients(msgCompFields, recipientType, recipientsList)
 {
+
   if (!msgCompFields)
     return;
 
@@ -402,6 +412,7 @@ function awTestRowSequence()
 
 function awResetAllRows()
 {
+
   var maxRecipients = top.MAX_RECIPIENTS;
   
   for (var row = 1; row <= maxRecipients ; row ++)
@@ -448,6 +459,7 @@ function awDeleteRow(rowToDelete)
 
 function awClickEmptySpace(target, setFocus)
 {
+
   if (target == null ||
       (target.localName != "listboxbody" &&
       target.localName != "listcell" &&
@@ -806,6 +818,7 @@ function awSetAutoComplete(rowNumber)
 
 function awRecipientTextCommand(userAction, element)
 {
+
   if (userAction == "typing" || userAction == "scrolling")
     awReturnHit(element);
 }
@@ -821,6 +834,7 @@ function awRecipientTextCommand(userAction, element)
 //
 function awRecipientErrorCommand(errItem, element)
 {
+
     // remove the angle brackets from the general error message to construct 
     // the title for the alert.  someday we'll pass this info using a real
     // exception object, and then this code can go away.
@@ -869,13 +883,14 @@ function awRecipientKeyDown(event, element)
 {
   switch(event.keyCode) {
   case 46:
-  case 8:
+  //case 8: // Classilla issue 104
     /* do not query directly the value of the text field else the autocomplete widget could potentially
        alter it value while doing some internal cleanup, instead, query the value through the first child
     */
+    //alert("backyspace");
     if (!element.value)
       awDeleteHit(element);
-    event.preventBubble();  //We need to stop the event else the listbox will receive it and the function
+    //event.preventBubble();  //We need to stop the event else the listbox will receive it and the function
                             //awKeyDown will be executed!
     break;
   }
@@ -883,9 +898,10 @@ function awRecipientKeyDown(event, element)
 
 function awKeyDown(event, listboxElement)
 {
+
   switch(event.keyCode) {
   case 46:
-  case 8:
+  //case 8: // Classilla issue 104
     /* Warning, the listboxElement.selectedItems will change everytime we delete a row */
     var selItems = listboxElement.selectedItems;
     var length = listboxElement.selectedItems.length;

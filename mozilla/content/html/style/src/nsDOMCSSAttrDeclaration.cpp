@@ -68,10 +68,14 @@ nsDOMCSSAttributeDeclaration::~nsDOMCSSAttributeDeclaration()
   MOZ_COUNT_DTOR(nsDOMCSSAttributeDeclaration);
 }
 
+
+// bug 188803
+#if(0)
 NS_IMETHODIMP
 nsDOMCSSAttributeDeclaration::RemoveProperty(const nsAString& aPropertyName,
                                              nsAString& aReturn)
 {
+  aReturn.Truncate(); // bug 125246
   nsCSSDeclaration* decl;
 
 // bug 171830
@@ -97,9 +101,17 @@ nsDOMCSSAttributeDeclaration::RemoveProperty(const nsAString& aPropertyName,
 // end bug
 
     nsCSSProperty prop = nsCSSProps::LookupProperty(aPropertyName);
+// bug 125246
+#if(0)
     nsCSSValue val;
 
     rv = decl->RemoveProperty(prop, val);
+#else
+    decl->GetValue(prop, aReturn);
+
+    rv = decl->RemoveProperty(prop);
+#endif
+// end bug
 
     if (NS_SUCCEEDED(rv)) {
 // bug 171830
@@ -123,11 +135,21 @@ nsDOMCSSAttributeDeclaration::RemoveProperty(const nsAString& aPropertyName,
       rv = SetCSSDeclaration(decl, PR_TRUE);
 #endif
 // end bug
+// backbugs
+    } else {
+      // RemoveProperty will throw in all sorts of situations -- eg if
+      // the property is a shorthand one.  Do not propagate its return
+      // value to callers.
+      rv = NS_OK;
     }
+// end backbugs
   }
 
   return rv;
 }
+#endif
+// end bug 188803
+
 
 void
 nsDOMCSSAttributeDeclaration::DropReference()
@@ -135,10 +157,38 @@ nsDOMCSSAttributeDeclaration::DropReference()
   mContent = nsnull;
 }
 
+// bug 188803
+// PATCH IS FIRST!
+#if(1)
+nsresult
+nsDOMCSSAttributeDeclaration::DeclarationChanged()
+{
+  NS_ASSERTION(mContent, "Must have content node to set the decl!");
+  nsHTMLValue val;
+  nsresult rv = mContent->GetHTMLAttribute(nsHTMLAtoms::style, val);
+  NS_ASSERTION(rv == NS_CONTENT_ATTR_HAS_VALUE &&
+               eHTMLUnit_ISupports == val.GetUnit(),
+               "content must have rule");
+  nsCOMPtr<nsICSSStyleRule> oldRule =
+    do_QueryInterface(nsCOMPtr<nsISupports>(val.GetISupportsValue()));
+
+  nsCOMPtr<nsICSSStyleRule> newRule = oldRule->DeclarationChanged(PR_FALSE);
+  if (!newRule) {
+    return NS_ERROR_OUT_OF_MEMORY;
+  }
+    
+  return mContent->SetHTMLAttribute(nsHTMLAtoms::style,
+                                    nsHTMLValue(newRule),
+                                    PR_TRUE);
+}
+
+#else
+
 // bug 171830
 nsresult
 nsDOMCSSAttributeDeclaration::SetCSSDeclaration(nsCSSDeclaration* aDecl,
                                                 PRBool aNotify)
+                                                // aDeclOwnedByRule we don't have.
 {
   NS_ASSERTION(mContent, "Must have content node to set the decl!");
     
@@ -158,6 +208,11 @@ nsDOMCSSAttributeDeclaration::SetCSSDeclaration(nsCSSDeclaration* aDecl,
                                     aNotify);
 }
 // end bug
+
+#endif
+// end bug 188803
+
+
 nsresult
 nsDOMCSSAttributeDeclaration::GetCSSDeclaration(nsCSSDeclaration **aDecl,
                                                 PRBool aAllocate)
@@ -181,6 +236,10 @@ nsDOMCSSAttributeDeclaration::GetCSSDeclaration(nsCSSDeclaration **aDecl,
       }
     }
     else if (aAllocate) {
+// bug 125246
+// I combined 171830 and 125246 into one big superpatch here because otherwise
+// it was just too confusing.
+#if(0)
       result = NS_NewCSSDeclaration(aDecl);
 // bug 171830
 #if(0)
@@ -204,7 +263,32 @@ nsDOMCSSAttributeDeclaration::GetCSSDeclaration(nsCSSDeclaration **aDecl,
           (*aDecl)->RuleAbort();
           *aDecl = nsnull;
         }
+#else
+      nsCSSDeclaration *decl = new nsCSSDeclaration();
+      if (!decl)
+        return NS_ERROR_OUT_OF_MEMORY;
+      if (!decl->InitializeEmpty()) {
+        decl->RuleAbort();
+        return NS_ERROR_OUT_OF_MEMORY;
       }
+// bug 188803
+      //result = SetCSSDeclaration(*aDecl, PR_FALSE); // modified for 1.3.1 , PR_FALSE);
+      nsCOMPtr<nsICSSStyleRule> cssRule;
+      result = NS_NewCSSStyleRule(getter_AddRefs(cssRule), nsnull, decl);
+      if (NS_FAILED(result)) {
+        decl->RuleAbort();
+        return result;
+      }
+        
+      result = mContent->SetHTMLAttribute(nsHTMLAtoms::style,
+                                          nsHTMLValue(cssRule),
+                                          PR_FALSE);
+// end bug
+      if (NS_SUCCEEDED(result)) {
+        *aDecl = decl;
+      }
+#endif
+// end bug 125246
     }
   }
 
@@ -240,19 +324,22 @@ nsDOMCSSAttributeDeclaration::SetCSSDeclaration(nsCSSDeclaration *aDecl)
  * being initialized
  */
 nsresult
-nsDOMCSSAttributeDeclaration::GetCSSParsingEnvironment(nsIContent* aContent,
+nsDOMCSSAttributeDeclaration::GetCSSParsingEnvironment(//nsIContent* aContent, // bug 188803
                                                        nsIURI** aBaseURI,
                                                        nsICSSLoader** aCSSLoader,
                                                        nsICSSParser** aCSSParser)
 {
-  NS_ASSERTION(aContent, "Something is severely broken -- there should be an nsIContent here!");
+// aContent to mContent bug 188803.
+  NS_ASSERTION(mContent, // aContent, 
+  	"Something is severely broken -- there should be an nsIContent here!");
   // null out the out params since some of them may not get initialized below
   *aBaseURI = nsnull;
   *aCSSLoader = nsnull;
   *aCSSParser = nsnull;
   
   nsCOMPtr<nsINodeInfo> nodeInfo;
-  nsresult result = aContent->GetNodeInfo(*getter_AddRefs(nodeInfo));
+  //nsresult result = aContent->GetNodeInfo(*getter_AddRefs(nodeInfo));
+  nsresult result = mContent->GetNodeInfo(*getter_AddRefs(nodeInfo));
   if (NS_FAILED(result)) {
     return result;
   }
@@ -286,6 +373,8 @@ nsDOMCSSAttributeDeclaration::GetCSSParsingEnvironment(nsIContent* aContent,
   return NS_OK;
 }
 
+// bug 188803
+#if(0)
 nsresult
 nsDOMCSSAttributeDeclaration::ParsePropertyValue(const nsAString& aPropName,
                                                  const nsAString& aPropValue)
@@ -439,6 +528,8 @@ nsDOMCSSAttributeDeclaration::ParseDeclaration(const nsAString& aDecl,
   if (NS_FAILED(result)) {
     return result;
   }
+// bug 125246
+#if(0)
   if (aClearOldDecl) {
     // This should be done with decl->Clear() once such a method exists.
     nsAutoString propName;
@@ -452,11 +543,14 @@ nsDOMCSSAttributeDeclaration::ParseDeclaration(const nsAString& aDecl,
       decl->RemoveProperty(prop, val);
     }
   }
+#endif
+// end bug
   
   nsChangeHint uselessHint = NS_STYLE_HINT_NONE;
   result = cssParser->ParseAndAppendDeclaration(aDecl, baseURI, decl,
                                                 aParseOnlyOneDecl,
-                                                &uselessHint);
+                                                &uselessHint,
+                                                aClearOldDecl); // bug 125246
   
   if (NS_SUCCEEDED(result)) {
     result = SetCSSDeclaration(decl, PR_TRUE);
@@ -471,6 +565,11 @@ nsDOMCSSAttributeDeclaration::ParseDeclaration(const nsAString& aDecl,
   return result;
 }
 
+#endif
+// end bug 188803
+
+// bug 188803
+#if(0)
 nsresult
 nsDOMCSSAttributeDeclaration::GetParent(nsISupports **aParent)
 {
@@ -482,3 +581,15 @@ nsDOMCSSAttributeDeclaration::GetParent(nsISupports **aParent)
   return NS_OK;
 }
 
+#else
+
+nsresult
+nsDOMCSSAttributeDeclaration::GetParentRule(nsIDOMCSSRule **aParent)
+{
+  NS_ENSURE_ARG_POINTER(aParent);
+
+  *aParent = nsnull;
+  return NS_OK;
+}
+#endif
+// end bug

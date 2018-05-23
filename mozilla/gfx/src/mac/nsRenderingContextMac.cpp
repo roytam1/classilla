@@ -409,6 +409,7 @@ NS_IMETHODIMP nsRenderingContextMac::CopyOffScreenBits(nsDrawingSurface aSrcSurf
                                                          const nsRect &aDestBounds,
                                                          PRUint32 aCopyFlags)
 {
+
 	// hack: shortcut to bypass empty frames
 	// or frames entirely recovered with other frames
 	if ((aCopyFlags & NS_COPYBITS_TO_BACK_BUFFER) == 0)

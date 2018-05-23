@@ -2304,6 +2304,9 @@ nsDocShell::AddChildSHEntry(nsISHEntry * aCloneRef, nsISHEntry * aNewEntry,
             rv = container->AddChild(aNewEntry, aChildOffset);
         }
     }
+// This doesn't work in Classilla; it seems we always seem to have a null
+// aCloneRef. We need the patch below instead. -- Cameron
+#if(0)
     // pull up 1.8.1
     else if (!aCloneRef) {
     	/* This is an initial load in some subframe.  Just append it if we can */
@@ -2313,6 +2316,7 @@ nsDocShell::AddChildSHEntry(nsISHEntry * aCloneRef, nsISHEntry * aNewEntry,
     	}
     }
     // end pull up
+#endif
     else if (mSessionHistory) {
         /* You are currently in the rootDocShell.
          * You will get here when a subframe has a new url
@@ -2335,8 +2339,8 @@ nsDocShell::AddChildSHEntry(nsISHEntry * aCloneRef, nsISHEntry * aNewEntry,
         if (currentEntry) {
             PRUint32 cloneID = 0;
             nsCOMPtr<nsISHEntry> nextEntry;  //(do_CreateInstance(NS_SHENTRY_CONTRACTID));
-            //   NS_ENSURE_TRUE(result, NS_ERROR_FAILURE);
-            //if (aCloneRef)
+            //   NS_ENSURE_TRUE(result, NS_ERROR_FAILURE); // both commented out a/o 1.7.
+            if (aCloneRef) // This is commented out in 1.8.1.
                 aCloneRef->GetID(&cloneID);
             rv = CloneAndReplace(currentEntry, cloneID, aNewEntry,
                                  getter_AddRefs(nextEntry));
@@ -6248,7 +6252,7 @@ nsDocShell::AddToSessionHistory(nsIURI * aURI,
      */
     //if (LOAD_NORMAL_REPLACE == mLoadType && (root.get() != NS_STATIC_CAST(nsIDocShellTreeItem *, this))) {
     // bug 277224
-    if (LOAD_TYPE_HAS_FLAGS(mLoadType, LOAD_FLAGS_REPLACE_HISTORY) && root != NS_STATIC_CAST(nsIDocShellTreeItem *, this)) {
+    if (LOAD_TYPE_HAS_FLAGS(mLoadType, LOAD_FLAGS_REPLACE_HISTORY) && root.get() != NS_STATIC_CAST(nsIDocShellTreeItem *, this)) {
         // This is a subframe 
         entry = mOSHE;
         nsCOMPtr<nsISHContainer> shContainer(do_QueryInterface(entry));
@@ -6339,7 +6343,7 @@ nsDocShell::AddToSessionHistory(nsIURI * aURI,
 
 	// bug 277224
     //if (root.get() == NS_STATIC_CAST(nsIDocShellTreeItem *, this) && mSessionHistory) {
-    if (root == NS_STATIC_CAST(nsIDocShellTreeItem *, this) && mSessionHistory) {
+    if (root.get() == NS_STATIC_CAST(nsIDocShellTreeItem *, this) && mSessionHistory) {
         // This is the root docshell
         //if (mLoadType == LOAD_NORMAL_REPLACE) {  
         if (LOAD_TYPE_HAS_FLAGS(mLoadType, LOAD_FLAGS_REPLACE_HISTORY)) {          

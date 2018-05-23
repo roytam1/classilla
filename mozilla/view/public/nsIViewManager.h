@@ -544,6 +544,9 @@ public:
   NS_IMETHOD GetRectVisibility(nsIView *aView, const nsRect &aRect, 
                                PRUint16 aMinTwips, 
                                nsRectVisibility *aRectVisibility)=0;
+        
+  /* For Classilla: figure out if we had to bail out on double buffering. issue 28 */                       
+  NS_IMETHOD GetLastUpdateFlags(PRUint32 *aUpdateFlags)=0;
 
 };
 

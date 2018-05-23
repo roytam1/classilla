@@ -280,16 +280,31 @@ public:
    * modified. The style sheet passes this notification to 
    * the document. The notification is passed on to all of 
    * the document observers.
+   * Since nsIStyleRule objects are immutable, there is a new object
+   * replacing the old one.  However, the use of this method (rather
+   * than StyleRuleAdded and StyleRuleRemoved) implies that the new rule
+   * matches the same elements and has the same priority (weight,
+   * origin, specificity) as the old one.  (However, if it is a CSS
+   * style rule, there may be a change in whether it has an important
+   * rule.) bug 188803
    *
    * @param aDocument The document being observed
    * @param aStyleSheet the StyleSheet that contians the rule
-   * @param aStyleRule the rule that was modified
-   * @param aHint some possible info about the nature of the change
+   * xxx bug 188803 @param aStyleRule the rule that was modified
+   * xxx bug 188803 @param aHint some possible info about the nature of the change
+   * @param aOldStyleRule The rule being removed.  This rule may not be
+   *                      fully valid anymore -- however, it can still
+   *                      be used for pointer comparison and
+   *                      |QueryInterface|.
+   * @param aNewStyleRule The rule being added.  
    */
   NS_IMETHOD StyleRuleChanged(nsIDocument *aDocument,
                               nsIStyleSheet* aStyleSheet,
-                              nsIStyleRule* aStyleRule,
-                              nsChangeHint aHint) = 0;
+                              /* nsIStyleRule* aStyleRule,
+                              nsChangeHint aHint) = 0; */
+                              nsIStyleRule* aOldStyleRule,
+                              nsIStyleRule* aNewStyleRule) = 0; // bug 188803
+
 
   /**
    * A StyleRule has just been added to a style sheet.
@@ -378,8 +393,8 @@ public:
                                                 PRBool aApplicable);         \
     NS_IMETHOD StyleRuleChanged(nsIDocument* aDocument,                      \
                                 nsIStyleSheet* aStyleSheet,                  \
-                                nsIStyleRule* aStyleRule,                    \
-                                nsChangeHint aHint);                         \
+                                nsIStyleRule* aOldStyleRule,                    \
+                                nsIStyleRule* aNewStyleRule);                         \
     NS_IMETHOD StyleRuleAdded(nsIDocument* aDocument,                        \
                               nsIStyleSheet* aStyleSheet,                    \
                               nsIStyleRule* aStyleRule);                     \
@@ -388,6 +403,8 @@ public:
                                 nsIStyleRule* aStyleRule);                   \
     NS_IMETHOD DocumentWillBeDestroyed(nsIDocument* aDocument);              \
 
+
+// bug 188803 changed StyleRuleChanged above.
 
 #define NS_IMPL_NSIDOCUMENTOBSERVER_CORE_STUB(_class)                     \
 NS_IMETHODIMP                                                             \
@@ -516,8 +533,8 @@ _class::StyleSheetApplicableStateChanged(nsIDocument* aDocument,          \
 NS_IMETHODIMP                                                             \
 _class::StyleRuleChanged(nsIDocument* aDocument,                          \
                                        nsIStyleSheet* aStyleSheet,        \
-                                       nsIStyleRule* aStyleRule,          \
-                                       nsChangeHint aHint)                \
+                                       nsIStyleRule* aOldStyleRule,          \
+                                       nsIStyleRule* aNewStyleRule)                \
 {                                                                         \
   return NS_OK;                                                           \
 }                                                                         \
@@ -536,4 +553,6 @@ _class::StyleRuleRemoved(nsIDocument* aDocument,                          \
   return NS_OK;                                                           \
 }
 
+
+// bug 188803 changed StyleRuleChanged above.
 #endif /* nsIDocumentObserver_h___ */

@@ -89,6 +89,8 @@ nsHTMLReflowState::ReasonToString(nsReflowReason aReason)
 }
 #endif
 
+// removed by bug 135082, but we crash if it's missing.
+#if(1)
 nsHTMLReflowState::nsHTMLReflowState(const nsHTMLReflowState& aOther)
 {
   // Use assignment operator below.
@@ -111,6 +113,8 @@ nsHTMLReflowState::operator=(const nsHTMLReflowState &aOther)
 
   return *this;
 }
+#endif
+// end bug
 
 // Initialize a <b>root</b> reflow state with a rendering context to
 // use for measuring things.
@@ -353,6 +357,8 @@ nsHTMLReflowState::Init(nsIPresContext* aPresContext,
 
 void nsHTMLReflowState::InitCBReflowState()
 {
+// bug 135082 modified for Classilla
+#if(0)
   PRBool isContainingBlock;
   nsresult rv = frame->IsPercentageBase(isContainingBlock);
   if (NS_SUCCEEDED(rv) && isContainingBlock) {
@@ -373,6 +379,35 @@ void nsHTMLReflowState::InitCBReflowState()
     mCBReflowState = this;
     return;
   }
+#else
+  if (!parentReflowState) {
+    mCBReflowState = nsnull;
+    return;
+  }
+
+  //if (parentReflowState->frame->IsContainingBlock() ||
+  PRBool isContainingBlock;
+  nsresult rv = parentReflowState->frame->IsPercentageBase(isContainingBlock);
+  if ((NS_SUCCEEDED(rv) && isContainingBlock) ||
+      // Absolutely positioned frames should always be kids of the frames that
+      // determine their containing block
+      (NS_FRAME_GET_TYPE(mFrameType) == NS_CSS_FRAME_TYPE_ABSOLUTE)) {
+    // a block inside a table cell needs to use the table cell
+    nsCOMPtr<nsIAtom> parentFrameType;
+    if (parentReflowState->parentReflowState && parentReflowState->parentReflowState->frame)
+    parentReflowState->parentReflowState->frame->GetFrameType(getter_AddRefs(parentFrameType));
+    //if (parentReflowState->parentReflowState &&
+        //IS_TABLE_CELL(parentReflowState->parentReflowState->frame->GetType())) {
+        if(IS_TABLE_CELL(parentFrameType)) {
+      mCBReflowState = parentReflowState->parentReflowState;
+    } else {
+      mCBReflowState = parentReflowState;
+    }
+      
+    return;
+  }
+#endif
+// end bug
   mCBReflowState = parentReflowState->mCBReflowState;
 }
 
@@ -384,9 +419,10 @@ nsHTMLReflowState::GetPageBoxReflowState(const nsHTMLReflowState* aParentRS)
 }
 
 nscoord
-nsHTMLReflowState::GetContainingBlockContentWidth(const nsHTMLReflowState* aParentRS)
+nsHTMLReflowState::GetContainingBlockContentWidth(const nsHTMLReflowState* aReflowState)
+// aParentRS) // bug 135082
 {
-  const nsHTMLReflowState* rs = aParentRS->mCBReflowState;
+  const nsHTMLReflowState* rs = aReflowState->mCBReflowState; //aParentRS->mCBReflowState;
   if (!rs)
     return 0;
   return rs->mComputedWidth;
@@ -808,7 +844,8 @@ nsHTMLReflowState::CalculateHypotheticalBox(nsIPresContext*    aPresContext,
                                             nsIFrame*          aPlaceholderFrame,
                                             nsIFrame*          aBlockFrame,
                                             nsMargin&          aBlockContentArea,
-                                            nsIFrame*          aAbsoluteContainingBlockFrame,
+                                            //nsIFrame*          aAbsoluteContainingBlockFrame,
+                                            const nsHTMLReflowState* cbrs, // bug 135082
                                             nsHypotheticalBox& aHypotheticalBox)
 {
   NS_ASSERTION(mStyleDisplay->mOriginalDisplay != NS_STYLE_DISPLAY_NONE,
@@ -875,6 +912,8 @@ nsHTMLReflowState::CalculateHypotheticalBox(nsIPresContext*    aPresContext,
 
   // Get the placeholder x-offset and y-offset in the coordinate
   // space of the block frame that contains it
+  // XXXbz the placeholder is not fully reflown yet if our containing block is
+  // relatively positioned... (bug 135082)
   nsPoint placeholderOffset;
   GetPlaceholderOffset(aPlaceholderFrame, aBlockFrame, placeholderOffset);
 
@@ -1000,8 +1039,24 @@ nsHTMLReflowState::CalculateHypotheticalBox(nsIPresContext*    aPresContext,
   // The current coordinate space is that of the nearest block to the placeholder.
   // Convert to the coordinate space of the absolute containing block
   // this does not include backbugs from 253479; maybe it should
-  if (aBlockFrame != aAbsoluteContainingBlockFrame) {
-    nsIFrame* parent = aBlockFrame;
+// ... enter bug 135082
+//  if (aBlockFrame != aAbsoluteContainingBlockFrame) {
+//    nsIFrame* parent = aBlockFrame;
+  nsIFrame* absoluteContainingBlock = cbrs->frame;
+  if (aBlockFrame != absoluteContainingBlock) {
+    nsIFrame* parent;
+    nsIFrame* stop;
+    if (NS_FRAME_GET_TYPE(cbrs->mFrameType) == NS_CSS_FRAME_TYPE_INLINE) {
+      // The absolute containing block is an inline frame... so it will be a
+      // descendant of aBlockFrame
+      parent = absoluteContainingBlock;
+      stop = aBlockFrame;
+    } else {
+      // aBlockFrame may be a descendant of absoluteContainingBlock
+      parent = aBlockFrame;
+      stop = absoluteContainingBlock;
+    }
+// end bug 135082
     do {
       nsPoint origin;
 
@@ -1012,9 +1067,12 @@ nsHTMLReflowState::CalculateHypotheticalBox(nsIPresContext*    aPresContext,
 
       // Move up the tree one level
       parent->GetParent(&parent);
-    } while (parent && (parent != aAbsoluteContainingBlockFrame));
+    //} while (parent && (parent != aAbsoluteContainingBlockFrame));
+    } while (parent && parent != stop); // bug 135082
   }
 
+// bug 135082
+#if(0)
   // The specified offsets are relative to the absolute containing block's padding
   // edge, and our current values are relative to the border edge so translate
   nsMargin              border;
@@ -1027,6 +1085,37 @@ nsHTMLReflowState::CalculateHypotheticalBox(nsIPresContext*    aPresContext,
   aHypotheticalBox.mLeft -= border.left;
   aHypotheticalBox.mRight -= border.left;
   aHypotheticalBox.mTop -= border.top;
+#else
+// bug 300816 supersedes bug 135082
+#if(0)
+  // The specified offsets are relative to the absolute containing block's
+  // padding edge or content edge, and our current values are relative to the
+  // border edge, so translate.
+  if (NS_FRAME_GET_TYPE(cbrs->mFrameType) == NS_CSS_FRAME_TYPE_INLINE) {
+    // content edge
+    const nsMargin& borderPadding = cbrs->mComputedBorderPadding;
+    aHypotheticalBox.mLeft -= borderPadding.left;
+    aHypotheticalBox.mRight -= borderPadding.right;
+    aHypotheticalBox.mTop -= borderPadding.top;
+  } else {
+    // padding edge
+    nsMargin border = cbrs->mComputedBorderPadding - cbrs->mComputedPadding;
+    aHypotheticalBox.mLeft -= border.left;
+    aHypotheticalBox.mRight -= border.right;
+    aHypotheticalBox.mTop -= border.top;
+  }
+#else
+  // padding edge and our current values are relative to the border edge, so
+  // translate.
+  nsMargin border = cbrs->mComputedBorderPadding - cbrs->mComputedPadding;
+  aHypotheticalBox.mLeft -= border.left;
+  aHypotheticalBox.mRight -= border.left; // WTF? bug 419072 // border.right;
+  aHypotheticalBox.mTop -= border.top;
+#endif
+// end bug 300816
+#endif
+// end bug 135082
+
 }
 
 void
@@ -1062,7 +1151,8 @@ nsHTMLReflowState::InitAbsoluteConstraints(nsIPresContext* aPresContext,
        (eStyleUnit_Auto == mStylePosition->mOffset.GetBottomUnit()))) {
 
     CalculateHypotheticalBox(aPresContext, placeholderFrame, blockFrame,
-                             blockContentArea, cbrs->frame, hypotheticalBox);
+                             blockContentArea, cbrs, // ->frame, // bug 135082
+                             hypotheticalBox);
   }
 
   // Initialize the 'left' and 'right' computed offsets
@@ -1224,7 +1314,7 @@ nsHTMLReflowState::InitAbsoluteConstraints(nsIPresContext* aPresContext,
           mComputedBorderPadding.right -
           mComputedMargin.right - mComputedOffsets.right;
 
-        // bug 182748
+        // bug 182748 (supersedes bug 135082)
         if (autoWidth < 0) {
           autoWidth = 0;
         }
@@ -1431,7 +1521,7 @@ nsHTMLReflowState::InitAbsoluteConstraints(nsIPresContext* aPresContext,
           mComputedBorderPadding.bottom -
           mComputedMargin.bottom - mComputedOffsets.bottom;
 
-        // bug 182748
+        // bug 182748 (supersedes bug 135082)
         if (autoHeight < 0) {
           autoHeight = 0;
         }
@@ -1439,7 +1529,7 @@ nsHTMLReflowState::InitAbsoluteConstraints(nsIPresContext* aPresContext,
         // end bug
 
         AdjustComputedHeight(PR_FALSE); // bug 227819
-        
+      
         // bug 182748
         if (autoHeight != mComputedHeight) {
           // Re-calculate any 'auto' margin values since the computed height
@@ -1489,6 +1579,19 @@ nsHTMLReflowState::InitAbsoluteConstraints(nsIPresContext* aPresContext,
       }
     }
   }
+// bug 135082 (removed by bug 300816)
+#if(0)
+  // Now that we've solved for our auto offsets and so forth, we need to adjust
+  // the offsets to what the rest of layout actually expects them to be.  The
+  // offsets as computed now are relative to the parent's padding edge if the
+  // parent is a block and the parent's content edge if the parent is an
+  // inline.  We need them to be relative to the parent's padding edge for
+  // nsAbsoluteContainer reflow to work right.
+  if (NS_FRAME_GET_TYPE(cbrs->mFrameType) == NS_CSS_FRAME_TYPE_INLINE) {
+    mComputedOffsets += cbrs->mComputedPadding;
+  }
+#endif
+// end bug
 }
 
 static PRBool
@@ -1726,6 +1829,8 @@ nsHTMLReflowState::ComputeContainingBlockRectangle(nsIPresContext*          aPre
   if (NS_FRAME_GET_TYPE(mFrameType) == NS_CSS_FRAME_TYPE_ABSOLUTE) {
     // See if the ancestor is block-level or inline-level
     if (NS_FRAME_GET_TYPE(aContainingBlockRS->mFrameType) == NS_CSS_FRAME_TYPE_INLINE) {
+// bug 135082 modified for Classilla
+#if(0)
       // The CSS2 spec says that if the ancestor is inline-level, the containing
       // block depends on the 'direction' property of the ancestor. For direction
       // 'ltr', it's the top and left of the content edges of the first box and
@@ -1756,7 +1861,39 @@ nsHTMLReflowState::ComputeContainingBlockRectangle(nsIPresContext*          aPre
 
         cbrs = (const nsHTMLReflowState*)cbrs->parentReflowState;   // XXX cast
       }
-
+#else
+      // Base our size on the actual size of the frame.  In cases when this is
+      // completely bogus (eg initial reflow), this code shouldn't even be
+      // called, since the code in nsPositionedInlineFrame::Reflow will pass in
+      // the containing block dimensions to our constructor.
+      // XXXbz we should be taking the in-flows into account too, but
+      // that's very hard.
+      nsRect cbRect;
+      aContainingBlockRS->frame->GetRect(cbRect);
+// superseded by bug 300816
+#if(0)
+      //aContainingBlockWidth = aContainingBlockRS->frame->GetRect().width -
+      aContainingBlockWidth = cbRect.width -
+        (aContainingBlockRS->mComputedBorderPadding.left +
+         aContainingBlockRS->mComputedBorderPadding.right);
+      //aContainingBlockHeight = aContainingBlockRS->frame->GetRect().height -
+      aContainingBlockHeight = cbRect.height -
+        (aContainingBlockRS->mComputedBorderPadding.top +
+         aContainingBlockRS->mComputedBorderPadding.bottom);
+#else
+      //nsRect cbRect(aContainingBlockRS->frame->GetRect());
+      cbRect.Deflate(aContainingBlockRS->mComputedBorderPadding -
+                     aContainingBlockRS->mComputedPadding);
+      aContainingBlockWidth = cbRect.width;
+      aContainingBlockHeight = cbRect.height;
+#endif
+// end bug 300816
+      NS_ASSERTION(aContainingBlockWidth >= 0,
+                   "Negative containing block width!");
+      NS_ASSERTION(aContainingBlockHeight >= 0,
+                   "Negative containing block height!");
+#endif
+// end bug
     } else {
       // If the ancestor is block-level, the containing block is formed by the
       // padding edge of the ancestor
@@ -1910,7 +2047,7 @@ nsHTMLReflowState::InitConstraints(nsIPresContext* aPresContext,
     mComputedMaxWidth = mComputedMaxHeight = NS_UNCONSTRAINEDSIZE;
   } else {
     // Get the containing block reflow state
-    const nsHTMLReflowState* cbrs = parentReflowState->mCBReflowState;
+    const nsHTMLReflowState* cbrs = mCBReflowState; // bug 135082 // parentReflowState->mCBReflowState;
     NS_ASSERTION(nsnull != cbrs, "no containing block");
 
     // If we weren't given a containing block width and height, then
@@ -2783,7 +2920,7 @@ nsHTMLReflowState::ComputeVerticalValue(nscoord aContainingBlockHeight,
       aResult = NSToCoordFloor(aContainingBlockHeight * pct);
     }
     else {  // safest thing to do for an undefined height is to make it 0
-      aResult = 0;
+      aResult = NS_AUTOHEIGHT; //0;
     }
 
   } else if (eStyleUnit_Coord == aUnit) {

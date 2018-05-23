@@ -1639,7 +1639,9 @@ nsresult nsEventListenerManager::HandleEvent(nsIPresContext* aPresContext,
           ret = NS_NewDOMUIEvent(aDOMEvent, aPresContext, empty, aEvent);
         }
         if (NS_OK == ret) {
-          for (int i=0; !mListenersRemoved && listeners && i<listeners->Count(); i++) {
+          // stopNow is for event debugging. -- Cameron
+          PRBool stopNow = PR_FALSE;
+          for (int i=0; !mListenersRemoved && !stopNow && listeners && i<listeners->Count(); i++) {
             nsListenerStruct *ls = (nsListenerStruct*)listeners->ElementAt(i);
 
             if (ls->mFlags & aFlags && ls->mGroupFlags == currentGroup) {
@@ -1688,6 +1690,8 @@ nsresult nsEventListenerManager::HandleEvent(nsIPresContext* aPresContext,
                   ret = HandleEventSubType(ls, *aDOMEvent, aCurrentTarget, subType, aFlags);
                 }
               }
+            } else {
+//            	stopNow = PR_FALSE; // short cut for event debugging.
             }
           }
         }

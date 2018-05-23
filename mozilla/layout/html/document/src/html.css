@@ -1,5 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * Version: NPL 1.1/GPL 2.0/LGPL 2.1
+ * Modified for Classilla by Cameron Kaiser
  *
  * The contents of this file are subject to the Netscape Public License
  * Version 1.1 (the "License"); you may not use this file except in
@@ -39,7 +40,7 @@
 
 /* blocks */
 
-html, div, map, dt, isindex { /* form is no longer a block ... ck */
+html, div, map, dt, isindex, form {
   display: block;
 }
 
@@ -392,10 +393,11 @@ object, embed, applet {
 
 frameset {
   display: block ! important;
-  overflow: hidden; /* later versions are -moz-hidden-unscrollable. not changing yet */
+  overflow: -moz-hidden-unscrollable;
 }
 
 frame {
+  border: none ! important;
   -moz-user-focus: normal;
 }
 

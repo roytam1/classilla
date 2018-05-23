@@ -47,6 +47,7 @@
 
 class nsCSSDeclaration;
 class nsICSSParser;
+class nsICSSLoader; // bug 188803
 class nsIURI;
 
 class nsDOMCSSDeclaration : public nsIDOMCSSStyleDeclaration
@@ -56,6 +57,8 @@ public:
 
   NS_DECL_ISUPPORTS
 
+// bug 188803
+#if(0)
   // NS_DECL_IDOMCSSSTYLEDECLARATION
   NS_IMETHOD    GetCssText(nsAString& aCssText);
   NS_IMETHOD    SetCssText(const nsAString& aCssText);
@@ -73,21 +76,60 @@ public:
                             const nsAString& aValue,
                             const nsAString& aPriority);
   NS_IMETHOD    Item(PRUint32 aIndex, nsAString& aReturn);
-
+#else
+  // Require subclasses to implement |GetParentRule|.
+  //NS_DECL_NSIDOMCSSSTYLEDECLARATION
+  NS_IMETHOD GetCssText(nsAString & aCssText);
+  NS_IMETHOD SetCssText(const nsAString & aCssText);
+  NS_IMETHOD GetPropertyValue(const nsAString & propertyName,
+                              nsAString & _retval);
+  NS_IMETHOD GetPropertyCSSValue(const nsAString & propertyName,
+                                 nsIDOMCSSValue **_retval);
+  NS_IMETHOD RemoveProperty(const nsAString & propertyName,
+                            nsAString & _retval);
+  NS_IMETHOD GetPropertyPriority(const nsAString & propertyName,
+                                 nsAString & _retval);
+  NS_IMETHOD SetProperty(const nsAString & propertyName,
+                         const nsAString & value, const nsAString & priority);
+  NS_IMETHOD GetLength(PRUint32 *aLength);
+  NS_IMETHOD Item(PRUint32 index, nsAString & _retval);
+  NS_IMETHOD GetParentRule(nsIDOMCSSRule * *aParentRule) = 0; 
+#endif
+// end bug
 
   virtual void DropReference() = 0;
+protected: // bug 188803
+  // XXX DeCOMify this, so that |nsCSSDeclaration*| is the return type.
   virtual nsresult GetCSSDeclaration(nsCSSDeclaration **aDecl,
                                      PRBool aAllocate) = 0;
   // Note! This will only set the declaration if a style rule already exists
   // virtual nsresult SetCSSDeclaration(nsCSSDeclaration *aDecl) = 0; // bug 171830
 
+// bug 188803
+#if(0)
   virtual nsresult ParsePropertyValue(const nsAString& aPropName,
                                       const nsAString& aPropValue) = 0;
   virtual nsresult ParseDeclaration(const nsAString& aDecl,
                                     PRBool aParseOnlyOneDecl,
                                     PRBool aClearOldDecl) = 0;
   virtual nsresult GetParent(nsISupports **aParent) = 0;
+#endif
+
+// bug 188803
+  virtual nsresult DeclarationChanged() = 0;
   
+  // This will only fail if it can't get a parser.  This means it can
+  // return NS_OK without aURI or aCSSLoader being initialized.
+  virtual nsresult GetCSSParsingEnvironment(nsIURI** aBaseURI,
+                                            nsICSSLoader** aCSSLoader,
+                                            nsICSSParser** aCSSParser) = 0;
+
+  nsresult ParsePropertyValue(const nsAString& aPropName,
+                              const nsAString& aPropValue);
+  nsresult ParseDeclaration(const nsAString& aDecl,
+                            PRBool aParseOnlyOneDecl, PRBool aClearOldDecl);
+// end bug
+
 protected:
   virtual ~nsDOMCSSDeclaration();
 

@@ -51,6 +51,9 @@
 #include "nsHashtable.h"
 #include "nsITimer.h"
 #include "nsIReflowCallback.h"
+// bug 201681
+#include "nsILookAndFeel.h" // do we need this?
+#include "nsValueArray.h"
 
 #include "imgIDecoderObserver.h"
 

@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 
-<!DOCTYPE window SYSTEM "chrome://chatzilla/locale/chatzilla.dtd">
+<!DOCTYPE window SYSTEM "chrome://global/locale/terminos.dtd">
 <?xul-overlay href="chrome://global/content/globalOverlay.xul"?>
 
 <window

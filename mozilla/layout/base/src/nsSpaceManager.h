@@ -289,6 +289,8 @@ protected: /* hmm ... 196919, seems dubious */
    */
 public: /* 196919 */
   void ClearRegions();
+  
+  PRBool HasAnyFloats() { return mFrameInfoMap != nsnull; } // bug 299742
 
   /**
    * Methods for dealing with the propagation of float damage during

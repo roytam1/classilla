@@ -1265,9 +1265,23 @@ nsObjectFrame::InstantiatePlugin(nsIPresContext* aPresContext,
   window->clipRect.right = 0;
 #endif
 
+// issue 101
+  // do we have plugins disabled?
+  // although I hate making a pref branch just for this, creating a plugin instance
+  // is relatively expensive anyway, so this is not so bad. we do this at this point
+  // so that we are correctly positioned and the space remains just whitespace.
+  nsCOMPtr<nsIPrefBranch> prefBranch(do_GetService(NS_PREFSERVICE_CONTRACTID));
+  PRBool noPlugins = PR_FALSE;
+  if (prefBranch)
+  	prefBranch->GetBoolPref("classilla.layout.hideplugins", &noPlugins);
+  if (noPlugins)
+  	return NS_OK;
+// end issue
+  
   // Check to see if content-policy wants to veto this
   if(aURI != nsnull)
   {
+    
     PRBool shouldLoad = PR_TRUE; // default permit
     nsresult rv;
     nsCOMPtr<nsIDOMElement> element = do_QueryInterface(mContent, &rv);

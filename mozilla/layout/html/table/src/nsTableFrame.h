@@ -272,11 +272,11 @@ public:
                          nsIFrame*       aOldFrame);
 
   // Get the offset from the border box to the area where the row groups fit
-  nsMargin GetChildAreaOffset(nsIPresContext&          aPresContext,
+  nsMargin GetChildAreaOffset(nsIPresContext*          aPresContext, // & -> * bug 173277
                               const nsHTMLReflowState* aReflowState) const;
 
   // Get the offset from the border box to the area where the content fits
-  nsMargin GetContentAreaOffset(nsIPresContext&          aPresContext,
+  nsMargin GetContentAreaOffset(nsIPresContext*          aPresContext, // & -> * bug 173277
                                 const nsHTMLReflowState* aReflowState) const;
 
   /** helper method to find the table parent of any table frame object */
@@ -331,9 +331,19 @@ public:
                              nsFramePaintLayer    aWhichLayer,
                              PRUint32             aFlags = 0);
 
+// bug 173277
+#if(0)
   nsMargin* GetBCBorder(nsIPresContext& aPresContext,
                         PRBool          aInnerBorderOnly,
                         nsMargin&       aBorder) const;
+#else
+  nsMargin GetBCBorder(nsIPresContext* aPresContext) const;
+
+  // get the area that the border leak out from the inner table frame into
+  // the surrounding margin space
+  nsMargin GetBCMargin(nsIPresContext* aPresContext) const;
+#endif
+// end bug
 
   void SetBCDamageArea(nsIPresContext& aPresContext,
                        const nsRect&   aValue);
@@ -616,6 +626,7 @@ protected:
                            PRBool               aDirtyOnly,
                            nsReflowStatus&      aStatus,
                            nsIFrame*&           aLastChildReflowed,
+                           nsRect&              aOverflowArea, // bug 173277
                            PRBool*              aReflowedAtLeastOne = nsnull);
 // begin incremental reflow methods
   
@@ -705,8 +716,12 @@ protected:
 
   // return the desired height of this table accounting for the current
   // reflow state, and for the table attributes and parent 
+  /*
   nscoord CalcDesiredHeight(nsIPresContext*          aPresContext,
-                            const nsHTMLReflowState& aReflowState);
+                            const nsHTMLReflowState& aReflowState); */
+  void CalcDesiredHeight(nsIPresContext*          aPresContext, // we still need a pres context!
+  	const nsHTMLReflowState& aReflowState, nsHTMLReflowMetrics& aDesiredSize);
+  // bug 231275 modified for Clecko
 
   // The following is a helper for CalcDesiredHeight 
  
@@ -717,7 +732,7 @@ protected:
   void PlaceChild(nsIPresContext*      aPresContext,
                   nsTableReflowState&  aReflowState,
                   nsIFrame*            aKidFrame,
-                  nsHTMLReflowMetrics& aDesiredSize);
+                  nsHTMLReflowMetrics& aKidDesiredSize); // aDesiredSize -> aKid bug 173277
 
   /** assign widths for each column, taking into account the table content, the effective style, 
     * the layout constraints, and the compatibility mode.  

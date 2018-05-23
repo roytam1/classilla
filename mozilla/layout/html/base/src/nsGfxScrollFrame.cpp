@@ -133,10 +133,12 @@ public:
   NS_IMETHOD StyleSheetApplicableStateChanged(nsIDocument *aDocument,
                                               nsIStyleSheet* aStyleSheet,
                                               PRBool aApplicable) { return NS_OK; }
+                                              /* needed for bug 188803 */
   NS_IMETHOD StyleRuleChanged(nsIDocument *aDocument,
                               nsIStyleSheet* aStyleSheet,
-                              nsIStyleRule* aStyleRule,
-                              nsChangeHint aHint) { return NS_OK; }
+                              nsIStyleRule* aOldStyleRule,
+                              nsIStyleRule *aNewStyleRule /* ,
+                              nsChangeHint aHint */) { return NS_OK; }
   NS_IMETHOD StyleRuleAdded(nsIDocument *aDocument,
                             nsIStyleSheet* aStyleSheet,
                             nsIStyleRule* aStyleRule) { return NS_OK; }
@@ -325,13 +327,14 @@ nsGfxScrollFrame::GetScrollPreference(nsIPresContext* aPresContext, nsScrollPref
 // backbugs from bug 234851 were not incorporated into this function
 // (it's the nearest equivalent to ::GetScrollbarStyles()), so it is
 // still 1.3 -- Cameron
+// even after bug 69355, this is still mostly the same. I have to do more work on this.
    
   const nsStyleDisplay* styleDisplay = nsnull;
 
   GetStyleData(eStyleStruct_Display,
               (const nsStyleStruct*&)styleDisplay);
 
-  switch (styleDisplay->mOverflow)
+  switch (styleDisplay->mOverflow) // switch (overflow) {
   {
     case NS_STYLE_OVERFLOW_SCROLL:
       *aScrollPreference = AlwaysScroll;
@@ -350,6 +353,9 @@ nsGfxScrollFrame::GetScrollPreference(nsIPresContext* aPresContext, nsScrollPref
     break;
 
     default:
+    // case NS_STYLE_OVERFLOW_CLIP:
+    // case NS_STYLE_OVERFLOW_HIDDEN:
+    // case NS_STYLE_OVERFLOW_VISIBLE:
       *aScrollPreference = NeverScroll;
   }
 
@@ -700,6 +706,7 @@ nsGfxScrollFrame::GetPrefSize(nsBoxLayoutState& aState, nsSize& aSize)
                       (const nsStyleStruct*&)styleDisplay);
 
   nsSize vSize(0,0);
+  // we don't account for styles.mVertical or styles.mHorizontal.
   if (styleDisplay->mOverflow == NS_STYLE_OVERFLOW_SCROLL || 
       styleDisplay->mOverflow == NS_STYLE_OVERFLOW_SCROLLBARS_VERTICAL) {
      // make sure they are visible.
@@ -716,12 +723,32 @@ nsGfxScrollFrame::GetPrefSize(nsBoxLayoutState& aState, nsSize& aSize)
      nsBox::AddMargin(mInner->mHScrollbarBox, hSize);
   }
 
-  // if one of the width and height is constrained,
+  // If one of the width and height is constrained,
   // do smarter preferred size checking in case the scrolled frame is a block.
+  // 
+  // Details: We're going to pass our width (or height) constraint
+  // down to nsBoxToBlockAdaptor.  Then when we call
+  // mScrollAreaBox->GetPrefSize below, it will reflow the scrolled
+  // block with this width (or height) constraint, and report the resulting
+  // height (or width) of the block. So if possible we'll be sized exactly to the
+  // height (or width) of the block, which is what we want because 'overflow'
+  // should not affect sizing...
+
+  // Push current constraint. We'll restore it when we're done.
   nsSize oldConstrainedSize;
   aState.GetScrolledBlockSizeConstraint(oldConstrainedSize);
+  
   const nsHTMLReflowState* HTMLState = aState.GetReflowState();
+  
+  // This stores the computed width and height, if available.
   nsSize computedSize(NS_INTRINSICSIZE, NS_INTRINSICSIZE);
+  
+  // This stores the maximum width and height we can be, if available.
+  // This is what we use to constrain the block reflow. (bug 235558)
+  nsSize computedMax(NS_INTRINSICSIZE, NS_INTRINSICSIZE);
+
+// bug 235558 + backbugs from 1.7
+#if(0)
   if (HTMLState != nsnull) {
     computedSize.width = HTMLState->mComputedWidth;
     computedSize.height = HTMLState->mComputedHeight;
@@ -741,22 +768,87 @@ nsGfxScrollFrame::GetPrefSize(nsBoxLayoutState& aState, nsSize& aSize)
   } else {
     aState.SetScrolledBlockSizeConstraint(nsSize(-1,-1));
   }
+#else
+  if (HTMLState != nsnull) {
+    computedSize = nsSize(HTMLState->mComputedWidth, HTMLState->mComputedHeight);
+    // If we know the computed size, then that's the effective maximum
+    computedMax = computedSize;
+    // Get CSS maxima where we don't have a computed size
+    /*
+    if (computedMax.width == NS_INTRINSICSIZE) {
+      computedMax.width = HTMLState->mComputedMaxWidth;
+    }
+    if (computedMax.height == NS_INTRINSICSIZE) {
+      computedMax.height = HTMLState->mComputedMaxHeight;
+    }
+    // One could imagine using other constraints in computedMax, but it doesn't
+    // really work. See bug 237622.
+    */
+
+    // Pass a constraint to the block if we have at least one constraint
+    // and our size is not fixed
+    if (((computedSize.width == NS_INTRINSICSIZE)
+         || (computedSize.height == NS_INTRINSICSIZE))
+        && (computedMax.width != NS_INTRINSICSIZE
+            || computedMax.height != NS_INTRINSICSIZE)) {
+      // adjust constraints in case we have scrollbars
+      if (computedMax.width != NS_INTRINSICSIZE) {
+        computedMax.width = PR_MAX(0, computedMax.width - vSize.width);
+      }
+      if (computedMax.height != NS_INTRINSICSIZE) {
+        computedMax.height = PR_MAX(0, computedMax.height - hSize.height);
+      }
+      // For now, constrained height seems to just confuse things because
+      // various places in the block code assume constrained height => printing.
+      // Disable height constraint.
+      aState.SetScrolledBlockSizeConstraint(nsSize(computedMax.width, NS_INTRINSICSIZE));
+    } else {
+      aState.SetScrolledBlockSizeConstraint(nsSize(-1,-1));
+    }
+  } else {
+    aState.SetScrolledBlockSizeConstraint(nsSize(-1,-1));
+  }
+#endif
+// end bug + backbugs
 
   nsresult rv = mInner->mScrollAreaBox->GetPrefSize(aState, aSize);
+  
+  // Restore old constraint.
   aState.SetScrolledBlockSizeConstraint(oldConstrainedSize);
 
+  // If our height is not constrained, and we will need a horizontal
+  // scrollbar, then add space for the scrollbar to our desired height.
+  // This doesn't account for styles.mHorizontal or styles.mVertical
   if (styleDisplay->mOverflow == NS_STYLE_OVERFLOW_AUTO) {
     if (computedSize.height == NS_INTRINSICSIZE
+// bug 235558
+#if(0)
         && computedSize.width != NS_INTRINSICSIZE
-        && aSize.width > computedSize.width) {
+        && aSize.width > computedSize.width
+#else
+        && computedMax.width != NS_INTRINSICSIZE
+        && aSize.width > computedMax.width
+#endif
+    ) {
       // Add height of horizontal scrollbar which will be needed
       mInner->SetScrollbarVisibility(mInner->mHScrollbarBox, PR_TRUE);
       mInner->mHScrollbarBox->GetPrefSize(aState, hSize);
       nsBox::AddMargin(mInner->mHScrollbarBox, hSize);
     }
+    
+    // If our width is not constrained, and we will need a vertical
+    // scrollbar, then add space for the scrollbar to our desired width.
     if (computedSize.width == NS_INTRINSICSIZE
+// bug 235558
+#if(0)
         && computedSize.height != NS_INTRINSICSIZE
-        && aSize.height > computedSize.height) {
+        && aSize.height > computedSize.height
+#else
+        && computedMax.height != NS_INTRINSICSIZE
+        && aSize.height > computedMax.height
+#endif
+// end bug
+      ) {
       // Add width of vertical scrollbar which will be needed
       mInner->SetScrollbarVisibility(mInner->mVScrollbarBox, PR_TRUE);
       mInner->mVScrollbarBox->GetPrefSize(aState, vSize);
@@ -1321,7 +1413,8 @@ nsGfxScrollFrameInner::Layout(nsBoxLayoutState& aState)
     // There are two cases to consider
       if (scrolledContentSize.height <= scrollAreaRect.height
           || styleDisplay->mOverflow == NS_STYLE_OVERFLOW_SCROLLBARS_HORIZONTAL
-          || styleDisplay->mOverflow == NS_STYLE_OVERFLOW_SCROLLBARS_NONE) {
+          //|| styleDisplay->mOverflow == NS_STYLE_OVERFLOW_SCROLLBARS_NONE) {
+          || styleDisplay->mOverflow == NS_STYLE_OVERFLOW_HIDDEN) { // bug 69355 for Clecko
         if (mHasVerticalScrollbar) {
           // We left room for the vertical scrollbar, but it's not needed;
           // remove it.
@@ -1364,7 +1457,8 @@ nsGfxScrollFrameInner::Layout(nsBoxLayoutState& aState)
     // and we don't have a scrollbar add one.
     if (scrolledContentSize.width > scrollAreaRect.width
         && styleDisplay->mOverflow != NS_STYLE_OVERFLOW_SCROLLBARS_VERTICAL
-        && styleDisplay->mOverflow != NS_STYLE_OVERFLOW_SCROLLBARS_NONE) { 
+        //&& styleDisplay->mOverflow != NS_STYLE_OVERFLOW_SCROLLBARS_NONE) { 
+        && styleDisplay->mOverflow != NS_STYLE_OVERFLOW_HIDDEN) { // bug 69355 for Clecko
 
       if (!mHasHorizontalScrollbar) {
            // no scrollbar? 

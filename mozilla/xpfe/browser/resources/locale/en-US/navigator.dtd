@@ -44,6 +44,8 @@
 <!ENTITY viewMenu.accesskey "v">
 <!ENTITY viewFixups.label "Use Experimental Renderer">
 <!ENTITY viewFixups.commandkey "X">
+<!ENTITY viewSlowScroll.label "Use Slow Scroll">
+<!ENTITY viewSlowScroll.commandkey "S">
 
 <!ENTITY toolbarsCmd.label "Show/Hide">
 <!ENTITY toolbarsCmd.accesskey "w">

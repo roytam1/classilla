@@ -564,7 +564,12 @@ NS_IMETHODIMP nsView::SetVisibility(nsViewVisibility aVisibility)
     }
   }
 
-  if (nsnull != mWindow)
+  //if (nsnull != mWindow)
+  // bug 141901
+  // Don't show or hide the widget if the view manager is batching
+  // updates. Showing/Hiding the view's widget will cause widget's to 
+  // be invalidated. When batching all invalidates must be deferred.
+  if ((nsnull != mWindow) && (! mViewManager->IsBatchingUpdates()))
   {
 #ifndef HIDE_ALL_WIDGETS
     if (mVis == nsViewVisibility_kShow)

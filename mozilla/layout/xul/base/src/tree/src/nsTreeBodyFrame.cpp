@@ -3324,7 +3324,7 @@ nsTreeBodyFrame::ScrollInternal(PRInt32 aRow)
   if (hasBackground || absDelta*mRowHeight >= mRect.height)
     Invalidate();
   else if (mTreeWidget)
-    mTreeWidget->Scroll(0, -delta*rowHeightAsPixels, nsnull);
+    mTreeWidget->Scroll(0, -delta*rowHeightAsPixels, nsnull, nsnull, nsnull, NS_WIDGET_ALWAYS_FAST_SCROLL);
 
   return NS_OK;
 }

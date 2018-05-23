@@ -440,9 +440,16 @@
 #define NS_STYLE_OVERFLOW_HIDDEN                1
 #define NS_STYLE_OVERFLOW_SCROLL                2
 #define NS_STYLE_OVERFLOW_AUTO                  3
+// bug 69355
+#if(0)
 #define NS_STYLE_OVERFLOW_SCROLLBARS_NONE				4
 #define NS_STYLE_OVERFLOW_SCROLLBARS_HORIZONTAL	5
 #define NS_STYLE_OVERFLOW_SCROLLBARS_VERTICAL		6
+#else
+#define NS_STYLE_OVERFLOW_CLIP                  4
+#define NS_STYLE_OVERFLOW_SCROLLBARS_HORIZONTAL 5
+#define NS_STYLE_OVERFLOW_SCROLLBARS_VERTICAL   6
+#endif
 
 // See nsStyleList
 #define NS_STYLE_LIST_STYLE_NONE                  0

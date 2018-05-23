@@ -72,9 +72,10 @@ public:
                   nsIStyleContext* aContext,
                   nsIFrame*        aPrevInFlow);
 
+/* bug 173277
   NS_IMETHOD SetInitialChildList(nsIPresContext* aPresContext,
                                  nsIAtom*        aListName,
-                                 nsIFrame*       aChildList);
+                                 nsIFrame*       aChildList); */
   NS_IMETHOD AppendFrames(nsIPresContext* aPresContext,
                           nsIPresShell&   aPresShell,
                           nsIAtom*        aListName,
@@ -107,6 +108,8 @@ public:
                    PRUint32             aFlags = 0);
 
 
+// bug 173277
+#if(0)
   /** ask all children to paint themselves, without clipping (for cells with rowspan>1)
     * @see nsIFrame::Paint 
     */
@@ -115,6 +118,8 @@ public:
                              const nsRect&        aDirtyRect,
                              nsFramePaintLayer    aWhichLayer,
                              PRUint32             aFlags = 0);
+#endif
+// end bug
 
   NS_IMETHOD GetFrameForPoint(nsIPresContext*   aPresContext,
                               const nsPoint&    aPoint, 
@@ -141,7 +146,8 @@ public:
                     const nsHTMLReflowState& aReflowState,
                     nsReflowStatus&          aStatus);
 
-  virtual void DidResize(nsIPresContext*          aPresContext,
+  //virtual  // bug 173277
+  void DidResize(nsIPresContext*          aPresContext,
                          const nsHTMLReflowState& aReflowState);
 
   /**

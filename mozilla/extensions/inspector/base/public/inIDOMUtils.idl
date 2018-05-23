@@ -50,7 +50,9 @@ interface nsIDOMCSSStyleRule;
 interface inIDOMUtils : nsISupports
 {
   // CSS utilities
-  nsISupportsArray getStyleRules(in nsIDOMElement aElement);
+  // bug 188803
+  nsISupportsArray getCSSStyleRules(in nsIDOMElement aElement);
+  //nsISupportsArray getStyleRules(in nsIDOMElement aElement);
   // unsigned long getRuleWeight(in nsIDOMCSSStyleRule aRule); // bug 98765
   unsigned long getRuleLine(in nsIDOMCSSStyleRule aRule);
 

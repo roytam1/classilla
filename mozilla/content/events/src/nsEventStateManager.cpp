@@ -116,6 +116,8 @@
 #include "nsUnicharUtils.h"
 #include "nsContentUtils.h"
 
+#include "nsIScrollableFrame.h" // issue 95
+
 #if defined (XP_MAC) || defined(XP_MACOSX)
 #include <Events.h>
 #endif
@@ -1632,12 +1634,50 @@ nsEventStateManager::DoWheelScroll(nsIPresContext* aPresContext,
     	continue; // while
     } 
     
+// issue 95
+// while based in spirit on bug 259615, in practice this code is nothing like it
+// because we have to resort to more primitive means in 1.3.1. -- Cameron
+
+    // if our scrolling view is clipped or hidden, don't scroll it.
+    // however, we have to ask ourselves for the style data.
+    const nsStyleDisplay *styleDisplay = nsnull;
+    focusFrame->GetStyleData(eStyleStruct_Display, (const nsStyleStruct*&)styleDisplay);
+    if (styleDisplay != nsnull && (styleDisplay->mOverflow == NS_STYLE_OVERFLOW_CLIP
+    		|| styleDisplay->mOverflow == NS_STYLE_OVERFLOW_HIDDEN
+    		|| styleDisplay->mOverflow == NS_STYLE_OVERFLOW_VISIBLE
+    	)) {
+    	
+    	PRBool ok_to_scroll = PR_FALSE;
+    	if (styleDisplay->mOverflow == NS_STYLE_OVERFLOW_VISIBLE) {
+    		// document body defaults to overflow:visible, but still scrollable. so,
+    		// if this is <html> or the <body>, we can always try scrolling it,
+    		// and if it doesn't work it will get back to XUL somehow.
+    		nsCOMPtr<nsIContent> thisContent;
+    		focusFrame->GetContent(getter_AddRefs(thisContent));
+    		if (thisContent) {
+    			nsCOMPtr<nsIAtom> tagname;
+    			thisContent->GetTag(*getter_AddRefs(tagname));
+    			if (tagname.get() == nsHTMLAtoms::body ||
+    				tagname.get() == nsHTMLAtoms::html) {
+    					ok_to_scroll = PR_TRUE;
+    			}
+    		}
+    	}
+    	// otherwise, we can't scroll this. maybe our parent can.
+    	if (!ok_to_scroll) {
+    		focusFrame->GetParent(&focusFrame);
+    		continue;
+    	}
+    }
+// end issue
+    
     sv = GetNearestScrollingView(focusView);
     if (!sv) {
     	// not sure how this happened ...
     	focusFrame->GetParent(&focusFrame);
     	continue; // while
     }
+
     // are we at our scrolling max?
     nscoord lineHeight;
     sv->GetLineHeight(&lineHeight);

@@ -44,6 +44,8 @@
 #include "nsICSSParser.h"
 #include "nsICSSLoader.h"
 #include "nsICSSStyleRule.h"
+// bug 125246
+#include "nsCSSStruct.h"
 #include "nsCSSDeclaration.h"
 #include "nsIDocument.h"
 #include "nsIDocumentEncoder.h"
@@ -134,6 +136,10 @@
 
 #include "nsIDOMText.h"
 #include "nsITextContent.h"
+
+// bug 234761
+#include "nsGenericDOMDataNode.h"
+#include "nsIAttributeContent.h"
 
 static NS_DEFINE_CID(kPresStateCID,  NS_PRESSTATE_CID);
 // XXX todo: add in missing out-of-memory checks
@@ -1650,7 +1656,7 @@ nsGenericHTMLElement::SetAttr(PRInt32 aNameSpaceID,
 
   if (aAttribute == nsHTMLAtoms::style) {
     nsHTMLValue parsedValue;
-    ParseStyleAttribute(aValue, parsedValue);
+    ParseStyleAttribute(this, aValue, parsedValue); // backbug from 1.7 for bug 234761
     result = SetHTMLAttribute(aAttribute, parsedValue, aNotify);
     return result;
   }
@@ -1935,15 +1941,41 @@ nsGenericHTMLElement::SetHTMLAttribute(nsIAtom* aAttribute,
                                        PRBool aNotify)
 {
   nsresult  result = NS_OK;
+  
+// bug 209634 using Tp patch #2
+  PRBool haveListeners =
+    mDocument &&
+    nsGenericElement::HasMutationListeners(this,
+                                           NS_EVENT_BITS_MUTATION_ATTRMODIFIED);
+  // If we have no listeners and aNotify is false, we are almost certainly
+  // coming from the content sink and will almost certainly have no previous
+  // value.  Even if we do, setting the value is cheap when we have no
+  // listeners and don't plan to notify.  The check for aNotify here is an
+  // optimization; the check for haveListeners is a correctness issue.
+  if (haveListeners || aNotify) {
+    // Do nothing if there is no change.  Note that operator== on nsHTMLValue
+    // assumes that two nsHTMLValues are the same if they have the same unit
+    // and value.  For nsHTMLValues whose value is an nsISupports, this means
+    // that a new nsISupports pointer _must_ be created in order for attribute
+    // changes to take proper effect. Currently, this only applies to inline
+    // style, which satisfies this constraint, since style rules are immutable.
+    nsHTMLValue oldValue;
+    result = GetHTMLAttribute(aAttribute, oldValue);
+    if (result != NS_CONTENT_ATTR_NOT_THERE && oldValue == aValue) {
+      return NS_OK;
+    }
+  }
+// end bug
 
   nsChangeHint impact = NS_STYLE_HINT_NONE;
   GetMappedAttributeImpact(aAttribute, nsIDOMMutationEvent::MODIFICATION,
                            impact);
   nsCOMPtr<nsIHTMLStyleSheet> sheet;
   if (mDocument) {
+  /* bug 209634 
     PRBool haveListeners =
       nsGenericElement::HasMutationListeners(this,
-                                             NS_EVENT_BITS_MUTATION_ATTRMODIFIED);
+                                             NS_EVENT_BITS_MUTATION_ATTRMODIFIED); */
     PRBool modification = PR_TRUE;
     nsAutoString oldValueStr;
     if (haveListeners) {
@@ -3103,7 +3135,8 @@ nsGenericHTMLElement::ReparseStyleAttribute(void)
     if (eHTMLUnit_String == oldValue.GetUnit()) {
       nsHTMLValue parsedValue;
       nsAutoString  stringValue;
-      result = ParseStyleAttribute(oldValue.GetStringValue(stringValue), parsedValue);
+      result = ParseStyleAttribute(this, oldValue.GetStringValue(stringValue), parsedValue);
+      	// backbug from 1.7 for bug 234761
       if (NS_SUCCEEDED(result) && (eHTMLUnit_String != parsedValue.GetUnit())) {
         result = SetHTMLAttribute(nsHTMLAtoms::style, parsedValue, PR_FALSE);
       }
@@ -3113,7 +3146,8 @@ nsGenericHTMLElement::ReparseStyleAttribute(void)
 }
 
 nsresult
-nsGenericHTMLElement::ParseStyleAttribute(const nsAString& aValue, nsHTMLValue& aResult)
+nsGenericHTMLElement::ParseStyleAttribute(nsIContent* aContent, // backbug from 1.7 for bug 234761
+										const nsAString& aValue, nsHTMLValue& aResult)
 {
   nsresult result = NS_OK;
   NS_ASSERTION(mNodeInfo, "If we don't have a nodeinfo, we are very screwed");
@@ -3125,14 +3159,28 @@ nsGenericHTMLElement::ParseStyleAttribute(const nsAString& aValue, nsHTMLValue& 
   }
 
   if (doc) {
-    PRBool isCSS = PR_TRUE; // asume CSS until proven otherwise
+    PRBool isCSS = PR_TRUE; // assume CSS until proven otherwise
 
+// bug 234761 (not yet)
+#if(0)
     nsAutoString styleType;
     doc->GetHeaderData(nsHTMLAtoms::headerContentStyleType, styleType);
     if (!styleType.IsEmpty()) {
       static const char textCssStr[] = "text/css";
       isCSS = (styleType.EqualsIgnoreCase(textCssStr, sizeof(textCssStr) - 1));
     }
+#else
+    if (!aContent->IsNativeAnonymous()) {  // native anonymous content
+                                           // always assumes CSS
+      nsAutoString styleType;
+      doc->GetHeaderData(nsHTMLAtoms::headerContentStyleType, styleType);
+      if (!styleType.IsEmpty()) {
+        static const char textCssStr[] = "text/css";
+        isCSS = (styleType.EqualsIgnoreCase(textCssStr, sizeof(textCssStr) - 1));
+      }
+    }
+#endif
+// end bug
 
     if (isCSS) {
       nsCOMPtr<nsICSSLoader> cssLoader;
@@ -3327,11 +3375,20 @@ nsGenericHTMLElement::MapImageMarginAttributeInto(const nsIHTMLMappedAttributes*
     hval.SetPercentValue(value.GetPercentValue());
 
   if (hval.GetUnit() != eCSSUnit_Null) {
+// bug 125246
+#if(0)
     nsCSSRect* margin = aData->mMarginData->mMargin;
     if (margin->mLeft.GetUnit() == eCSSUnit_Null)
       margin->mLeft = hval;
     if (margin->mRight.GetUnit() == eCSSUnit_Null)
       margin->mRight = hval;
+#else
+    nsCSSRect& margin = aData->mMarginData->mMargin;
+    if (margin.mLeft.GetUnit() == eCSSUnit_Null)
+      margin.mLeft = hval;
+    if (margin.mRight.GetUnit() == eCSSUnit_Null)
+      margin.mRight = hval;
+#endif
   }
 
   // vspace: value
@@ -3343,11 +3400,21 @@ nsGenericHTMLElement::MapImageMarginAttributeInto(const nsIHTMLMappedAttributes*
     vval.SetPercentValue(value.GetPercentValue());
 
   if (vval.GetUnit() != eCSSUnit_Null) {
+// bug 125246
+#if(0)
     nsCSSRect* margin = aData->mMarginData->mMargin;
     if (margin->mTop.GetUnit() == eCSSUnit_Null)
       margin->mTop = vval;
     if (margin->mBottom.GetUnit() == eCSSUnit_Null)
       margin->mBottom = vval;
+#else
+    nsCSSRect& margin = aData->mMarginData->mMargin;
+    if (margin.mTop.GetUnit() == eCSSUnit_Null)
+      margin.mTop = vval;
+    if (margin.mBottom.GetUnit() == eCSSUnit_Null)
+      margin.mBottom = vval;
+#endif
+// end bug
   }
 }
 
@@ -3398,6 +3465,8 @@ nsGenericHTMLElement::MapImageBorderAttributeInto(const nsIHTMLMappedAttributes*
 
   nscoord val = value.GetPixelValue();
 
+// bug 125246 in multiple places
+#if(0)
   nsCSSRect* borderWidth = aData->mMarginData->mBorderWidth;
   if (borderWidth->mLeft.GetUnit() == eCSSUnit_Null)
     borderWidth->mLeft.SetFloatValue((float)val, eCSSUnit_Pixel);
@@ -3407,7 +3476,19 @@ nsGenericHTMLElement::MapImageBorderAttributeInto(const nsIHTMLMappedAttributes*
     borderWidth->mRight.SetFloatValue((float)val, eCSSUnit_Pixel);
   if (borderWidth->mBottom.GetUnit() == eCSSUnit_Null)
     borderWidth->mBottom.SetFloatValue((float)val, eCSSUnit_Pixel);
+#else
+  nsCSSRect& borderWidth = aData->mMarginData->mBorderWidth;
+  if (borderWidth.mLeft.GetUnit() == eCSSUnit_Null)
+    borderWidth.mLeft.SetFloatValue((float)val, eCSSUnit_Pixel);
+  if (borderWidth.mTop.GetUnit() == eCSSUnit_Null)
+    borderWidth.mTop.SetFloatValue((float)val, eCSSUnit_Pixel);
+  if (borderWidth.mRight.GetUnit() == eCSSUnit_Null)
+    borderWidth.mRight.SetFloatValue((float)val, eCSSUnit_Pixel);
+  if (borderWidth.mBottom.GetUnit() == eCSSUnit_Null)
+    borderWidth.mBottom.SetFloatValue((float)val, eCSSUnit_Pixel);
+#endif
 
+#if(0)
   nsCSSRect* borderStyle = aData->mMarginData->mBorderStyle;
   if (borderStyle->mLeft.GetUnit() == eCSSUnit_Null)
     borderStyle->mLeft.SetIntValue(NS_STYLE_BORDER_STYLE_SOLID, eCSSUnit_Enumerated);
@@ -3417,7 +3498,19 @@ nsGenericHTMLElement::MapImageBorderAttributeInto(const nsIHTMLMappedAttributes*
     borderStyle->mRight.SetIntValue(NS_STYLE_BORDER_STYLE_SOLID, eCSSUnit_Enumerated);
   if (borderStyle->mBottom.GetUnit() == eCSSUnit_Null)
     borderStyle->mBottom.SetIntValue(NS_STYLE_BORDER_STYLE_SOLID, eCSSUnit_Enumerated);
+#else
+  nsCSSRect& borderStyle = aData->mMarginData->mBorderStyle;
+  if (borderStyle.mLeft.GetUnit() == eCSSUnit_Null)
+    borderStyle.mLeft.SetIntValue(NS_STYLE_BORDER_STYLE_SOLID, eCSSUnit_Enumerated);
+  if (borderStyle.mTop.GetUnit() == eCSSUnit_Null)
+    borderStyle.mTop.SetIntValue(NS_STYLE_BORDER_STYLE_SOLID, eCSSUnit_Enumerated);
+  if (borderStyle.mRight.GetUnit() == eCSSUnit_Null)
+    borderStyle.mRight.SetIntValue(NS_STYLE_BORDER_STYLE_SOLID, eCSSUnit_Enumerated);
+  if (borderStyle.mBottom.GetUnit() == eCSSUnit_Null)
+    borderStyle.mBottom.SetIntValue(NS_STYLE_BORDER_STYLE_SOLID, eCSSUnit_Enumerated);
+#endif
 
+#if(0)
   nsCSSRect* borderColor = aData->mMarginData->mBorderColor;
   if (borderColor->mLeft.GetUnit() == eCSSUnit_Null)
     borderColor->mLeft.SetIntValue(NS_STYLE_COLOR_MOZ_USE_TEXT_COLOR, eCSSUnit_Enumerated);
@@ -3427,6 +3520,18 @@ nsGenericHTMLElement::MapImageBorderAttributeInto(const nsIHTMLMappedAttributes*
     borderColor->mRight.SetIntValue(NS_STYLE_COLOR_MOZ_USE_TEXT_COLOR, eCSSUnit_Enumerated);
   if (borderColor->mBottom.GetUnit() == eCSSUnit_Null)
     borderColor->mBottom.SetIntValue(NS_STYLE_COLOR_MOZ_USE_TEXT_COLOR, eCSSUnit_Enumerated);
+#else
+  nsCSSRect& borderColor = aData->mMarginData->mBorderColor;
+  if (borderColor.mLeft.GetUnit() == eCSSUnit_Null)
+    borderColor.mLeft.SetIntValue(NS_STYLE_COLOR_MOZ_USE_TEXT_COLOR, eCSSUnit_Enumerated);
+  if (borderColor.mTop.GetUnit() == eCSSUnit_Null)
+    borderColor.mTop.SetIntValue(NS_STYLE_COLOR_MOZ_USE_TEXT_COLOR, eCSSUnit_Enumerated);
+  if (borderColor.mRight.GetUnit() == eCSSUnit_Null)
+    borderColor.mRight.SetIntValue(NS_STYLE_COLOR_MOZ_USE_TEXT_COLOR, eCSSUnit_Enumerated);
+  if (borderColor.mBottom.GetUnit() == eCSSUnit_Null)
+    borderColor.mBottom.SetIntValue(NS_STYLE_COLOR_MOZ_USE_TEXT_COLOR, eCSSUnit_Enumerated);
+#endif
+// end bug
 }
 
 PRBool

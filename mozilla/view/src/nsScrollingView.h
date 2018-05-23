@@ -102,7 +102,7 @@ public:
 
   NS_IMETHOD  AddScrollPositionListener(nsIScrollPositionListener* aListener);
   NS_IMETHOD  RemoveScrollPositionListener(nsIScrollPositionListener* aListener);
-
+  
   // local to view module
   void HandleScrollEvent(nsGUIEvent *aEvent, PRUint32 aEventFlags);
  

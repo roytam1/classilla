@@ -230,12 +230,21 @@ NS_METHOD nsTableRowGroupFrame::Paint(nsIPresContext*      aPresContext,
 
   const nsStyleDisplay* disp = (const nsStyleDisplay*)
     mStyleContext->GetStyleData(eStyleStruct_Display);
-  if (disp && (NS_STYLE_OVERFLOW_HIDDEN == disp->mOverflow)) {
+  // bug 221140 modified for Clecko
+  PRUint8 overflow = disp->mOverflow; // GetStyleDisplay()->mOverflow;
+  PRBool clip = overflow == NS_STYLE_OVERFLOW_HIDDEN ||
+#ifdef NS_STYLE_MOZ_SCROLLBARS_NONE
+                overflow == NS_STYLE_OVERFLOW_MOZ_SCROLLBARS_NONE;
+#else
+                overflow == NS_STYLE_OVERFLOW_CLIP;
+#warning when we define MOZ_SCROLLBARS_NONE this needs to be uncommented
+#endif
+  if (clip) { //if (disp && (NS_STYLE_OVERFLOW_HIDDEN == disp->mOverflow)) { // bug 221140
     aRenderingContext.PushState();
     SetOverflowClipRect(aRenderingContext);
   }
   PaintChildren(aPresContext, aRenderingContext, aDirtyRect, aWhichLayer, aFlags);
-  if (disp && (NS_STYLE_OVERFLOW_HIDDEN == disp->mOverflow)) {
+  if (clip) { // if (disp && (NS_STYLE_OVERFLOW_HIDDEN == disp->mOverflow)) { // bug 221140
     PRBool clipState;
     aRenderingContext.PopState(clipState);
   }
@@ -406,7 +415,8 @@ nsTableRowGroupFrame::ReflowChildren(nsIPresContext*        aPresContext,
       nsSize kidAvailSize(aReflowState.availSize);
       if (0 >= kidAvailSize.height)
         kidAvailSize.height = 1;      // XXX: HaCk - we don't handle negative heights yet
-      nsHTMLReflowMetrics desiredSize(nsnull);
+      //nsHTMLReflowMetrics desiredSize(nsnull);
+      nsHTMLReflowMetrics desiredSize(PR_FALSE); // bug 173277
       desiredSize.width = desiredSize.height = desiredSize.ascent = desiredSize.descent = 0;
   
       // Reflow the child into the available space, giving it as much height as
@@ -474,6 +484,7 @@ nsTableRowGroupFrame::ReflowChildren(nsIPresContext*        aPresContext,
       kidFrame->GetSize(kidSize);
       aReflowState.y += kidSize.height + cellSpacingY;
     }
+    ConsiderChildOverflow(aPresContext, aDesiredSize.mOverflowArea, kidFrame); // bug 173277
   }
 
   // adjust the rows after the ones that were reflowed
@@ -539,6 +550,7 @@ UpdateHeights(RowInfo& aRowInfo,
 void 
 nsTableRowGroupFrame::DidResizeRows(nsIPresContext&          aPresContext,
                                     const nsHTMLReflowState& aReflowState,
+                                    nsHTMLReflowMetrics&     aDesiredSize, // bug 173277
                                     nsTableRowFrame*         aStartRowFrameIn)
 {
   // update the cells spanning rows with their new heights
@@ -546,8 +558,15 @@ nsTableRowGroupFrame::DidResizeRows(nsIPresContext&          aPresContext,
   PRInt32 rowIndex;
   nsTableRowFrame* rowFrame;
   nsTableRowFrame* startRowFrame = (aStartRowFrameIn) ? aStartRowFrameIn: GetFirstRow();
+// bug 173277
+  if (!aStartRowFrameIn || startRowFrame == GetFirstRow()) {
+    // Reset the overflow area
+    aDesiredSize.mOverflowArea = nsRect(0, 0, 0, 0);
+  }
+// end bug
   for (rowFrame = startRowFrame, rowIndex = 0; rowFrame; rowFrame = rowFrame->GetNextRow(), rowIndex++) {
     rowFrame->DidResize(&aPresContext, aReflowState);
+    ConsiderChildOverflow(&aPresContext, aDesiredSize.mOverflowArea, rowFrame); // bug 173277
   }
 }
 
@@ -886,7 +905,8 @@ nsTableRowGroupFrame::CalculateRowHeights(nsIPresContext*          aPresContext,
     CacheRowHeightsForPrinting(aPresContext, GetFirstRow());
   }
 
-  DidResizeRows(*aPresContext, aReflowState, startRowFrame);
+  //DidResizeRows(*aPresContext, aReflowState, startRowFrame);
+  DidResizeRows(*aPresContext, aReflowState, aDesiredSize, startRowFrame); // bug 173277
 
   aDesiredSize.height = rowGroupHeight; // Adjust our desired size
   delete [] rowInfo; // cleanup
@@ -1123,7 +1143,8 @@ nsTableRowGroupFrame::SplitRowGroup(nsIPresContext*          aPresContext,
                                          eReflowReason_Resize);
         InitChildReflowState(*aPresContext, borderCollapse, p2t, rowReflowState);
         rowReflowState.mFlags.mIsTopOfPage = isTopOfPage; // set top of page
-        nsHTMLReflowMetrics rowMetrics(nsnull);
+        //nsHTMLReflowMetrics rowMetrics(nsnull);
+        nsHTMLReflowMetrics rowMetrics(PR_FALSE); // bug 173277
 
         // Reflow the cell with the constrained height. A cell with rowspan >1 will get this
         // reflow later during SplitSpanningCells.
@@ -1346,7 +1367,8 @@ nsTableRowGroupFrame::Reflow(nsIPresContext*          aPresContext,
     // but we need to correctly calculate the row group height and we can't if there
     // are row spans unless we do this step
     if (aReflowState.mFlags.mSpecialHeightReflow) {
-      DidResizeRows(*aPresContext, aReflowState);
+      //DidResizeRows(*aPresContext, aReflowState);
+      DidResizeRows(*aPresContext, aReflowState, aDesiredSize); // bug 173277
       if (isPaginated) {
         CacheRowHeightsForPrinting(aPresContext, GetFirstRow());
       }
@@ -1383,6 +1405,12 @@ nsTableRowGroupFrame::Reflow(nsIPresContext*          aPresContext,
     // calculate the height based on the rect of the last row
     aDesiredSize.height = GetHeightOfRows(aPresContext);
   }
+
+// bug 173277
+  aDesiredSize.mOverflowArea.UnionRect(aDesiredSize.mOverflowArea, nsRect(0, 0, aDesiredSize.width,
+	                                                                      aDesiredSize.height)); 
+  StoreOverflow(aPresContext, aDesiredSize);
+// end bug
 
 #if defined DEBUG_TABLE_REFLOW_TIMING
   nsTableFrame::DebugReflow(this, (nsHTMLReflowState&)aReflowState, &aDesiredSize, aStatus);
@@ -1780,6 +1808,8 @@ nsTableRowGroupFrame::IR_TargetIsChild(nsIPresContext*        aPresContext,
       } else {
         // Inform the row of its new height.
         ((nsTableRowFrame*)aNextFrame)->DidResize(aPresContext, aReflowState.reflowState);
+        // the overflow area may have changed inflate the overflow area
+        ConsiderChildOverflow(aPresContext, aDesiredSize.mOverflowArea, aNextFrame); // bug 173277
         if (aReflowState.tableFrame->IsAutoHeight()) {
           // Because other cells in the row may need to be be aligned differently,
           // repaint the entire row

@@ -502,29 +502,40 @@ nsTableCellFrame::Paint(nsIPresContext*      aPresContext,
     PRBool clipState;
     nsPoint offset;
     GetCollapseOffset(aPresContext, offset);
+    PRBool pushed = PR_FALSE; // bug 221140
     if ((0 != offset.x) || (0 != offset.y)) {
       aRenderingContext.PushState();
+      PRBool pushed = PR_TRUE; // bug 221140
       aRenderingContext.Translate(offset.x, offset.y);
       aRenderingContext.SetClipRect(nsRect(-offset.x, -offset.y, mRect.width, mRect.height),
                                     nsClipCombine_kIntersect, clipState);
     }
     else {
-      if ((NS_STYLE_OVERFLOW_HIDDEN == disp->mOverflow) || HasPctOverHeight()) {
+      //if ((NS_STYLE_OVERFLOW_HIDDEN == disp->mOverflow) || HasPctOverHeight()) {
+      if (NS_STYLE_OVERFLOW_CLIP == disp->mOverflow || // bug 69355
+          // XXXldb _HIDDEN should really create a scrollframe,
+          // but test here since it doesn't.
+          //NS_STYLE_OVERFLOW_SCROLLBARS_NONE == disp->mOverflow ||
+          NS_STYLE_OVERFLOW_HIDDEN == disp->mOverflow ||
+          HasPctOverHeight()) { // bug 221140
         aRenderingContext.PushState();
+        pushed = PR_TRUE;
         SetOverflowClipRect(aRenderingContext);
       }    
     }
 
     PaintChildren(aPresContext, aRenderingContext, aDirtyRect, aWhichLayer, aFlags);
 
-    if ((0 != offset.x) || (0 != offset.y)) {
+    //if ((0 != offset.x) || (0 != offset.y)) {
+    if (pushed) { // bug 221140
       aRenderingContext.PopState(clipState);
     }
-    else { 
+   /* else { 
       if ((NS_STYLE_OVERFLOW_HIDDEN == disp->mOverflow) || HasPctOverHeight()) {
         aRenderingContext.PopState(clipState);         
       }
-    }
+    } // bug 221140
+    */
   } 
   
   DO_GLOBAL_REFLOW_COUNT_DSP_J("nsTableCellFrame", &aRenderingContext, 0);
@@ -679,7 +690,19 @@ void nsTableCellFrame::VerticallyAlignChild(nsIPresContext*          aPresContex
       aPresContext->GetScaledPixelsToTwips(&p2t);
       kidYTop = nsTableFrame::RoundToPixel(kidYTop, p2t, eAlwaysRoundDown);
   }
-  firstKid->MoveTo(aPresContext, kidRect.x, kidYTop);
+  
+  // if the content is larger than the cell height align from top (bug 114430)
+  kidYTop = PR_MAX(0, kidYTop);
+  
+  firstKid->MoveTo(aPresContext, kidRect.x, kidYTop); // firstKid->SetPosition(nsPoint(kidRect.x, kidYTop));
+// bug 173277
+  nsHTMLReflowMetrics desiredSize(PR_FALSE);
+  desiredSize.width = mRect.width;
+  desiredSize.height = mRect.height;
+  desiredSize.mOverflowArea = nsRect(0, 0, mRect.width, mRect.height);
+  ConsiderChildOverflow(aPresContext, desiredSize.mOverflowArea, firstKid);
+  StoreOverflow(aPresContext, desiredSize);
+// end bug
   if (kidYTop != kidRect.y) {
     // Make sure any child views are correctly positioned. We know the inner table
     // cell won't have a view
@@ -1071,6 +1094,8 @@ NS_METHOD nsTableCellFrame::Reflow(nsIPresContext*          aPresContext,
 
   aDesiredSize.ascent  += kidSize.ascent;
   aDesiredSize.descent += kidSize.descent;
+  
+  // the overflow area will be computed when the child will be vertically aligned
 
   if (aDesiredSize.mComputeMEW) {
     aDesiredSize.mMaxElementWidth =

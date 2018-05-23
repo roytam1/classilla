@@ -307,6 +307,7 @@ nsAppShellService::DoProfileStartup(nsICmdLineService *aCmdLineService, PRBool c
         						NS_LITERAL_STRING("You are using an altered browser user-agent. This may cause sites to enable features Classilla does not yet handle. To change the user-agent, go to Preferences > Navigator > User Agent.").get());
     }
     
+#if(0)
     // Also warn if the fixup renderer is on.
     PRBool fixupson;
     rrv = prefBranch->GetBoolPref("classilla.layout.fixup", &fixupson);
@@ -315,6 +316,7 @@ nsAppShellService::DoProfileStartup(nsICmdLineService *aCmdLineService, PRBool c
   			prompter->Alert(nsnull, NS_LITERAL_STRING("Classilla").get(),
   									NS_LITERAL_STRING("Classilla's experimental rendering mode is currently enabled. This enables rendering fix-ups that may cause sites to display in an unexpected fashion. To toggle these fix-ups, go to View > Use Experimental Renderer.").get());
     }
+#endif
     
     ExitLastWindowClosingSurvivalArea();
 

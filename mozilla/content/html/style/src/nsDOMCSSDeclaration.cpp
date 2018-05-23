@@ -39,6 +39,7 @@
 #include "nsDOMCSSDeclaration.h"
 #include "nsIDOMCSSRule.h"
 #include "nsICSSParser.h"
+#include "nsICSSLoader.h" // bug 188803
 #include "nsIStyleRule.h"
 #include "nsCSSDeclaration.h"
 #include "nsCSSProps.h"
@@ -137,15 +138,27 @@ nsDOMCSSDeclaration::GetLength(PRUint32* aLength)
 {
   nsCSSDeclaration *decl;
   nsresult result = GetCSSDeclaration(&decl, PR_FALSE);
- 
+
+// bug 188803
+#if(0) 
   *aLength = 0;
   if ((NS_OK == result) && (nsnull != decl)) {
     *aLength = decl->Count();
   }
+#else
+  if (decl) {
+    *aLength = decl->Count();
+  } else {
+    *aLength = 0;
+  }
+#endif
+// end bug
 
   return result;
 }
 
+// bug 188803
+#if(0)
 NS_IMETHODIMP
 nsDOMCSSDeclaration::GetParentRule(nsIDOMCSSRule** aParentRule)
 {
@@ -162,6 +175,9 @@ nsDOMCSSDeclaration::GetParentRule(nsIDOMCSSRule** aParentRule)
 
   return NS_OK;
 }
+#endif
+// end bug
+
 
 NS_IMETHODIMP
 nsDOMCSSDeclaration::GetPropertyCSSValue(const nsAString& aPropertyName,
@@ -182,7 +198,7 @@ nsDOMCSSDeclaration::Item(PRUint32 aIndex, nsAString& aReturn)
   nsresult result = GetCSSDeclaration(&decl, PR_FALSE);
 
   aReturn.SetLength(0);
-  if ((NS_OK == result) && (nsnull != decl)) {
+  if (decl) { // bug 188803 // if ((NS_OK == result) && (nsnull != decl)) {
     result = decl->GetNthProperty(aIndex, aReturn);
   }
 
@@ -197,8 +213,8 @@ nsDOMCSSDeclaration::GetPropertyValue(const nsAString& aPropertyName,
   nsCSSDeclaration *decl;
   nsresult result = GetCSSDeclaration(&decl, PR_FALSE);
 
-  aReturn.SetLength(0);
-  if ((NS_OK == result) && (nsnull != decl)) {
+  aReturn.Truncate(); // bug 188803 // aReturn.SetLength(0);
+  if (decl) { // bug 188803 // if ((NS_OK == result) && (nsnull != decl)) {
     result = decl->GetValue(aPropertyName, aReturn);
   }
 
@@ -211,6 +227,8 @@ nsDOMCSSDeclaration::GetPropertyPriority(const nsAString& aPropertyName,
 {
   nsCSSDeclaration *decl;
   nsresult result = GetCSSDeclaration(&decl, PR_FALSE);
+// bug 188803
+#if(0)
   PRBool isImportant = PR_FALSE;
 
   if ((NS_OK == result) && (nsnull != decl)) {
@@ -223,6 +241,13 @@ nsDOMCSSDeclaration::GetPropertyPriority(const nsAString& aPropertyName,
   else {
     aReturn.SetLength(0);
   }
+#else
+  aReturn.Truncate();
+  if (decl && decl->GetValueIsImportant(aPropertyName)) {
+    aReturn.Assign(NS_LITERAL_STRING("important"));    
+  }
+#endif
+// end bug
 
   return result;
 }
@@ -252,6 +277,113 @@ nsDOMCSSDeclaration::SetProperty(const nsAString& aPropertyName,
                           PR_TRUE, PR_FALSE);
 }
 
+// bug 188803
+NS_IMETHODIMP
+nsDOMCSSDeclaration::RemoveProperty(const nsAString& aPropertyName,
+                                    nsAString& aReturn)
+{
+  aReturn.Truncate();
+
+  nsCSSDeclaration* decl;
+  nsresult rv = GetCSSDeclaration(&decl, PR_FALSE);
+  if (!decl) {
+    return rv;
+  }
+
+  nsCSSProperty prop = nsCSSProps::LookupProperty(aPropertyName);
+
+  decl->GetValue(prop, aReturn);
+
+  rv = decl->RemoveProperty(prop);
+
+  if (NS_SUCCEEDED(rv)) {
+    rv = DeclarationChanged();
+  } else {
+    // RemoveProperty used to throw in all sorts of situations -- e.g.
+    // if the property was a shorthand one.  Do not propagate its return
+    // value to callers.  (XXX or should we propagate it again now?)
+    rv = NS_OK;
+  }
+
+  return rv;
+}
+
+nsresult
+nsDOMCSSDeclaration::ParsePropertyValue(const nsAString& aPropName,
+                                        const nsAString& aPropValue)
+{
+  nsCSSDeclaration* decl;
+  nsresult result = GetCSSDeclaration(&decl, PR_TRUE);
+  if (!decl) {
+    return result;
+  }
+  
+  nsCOMPtr<nsICSSLoader> cssLoader;
+  nsCOMPtr<nsICSSParser> cssParser;
+  nsCOMPtr<nsIURI> baseURI;
+  
+  result = GetCSSParsingEnvironment(getter_AddRefs(baseURI),
+                                    getter_AddRefs(cssLoader),
+                                    getter_AddRefs(cssParser));
+  if (NS_FAILED(result)) {
+    return result;
+  }
+
+  nsChangeHint uselessHint = NS_STYLE_HINT_NONE;
+  result = cssParser->ParseProperty(aPropName, aPropValue, baseURI, decl,
+                                    &uselessHint);
+  if (NS_SUCCEEDED(result)) {
+    result = DeclarationChanged();
+  }
+
+  if (cssLoader) {
+    cssLoader->RecycleParser(cssParser);
+  }
+
+  return result;
+}
+
+nsresult
+nsDOMCSSDeclaration::ParseDeclaration(const nsAString& aDecl,
+                                      PRBool aParseOnlyOneDecl,
+                                      PRBool aClearOldDecl)
+{
+  nsCSSDeclaration* decl;
+  nsresult result = GetCSSDeclaration(&decl, PR_TRUE);
+  if (!decl) {
+    return result;
+  }
+
+  nsCOMPtr<nsICSSLoader> cssLoader;
+  nsCOMPtr<nsICSSParser> cssParser;
+  nsCOMPtr<nsIURI> baseURI;
+
+  result = GetCSSParsingEnvironment(getter_AddRefs(baseURI),
+                                    getter_AddRefs(cssLoader),
+                                    getter_AddRefs(cssParser));
+
+  if (NS_FAILED(result)) {
+    return result;
+  }
+
+  nsChangeHint uselessHint = NS_STYLE_HINT_NONE;
+  result = cssParser->ParseAndAppendDeclaration(aDecl, baseURI, decl,
+                                                aParseOnlyOneDecl,
+                                                &uselessHint,
+                                                aClearOldDecl);
+  
+  if (NS_SUCCEEDED(result)) {
+    result = DeclarationChanged();
+  }
+
+  if (cssLoader) {
+    cssLoader->RecycleParser(cssParser);
+  }
+
+  return result;
+}
+// end bug
+
 //////////////////////////////////////////////////////////////////////////////
 
 CSS2PropertiesTearoff::CSS2PropertiesTearoff(nsISupports *aOuter)
@@ -274,7 +406,9 @@ NS_INTERFACE_MAP_END_AGGREGATED(fOuter)
 // nsIDOMCSS2Properties
 // nsIDOMNSCSS2Properties
 
-#define CSS_PROP(name_, id_, method_, hint_)                            \
+// bug 125246
+//#define CSS_PROP(name_, id_, method_, hint_)                            
+#define CSS_PROP(name_, id_, method_, hint_, datastruct_, member_, type_, iscoord_) \
   NS_IMETHODIMP                                                         \
   CSS2PropertiesTearoff::Get##method_(nsAString& aValue)                \
   {                                                                     \
@@ -290,9 +424,26 @@ NS_INTERFACE_MAP_END_AGGREGATED(fOuter)
                   NS_LITERAL_STRING(""));                               \
   }
 
+// bug 125246
+#if(0)
 #define CSS_PROP_INTERNAL(name_, id_, method_, hint_)  /* nothing */
 #define CSS_PROP_NOTIMPLEMENTED(name_, id_, method_, hint_)             \
   CSS_PROP(name_, id_, method_, hint_)
 #include "nsCSSPropList.h"
 #undef CSS_PROP_INTERNAL
 #undef CSS_PROP
+
+#else
+
+#define CSS_PROP_LIST_EXCLUDE_INTERNAL
+#define CSS_PROP_NOTIMPLEMENTED(name_, id_, method_, hint_)             \
+  CSS_PROP(name_, id_, method_, hint_, , , ,)
+#define CSS_PROP_SHORTHAND(name_, id_, method_, hint_)                  \
+  CSS_PROP(name_, id_, method_, hint_, , , ,)
+#include "nsCSSPropList.h"
+#undef CSS_PROP_SHORTHAND
+#undef CSS_PROP_NOTIMPLEMENTED
+#undef CSS_PROP_LIST_EXCLUDE_INTERNAL
+#undef CSS_PROP
+#endif
+// end bug

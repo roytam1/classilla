@@ -55,27 +55,31 @@ public:
   nsDOMCSSAttributeDeclaration(nsIHTMLContent *aContent);
   ~nsDOMCSSAttributeDeclaration();
 
-  NS_IMETHOD RemoveProperty(const nsAString& aPropertyName,
-                            nsAString& aReturn);
+  // bug 188803
+  //NS_IMETHOD RemoveProperty(const nsAString& aPropertyName,
+  //                          nsAString& aReturn);
 
   virtual void DropReference();
   virtual nsresult GetCSSDeclaration(nsCSSDeclaration **aDecl,
                                      PRBool aAllocate);
   // virtual nsresult SetCSSDeclaration(nsCSSDeclaration *aDecl); // bug 171830
-  virtual nsresult GetCSSParsingEnvironment(nsIContent* aContent,
+  virtual nsresult GetCSSParsingEnvironment(//nsIContent* aContent, // bug 188803
                                             nsIURI** aBaseURI,
                                             nsICSSLoader** aCSSLoader,
                                             nsICSSParser** aCSSParser);
+  /* bug 188803
   virtual nsresult ParsePropertyValue(const nsAString& aPropName,
                                       const nsAString& aPropValue);
   virtual nsresult ParseDeclaration(const nsAString& aDecl,
                                     PRBool aParseOnlyOneDecl,
-                                    PRBool aClearOldDecl);
-  virtual nsresult GetParent(nsISupports **aParent);
+                                    PRBool aClearOldDecl); 
+  virtual nsresult GetParent(nsISupports **aParent);*/
+  virtual nsresult GetParentRule(nsIDOMCSSRule **aParent);
 
 protected:
 // bug 171830
-  nsresult SetCSSDeclaration(nsCSSDeclaration* aDecl, PRBool aNotify);
+  //nsresult SetCSSDeclaration(nsCSSDeclaration* aDecl, PRBool aNotify); // bug 188803
+  virtual nsresult DeclarationChanged(); // bug 188803
 
   nsIHTMLContent *mContent;
 };

@@ -47,6 +47,9 @@
 
 #include "nsIMouseListener.h"
 #include "nsIEventListener.h"
+#include "nsIScrollableView.h"
+#include "nsIViewManager.h"
+
 #include "nsString.h"
 
 #include "nsIMenuBar.h"
@@ -149,7 +152,9 @@ public:
 
     virtual void*           GetNativeData(PRUint32 aDataType);
     NS_IMETHOD            	SetColorMap(nsColorMap *aColorMap);
-    NS_IMETHOD            	Scroll(PRInt32 aDx, PRInt32 aDy, nsRect *aClipRect);
+    NS_IMETHOD            	Scroll(PRInt32 aDx, PRInt32 aDy, nsRect *aClipRect,
+    							nsIScrollableView *scrollView, nsIViewManager *viewManager,
+    							PRUint32 aFlags); // issue 28
     NS_IMETHOD            	WidgetToScreen(const nsRect& aOldRect, nsRect& aNewRect);
     NS_IMETHOD            	ScreenToWidget(const nsRect& aOldRect, nsRect& aNewRect);
     NS_IMETHOD            	BeginResizingChildren(void);
@@ -214,7 +219,10 @@ protected:
 
 	// our own impl of ::ScrollRect() that uses CopyBits so that it looks good. On 
 	// Carbon, this just calls ::ScrollWindowRect()
-	void					ScrollBits ( Rect & foo, PRInt32 inLeftDelta, PRInt32 inTopDelta ) ;
+	void					ScrollBits ( Rect & foo, PRInt32 inLeftDelta, PRInt32 inTopDelta,
+								nsIScrollableView *scrollView, nsIViewManager *viewManager,
+								PRUint32 aFlags ) ;
+								// issue 28
 
   void          CombineRects ( TRectArray & inRectArray ) ;
   void          SortRectsLeftToRight ( TRectArray & inRectArray ) ;
@@ -231,6 +239,10 @@ protected:
   PRPackedBool      mVisible;
   PRPackedBool      mEnabled;
 	PRInt32					mPreferredWidth;
+	PRInt32					mLastYScroll; // issue 28
+	PRInt32					mComputedXScroll; // issue 28
+	float  mWidthInTwips; // issue 28
+	float  fPixelsToTwips; // issue 28
 	PRInt32					mPreferredHeight;
 	nsIFontMetrics*			mFontMetrics;
 	nsIMenuBar* 			mMenuBar;

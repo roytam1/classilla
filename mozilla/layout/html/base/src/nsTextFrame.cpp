@@ -477,6 +477,9 @@ public:
                          nsEventStatus*  aEventStatus);
 
   NS_IMETHOD GetOffsets(PRInt32 &start, PRInt32 &end)const;
+  
+  //NS_IMETHOD
+  //nsresult DidSetStyleContext(nsPresContext* aPresContext); // bug 254378 // see comments below
 
   NS_IMETHOD GetPointFromOffset(nsIPresContext*         inPresContext,
                                 nsIRenderingContext*    inRendContext,
@@ -1352,6 +1355,14 @@ DrawSelectionIterator::IsBeforeOrAfter()
 
 #define TEXT_BLINK_ON        0x80000000
 
+// bug 254378 (all three)
+#define TEXT_IS_ONLY_WHITESPACE        0x00100000
+
+#define TEXT_ISNOT_ONLY_WHITESPACE     0x00200000
+
+#define TEXT_WHITESPACE_FLAGS   0x00300000
+
+
 //----------------------------------------------------------------------
 
 nsresult
@@ -1481,6 +1492,7 @@ nsTextFrame::ContentChanged(nsIPresContext* aPresContext,
         markAllDirty = PR_FALSE;
         nsTextFrame* frame = (nsTextFrame*)GetLastInFlow();
         frame->mState |= NS_FRAME_IS_DIRTY;
+        frame->mState &= ~TEXT_WHITESPACE_FLAGS; // bug 254378
         targetTextFrame = frame;
       }
     }
@@ -1491,6 +1503,7 @@ nsTextFrame::ContentChanged(nsIPresContext* aPresContext,
     nsTextFrame*  textFrame = this;
     while (textFrame) {
       textFrame->mState |= NS_FRAME_IS_DIRTY;
+      textFrame->mState &= ~TEXT_WHITESPACE_FLAGS; // bug 254378
 #ifdef IBMBIDI
       nsIFrame* nextBidi;
       textFrame->GetBidiProperty(aPresContext, nsLayoutAtoms::nextBidi, (void**) &nextBidi,sizeof(nextBidi));
@@ -6143,15 +6156,38 @@ nsTextFrame::IsEmpty(nsCompatibility aCompatMode,
     *aResult = PR_FALSE;
     return NS_OK;
   }
+  
+  // mState bit changes bug 254378. modified for 1.3.1
+  if (mState & TEXT_ISNOT_ONLY_WHITESPACE) {
+    //return PR_FALSE;
+    *aResult = PR_FALSE;
+    return NS_OK;
+  }
+  
+  if (mState & TEXT_IS_ONLY_WHITESPACE) {
+    //return PR_TRUE;
+    *aResult = PR_TRUE;
+    return NS_OK;
+  }
+
 
   nsCOMPtr<nsITextContent> textContent( do_QueryInterface(mContent) );
   if (! textContent) {
     NS_NOTREACHED("text frame has no text content");
     *aResult = PR_TRUE;
-    return NS_ERROR_UNEXPECTED;
+    return NS_OK; // NS_ERROR_UNEXPECTED;
   }
-  return textContent->IsOnlyWhitespace(aResult);
+  //return textContent->IsOnlyWhitespace(aResult);
+// modified from bug 254378
+//  PRBool isEmpty = textContent->IsOnlyWhitespace();
+//  mState |= (isEmpty ? TEXT_IS_EMPTY : TEXT_ISNOT_EMPTY);
+//  return isEmpty;
+  nsresult rv = textContent->IsOnlyWhitespace(aResult);
+  mState |= (*aResult == PR_TRUE) ? TEXT_IS_ONLY_WHITESPACE : TEXT_ISNOT_ONLY_WHITESPACE;
+  return rv;
 }
+
+// we do not use DidSetStyleContext; see bug 254378 patch 2, which removed it anyway.
 
 #ifdef DEBUG
 NS_IMETHODIMP

@@ -228,6 +228,8 @@ public:
                               PRInt32 aModType, 
                               nsChangeHint aHint) = 0;
 
+// bug 188803
+#if(0)
 
   /////////////// Style change notifications ////////////////// 
 
@@ -283,6 +285,10 @@ public:
   NS_IMETHOD StyleRuleRemoved(nsIPresContext* aPresContext,
                               nsIStyleSheet* aStyleSheet,
                               nsIStyleRule* aStyleRule) = 0;
+
+#endif
+// end bug
+
 
   /**
    * Method that actually handles style changes for effected frames.

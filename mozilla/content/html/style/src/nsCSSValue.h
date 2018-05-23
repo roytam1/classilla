@@ -42,7 +42,9 @@
 #include "nsString.h"
 #include "nsCRT.h"
 #include "nsCoord.h"
-#include "nsCSSProps.h"
+// bug 125246
+#include "nsCSSProperty.h"
+//#include "nsCSSProps.h"
 #include "nsUnitConversion.h"
 
 

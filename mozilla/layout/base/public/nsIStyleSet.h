@@ -149,7 +149,7 @@ public:
   // only specified in the inline style case, i.e., when the inline style attribute changes.
   virtual nsresult ClearStyleData(nsIPresContext* aPresContext, nsIStyleRule* aRule, nsIStyleContext* aContext) = 0;
 #else
-  virtual nsresult ClearStyleData(nsIPresContext* aPresContext, nsIStyleRule* aRule) = 0;
+  virtual nsresult ClearStyleData(nsIPresContext* aPresContext) = 0; // bug 188803 // , nsIStyleRule* aRule) = 0;
 #endif
 // end bug
 
@@ -263,6 +263,8 @@ public:
                               PRInt32 aModType, 
                               nsChangeHint aHint) = 0;
 
+// bug 188803 extended for 1.3.1
+#if(0)
   // Style change notifications
   NS_IMETHOD StyleRuleChanged(nsIPresContext* aPresContext,
                               nsIStyleSheet* aStyleSheet,
@@ -274,6 +276,8 @@ public:
   NS_IMETHOD StyleRuleRemoved(nsIPresContext* aPresContext,
                               nsIStyleSheet* aStyleSheet,
                               nsIStyleRule* aStyleRule) = 0;
+#endif
+// end bug
 
   // Notification that we were unable to render a replaced element.
   // Called when the replaced element can not be rendered, and we should

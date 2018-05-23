@@ -526,7 +526,7 @@ void nsScrollPortView::Scroll(nsView *aScrolledView, PRInt32 aDx, PRInt32 aDy, f
     } else { // if we can blit and have a scrollwidget then scroll.
       // Scroll the contents of the widget by the specfied amount, and scroll
       // the child widgets
-      scrollWidget->Scroll(aDx, aDy, nsnull);
+      scrollWidget->Scroll(aDx, aDy, nsnull, this, mViewManager, 0); // issue 28
       mViewManager->UpdateViewAfterScroll(this, aDx, aDy);
     }
     

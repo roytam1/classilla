@@ -205,7 +205,7 @@ public:
 
   virtual nsresult ClearStyleData(nsIPresContext* aPresContext, nsIStyleRule* aRule, nsIStyleContext* aContext);
 #else
-  virtual nsresult ClearStyleData(nsIPresContext* aPresContext, nsIStyleRule* aRule);
+  virtual nsresult ClearStyleData(nsIPresContext* aPresContext); // bug 188803 // , nsIStyleRule* aRule);
 #endif
 // end bug
 
@@ -260,6 +260,8 @@ public:
                               PRInt32 aModType, 
                               nsChangeHint aHint); // See nsStyleConsts fot hint values
 
+// bug 188803
+#if(0)
   // xxx style rules enumeration
 
   // Style change notifications
@@ -273,6 +275,7 @@ public:
   NS_IMETHOD StyleRuleRemoved(nsIPresContext* aPresContext,
                               nsIStyleSheet* aStyleSheet,
                               nsIStyleRule* aStyleRule);
+#endif
 
   // Notification that we were unable to render a replaced element.
   NS_IMETHOD CantRenderReplacedElement(nsIPresContext* aPresContext,
@@ -1523,15 +1526,22 @@ StyleSetImpl::EndRuleTreeReconstruct()
 nsresult
 StyleSetImpl::ClearCachedDataInRuleTree(nsIStyleRule* aInlineStyleRule)
 {
+// bug 188803 extended for 1.3.1
+#if(0)
   if (mRuleTree)
     mRuleTree->ClearCachedDataInSubtree(aInlineStyleRule);
+#else
+  NS_NOTREACHED("ClearCachedDataInRuleTree called");
+#endif
   return NS_OK;
 }
 
 nsresult
 //StyleSetImpl::ClearStyleData(nsIPresContext* aPresContext, nsIStyleRule* aRule, nsIStyleContext* aContext)
-StyleSetImpl::ClearStyleData(nsIPresContext* aPresContext, nsIStyleRule* aRule) // bug 171830
+StyleSetImpl::ClearStyleData(nsIPresContext* aPresContext) // bug 188803 // , nsIStyleRule* aRule) // bug 171830
 {
+// bug 188803 totally supersedes this.
+#if(0)
 // bug 171830 modified for 1.3.1
 #if(0)
   // XXXdwh.  If we're willing to *really* optimize this
@@ -1617,9 +1627,21 @@ StyleSetImpl::ClearStyleData(nsIPresContext* aPresContext, nsIStyleRule* aRule) 
     if (rootContext)
       rootContext->ClearStyleData(aPresContext, aRule);
 #endif
-// end bug
+// end bug 171830
   }
 
+#else
+// bug 188803
+  if (mRuleTree)
+    mRuleTree->ClearStyleData();
+
+  for (PRInt32 i = mRoots.Count() - 1; i >= 0; --i) {
+    //NS_STATIC_CAST(nsStyleContext*,mRoots[i])->ClearStyleData(aPresContext);
+    NS_STATIC_CAST(nsIStyleContext*,mRoots[i])->ClearStyleData(aPresContext);
+  }
+#endif
+// end bug 188803
+ 
   return NS_OK;
 }
 
@@ -1828,6 +1850,8 @@ StyleSetImpl::AttributeChanged(nsIPresContext* aPresContext,
                                              aNameSpaceID, aAttribute, aModType, aHint);
 }
 
+// bug 188803
+#if(0)
 
 // Style change notifications
 NS_IMETHODIMP
@@ -1854,6 +1878,9 @@ StyleSetImpl::StyleRuleRemoved(nsIPresContext* aPresContext,
 {
   return mFrameConstructor->StyleRuleRemoved(aPresContext, aStyleSheet, aStyleRule);
 }
+
+#endif
+// end bug
 
 NS_IMETHODIMP
 StyleSetImpl::CantRenderReplacedElement(nsIPresContext* aPresContext,

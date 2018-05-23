@@ -1,0 +1,55 @@
+<?xml version="1.0"?> 
+
+<!--
+Performance prefpane for Classilla 9.0.4
+Cameron Kaiser 
+  -->
+<?xml-stylesheet href="chrome://communicator/skin/" type="text/css"?>
+
+<!DOCTYPE page [
+<!ENTITY % brandDTD SYSTEM "chrome://global/locale/brand.dtd" >
+%brandDTD;
+<!ENTITY % perfDTD SYSTEM "chrome://communicator/locale/pref/pref-performance.dtd" >
+%perfDTD;
+]>
+
+<page xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+      onload="parent.initPanel('chrome://communicator/content/pref/pref-performance.xul');"
+      headertitle="&boxHeader;">
+
+  <script type="application/x-javascript">
+  <![CDATA[
+  
+    var panel = "chrome://communicator/content/pref/pref-performance.xul";
+    var _elementIDs = ["pluginsOff"];
+    
+    function Startup()
+    {
+    	// nothin'. just chillaxin'. yo dawg.
+    }
+    
+  ]]>
+  </script>
+
+<groupbox>
+
+  <caption label="&rHeader;"/>
+  <vbox align="start" id="prefBlurb">
+    <description>&textPerf;</description>
+  </vbox>
+  
+  <groupbox>
+  	<caption label="&textFastScroll;"/>
+  	<vbox align="start" id="fastScrollBox">
+    	<description>&blurbFastScroll;</description>
+  	</vbox>
+  </groupbox>
+  
+  <vbox align="start" id="pluginDisableBox">
+    <checkbox id="pluginsOff" label="&textDisablePlugins;"
+    	prefstring="classilla.layout.hideplugins"/>
+    <description>&blurbDisablePlugins;</description>
+  </vbox>
+
+</groupbox>
+</page>

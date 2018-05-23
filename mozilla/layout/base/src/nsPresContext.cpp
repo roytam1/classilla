@@ -588,7 +588,7 @@ nsPresContext::ClearStyleDataAndReflow()
     // Clear out all our style data.
     nsCOMPtr<nsIStyleSet> set;
     mShell->GetStyleSet(getter_AddRefs(set));
-    set->ClearStyleData(this, nsnull); // bug 171830 // , nsnull);
+    set->ClearStyleData(this); // bug 188803 // , nsnull); // bug 171830 // , nsnull);
 
     // Force a reflow of the root frame
     // XXX We really should only do a reflow if a preference that affects

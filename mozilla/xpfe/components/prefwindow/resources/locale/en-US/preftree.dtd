@@ -32,6 +32,7 @@
 <!ENTITY keynav.label "Keyboard Navigation">
 <!ENTITY search.label "Internet Search">
 <!ENTITY ua.label "User Agent">
+<!ENTITY performance.label "Performance">
 <!ENTITY policies.label "Security Policies">
 <!ENTITY mousewheel.label "Mouse Wheel">
 <!ENTITY scriptsAndWindows.label "Scripts &amp; Plugins">

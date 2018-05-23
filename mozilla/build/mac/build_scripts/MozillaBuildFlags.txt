@@ -69,7 +69,7 @@ p3p             0
 jsd             1
 venkman         1
 moz_logging     1      MOZ_LOGGING
-chatzilla       1
+chatzilla       0
 content_packs   1
 xml_rpc         1
 cview           1

@@ -837,7 +837,7 @@ PRInt32 nsHTMLFrameInnerFrame::GetScrolling(nsIContent* aContent)
           case NS_STYLE_FRAME_OFF:
           case NS_STYLE_FRAME_NOSCROLL:
           case NS_STYLE_FRAME_NO:
-            returnValue = NS_STYLE_OVERFLOW_HIDDEN;
+            returnValue = NS_STYLE_OVERFLOW_HIDDEN; // XXX should this be _CLIP? NO. 
             break;
         
           case NS_STYLE_FRAME_AUTO:

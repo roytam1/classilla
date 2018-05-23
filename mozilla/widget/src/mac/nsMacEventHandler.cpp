@@ -1278,7 +1278,26 @@ PRBool nsMacEventHandler::HandleUKeyEvent(PRUnichar* text, long charCount, Event
   // nsEvent
   nsKeyEvent keyEvent;
   PRBool isCharacter = PR_FALSE;
+// bug 184549
+  // simulate key down event if this isn't an autoKey event
+  if (aOSEvent.what == keyDown)
+  {
+    InitializeKeyEvent(keyEvent, aOSEvent, focusedWidget, NS_KEY_DOWN, &isCharacter, PR_FALSE);
+    result = focusedWidget->DispatchWindowEvent(keyEvent);
+    NS_ASSERTION(NS_SUCCEEDED(result), "cannot DispatchWindowEvent keydown");
+
+    // check if focus changed; see also HandleKeyEvent above
+    nsWindow *checkFocusedWidget = gEventDispatchHandler.GetActive();
+    if (!checkFocusedWidget)
+      checkFocusedWidget = mTopLevelWidget;
+    if (checkFocusedWidget != focusedWidget)
+      return result;
+  }
+// end bug
+
+  // simulate key press events
   InitializeKeyEvent(keyEvent, aOSEvent, focusedWidget, NS_KEY_PRESS, &isCharacter, PR_FALSE);
+  
   if (isCharacter) 
   {
     // it is a message with text, send all the unicode characters
@@ -1286,6 +1305,9 @@ PRBool nsMacEventHandler::HandleUKeyEvent(PRUnichar* text, long charCount, Event
     for (i = 0; i < charCount; i++)
     {
       keyEvent.charCode = text[i];
+      
+      // this block of code is triggered when user presses
+      // a combination such as command-shift-M
       if (keyEvent.isShift && keyEvent.charCode <= 'z' && keyEvent.charCode >= 'a') 
         keyEvent.charCode -= 32;
 

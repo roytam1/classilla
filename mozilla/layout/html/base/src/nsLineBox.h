@@ -373,7 +373,8 @@ public:
 
   // mCarriedOutBottomMargin value
   nsCollapsingMargin GetCarriedOutBottomMargin() const;
-  void SetCarriedOutBottomMargin(nsCollapsingMargin aValue);
+  PRBool // bug 257612 // void 
+  SetCarriedOutBottomMargin(nsCollapsingMargin aValue);
 
   // mFloaters
   PRBool HasFloaters() const {

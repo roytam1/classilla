@@ -140,6 +140,8 @@ public:
                               PRInt32         aModType, 
                               nsChangeHint    aHint);
 
+// bug 188803
+#if(0)
   // Style change notifications
   NS_IMETHOD StyleRuleChanged(nsIPresContext* aPresContext,
                               nsIStyleSheet*  aStyleSheet,
@@ -153,6 +155,8 @@ public:
   NS_IMETHOD StyleRuleRemoved(nsIPresContext* aPresContext,
                               nsIStyleSheet*  aStyleSheet,
                               nsIStyleRule*   aStyleRule);
+#endif
+// end bug
 
   NS_IMETHOD ProcessRestyledFrames(nsStyleChangeList& aRestyleArray, 
                                    nsIPresContext*    aPresContext);

@@ -443,6 +443,8 @@ NS_IMETHODIMP nsImageFrame::OnDataAvailable(imgIRequest *aRequest, nsIPresContex
     }
   }
 
+// bug 222901 modified for Classilla
+#if(0)
   nsRect r(aRect->x, aRect->y, aRect->width, aRect->height);
 
   float p2t;
@@ -453,11 +455,18 @@ NS_IMETHODIMP nsImageFrame::OnDataAvailable(imgIRequest *aRequest, nsIPresContex
   r.height = NSIntPixelsToTwips(r.height, p2t);
 
   load->mTransform.TransformCoord(&r.x, &r.y, &r.width, &r.height);
+#else
+   nsRect r = SourceRectToDest(*aRect, aPresContext, whichLoad);
+#endif
+// end bug
 
-  r.x += mBorderPadding.left;
-  r.y += mBorderPadding.top;
+// this is not in bug 222901.
+//  r.x += mBorderPadding.left;
+//  r.y += mBorderPadding.top;
 
-  if (whichLoad == 0 && !r.IsEmpty())
+// bug 222901 has this as a simple Invalidate(r, PR_FALSE). maybe we should do
+// that? (i.e., no if.)
+//  if (whichLoad == 0 && !r.IsEmpty())
     Invalidate(aPresContext, r, PR_FALSE);
 
   return NS_OK;
@@ -762,6 +771,8 @@ NS_IMETHODIMP nsImageFrame::FrameChanged(imgIContainer *aContainer, nsIPresConte
   nsCOMPtr<imgIContainer> con;
   mLoads[0].mRequest->GetImage(getter_AddRefs(con));
   if (aContainer == con.get()) {
+// bug 222901 modified for Classilla
+#if(0)
     nsRect r(*aDirtyRect);
 
     float p2t;
@@ -772,15 +783,55 @@ NS_IMETHODIMP nsImageFrame::FrameChanged(imgIContainer *aContainer, nsIPresConte
     r.height = NSIntPixelsToTwips(r.height, p2t);
 
     mLoads[0].mTransform.TransformCoord(&r.x, &r.y, &r.width, &r.height);
-    if (!r.IsEmpty()) {
-      r.x += mBorderPadding.left;
-      r.y += mBorderPadding.top;
+#else
+	nsRect r = SourceRectToDest(*aDirtyRect, aPresContext, 0);
+#endif
+// end bug
+//    if (!r.IsEmpty()) {
+//      r.x += mBorderPadding.left;
+//      r.y += mBorderPadding.top;
       Invalidate(aPresContext, r, PR_FALSE);
-    }
+//    }
   }
   return NS_OK;
 }
 
+// bug 222901 modified for Classilla
+// we don't have nsImageFrame::ConvertPxRectToTwips() -- this is added by that bug.
+nsRect
+//nsImageFrame::SourceRectToDest(const nsRect& aRect)
+nsImageFrame::SourceRectToDest(const nsRect& aRect, nsIPresContext *aPresContext, int whichLoad)
+{
+  //float p2t = GetPresContext()->PixelsToTwips();
+  float p2t;
+  aPresContext->GetPixelsToTwips(&p2t);  
+
+  // When scaling the image, row N of the source image may (depending on
+  // the scaling function) be used to draw any row in the destination image
+  // between floor(F * (N-1)) and ceil(F * (N+1)), where F is the
+  // floating-point scaling factor.  The same holds true for columns.
+  // So, we start by computing that bound without the floor and ceiling.
+
+  nsRect r(NSIntPixelsToTwips(aRect.x - 1, p2t),
+           NSIntPixelsToTwips(aRect.y - 1, p2t),
+           NSIntPixelsToTwips(aRect.width + 2, p2t),
+           NSIntPixelsToTwips(aRect.height + 2, p2t));
+
+  //mTransform.TransformCoord(&r.x, &r.y, &r.width, &r.height);
+  mLoads[whichLoad].mTransform.TransformCoord(&r.x, &r.y, &r.width, &r.height);
+
+  // Now, round the edges out to the pixel boundary.
+  int scale = (int) p2t;
+  nscoord right = r.x + r.width;
+  nscoord bottom = r.y + r.height;
+
+  r.x -= (scale + (r.x % scale)) % scale;
+  r.y -= (scale + (r.y % scale)) % scale;
+  r.width = right + ((scale - (right % scale)) % scale) - r.x;
+  r.height = bottom + ((scale - (bottom % scale)) % scale) - r.y;
+
+  return r;
+}
 
 #define MINMAX(_value,_min,_max) \
     ((_value) < (_min)           \

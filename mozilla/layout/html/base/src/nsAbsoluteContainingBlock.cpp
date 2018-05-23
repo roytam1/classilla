@@ -472,7 +472,11 @@ nsAbsoluteContainingBlock::ReflowAbsoluteFrame(nsIFrame*                aDelegat
   if (!aReflowState.mStyleBorder->GetBorder(border)) {
     NS_NOTYETIMPLEMENTED("percentage border");
   }
+  
+// It's not clear if this actually fixed anything, so I'm temporarily backing it out.
+//#define BUG201897
 
+#ifdef BUG201897
 // backbugs from bug 201897 modified for 1.3.1
   nscoord availWidth = aReflowState.mComputedWidth;
   enum { NOT_SHRINK_TO_FIT, SHRINK_TO_FIT_AVAILWIDTH, SHRINK_TO_FIT_MEW };
@@ -498,15 +502,19 @@ nsAbsoluteContainingBlock::ReflowAbsoluteFrame(nsIFrame*                aDelegat
       }
     }
 // end bug + backbugs
+#endif
 
   nsFrameState        kidFrameState;
   nsSize              availSize(aReflowState.mComputedWidth, NS_UNCONSTRAINEDSIZE);
-  //nsHTMLReflowMetrics kidDesiredSize(nsnull); // moved up above by bug 201897
+#ifndef BUG201897
+  nsHTMLReflowMetrics kidDesiredSize(nsnull); // moved up above by bug 201897
+#endif
   nsHTMLReflowState   kidReflowState(aPresContext, aReflowState, aKidFrame,
                                      availSize, aContainingBlockWidth,
                                      aContainingBlockHeight,
                                      aReason);
 
+#ifdef BUG201897
     if (situation == SHRINK_TO_FIT_MEW) {
       situation = NOT_SHRINK_TO_FIT; // This is the last reflow
       kidReflowState.mComputedWidth = PR_MIN(availWidth, kidReflowState.mComputedMaxWidth);
@@ -528,6 +536,7 @@ nsAbsoluteContainingBlock::ReflowAbsoluteFrame(nsIFrame*                aDelegat
         kidReflowState.mComputedMaxWidth = PR_MAX(maxWidth, kidReflowState.mComputedMinWidth);
       }
     }
+#endif
 
   // Send the WillReflow() notification and position the frame
   aKidFrame->WillReflow(aPresContext);
@@ -552,10 +561,11 @@ nsAbsoluteContainingBlock::ReflowAbsoluteFrame(nsIFrame*                aDelegat
     nsContainerFrame::PositionFrameView(aPresContext, aKidFrame);
   }
 
-// backbugs from bug 201897 + pull up to 1.8.1
   // Do the reflow
   rv = aKidFrame->Reflow(aPresContext, kidDesiredSize, kidReflowState, aStatus);
-
+  
+#ifdef BUG201897
+// backbugs from bug 201897 + pull up to 1.8.1
     if (situation == SHRINK_TO_FIT_AVAILWIDTH) {
       // ...continued CSS2.1 10.3.7 width:auto and at least one of left/right is auto
       availWidth -= kidReflowState.mComputedMargin.left + kidReflowState.mComputedMargin.right;
@@ -585,7 +595,7 @@ nsAbsoluteContainingBlock::ReflowAbsoluteFrame(nsIFrame*                aDelegat
         continue; // Do a second reflow constrained to MEW.
       }
     }
-
+#endif
 
   // If we're solving for 'left' or 'top', then compute it now that we know the
   // width/height
@@ -681,8 +691,10 @@ nsAbsoluteContainingBlock::ReflowAbsoluteFrame(nsIFrame*                aDelegat
   }
 #endif
 
+#ifdef BUG201897
 	break;
 } // this ends the backbug while(1)
+#endif
   return rv;
 }
 

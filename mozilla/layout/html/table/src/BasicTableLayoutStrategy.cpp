@@ -220,7 +220,8 @@ BasicTableLayoutStrategy::BalanceColumnWidths(nsIPresContext*          aPresCont
   nscoord horOffset; 
   // get the reduction in available horizontal space due to borders and padding
   if (mTableFrame->IsBorderCollapse()) {
-    nsMargin offset = mTableFrame->GetChildAreaOffset(*aPresContext, &aReflowState);
+    //nsMargin offset = mTableFrame->GetChildAreaOffset(*aPresContext, &aReflowState);
+    nsMargin offset = mTableFrame->GetChildAreaOffset(aPresContext, &aReflowState); // bug 173277
     horOffset = offset.left + offset.right;
   }
   else {
@@ -1246,7 +1247,8 @@ BasicTableLayoutStrategy::CalcPctAdjTableWidth(nsIPresContext&          aPresCon
     rawPctValues[colX] = 0.0f;
   }
 
-  nsMargin borderPadding = mTableFrame->GetContentAreaOffset(aPresContext, &aReflowState);
+  //nsMargin borderPadding = mTableFrame->GetContentAreaOffset(aPresContext, &aReflowState);
+  nsMargin borderPadding = mTableFrame->GetContentAreaOffset(&aPresContext, &aReflowState); // bug 173277
   nscoord availWidth = aAvailWidthIn;
   if (NS_UNCONSTRAINEDSIZE != availWidth) {
     // adjust the avail width to exclude table border, padding and cell spacing
@@ -1381,7 +1383,8 @@ BasicTableLayoutStrategy::AssignPctColumnWidths(nsIPresContext&          aPresCo
                   : aAvailWidth;
 
   // adjust the basis to exclude table border, padding and cell spacing
-  nsMargin borderPadding = mTableFrame->GetContentAreaOffset(aPresContext, &aReflowState);
+  //nsMargin borderPadding = mTableFrame->GetContentAreaOffset(aPresContext, &aReflowState);
+  nsMargin borderPadding = mTableFrame->GetContentAreaOffset(&aPresContext, &aReflowState); // bug 173277
   basis -= borderPadding.left + borderPadding.right + mCellSpacingTotal;
 
   nscoord colPctTotal = 0;

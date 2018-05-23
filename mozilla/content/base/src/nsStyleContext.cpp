@@ -106,7 +106,9 @@ public:
 
   virtual nsresult ClearCachedDataForRule(nsIStyleRule* aRule);
 
-  virtual nsresult ClearStyleData(nsIPresContext* aPresContext, nsIStyleRule* aRule);
+// bug 188803 modified for 1.3.1
+  //virtual 
+  nsresult ClearStyleData(nsIPresContext* aPresContext); //, nsIStyleRule* aRule);
 
   NS_IMETHOD  CalcStyleDifference(nsIStyleContext* aOther, nsChangeHint& aHint);
 
@@ -540,36 +542,45 @@ nsStyleContext::ApplyStyleFixups(nsIPresContext* aPresContext)
 nsresult
 nsStyleContext::ClearCachedDataForRule(nsIStyleRule* aInlineStyleRule)
 {
+// bug 188803 changes ClearCachedData. since nothing calls this ...
+#if(0)
   mRuleNode->ClearCachedData(aInlineStyleRule); // XXXdwh.  If we're willing to *really* special case
                                            // inline style, we could only invalidate the struct data
                                            // that actually changed.  For example, if someone changes
                                            // style.left, we really only need to blow away cached
                                            // data in the position struct.
+#else
+  NS_NOTREACHED("ClearCachedDataForRule was called. wtf?");
+#endif
   return NS_OK;
 }
 
+// bug 188803
 nsresult
-nsStyleContext::ClearStyleData(nsIPresContext* aPresContext, nsIStyleRule* aRule)
+nsStyleContext::ClearStyleData(nsIPresContext* aPresContext)//, nsIStyleRule* aRule)
 {
+#if(0)
   PRBool matched = PR_TRUE;
   if (aRule)
     mRuleNode->PathContainsRule(aRule, &matched);
   
   if (matched) {
+#endif
     // First we need to clear out all of our style data.
     if (mCachedStyleData.mResetData || mCachedStyleData.mInheritedData)
       mCachedStyleData.Destroy(mBits, aPresContext);
 
     mBits = 0; // Clear all bits.
+#if(0)
     aRule = nsnull; // Force all structs to be blown away in the children.
   }
-
+#endif
   ApplyStyleFixups(aPresContext);
 
   if (mChild) {
     nsStyleContext* child = mChild;
     do {
-      child->ClearStyleData(aPresContext, aRule);
+      child->ClearStyleData(aPresContext); //, aRule);
       child = child->mNextSibling;
     } while (mChild != child);
   }
@@ -577,13 +588,14 @@ nsStyleContext::ClearStyleData(nsIPresContext* aPresContext, nsIStyleRule* aRule
   if (mEmptyChild) {
     nsStyleContext* child = mEmptyChild;
     do {
-      child->ClearStyleData(aPresContext, aRule);
+      child->ClearStyleData(aPresContext); //, aRule);
       child = child->mNextSibling;
     } while (mEmptyChild != child);
   }
 
   return NS_OK;
 }
+// end bug
 
 NS_IMETHODIMP
 nsStyleContext::CalcStyleDifference(nsIStyleContext* aOther, nsChangeHint& aHint)
