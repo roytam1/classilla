@@ -53,6 +53,7 @@
             <textbox id="smtp.port" size="5"
                      preftype="int"
                      prefstring="mail.smtpserver.%serverkey%.port"/>
+            <label value="&serverPort.label2;"/>
           </hbox>
         </row>
       </rows>
@@ -77,16 +78,14 @@
         </hbox>
       </vbox>
      </vbox>
-     <hbox align="center">
-       <label value="&isSecure.label;"/>
-     </hbox>
      <radiogroup id="smtp.trySSL"
                  prefstring="mail.smtpserver.%serverkey%.try_ssl">
-       <hbox style="margin-left: 2em">
+       <vbox>
          <radio value="0" label="&neverSecure.label;" id="smtp.neverSecure"/>
          <radio value="1" label="&sometimesSecure.label;" id="smtp.sometimesSecure"/>
          <radio value="2" label="&alwaysSecure.label;" id="smtp.alwaysSecure"/>
-       </hbox>
+         <radio value="3" label="&alwaysSmtpS.label;" id="smtp.alwaysSmtpS"/>
+       </vbox>
      </radiogroup>
   </vbox>
 </overlay>

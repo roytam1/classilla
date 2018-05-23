@@ -1836,3 +1836,16 @@ MimeObject_output_init(MimeObject *obj, const char *content_type)
   return 0;
 }
 
+char *
+mime_get_base_url(const char *url)
+{
+  const char *s;
+  char *result;
+  
+  if (!url) return 0;
+  s = PL_strrchr(url, '?');
+  result = (char *) PR_MALLOC(strlen(url)+ 1);
+  memcpy(result, url, s - url);
+  result [s - url] = 0;
+  return result;
+}

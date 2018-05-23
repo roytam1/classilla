@@ -23,8 +23,8 @@
 
 
 MOD_DEPTH	= ../../..
-srcdir		= .
-topsrcdir 	= ../../..
+srcdir		= /cygdrive/d/kai/130/intree/mozilla/directory/c-sdk/ldap/libraries/libiutil
+topsrcdir 	= /cygdrive/d/kai/130/intree/mozilla/directory/c-sdk
 
 include $(MOD_DEPTH)/config/autoconf.mk
 include $(topsrcdir)/build.mk

@@ -87,7 +87,7 @@ nsPK11Token::nsPK11Token(PK11SlotInfo *slot)
     mTokenSerialNum.Trim(" ", PR_FALSE, PR_TRUE);
   }
 
-  mUIContext = new PipUIContext();
+  mUIContext = new PipUIContext("Accessing a security device.");
 }
 
 nsPK11Token::~nsPK11Token()

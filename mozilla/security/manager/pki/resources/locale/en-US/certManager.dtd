@@ -26,6 +26,7 @@
 <!ENTITY certmgr.tab.others "Other People's">
 <!ENTITY certmgr.tab.websites "Web Sites">
 <!ENTITY certmgr.tab.ca "Authorities">
+<!ENTITY certmgr.tab.orphan "Extra">
 
 <!ENTITY certmgr.ca.builtins "Built-in CAs">
 <!ENTITY certmgr.ca.mycas "CAs Managed By You">
@@ -34,6 +35,7 @@
 <!ENTITY certmgr.others "You have certificates on file that identify these people:">
 <!ENTITY certmgr.websites "You have certificates on file that identify these web sites:">
 <!ENTITY certmgr.cas "You have certificates on file that identify these certificate authorities:">
+<!ENTITY certmgr.orphans "You have these certificates that do not fit in any of the other categories:">
 
 <!ENTITY certmgr.detail.general_tab.title "General">
 <!ENTITY certmgr.detail.prettyprint_tab.title "Details">

@@ -47,6 +47,7 @@ Contributor(s):
         xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
         onload="Startup()" onunload="Shutdown()"
+        onclose="return WindowIsClosing();"
         contenttitlesetting="true"
         title="&mainWindow.title;" 
         titlemodifier="&mainWindow.titlemodifier;" 
@@ -412,7 +413,7 @@ Contributor(s):
     <statusbarpanel class="statusbarpanel-progress">
       <progressmeter class="progressmeter-statusbar" id="statusbar-icon" mode="normal" value="0"/>
     </statusbarpanel>
-    <statusbarpanel id="popupIcon" class="statusbarpanel-iconic" hidden="true" oncommand="StatusbarViewPopupManager()"/>
+    <statusbarpanel id="popupIcon" class="statusbarpanel-iconic" hidden="true" oncommand="StatusbarViewPopupManager()" tooltiptext="&popupIcon.tooltiptext;"/>
     <statusbarpanel class="statusbarpanel-iconic" id="offline-status"/>
     <statusbarpanel class="statusbarpanel-iconic" id="security-button"
                     onclick="BrowserPageInfo(null, 'securityTab')"/>

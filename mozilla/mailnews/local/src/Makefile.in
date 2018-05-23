@@ -46,6 +46,7 @@ REQUIRES	= xpcom \
 		  docshell \
 		  msgimap \
 		  nkcache \
+		  caps \
 		  $(NULL)
 
 CPPSRCS		= \

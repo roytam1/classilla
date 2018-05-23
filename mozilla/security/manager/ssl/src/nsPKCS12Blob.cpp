@@ -88,7 +88,7 @@ nsPKCS12Blob::nsPKCS12Blob():mCertArray(0),
                              mTmpFilePath(nsnull),
                              mTokenSet(PR_FALSE)
 {
-  mUIContext = new PipUIContext();
+  mUIContext = new PipUIContext("Processing a certificate backup/restore operation.");
 }
 
 // destructor

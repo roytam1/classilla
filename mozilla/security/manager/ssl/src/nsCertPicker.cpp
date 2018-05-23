@@ -86,7 +86,7 @@ NS_IMETHODIMP nsCertPicker::PickByUsage(nsIInterfaceRequestor *ctx,
   {
     // Iterate over all certs. This assures that user is logged in to all hardware tokens.
     CERTCertList *allcerts = nsnull;
-    nsCOMPtr<nsIInterfaceRequestor> ctx = new PipUIContext();
+    nsCOMPtr<nsIInterfaceRequestor> ctx = new PipUIContext("Obtain a list of available certificates.");
     allcerts = PK11_ListCerts(PK11CertListUnique, ctx);
     CERT_DestroyCertList(allcerts);
   }

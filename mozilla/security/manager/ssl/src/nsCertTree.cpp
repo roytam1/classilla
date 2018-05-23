@@ -329,7 +329,7 @@ nsCertTree::GetCertsByType(PRUint32           aType,
 {
   nsNSSShutDownPreventionLock locker;
   CERTCertList *certList = NULL;
-  nsCOMPtr<nsIInterfaceRequestor> cxt = new PipUIContext();
+  nsCOMPtr<nsIInterfaceRequestor> cxt = new PipUIContext("Obtain a list of available certificates");
   certList = PK11_ListCerts(PK11CertListUnique, cxt);
   PRBool rv = GetCertsByTypeFromCertList(certList, aType, aCertCmpFn, aCertCmpFnArg, _certs);
   if (certList)

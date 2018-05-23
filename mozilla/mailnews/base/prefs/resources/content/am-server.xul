@@ -98,6 +98,10 @@ Contributors:
             label="&isSecure.label;" oncommand="secureSelect();"
             prefattribute="value"
             prefstring="mail.server.%serverkey%.isSecure"/>
+  <checkbox iscontrolcontainer="true" wsm_persist="true" id="server.requireMD5DigestAuthentication"
+            label="&requireMD5.label;" hidable="true" hidefor="nntp,imap"
+            prefattribute="value"
+            prefstring="mail.server.%serverkey%.requireMD5DigestAuthentication"/>
   <checkbox iscontrolcontainer="true" hidable="true" wsm_persist="true"
             id="server.loginAtStartUp" hidefor="nntp"
             label="&loginAtStartup.label;"

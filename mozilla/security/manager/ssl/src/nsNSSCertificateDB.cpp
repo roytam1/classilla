@@ -842,7 +842,7 @@ nsNSSCertificateDB::ImportCertsFromFile(nsISupports *aToken,
   if (bytes_obtained != file_info.size)
     rv = NS_ERROR_FAILURE;
   else {
-	  nsCOMPtr<nsIInterfaceRequestor> cxt = new PipUIContext();
+	  nsCOMPtr<nsIInterfaceRequestor> cxt = new PipUIContext("Import a certificate.");
 
     switch (aType) {
       case nsIX509Cert::CA_CERT:
@@ -1080,7 +1080,7 @@ nsNSSCertificateDB::FindEmailEncryptionCert(const nsAString &aNickname, nsIX509C
   nsNSSShutDownPreventionLock locker;
   nsresult rv = NS_OK;
   CERTCertificate *cert = 0;
-  nsCOMPtr<nsIInterfaceRequestor> ctx = new PipUIContext();
+  nsCOMPtr<nsIInterfaceRequestor> ctx = new PipUIContext("Find an email encryption certificate.");
   nsNSSCertificate *nssCert = nsnull;
   char *asciiname = NULL;
   NS_ConvertUCS2toUTF8 aUtf8Nickname(aNickname);
@@ -1120,7 +1120,7 @@ nsNSSCertificateDB::FindEmailSigningCert(const nsAString &aNickname, nsIX509Cert
   nsNSSShutDownPreventionLock locker;
   nsresult rv = NS_OK;
   CERTCertificate *cert = 0;
-  nsCOMPtr<nsIInterfaceRequestor> ctx = new PipUIContext();
+  nsCOMPtr<nsIInterfaceRequestor> ctx = new PipUIContext("Find an email signature certificate.");
   nsNSSCertificate *nssCert = nsnull;
   char *asciiname = NULL;
   NS_ConvertUCS2toUTF8 aUtf8Nickname(aNickname);

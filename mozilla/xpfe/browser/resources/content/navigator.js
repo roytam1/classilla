@@ -2178,3 +2178,18 @@ function maybeInitPopupContext()
   }
   return null;
 }
+
+function WindowIsClosing() {
+  var browser = getBrowser();
+  if (browser
+      && browser.localName == 'tabbrowser'
+      && browser.mTabContainer.childNodes.length > 1) {
+    var numtabs = browser.mTabContainer.childNodes.length;
+    // give the user a chance to not lose all tabs if appropriate
+    var confmessage = "Warning: you are about to close a window with "
+                    + numtabs + " Navigator\n Tabs open. Are you"
+                    + " sure you want to continue?";
+    return window.confirm( confmessage );
+  }
+  return true;
+}

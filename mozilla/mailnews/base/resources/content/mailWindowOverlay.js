@@ -1143,7 +1143,7 @@ function MsgOpenExistingWindowForMessage(aMessageUri)
           windowID.gCurrentFolderUri = msgHdr.folder.URI;
           windowID.UpdateMailToolbar('MsgOpenExistingWindowForMessage');
           windowID.CreateView(gDBView);
-          windowID.gDBView.loadMessageByMsgKey(msgHdr.messageKey);
+          windowID.LoadMessageByMsgKey(msgHdr.messageKey);
         }
         else
           return false;

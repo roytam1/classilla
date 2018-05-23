@@ -83,11 +83,13 @@
 #include "nsIDOMWindowInternal.h"
 #include "nsIScriptGlobalObject.h"
 #include "nsIDocShell.h"
+#include "nsIDocShellLoadInfo.h"
 #include "nsIDocShellTreeItem.h"
 #include "nsIDocShellTreeNode.h"
 #include "nsIWebNavigation.h"
 
 // mail
+#include "nsIMsgMailNewsUrl.h"
 #include "nsMsgUtils.h"
 #include "nsMsgBaseCID.h"
 #include "nsIMsgAccountManager.h"
@@ -543,7 +545,7 @@ nsMessenger::PromptIfFileExists(nsFileSpec &fileSpec)
 }
 
 NS_IMETHODIMP
-nsMessenger::OpenURL(const char * url)
+nsMessenger::OpenURL(const char * url, PRBool useMessageService)
 {
   if (url)
   {
@@ -561,18 +563,42 @@ nsMessenger::OpenURL(const char * url)
       // for the web shell, but the message service doesn't need it unescaped.
       nsUnescape(unescapedUrl);
       
+      nsresult rv = NS_OK;
       nsCOMPtr <nsIMsgMessageService> messageService;
-      nsresult rv = GetMessageServiceFromURI(url, getter_AddRefs(messageService));
+      if (useMessageService)
+        rv = GetMessageServiceFromURI(url, getter_AddRefs(messageService));
       
-      if (NS_SUCCEEDED(rv) && messageService)
+      if (useMessageService && NS_SUCCEEDED(rv) && messageService)
       {
         nsCOMPtr<nsIWebShell> webShell(do_QueryInterface(mDocShell));
         messageService->DisplayMessage(url, webShell, mMsgWindow, nsnull, nsnull, nsnull);
         mLastDisplayURI = url; // remember the last uri we displayed....
       }
       //If it's not something we know about, then just load the url.
-      else
+      else if (!useMessageService)
       {
+        nsCOMPtr<nsIURI> uri;
+        nsAutoString uriString(NS_ConvertASCIItoUCS2(unescapedUrl).get());
+        // Cleanup the empty spaces that might be on each end.
+        uriString.Trim(" ");
+        // Eliminate embedded newlines, which single-line text fields now allow:
+        uriString.StripChars("\r\n");
+        NS_ENSURE_TRUE(!uriString.IsEmpty(), NS_ERROR_FAILURE);
+
+        rv = NS_NewURI(getter_AddRefs(uri), uriString);
+        if (NS_FAILED(rv) || !uri)
+          return NS_ERROR_FAILURE;
+        nsCOMPtr<nsIMsgMailNewsUrl> msgurl = do_QueryInterface(uri);
+        if (msgurl)
+          msgurl->SetMsgWindow(mMsgWindow);
+        if (mDocShell) {
+          nsCOMPtr<nsIDocShellLoadInfo> loadInfo;
+          rv = mDocShell->CreateLoadInfo(getter_AddRefs(loadInfo));
+          if (NS_FAILED(rv)) return rv;
+            loadInfo->SetLoadType(nsIDocShellLoadInfo::loadNormal);
+            mDocShell->LoadURI(uri, loadInfo, 0, PR_TRUE);
+        }
+      } else {
         nsCOMPtr<nsIWebNavigation> webNav(do_QueryInterface(mDocShell));
         if(webNav)
           webNav->LoadURI(NS_ConvertASCIItoUCS2(unescapedUrl).get(), // URI string

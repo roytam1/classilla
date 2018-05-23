@@ -1,0 +1,8 @@
+<!ENTITY securityMenu.label "Security">
+<!ENTITY securityMenu.accesskey "U">
+<!ENTITY securityCertManagerCmd.label "Certificate Manager">
+<!ENTITY securityCertManagerCmd.accesskey "C">
+<!ENTITY securityDeviceManagerCmd.label "Device Manager">
+<!ENTITY securityDeviceManagerCmd.accesskey "D">
+<!ENTITY securityCrlManagerCmd.label "CRL Manager">
+<!ENTITY securityCrlManagerCmd.accesskey "R">

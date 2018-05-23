@@ -806,7 +806,7 @@ NS_IMETHODIMP nsCMSDecoder::Start(NSSCMSContentCallback cb, void * arg)
     return NS_ERROR_NOT_AVAILABLE;
 
   PR_LOG(gPIPNSSLog, PR_LOG_DEBUG, ("nsCMSDecoder::Start\n"));
-  m_ctx = new PipUIContext();
+  m_ctx = new PipUIContext("Decode an encrypted message.");
 
   m_dcx = NSS_CMSDecoder_Start(0, cb, arg, 0, m_ctx, 0, 0);
   if (!m_dcx) {
@@ -891,7 +891,7 @@ NS_IMETHODIMP nsCMSEncoder::Start(nsICMSMessage *aMsg, NSSCMSContentCallback cb,
 
   PR_LOG(gPIPNSSLog, PR_LOG_DEBUG, ("nsCMSEncoder::Start\n"));
   nsCMSMessage *cmsMsg = NS_STATIC_CAST(nsCMSMessage*, aMsg);
-  m_ctx = new PipUIContext();
+  m_ctx = new PipUIContext("Create a signed message.");
 
   m_ecx = NSS_CMSEncoder_Start(cmsMsg->getCMS(), cb, arg, 0, 0, 0, m_ctx, 0, 0, 0, 0);
   if (m_ecx == nsnull) {

@@ -36,6 +36,8 @@
 #include "nsDOMCID.h"
 #include "nsIDOMWindowInternal.h"
 #include "nsIDOMClassInfo.h"
+#include "nsIDOMDocument.h"
+#include "nsIDocument.h"
 #include "nsIScriptObjectPrincipal.h"
 #include "nsIScriptContext.h"
 #include "nsIScriptGlobalObject.h"
@@ -52,6 +54,8 @@
 #include "nsXPIDLString.h"
 #include "nsIGenKeypairInfoDlg.h"
 #include "nsIDOMCryptoDialogs.h"
+#include "nsIFormSigningDialog.h"
+#include "nsIProxyObjectManager.h"
 #include "jsapi.h"
 #include "jsdbgapi.h"
 #include "jscntxt.h"
@@ -61,6 +65,8 @@
 #include "keyhi.h"
 #include "cryptohi.h"
 #include "seccomon.h"
+#include "secerr.h"
+#include "sechash.h"
 extern "C" {
 #include "crmf.h"
 #include "pk11pqg.h"
@@ -85,6 +91,7 @@ NSSCleanupAutoPtrClass(PK11SlotInfo, PK11_FreeSlot)
 #define JS_ERROR       "error:"
 #define JS_ERROR_INVAL_PARAM JS_ERROR"invalidParameter:"
 #define JS_ERROR_USER_CANCEL JS_ERROR"userCancel"
+#define JS_ERROR_NOCERT      JS_ERROR"noMatchingCert"
 #define JS_ERROR_INTERNAL  JS_ERROR"internalError"
 #define JS_ERROR_ARGC_ERR  JS_ERROR"incorrect number of parameters"
 
@@ -1541,7 +1548,7 @@ nsCrypto::GenerateCRMFRequest(nsIDOMCRMFObject** aReturn)
       return NS_OK;
     willEscrow = PR_TRUE;
   }
-  nsCOMPtr<nsIInterfaceRequestor> uiCxt = new PipUIContext;
+  nsCOMPtr<nsIInterfaceRequestor> uiCxt = new PipUIContext("Generate a new key pair and a certificate request.");
   PRInt32 numRequests = (argc - 5)/3;
   nsKeyPairInfo *keyids = new nsKeyPairInfo[numRequests];
   if (keyids == nsnull) {
@@ -1869,7 +1876,7 @@ nsCrypto::ImportUserCertificates(const nsAString& aNickname,
   PK11SlotInfo *slot;
   PRBool freeLocalNickname = PR_FALSE;
   char *localNick;
-  nsCOMPtr<nsIInterfaceRequestor> ctx = new PipUIContext();
+  nsCOMPtr<nsIInterfaceRequestor> ctx = new PipUIContext("Import a user certificate.");
   nsresult rv = NS_OK;
   CERTCertList *caPubs = nsnull;
   nsCOMPtr<nsIPK11Token> token;
@@ -2072,13 +2079,374 @@ nsCrypto::Random(PRInt32 aNumBytes, nsAString& aReturn)
   return NS_ERROR_NOT_IMPLEMENTED;
 }
 
+nsresult
+nsCrypto::GetHostFromContext(JSContext *cx, nsACString &aHost)
+{
+  /*
+    How to find the hostname? jst said:
+    
+    "get the JSContext from the nsIJSContextStack, 
+    then get the nsIScriptGlobalObject from the JSContext 
+    (through the nsIScriptContext in the JSContext's private slot) 
+    and then QI the nsIScriptGlobalObject to nsIDOMWindow, and so on...
+    
+    call GetDocument() on the nsIDOMWindow,
+    QI the nsIDOMDocument to nsIDocument and call GetDocumentURL()
+    
+    GetLocation() and then GetHref() if you want the URL as a string
+
+    that'll get you the URL of the document that loaded the script, 
+    but not the URL of the script itself if the script is external
+
+    there's code that does that in a few places, 
+    search for nsIJSContextStack and you should find some code you can use..."
+    
+    JSContext (file jscntxt.h)
+    has nsIScriptContext in its private slot
+    that is nsIScriptGlobalObject
+
+    QI to nsIDOMWindow
+    GetDocument() gives nsIDOMDocument
+    QI to nsIDocument
+    GetDocumentURL()
+    gives nsIURI    
+    has attribute host
+  */
+
+  nsCOMPtr<nsIScriptContext> scriptContext = 
+           NS_REINTERPRET_CAST(nsIScriptContext*,JS_GetContextPrivate(cx));
+  if (!scriptContext) {
+    return NS_ERROR_FAILURE;
+  }
+  
+  nsCOMPtr<nsIScriptGlobalObject> scriptGlobal;
+  scriptContext->GetGlobalObject(getter_AddRefs(scriptGlobal));
+  if (!scriptGlobal) {
+    return NS_ERROR_FAILURE;
+  }
+
+  nsCOMPtr<nsIDOMWindow> domWindow = do_QueryInterface(scriptGlobal);
+  if (!domWindow) {
+    return NS_ERROR_FAILURE;
+  }
+
+  nsCOMPtr<nsIDOMDocument> domDocument;
+  domWindow->GetDocument(getter_AddRefs(domDocument));
+  if (!domDocument) {
+    return NS_ERROR_FAILURE;
+  }
+
+  nsCOMPtr<nsIDocument> document = do_QueryInterface(domDocument);
+  if (!document) {
+    return NS_ERROR_FAILURE;
+  }
+
+  nsCOMPtr<nsIURI> uri;
+  document->GetDocumentURL(getter_AddRefs(uri));
+  if (!uri) {
+    return NS_ERROR_FAILURE;
+  }
+
+  return uri->GetHost(aHost);
+}
+
+void signTextOutputCallback(void *arg, const char *buf, unsigned long len)
+{
+  nsCString &str = *(nsCString*)arg;
+  str.Append(nsDependentCString(buf, len));
+}
+
+#define NICKNAME_EXPIRED_STRING " (expired)"
+#define NICKNAME_NOT_YET_VALID_STRING " (not yet valid)"
+
 NS_IMETHODIMP
 nsCrypto::SignText(nsAString& aReturn)
 {
-  return NS_ERROR_NOT_IMPLEMENTED;
+  nsresult rv;
+  aReturn.Truncate(0);
+
+  nsCOMPtr<nsIXPConnect> xpc(do_GetService(nsIXPConnect::GetCID(), &rv));
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  nsCOMPtr<nsIXPCNativeCallContext> ncc;
+  rv = xpc->GetCurrentNativeCallContext(getter_AddRefs(ncc));
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  if (!ncc)
+    return NS_ERROR_NOT_AVAILABLE;
+
+  PRUint32 argc;
+  ncc->GetArgc(&argc);
+
+  jsval *argv = nsnull;
+  ncc->GetArgvPtr(&argv);
+
+  JSContext *cx;
+  ncc->GetJSContext(&cx);
+
+  if (argc < 1 || JSVAL_IS_NULL(argv[0]) || !JSVAL_IS_STRING(argv[0])) {
+    JS_ReportError(cx, "%s%s\n", JS_ERROR, "no string to sign specified");
+    return NS_ERROR_FAILURE;
+  }
+  
+  if (argc < 2 || JSVAL_IS_NULL(argv[1]) || !JSVAL_IS_STRING(argv[1])) {
+    JS_ReportError(cx, "%s%s\n", JS_ERROR, "no cert selection argument specified");
+    return NS_ERROR_FAILURE;
+  }
+  
+  JSString *jsStringToSign = JS_ValueToString(cx, argv[0]);
+  char *stringToSign = JS_GetStringBytes(jsStringToSign);
+
+  JSString *jsCertSelection = JS_ValueToString(cx,argv[1]);
+  char *certSelection = JS_GetStringBytes(jsCertSelection);
+
+  if (!stringToSign || !certSelection) {
+    return NS_ERROR_FAILURE;
+  }
+  
+  if (0 != strcmp("auto", certSelection) && 0 != strcmp("ask", certSelection)) {
+    JS_ReportError(cx, "%s%s\n", JS_ERROR, "caOption argument must be ask or auto");
+    return NS_ERROR_FAILURE;
+  }
+  // It was decided to always behave as if "ask" were specified.
+
+  PRInt32 numCAs = argc - 2;
+  char **caNames = new char*[numCAs];
+ 
+  for (int iCA = 0; iCA < numCAs; ++iCA) {
+    int iArg = 2 + iCA;
+    if (JSVAL_IS_NULL(argv[iArg]) || !JSVAL_IS_STRING(argv[iArg])) {
+      JS_ReportError(cx, "%s%s\n", JS_ERROR, "invalid CA parameter specified");
+      return NS_ERROR_FAILURE;
+    } else {
+      JSString *jsString = JS_ValueToString(cx, argv[iArg]);
+      caNames[iCA] = JS_GetStringBytes(jsString);
+    }
+  }
+  
+  nsCString host;
+  rv = GetHostFromContext(cx, host);
+  if (NS_FAILED(rv))
+    return rv;  
+
+  nsCOMPtr<nsIInterfaceRequestor> uiCxt = new PipUIContext("Create a signature.");
+  PRBool bestOnly = PR_TRUE;
+  PRBool validOnly = PR_TRUE;
+  CERTCertList* certList = CERT_FindUserCertsByUsage(CERT_GetDefaultCertDB(), 
+    certUsageEmailSigner, bestOnly, validOnly, uiCxt);
+
+  if (certList && numCAs > 0) {
+    if (SECSuccess != CERT_FilterCertListByCANames(certList, 
+                        numCAs, caNames, certUsageEmailSigner)) {
+      return NS_ERROR_FAILURE;
+    } 
+  }
+
+  if (!certList || CERT_LIST_END(CERT_LIST_HEAD(certList), certList)) {
+    JS_ReportError(cx, "%s\n", JS_ERROR_NOCERT);
+    return NS_ERROR_FAILURE;
+  }
+
+  nsCOMPtr<nsIFormSigningDialog> fsd = 
+    do_CreateInstance(NS_FORMSIGNINGDIALOG_CONTRACTID, &rv);
+  if (NS_FAILED(rv)) 
+    return rv;
+
+  nsCOMPtr<nsIProxyObjectManager> proxyman(do_GetService(NS_XPCOMPROXY_CONTRACTID));
+  if (!proxyman)
+    return NS_ERROR_FAILURE;
+
+  nsCOMPtr<nsIFormSigningDialog> proxied_fsd;
+  proxyman->GetProxyForObject(NS_UI_THREAD_EVENTQ,
+                              NS_GET_IID(nsIFormSigningDialog), 
+                              fsd, PROXY_SYNC,
+                              getter_AddRefs(proxied_fsd));
+
+  if (!proxied_fsd) {
+    return NS_ERROR_FAILURE;
+  }
+
+  NS_ConvertUTF8toUCS2 ucs2Host(host);
+  NS_ConvertUTF8toUCS2 ucs2StringToSign(stringToSign);
+  PRBool canceled;
+  CERTCertificate *signingCert = nsnull;
+  PRInt32 selectedIndex;
+  CERTCertNicknames* nicknames = nsnull;
+  PRUnichar **certNicknameList = nsnull;
+  PRUnichar **certDetailsList = nsnull;
+  PRUint32 NumberOfCerts = 0;
+  int i;
+  CERTCertListNode* node;
+  nsAutoString password;
+
+  node = CERT_LIST_HEAD(certList);
+  while (!CERT_LIST_END(node, certList)) {
+    ++NumberOfCerts;
+    node = CERT_LIST_NEXT(node);
+  }
+
+  nicknames = CERT_NicknameStringsFromCertList(certList,
+                                               NICKNAME_EXPIRED_STRING,
+                                               NICKNAME_NOT_YET_VALID_STRING);
+  if (!nicknames) {
+    return NS_ERROR_FAILURE;
+  }
+
+  NS_ASSERTION(nicknames->numnicknames == NumberOfCerts, "nicknames->numnicknames != NumberOfCerts");
+
+  certNicknameList = (PRUnichar **)nsMemory::Alloc(sizeof(PRUnichar *) * nicknames->numnicknames);
+  certDetailsList = (PRUnichar **)nsMemory::Alloc(sizeof(PRUnichar *) * nicknames->numnicknames);
+
+  PRInt32 CertsToUse;
+  for (CertsToUse = 0, node = CERT_LIST_HEAD(certList);
+       !CERT_LIST_END(node, certList) && CertsToUse < nicknames->numnicknames;
+       node = CERT_LIST_NEXT(node)
+      )
+  {
+    nsNSSCertificate *tempCert = new nsNSSCertificate(node->cert);
+
+    if (tempCert) {
+      // XXX we really should be using an nsCOMPtr instead of manually add-refing,
+      // but nsNSSCertificate does not have a default constructor.
+
+      NS_ADDREF(tempCert);
+
+      nsAutoString i_nickname(NS_ConvertUTF8toUCS2(nicknames->nicknames[CertsToUse]));
+      nsAutoString nickWithSerial;
+      nsAutoString details;
+      if (NS_SUCCEEDED(tempCert->FormatUIStrings(i_nickname, nickWithSerial, details))) {
+        certNicknameList[CertsToUse] = ToNewUnicode(nickWithSerial);
+        certDetailsList[CertsToUse] = ToNewUnicode(details);
+      }
+      else {
+        certNicknameList[CertsToUse] = nsnull;
+        certDetailsList[CertsToUse] = nsnull;
+      }
+
+      NS_RELEASE(tempCert);
+
+      ++CertsToUse;
+    }
+  }
+
+  PRBool tryAgain;
+
+  rv = NS_OK;
+  do {
+    /* Throw up the form signing configmration dialog 
+     * and get back the index of the selected cert */
+
+    selectedIndex = -1;
+
+    rv = proxied_fsd->ConfirmSignText(uiCxt, 
+      ucs2Host, ucs2StringToSign,
+      (const PRUnichar**)certNicknameList, (const PRUnichar**)certDetailsList,
+      CertsToUse, &selectedIndex, password, &canceled);
+
+    if (NS_FAILED(rv))
+      break; // out of tryAgain loop
+
+    if (canceled) {
+      JS_ReportError(cx, "%s\n", JS_ERROR_USER_CANCEL);
+      rv = NS_ERROR_NOT_AVAILABLE;
+      break; // out of tryAgain loop
+    }
+
+    for (i = 0, node = CERT_LIST_HEAD(certList);
+         !CERT_LIST_END(node, certList);
+         ++i, node = CERT_LIST_NEXT(node)) {
+
+      if (i == selectedIndex) {
+        signingCert = CERT_DupCertificate(node->cert);
+        break; // out of cert list iteration loop
+      }
+    }
+
+    if (!signingCert) {
+      rv = NS_ERROR_FAILURE;
+      break; // out of tryAgain loop
+    }
+
+    NS_ConvertUCS2toUTF8 pwUtf8(password);
+
+    tryAgain = PR_FALSE;
+    if (SECSuccess != 
+      PK11_CheckUserPassword(
+        signingCert->slot, 
+        NS_CONST_CAST(char *, pwUtf8.get()))) {
+      // XXX we should show an error dialog before retrying
+      tryAgain = PR_TRUE;
+    }
+  } while (tryAgain);
+
+  for (i = 0; i < CertsToUse; ++i) {
+    nsMemory::Free(certNicknameList[i]);
+    nsMemory::Free(certDetailsList[i]);
+  }
+  nsMemory::Free(certNicknameList);
+  nsMemory::Free(certDetailsList);
+
+  if (NS_FAILED(rv)) // something went wrong inside the tryAgan loop
+    return rv;
+
+  SECKEYPrivateKey* privKey = PK11_FindKeyByAnyCert(signingCert, uiCxt);
+  if (privKey == NULL) {
+    PRIntn keyError = PR_GetError();
+    if (keyError == SEC_ERROR_BAD_PASSWORD) {
+        /* problem with password: bail */
+      return NS_ERROR_FAILURE;
+    }
+    else {
+      return NS_ERROR_FAILURE;
+    }
+  }
+
+  unsigned char hash[SHA1_LENGTH];
+  PRUint32 hashLen = 0;
+  HASHContext *hc = HASH_Create(HASH_AlgSHA1);
+  HASH_Begin(hc);
+  HASH_Update(hc, 
+    NS_REINTERPRET_CAST(unsigned char*, stringToSign), 
+    strlen(stringToSign));
+  HASH_End(hc, hash, &hashLen, sizeof(hash));
+  HASH_Destroy(hc);
+
+  SECItem digest;
+  digest.len = SHA1_LENGTH;
+  digest.data = hash;
+  
+  SEC_PKCS7ContentInfo *ci = SEC_PKCS7CreateSignedData(signingCert, certUsageEmailSigner, nsnull,
+    SEC_OID_SHA1, &digest, 
+    nsnull,
+    uiCxt);
+
+  if (!ci) {
+    JS_ReportError(cx, "%s%s\n", JS_ERROR, "Unable to use certificate to create a signature.");
+    return NS_ERROR_FAILURE;
+  }
+
+  SEC_PKCS7IncludeCertChain(ci, nsnull);
+  SEC_PKCS7AddSigningTime(ci);
+
+  nsCString p7;
+  if (SECSuccess != SEC_PKCS7Encode(
+                      ci,
+                      signTextOutputCallback,
+                      &p7,
+                      nsnull,
+                      nsnull,
+                      uiCxt)) {
+    return NS_ERROR_FAILURE;
+  }
+
+  char *result = BTOA_DataToAscii(
+    NS_REINTERPRET_CAST(const unsigned char*, p7.get()), 
+    p7.Length());
+  
+  NS_ConvertUTF8toUCS2 ucs2_result(result);
+  aReturn = ucs2_result;
+  return NS_OK;
 }
-
-
 
 NS_IMETHODIMP
 nsCrypto::Alert(const nsAString& aMessage)

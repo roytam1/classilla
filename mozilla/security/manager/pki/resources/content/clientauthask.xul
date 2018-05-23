@@ -56,7 +56,7 @@
     </menulist>
     <description>&clientAuthAsk.message3;</description>
     <textbox readonly="true" id="details" multiline="true"
-      style="height: 11em;"/>
+      style="height: 10em;"/>
     </groupbox>
   <separator/>
   <hbox>

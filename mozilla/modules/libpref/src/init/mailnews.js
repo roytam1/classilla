@@ -208,7 +208,6 @@ pref("mailnews.language_sensitive_font",    true);
 
 pref("offline.news.download.unread_only",   true);
 pref("offline.news.download.by_date",       true);
-pref("offline.news.download.use_days",      false);
 pref("offline.news.download.days",          30);    // days
 pref("offline.news.download.increments",    3); // 0-yesterday, 1-1 wk ago, 2-2 wk ago,
                                                 // 3-1 month ago, 4-6 month ago, 5-1 year ago
@@ -283,8 +282,8 @@ pref("mailnews.confirm.moveFoldersToTrash", true);
 
 pref("mailnews.reuse_message_window", true);
 
-pref("mailnews.start_page.url", "chrome://messenger-region/locale/region.properties");
-pref("mailnews.start_page.enabled", true);
+pref("mailnews.start_page.url", "");
+pref("mailnews.start_page.enabled", false);
 
 pref("mailnews.remember_selected_message", true);
 
@@ -380,7 +379,7 @@ pref("mail.send_struct", false);   // HTML->HTML *bold* etc. during Send; ditto
 // For the next 4 prefs, see <http://www.bucksch.org/1/projects/mozilla/108153>
 pref("mailnews.display.prefer_plaintext", false);  // Ignore HTML parts in multipart/alternative
 pref("mailnews.display.html_as", 0);  // How to display HTML parts. 0 = Render the sender's HTML; 1 = HTML->TXT->HTML; 2 = Show HTML source; 3 = Sanitize HTML
-pref("mailnews.display.html_sanitizer.allowed_tags", "html head title body p br div(lang,title) h1 h2 h3 h4 h5 h6 ul ol li(value,start,compact) dl dt dd blockquote(type,cite) pre noscript noframes strong em sub sup span(lang,title) acronym(title) abbr(title) del(title,cite,datetime) ins(title,cite,datetime) q(cite) a(href,name,title) img(alt,title,longdesc) base(href) area(alt) applet(alt) object(alt) var samp dfn address kbd code cite s strike tt b i table(align) caption tr(align,valign) td(rowspan,colspan,align,valign) th(rowspan,colspan,align,valign)");
+pref("mailnews.display.html_sanitizer.allowed_tags", "html head title body p br div(lang,title) h1 h2 h3 h4 h5 h6 ul ol li(value,start,compact) dl dt dd blockquote(type,cite) pre noscript noframes strong em sub sup span(lang,title) acronym(title) abbr(title) del(title,cite,datetime) ins(title,cite,datetime) q(cite) a(href,name,title) img(alt,title,longdesc,src) base(href) area(alt) applet(alt) object(alt) var samp dfn address kbd code cite s strike tt b i table(align) caption tr(align,valign) td(rowspan,colspan,align,valign) th(rowspan,colspan,align,valign)");
 pref("mailnews.display.disallow_mime_handlers", 0);  /* Let only a few classes process incoming data. This protects from bugs (e.g. buffer overflows) and from security loopholes (e.g. allowing unchecked HTML in some obscure classes, although the user has html_as > 0).
 This option is mainly for the UI of html_as.
 0 = allow all available classes
@@ -505,10 +504,9 @@ pref("mailnews.fakeaccount.show", false);
 pref("mailnews.fakeaccount.server", "");
 
 // message display properties
-pref("mailnews.message_display.disable_remote_image", false);
-pref("mailnews.message_display.allow.plugins", true);
+pref("mailnews.message_display.disable_remote_image", true);
+pref("mailnews.message_display.allow.plugins", false);
 
 // When there is no disclosed recipients (only bcc), we should address the message to empty group
 // to prevent some mail server to disclose the bcc recipients
 pref("mail.compose.add_undisclosed_recipients", true);
-

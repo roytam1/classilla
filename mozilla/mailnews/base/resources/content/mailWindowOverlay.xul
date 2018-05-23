@@ -461,7 +461,7 @@ Rights Reserved.
           <menupopup>
             <menu uri="..."  class="folderMenuItem menu-iconic" label="rdf:http://home.netscape.com/NC-rdf#Name">
               <menupopup>
-                <menuitem label="&fileHereMenu.label;" accesskey="&fileHereMenu.accesskey;" disabled="true"/>
+                <menuitem label="&copyHereMenu.label;" accesskey="&copyHereMenu.accesskey;" disabled="true"/>
                 <menuseparator/>
               </menupopup>
             </menu>
@@ -481,7 +481,7 @@ Rights Reserved.
               IsSecure="rdf:http://home.netscape.com/NC-rdf#IsSecure"
               ServerType="rdf:http://home.netscape.com/NC-rdf#ServerType">
               <menupopup>
-                <menuitem label="&fileHereMenu.label;" accesskey="&fileHereMenu.accesskey;" 
+                <menuitem label="&copyHereMenu.label;" accesskey="&copyHereMenu.accesskey;" 
                   oncommand="MsgCopyMessage(event.target.parentNode.parentNode)"/>
                 <menuseparator/>
               </menupopup>
@@ -764,7 +764,7 @@ Rights Reserved.
           <menupopup>
             <menu uri="..."  class="folderMenuItem menu-iconic" label="rdf:http://home.netscape.com/NC-rdf#Name">
               <menupopup>
-                <menuitem label="&fileHereMenu.label;" accesskey="&fileHereMenu.accesskey;" disabled="true"/>
+                <menuitem label="&copyHereMenu.label;" accesskey="&copyHereMenu.accesskey;" disabled="true"/>
                 <menuseparator/>
               </menupopup>
             </menu>
@@ -784,7 +784,7 @@ Rights Reserved.
               IsSecure="rdf:http://home.netscape.com/NC-rdf#IsSecure"
               ServerType="rdf:http://home.netscape.com/NC-rdf#ServerType">
               <menupopup>
-                <menuitem label="&fileHereMenu.label;" accesskey="&fileHereMenu.accesskey;" 
+                <menuitem label="&copyHereMenu.label;" accesskey="&copyHereMenu.accesskey;" 
                   oncommand="MsgCopyMessage(event.target.parentNode.parentNode)"/>
                 <menuseparator/>
               </menupopup>
@@ -1297,7 +1297,7 @@ Rights Reserved.
           <menupopup>
             <menu uri="..."  class="folderMenuItem menu-iconic" label="rdf:http://home.netscape.com/NC-rdf#Name">
               <menupopup>
-                <menuitem label="&fileHereMenu.label;" accesskey="&fileHereMenu.accesskey;" disabled="true"/>
+                <menuitem label="&copyHereMenu.label;" accesskey="&copyHereMenu.accesskey;" disabled="true"/>
                 <menuseparator/>
               </menupopup>
             </menu>
@@ -1317,7 +1317,7 @@ Rights Reserved.
              IsSecure="rdf:http://home.netscape.com/NC-rdf#IsSecure"
              ServerType="rdf:http://home.netscape.com/NC-rdf#ServerType">
               <menupopup>
-                <menuitem label="&fileHereMenu.label;" accesskey="&fileHereMenu.accesskey;" 
+                <menuitem label="&copyHereMenu.label;" accesskey="&copyHereMenu.accesskey;" 
                   oncommand="MsgCopyMessage(event.target.parentNode.parentNode)"/>
                 <menuseparator/>
               </menupopup>

@@ -257,7 +257,7 @@ void nsSmtpProtocol::Initialize(nsIURI * aURL)
     m_flags = 0;
     m_prefAuthMethod = PREF_AUTH_NONE;
     m_usernamePrompted = PR_FALSE;
-    m_prefTrySSL = PREF_SSL_TRY;
+    m_prefTrySSL = PREF_SMTPSECURE_TRY_STARTTLS;
     m_tlsInitiated = PR_FALSE;
 
     m_urlErrorState = NS_ERROR_FAILURE;
@@ -323,10 +323,13 @@ void nsSmtpProtocol::Initialize(nsIURI * aURL)
     if (smtpUrl)
         smtpUrl->GetNotificationCallbacks(getter_AddRefs(callbacks));
 
-    if (m_prefTrySSL != PREF_SSL_NEVER) {
+    if (m_prefTrySSL == PREF_SMTPSECURE_ALWAYS_SMTPS) {
+        rv = OpenNetworkSocket(aURL, "ssl", callbacks);  
+    }
+    else if (m_prefTrySSL != PREF_SMTPSECURE_NEVER) {
         rv = OpenNetworkSocket(aURL, "starttls", callbacks);  
-        if (NS_FAILED(rv) && m_prefTrySSL == PREF_SSL_TRY) {
-            m_prefTrySSL = PREF_SSL_NEVER;
+        if (NS_FAILED(rv) && m_prefTrySSL == PREF_SMTPSECURE_TRY_STARTTLS) {
+            m_prefTrySSL = PREF_SMTPSECURE_NEVER;
             rv = OpenNetworkSocket(aURL, nsnull, callbacks);
         }
     } else {
@@ -665,7 +668,7 @@ PRInt32 nsSmtpProtocol::SendEhloResponse(nsIInputStream * inputStream, PRUint32 
     {
       /* EHLO must not be implemented by the server so fall back to the HELO case */
 
-        if (m_prefTrySSL == PREF_SSL_ALWAYS)
+        if (m_prefTrySSL == PREF_SMTPSECURE_ALWAYS_STARTTLS)
         {
             m_nextState = SMTP_ERROR_DONE;
             m_urlErrorState = NS_ERROR_COULD_NOT_LOGIN_TO_SMTP_SERVER;
@@ -766,7 +769,15 @@ PRInt32 nsSmtpProtocol::ProcessAuth()
     {
         if(TestFlag(SMTP_EHLO_STARTTLS_ENABLED))
         {
-            if (m_prefTrySSL != PREF_SSL_NEVER)
+            // Do not try to combine SMTPS with STARTTLS.
+            // PREF_SMTPSECURE_ALWAYS_SMTPS is used,
+            // we are alrady using a secure connection.
+            // Do not attempt to do STARTTLS,
+            // even if server offers it.
+
+            if (m_prefTrySSL == PREF_SMTPSECURE_TRY_STARTTLS
+                ||
+                m_prefTrySSL == PREF_SMTPSECURE_ALWAYS_STARTTLS)
             {
                 buffer = "STARTTLS";
                 buffer += CRLF;
@@ -782,12 +793,13 @@ PRInt32 nsSmtpProtocol::ProcessAuth()
                 return status;
             }
         }
-        else if (m_prefTrySSL == PREF_SSL_ALWAYS)
+        else if (m_prefTrySSL == PREF_SMTPSECURE_ALWAYS_STARTTLS)
         {
             m_nextState = SMTP_ERROR_DONE;
             m_urlErrorState = NS_ERROR_COULD_NOT_LOGIN_TO_SMTP_SERVER;
             return(NS_ERROR_COULD_NOT_LOGIN_TO_SMTP_SERVER);
         }
+
         if ((TestFlag(SMTP_AUTH_PLAIN_ENABLED) ||
              TestFlag(SMTP_AUTH_LOGIN_ENABLED)) &&
             (m_prefAuthMethod == PREF_AUTH_ANY))

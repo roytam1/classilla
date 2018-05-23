@@ -214,7 +214,7 @@ done:
         }
       }
       if (NS_SUCCEEDED(rv)) {
-        nsCOMPtr<nsIInterfaceRequestor> cxt = new PipUIContext();
+        nsCOMPtr<nsIInterfaceRequestor> cxt = new PipUIContext("Import a Certificate Revocation List (CRL)");
         certDialogs->CrlImportStatusDialog(cxt, crlData);
       }
     }

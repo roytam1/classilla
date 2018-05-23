@@ -169,11 +169,28 @@ PK11PasswordPrompt(PK11SlotInfo* slot, PRBool retry, void* arg) {
   if (NS_FAILED(rv))
     return nsnull; 
 
-  const PRUnichar* formatStrings[1] = { ToNewUnicode(NS_ConvertUTF8toUCS2(PK11_GetTokenName(slot))) };
-  rv = nssComponent->PIPBundleFormatStringFromName(NS_LITERAL_STRING("CertPassPrompt").get(),
-                                      formatStrings, 1,
-                                      getter_Copies(promptString));
-  nsMemory::Free(NS_CONST_CAST(PRUnichar*, formatStrings[0]));
+  nsCOMPtr<nsISupportsCString> is_infostring(do_GetInterface(proxiedCallbacks));
+  nsCAutoString infostring;
+  if (is_infostring)
+    is_infostring->GetData(infostring);
+
+  if (!infostring.IsEmpty()) {
+    const PRUnichar* formatStrings[2] = { 
+        ToNewUnicode(NS_ConvertUTF8toUCS2(PK11_GetTokenName(slot))),
+        ToNewUnicode(infostring) };
+    rv = nssComponent->PIPBundleFormatStringFromName(NS_LITERAL_STRING("CertPassPrompt2").get(),
+                                        formatStrings, 2,
+                                        getter_Copies(promptString));
+    nsMemory::Free(NS_CONST_CAST(PRUnichar*, formatStrings[0]));
+    nsMemory::Free(NS_CONST_CAST(PRUnichar*, formatStrings[1]));
+  }
+  else {
+    const PRUnichar* formatStrings[1] = { ToNewUnicode(NS_ConvertUTF8toUCS2(PK11_GetTokenName(slot))) };
+    rv = nssComponent->PIPBundleFormatStringFromName(NS_LITERAL_STRING("CertPassPrompt").get(),
+                                        formatStrings, 1,
+                                        getter_Copies(promptString));
+    nsMemory::Free(NS_CONST_CAST(PRUnichar*, formatStrings[0]));
+  }
 
   if (NS_FAILED(rv))
     return nsnull;

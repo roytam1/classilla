@@ -1328,6 +1328,7 @@ nsTypeAheadFind::FindItNow(nsIPresShell *aPresShell,
     // ======= end-inner-while (go through a single document) ==========
 
     // ---------- Nothing found yet, try next document  -------------
+    PRBool hasTriedFirstDoc = PR_FALSE;
     do {
       // ==== Second inner loop - get another while  ====
       if (NS_SUCCEEDED(docShellEnumerator->HasMoreElements(&hasMoreDocShells))
@@ -1340,11 +1341,15 @@ nsTypeAheadFind::FindItNow(nsIPresShell *aPresShell,
           break;
         }
       }
+      else if (!hasTriedFirstDoc) {  // Avoid potential infinite loop
+        return NS_ERROR_FAILURE;  // No content doc shells
+      }
 
       // Reached last doc shell, loop around back to first doc shell
       rootContentDocShell->GetDocShellEnumerator(nsIDocShellTreeItem::typeContent,
                                                  nsIDocShell::ENUMERATE_FORWARDS,
                                                  getter_AddRefs(docShellEnumerator));
+      hasTriedFirstDoc = PR_TRUE;
     } while (docShellEnumerator);  // ==== end second inner while  ===
 
     PRBool continueLoop = PR_FALSE;
@@ -2431,6 +2436,10 @@ nsTypeAheadFind::GetTargetIfTypeAheadOkay(nsIDOMEvent *aEvent,
     GetAutoStart(topContentWin, &mIsFindAllowedInWindow);
     if (mIsFindAllowedInWindow) {
       UseInWindow(topContentWin);
+    }
+    else {
+      CancelFind();
+      mFocusedWindow = nsnull;
     }
   }
   if (!mIsFindAllowedInWindow) {

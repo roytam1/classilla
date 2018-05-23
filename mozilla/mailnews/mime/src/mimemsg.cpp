@@ -397,17 +397,15 @@ MimeMessage_close_headers (MimeObject *obj)
 		PR_FREEIF(mv);  /* done with this now. */
 	  }
 
+#ifdef ENABLE_SMIME
     /* If this message has a body which is encrypted and we're going to
        decrypt it (whithout converting it to HTML, since decrypt_p and
        write_html_p are never true at the same time)
     */
     if (obj->output_p &&
         obj->options &&
-        obj->options->decrypt_p
-#ifdef ENABLE_SMIME
-        && !mime_crypto_object_p (msg->hdrs, PR_FALSE)
-#endif /* ENABLE_SMIME */
-        )
+        obj->options->decrypt_p &&
+        !mime_crypto_object_p (msg->hdrs, PR_FALSE))
     {
       /* The body of this message is not an encrypted object, so we need
          to turn off the decrypt_p flag (to prevent us from s#$%ing the
@@ -416,6 +414,7 @@ MimeMessage_close_headers (MimeObject *obj)
       */
       obj->options->decrypt_p = PR_FALSE;
     }
+#endif /* ENABLE_SMIME */
 
 	  /* Emit the HTML for this message's headers.  Do this before
 		 creating the object representing the body.
@@ -491,10 +490,8 @@ MimeMessage_close_headers (MimeObject *obj)
   //
   PRBool outer_p = !obj->headers;	/* is this the outermost message? */
 
-  if (
-      (outer_p) &&
-      ( obj->options->part_to_load == NULL )
-     )
+  if ( outer_p &&
+       (!obj->options->part_to_load || obj->options->format_out == nsMimeOutput::nsMimeMessageBodyDisplay))
   {
     // call SetMailCharacterSetToMsgWindow() to set a menu charset
     if (mime_typep(body, (MimeObjectClass *) &mimeInlineTextClass))
@@ -573,7 +570,7 @@ MimeMessage_parse_eof (MimeObject *obj, PRBool abort_p)
 			  }
 		  }
 	  }
-	  if (obj->options->part_to_load == nsnull && 
+	  if ((!obj->options->part_to_load  || obj->options->format_out == nsMimeOutput::nsMimeMessageBodyDisplay) && 
 		  obj->options->headers != MimeHeadersOnly)
 		  mimeEmitterEndBody(obj->options);
   }
@@ -714,6 +711,17 @@ MimeMessage_write_headers_html (MimeObject *obj)
   char *msgID = MimeHeaders_get (msg->hdrs, HEADER_MESSAGE_ID,
 									                  PR_FALSE, PR_FALSE);
   PRBool outer_p = !obj->headers; /* is this the outermost message? */
+  if (!outer_p && obj->options->format_out == nsMimeOutput::nsMimeMessageBodyDisplay &&
+      obj->options->part_to_load)
+  {
+    //Maybe we are displaying a embedded message as outer part!
+    char *id = mime_part_address(obj);
+    if (id)
+    {
+      outer_p = !nsCRT::strcmp(id, obj->options->part_to_load);
+      PR_Free(id);
+    }
+  }
 
   // Ok, we should really find out the charset of this part. We always
   // output UTF-8 for display, but the original charset is necessary for

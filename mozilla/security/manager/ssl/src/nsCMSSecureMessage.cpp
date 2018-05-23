@@ -92,7 +92,7 @@ GetCertByPrefID(const char *certID, char **_retval)
   nsresult rv = NS_OK;
   CERTCertificate *cert = 0;
   nsXPIDLCString nickname;
-  nsCOMPtr<nsIInterfaceRequestor> ctx = new PipUIContext();
+  nsCOMPtr<nsIInterfaceRequestor> ctx = new PipUIContext("Access security device to obtain a list of available certificates.");
 
   *_retval = 0;
 
@@ -301,7 +301,7 @@ ReceiveMessage(const char *msg, char **_retval)
   PRInt32 derLen;
   NSSCMSMessage *cmsMsg = 0;
   SECItem *content;
-  nsCOMPtr<nsIInterfaceRequestor> ctx = new PipUIContext();
+  nsCOMPtr<nsIInterfaceRequestor> ctx = new PipUIContext("Decrypt an encrypted message.");
 
   /* Step 1. Decode the base64 wrapper */
   rv = decode(msg, &der, &derLen);

@@ -39,20 +39,27 @@
 #include "nsIInterfaceRequestor.h"
 #include "nsIInterfaceRequestorUtils.h"
 #include "pk11func.h"
+#include "nsISupportsPrimitives.h"
+#include "nsString.h"
 
 //
 // Implementation of an nsIInterfaceRequestor for use
 // as context for NSS calls
 //
-class PipUIContext : public nsIInterfaceRequestor
+class PipUIContext : public nsIInterfaceRequestor,
+                     public nsISupportsCString
 {
 public:
   NS_DECL_ISUPPORTS
   NS_DECL_NSIINTERFACEREQUESTOR
+  NS_DECL_NSISUPPORTSCSTRING
+  NS_DECL_NSISUPPORTSPRIMITIVE
 
-  PipUIContext();
+  PipUIContext(const char *info);
   virtual ~PipUIContext();
 
+protected:
+  nsCAutoString mInfo;
 };
 
 //

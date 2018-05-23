@@ -75,6 +75,9 @@ public:
 
   static nsIPrincipal* GetScriptPrincipal(JSContext *cx);
   static nsIEventQueue* GetUIEventQueue();
+
+private:
+  nsresult GetHostFromContext(JSContext *cx, nsACString &aHost);
 };
 
 class nsPkcs11 : public nsIDOMPkcs11

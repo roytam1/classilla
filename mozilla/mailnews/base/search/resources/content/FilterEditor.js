@@ -113,6 +113,8 @@ function filterEditorOnLoad()
             filterAction.type = (getScopeFromFilterList(gFilterList) == Components.interfaces.nsMsgSearchScope.newsFilter) ? nsMsgFilterAction.Delete : nsMsgFilterAction.MoveToFolder;
             gFilter.appendAction(filterAction);
             initializeDialog(gFilter);
+            // Clear the default action added above now that the dialog is initialized.
+            gFilter.clearActionList();
           }
           else{
             // fake the first more button press
@@ -127,7 +129,7 @@ function filterEditorOnLoad()
       var count = 1;
       var name = stub;
 
-      // Set the default filter name to be "untitled filter"
+      // Set the default filter name to be "Untitled Filter"
       while (duplicateFilterNameExists(name)) 
       {
         count++;
@@ -138,6 +140,9 @@ function filterEditorOnLoad()
       SetUpFilterActionList(getScopeFromFilterList(gFilterList));
     }
     gFilterNameElement.select();
+    // This call is required on mac and linux.  It has no effect
+    // under win32.  See bug 94800.
+    gFilterNameElement.focus();
     moveToAlertPosition();
 }
 
@@ -418,7 +423,7 @@ function saveFilter()
     gFilter.appendAction(filterAction);
   }
     
-  if (gChangePriorityCheckbox.checked) 
+  if (gChangePriorityCheckbox.checked)  
   {
     if (!gActionPriority.selectedItem) 
     {
@@ -482,11 +487,15 @@ function saveFilter()
     filterAction.type = nsMsgFilterAction.KillThread;
     gFilter.appendAction(filterAction);
   }
-    
+
   if (gFilter.actionList.Count() <= 0)
   {
     str = gFilterBundle.getString("mustSelectAction");
     window.alert(str);
+
+    // reset gFilter so that filter is still saved next time around
+    // see bug #186217
+    gFilter = null;
     return false;
   }
 

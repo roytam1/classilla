@@ -34,8 +34,9 @@
 # 
 
 MOD_DEPTH	= ..
-topsrcdir	= ..
-srcdir		= .
+topsrcdir	= /cygdrive/d/kai/130/intree/mozilla/directory/c-sdk
+srcdir		= /cygdrive/d/kai/130/intree/mozilla/directory/c-sdk/config
+VPATH		= /cygdrive/d/kai/130/intree/mozilla/directory/c-sdk/config
 
 include $(MOD_DEPTH)/config/autoconf.mk
 

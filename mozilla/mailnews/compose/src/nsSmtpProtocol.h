@@ -107,9 +107,10 @@ typedef enum _PrefAuthMethod {
 } PrefAuthMethod;
 
 typedef enum _PrefTrySSL {
-    PREF_SSL_NEVER = 0,
-    PREF_SSL_TRY = 1,
-    PREF_SSL_ALWAYS = 2
+    PREF_SMTPSECURE_NEVER = 0,
+    PREF_SMTPSECURE_TRY_STARTTLS = 1,
+    PREF_SMTPSECURE_ALWAYS_STARTTLS = 2,
+    PREF_SMTPSECURE_ALWAYS_SMTPS = 3
 } PrefTrySSL;
 
 class nsSmtpProtocol : public nsMsgAsyncWriteProtocol,

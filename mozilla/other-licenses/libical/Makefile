@@ -20,9 +20,9 @@
 
 DEPTH=../../
 
-topsrcdir	= $(DEPTH)
-srcdir		= .
-VPATH		= .
+topsrcdir	= d:/kai/130/intree/mozilla
+srcdir		= d:/kai/130/intree/mozilla/other-licenses/libical
+VPATH		= d:/kai/130/intree/mozilla/other-licenses/libical
 
 include $(DEPTH)/config/autoconf.mk
 

@@ -41,64 +41,13 @@
 #include "nsSDR.h"
 #include "nsNSSComponent.h"
 #include "nsNSSShutDown.h"
+#include "nsNSSHelper.h"
 
 #include "pk11func.h"
 #include "pk11sdr.h" // For PK11SDR_Encrypt, PK11SDR_Decrypt
 
 #include "nsNSSCleaner.h"
 NSSCleanupAutoPtrClass(PK11SlotInfo, PK11_FreeSlot)
-
-//
-// Implementation of an nsIInterfaceRequestor for use
-// as context for NSS calls
-//
-class nsSDRContext : public nsIInterfaceRequestor
-{
-public:
-  NS_DECL_ISUPPORTS
-  NS_DECL_NSIINTERFACEREQUESTOR
-
-  nsSDRContext();
-  virtual ~nsSDRContext();
-
-};
-
-NS_IMPL_ISUPPORTS1(nsSDRContext, nsIInterfaceRequestor)
-
-nsSDRContext::nsSDRContext()
-{
-}
-
-nsSDRContext::~nsSDRContext()
-{
-}
-
-/* void getInterface (in nsIIDRef uuid, [iid_is (uuid), retval] out nsQIResult result); */
-NS_IMETHODIMP nsSDRContext::GetInterface(const nsIID & uuid, void * *result)
-{
-  if (uuid.Equals(NS_GET_IID(nsIPrompt))) {
-    nsCOMPtr<nsIProxyObjectManager> proxyman(do_GetService(NS_XPCOMPROXY_CONTRACTID));
-    if (!proxyman) return NS_ERROR_FAILURE;
-
-    nsCOMPtr<nsIPrompt> prompter;
-    nsCOMPtr<nsIWindowWatcher> wwatch(do_GetService(NS_WINDOWWATCHER_CONTRACTID));
-    if (wwatch) {
-      wwatch->GetNewPrompter(0, getter_AddRefs(prompter));
-      if (prompter) {
-        nsCOMPtr<nsIPrompt> proxyPrompt;
-        proxyman->GetProxyForObject(NS_UI_THREAD_EVENTQ, NS_GET_IID(nsIPrompt),
-                                    prompter, PROXY_SYNC, getter_AddRefs(proxyPrompt));
-        if (!proxyPrompt) return NS_ERROR_FAILURE;
-        *result = proxyPrompt;
-        NS_ADDREF((nsIPrompt*)*result);
-      }
-    }
-  } else {
-    return NS_ERROR_NO_INTERFACE;
-  }
-
-  return NS_OK;
-}
 
 // Standard ISupports implementation
 // NOTE: Should these be the thread-safe versions?
@@ -127,7 +76,7 @@ Encrypt(unsigned char * data, PRInt32 dataLen, unsigned char * *result, PRInt32 
   SECItem request;
   SECItem reply;
   SECStatus s;
-  nsCOMPtr<nsIInterfaceRequestor> ctx = new nsSDRContext();
+  nsCOMPtr<nsIInterfaceRequestor> ctx = new PipUIContext("Encrypt a password");
 
   slot = PK11_GetInternalKeySlot();
   if (!slot) { rv = NS_ERROR_NOT_AVAILABLE; goto loser; }
@@ -168,7 +117,7 @@ Decrypt(unsigned char * data, PRInt32 dataLen, unsigned char * *result, PRInt32 
   SECStatus s;
   SECItem request;
   SECItem reply;
-  nsCOMPtr<nsIInterfaceRequestor> ctx = new nsSDRContext();
+  nsCOMPtr<nsIInterfaceRequestor> ctx = new PipUIContext("Decrypt a remembered password");
 
   *result = 0;
   *_retval = 0;
@@ -288,7 +237,7 @@ ChangePassword()
            NS_TOKENPASSWORDSDIALOG_CONTRACTID);
   if (NS_FAILED(rv)) return rv;
 
-  nsCOMPtr<nsIInterfaceRequestor> ctx = new nsSDRContext();
+  nsCOMPtr<nsIInterfaceRequestor> ctx = new PipUIContext("Remember an updated password");
   PRBool canceled;
 
   {

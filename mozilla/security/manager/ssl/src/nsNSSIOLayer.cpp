@@ -302,7 +302,7 @@ NS_IMETHODIMP nsNSSSocketInfo::GetInterface(const nsIID & uuid, void * *result)
 {
   nsresult rv;
   if (!mCallbacks) {
-    nsCOMPtr<nsIInterfaceRequestor> ir = new PipUIContext();
+    nsCOMPtr<nsIInterfaceRequestor> ir = new PipUIContext("Giving feedback about a secure connection.");
     if (!ir)
       return NS_ERROR_OUT_OF_MEMORY;
 
@@ -1882,7 +1882,6 @@ SECStatus nsNSS_SSLGetClientAuthData(void* arg, PRFileDesc* socket,
 								   SECKEYPrivateKey** pRetKey)
 {
   nsNSSShutDownPreventionLock locker;
-  void* wincx = NULL;
   SECStatus ret = SECFailure;
   nsresult rv;
   nsNSSSocketInfo* info = NULL;
@@ -1906,11 +1905,8 @@ SECStatus nsNSS_SSLGetClientAuthData(void* arg, PRFileDesc* socket,
     return SECFailure;
   }
 
-  /* get PKCS11 pin argument */
-  wincx = SSL_RevealPinArg(socket);
-  if (wincx == NULL) {
-    return SECFailure;
-  }
+  PipUIContext *ui1 = new PipUIContext("Obtain a list of certificates suitable to authenticate yourself to access a remote server");
+  PipUIContext *ui2 = new PipUIContext("Find the private key for the selected authentication certificate");
 
   /* get the socket info */
   info = (nsNSSSocketInfo*)socket->higher->secret;
@@ -1945,7 +1941,7 @@ SECStatus nsNSS_SSLGetClientAuthData(void* arg, PRFileDesc* socket,
     /* find all user certs that are valid and for SSL */
     certList = CERT_FindUserCertsByUsage(CERT_GetDefaultCertDB(), 
                                          certUsageSSLClient, PR_TRUE,
-                                         PR_TRUE, wincx);
+                                         PR_TRUE, ui1);
     if (certList == NULL) {
       goto noCert;
     }
@@ -1976,7 +1972,7 @@ SECStatus nsNSS_SSLGetClientAuthData(void* arg, PRFileDesc* socket,
       }
 #endif
 
-      privKey = PK11_FindKeyByAnyCert(node->cert, wincx);
+      privKey = PK11_FindKeyByAnyCert(node->cert, ui2);
       if (privKey != NULL) {
           /* this is a good cert to present */
           cert = CERT_DupCertificate(node->cert);
@@ -2007,7 +2003,7 @@ SECStatus nsNSS_SSLGetClientAuthData(void* arg, PRFileDesc* socket,
     /* note that we are allowing expired certs in this list */
     certList = CERT_FindUserCertsByUsage(CERT_GetDefaultCertDB(), 
                                          certUsageSSLClient, PR_FALSE, 
-                                         PR_FALSE, wincx);
+                                         PR_FALSE, ui1);
     if (certList == NULL) {
       goto noCert;
     }
@@ -2166,7 +2162,7 @@ SECStatus nsNSS_SSLGetClientAuthData(void* arg, PRFileDesc* socket,
     }
 
     /* go get the private key */
-    privKey = PK11_FindKeyByAnyCert(cert, wincx);
+    privKey = PK11_FindKeyByAnyCert(cert, ui2);
     if (privKey == NULL) {
       keyError = PR_GetError();
       if (keyError == SEC_ERROR_BAD_PASSWORD) {
@@ -2256,7 +2252,6 @@ nsSSLIOLayerImportFD(PRFileDesc *fd,
     NS_ASSERTION(PR_FALSE, "NSS: Error importing socket");
     return nsnull;
   }
-  SSL_SetPKCS11PinArg(sslSock, (nsIInterfaceRequestor*)infoObject);
   SSL_HandshakeCallback(sslSock, HandshakeCallback, infoObject);
   SSL_GetClientAuthDataHook(sslSock, 
                             (SSLGetClientAuthData)nsNSS_SSLGetClientAuthData,

@@ -531,9 +531,11 @@ nsMsgPrintEngine::FireThatLoadOperation(nsString *uri)
   //
   // if this is an addbook: url, skip it, because
   // we know that isn't a message.
+  
   if (PL_strncmp(tString, DATA_URL_PREFIX, DATA_URL_PREFIX_LEN) && 
       PL_strncmp(tString, ADDBOOK_URL_PREFIX, ADDBOOK_URL_PREFIX_LEN) && 
-      PL_strcmp(tString, "about:blank")) {
+      PL_strcmp(tString, "about:blank") &&
+      !PL_strstr(tString, "x-message-display")) {
     rv = GetMessageServiceFromURI(tString, getter_AddRefs(messageService));
   }
 

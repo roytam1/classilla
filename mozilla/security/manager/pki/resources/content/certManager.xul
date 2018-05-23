@@ -29,10 +29,12 @@
 <?xul-overlay href="chrome://pippki/content/OthersOverlay.xul"?>
 <?xul-overlay href="chrome://pippki/content/WebSitesOverlay.xul"?>
 <?xul-overlay href="chrome://pippki/content/CAOverlay.xul"?>
+<?xul-overlay href="chrome://pippki/content/OrphanOverlay.xul"?>
 
 <!DOCTYPE window SYSTEM "chrome://pippki/locale/certManager.dtd">
 
 <window id="certmanager" 
+	windowtype="mozilla:certmanager"
 	xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" 
         title="&certmgr.title;"
         onload="LoadCerts();">
@@ -49,12 +51,14 @@
         <tab id="others_tab" label="&certmgr.tab.others;"/>
         <tab id="websites_tab" label="&certmgr.tab.websites;"/>
         <tab id="ca_tab" label="&certmgr.tab.ca;" selected="true"/>
+        <tab id="orphan_tab" label="&certmgr.tab.orphan;"/>
       </tabs>
       <tabpanels flex="1">
         <vbox id="myCerts" flex="1"/>
         <vbox id="othersCerts" flex="1"/>
         <vbox id="webCerts" flex="1"/>
         <vbox id="CACerts" flex="1"/>
+        <vbox id="OrphanCerts" flex="1"/>
       </tabpanels>
     </tabbox>
 

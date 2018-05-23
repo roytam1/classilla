@@ -722,6 +722,13 @@
             <FILELIST>
                 <FILE>
                     <PATHTYPE>Name</PATHTYPE>
+                    <PATH>nsIFormSigningDialog.idl</PATH>
+                    <PATHFORMAT>MacOS</PATHFORMAT>
+                    <FILEKIND>Text</FILEKIND>
+                    <FILEFLAGS></FILEFLAGS>
+                </FILE>
+                <FILE>
+                    <PATHTYPE>Name</PATHTYPE>
                     <PATH>nsIBadCertListener.idl</PATH>
                     <PATHFORMAT>MacOS</PATHFORMAT>
                     <FILEKIND>Text</FILEKIND>
@@ -974,6 +981,11 @@
                 </FILE>
             </FILELIST>
             <LINKORDER>
+                <FILEREF>
+                    <PATHTYPE>Name</PATHTYPE>
+                    <PATH>nsIFormSigningDialog.idl</PATH>
+                    <PATHFORMAT>MacOS</PATHFORMAT>
+                </FILEREF>
                 <FILEREF>
                     <PATHTYPE>Name</PATHTYPE>
                     <PATH>nsIBadCertListener.idl</PATH>
@@ -1825,6 +1837,13 @@
             <FILELIST>
                 <FILE>
                     <PATHTYPE>Name</PATHTYPE>
+                    <PATH>nsIFormSigningDialog.idl</PATH>
+                    <PATHFORMAT>MacOS</PATHFORMAT>
+                    <FILEKIND>Text</FILEKIND>
+                    <FILEFLAGS></FILEFLAGS>
+                </FILE>
+                <FILE>
+                    <PATHTYPE>Name</PATHTYPE>
                     <PATH>nsIBadCertListener.idl</PATH>
                     <PATHFORMAT>MacOS</PATHFORMAT>
                     <FILEKIND>Text</FILEKIND>
@@ -2079,6 +2098,11 @@
             <LINKORDER>
                 <FILEREF>
                     <PATHTYPE>Name</PATHTYPE>
+                    <PATH>nsIFormSigningDialog.idl</PATH>
+                    <PATHFORMAT>MacOS</PATHFORMAT>
+                </FILEREF>
+                <FILEREF>
+                    <PATHTYPE>Name</PATHTYPE>
                     <PATH>nsIBadCertListener.idl</PATH>
                     <PATHFORMAT>MacOS</PATHFORMAT>
                 </FILEREF>
@@ -2267,6 +2291,12 @@
     </TARGETORDER>
 
     <GROUPLIST>
+        <FILEREF>
+            <TARGETNAME>headers</TARGETNAME>
+            <PATHTYPE>Name</PATHTYPE>
+            <PATH>nsIFormSigningDialog.idl</PATH>
+            <PATHFORMAT>MacOS</PATHFORMAT>
+        </FILEREF>
         <FILEREF>
             <TARGETNAME>headers</TARGETNAME>
             <PATHTYPE>Name</PATHTYPE>

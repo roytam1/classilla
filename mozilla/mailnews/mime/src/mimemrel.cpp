@@ -506,8 +506,18 @@ MimeMultipartRelated_output_child_p(MimeObject *obj, MimeObject* child)
           if (!imappartnum.IsEmpty()) 
             part = mime_set_url_imap_part(obj->options->url, imappartnum.get(), partnum.get());
           else
-            part = mime_set_url_part(obj->options->url, partnum.get(),
-                       PR_FALSE);
+          {
+            char *no_part_url = nsnull;
+            if (obj->options->part_to_load && obj->options->format_out == nsMimeOutput::nsMimeMessageBodyDisplay)
+              no_part_url = mime_get_base_url(obj->options->url);
+            if (no_part_url)
+            {
+              part = mime_set_url_part(no_part_url, partnum.get(), PR_FALSE);
+              PR_Free(no_part_url);
+            }
+            else
+              part = mime_set_url_part(obj->options->url, partnum.get(), PR_FALSE);
+          }
           if (part)
           {
             char *name = MimeHeaders_get_name(child->headers, child->options);
@@ -842,8 +852,14 @@ flush_tag(MimeMultipartRelated* relobj)
         ptr2++;
       /* Compare the beginning of the word with "cid:". Yuck. */
       if (((ptr2 - buf) > 4) && 
-        (buf[0]=='c' && buf[1]=='i' && buf[2]=='d' && buf[3]==':'))
+        ((buf[0]=='c' || buf[0]=='C') && 
+         (buf[1]=='i' || buf[1]=='I') && 
+         (buf[2]=='d' || buf[2]=='D') && 
+          buf[3]==':'))
       {
+        // Make sure it's lowercase, otherwise it won't be found in the hash table
+        buf[0] = 'c'; buf[1] = 'i'; buf[2] = 'd';
+
         /* Null terminate the word so we can... */
         c = *ptr2;
         *ptr2 = '\0';

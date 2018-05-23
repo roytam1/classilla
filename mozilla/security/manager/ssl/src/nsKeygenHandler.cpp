@@ -167,7 +167,7 @@ MOZ_DECL_CTOR_COUNTER(nsKeygenFormProcessor)
 nsKeygenFormProcessor::nsKeygenFormProcessor()
 { 
    MOZ_COUNT_CTOR(nsKeygenFormProcessor);
-   m_ctx = new PipUIContext();
+   m_ctx = new PipUIContext("Generate a new key pair and a certificate request.");
 
 } 
 

@@ -45,6 +45,7 @@ interface nsIDOMWindowInternal;
 interface nsIMsgHeaderSink;
 interface nsIPrompt;
 interface nsIAuthPrompt;
+interface nsIURI;
 
 /*
  *  This interface can be used to set data specific to a window.

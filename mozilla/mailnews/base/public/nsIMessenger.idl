@@ -81,7 +81,7 @@ interface nsIMessenger : nsISupports {
                    in nsISupportsArray folders,
                    in boolean isMoveFolder);
     
-    void OpenURL(in string url);
+    void OpenURL(in string url, in boolean useMessageService);
     void RenameFolder(in nsIRDFCompositeDataSource db, 
                       in nsIRDFResource folder, in wstring name);
     void CompactFolder(in nsIRDFCompositeDataSource db,

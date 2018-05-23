@@ -1010,6 +1010,24 @@
                     <PATHTYPE>PathRelative</PATHTYPE>
                     <PATHROOT>Project</PATHROOT>
                     <ACCESSPATH>::src:</ACCESSPATH>
+                    <PATH>:nsFormSigningDialog.cpp</PATH>
+                    <PATHFORMAT>MacOS</PATHFORMAT>
+                    <FILEKIND>Text</FILEKIND>
+                    <FILEFLAGS></FILEFLAGS>
+                </FILE>
+                <FILE>
+                    <PATHTYPE>PathRelative</PATHTYPE>
+                    <PATHROOT>Project</PATHROOT>
+                    <ACCESSPATH>::src:</ACCESSPATH>
+                    <PATH>:nsNSSDialogHelper.cpp</PATH>
+                    <PATHFORMAT>MacOS</PATHFORMAT>
+                    <FILEKIND>Text</FILEKIND>
+                    <FILEFLAGS></FILEFLAGS>
+                </FILE>
+                <FILE>
+                    <PATHTYPE>PathRelative</PATHTYPE>
+                    <PATHROOT>Project</PATHROOT>
+                    <ACCESSPATH>::src:</ACCESSPATH>
                     <PATH>:nsNSSDialogs.cpp</PATH>
                     <PATHFORMAT>MacOS</PATHFORMAT>
                     <FILEKIND>Text</FILEKIND>
@@ -1107,6 +1125,20 @@
                 </FILE>
             </FILELIST>
             <LINKORDER>
+                <FILEREF>
+                    <PATHTYPE>PathRelative</PATHTYPE>
+                    <PATHROOT>Project</PATHROOT>
+                    <ACCESSPATH>::src:</ACCESSPATH>
+                    <PATH>:nsNSSDialogHelper.cpp</PATH>
+                    <PATHFORMAT>MacOS</PATHFORMAT>
+                </FILEREF>
+                <FILEREF>
+                    <PATHTYPE>PathRelative</PATHTYPE>
+                    <PATHROOT>Project</PATHROOT>
+                    <ACCESSPATH>::src:</ACCESSPATH>
+                    <PATH>:nsFormSigningDialog.cpp</PATH>
+                    <PATHFORMAT>MacOS</PATHFORMAT>
+                </FILEREF>
                 <FILEREF>
                     <PATHTYPE>PathRelative</PATHTYPE>
                     <PATHROOT>Project</PATHROOT>
@@ -2150,6 +2182,24 @@
                     <PATHTYPE>PathRelative</PATHTYPE>
                     <PATHROOT>Project</PATHROOT>
                     <ACCESSPATH>::src:</ACCESSPATH>
+                    <PATH>:nsFormSigningDialog.cpp</PATH>
+                    <PATHFORMAT>MacOS</PATHFORMAT>
+                    <FILEKIND>Text</FILEKIND>
+                    <FILEFLAGS></FILEFLAGS>
+                </FILE>
+                <FILE>
+                    <PATHTYPE>PathRelative</PATHTYPE>
+                    <PATHROOT>Project</PATHROOT>
+                    <ACCESSPATH>::src:</ACCESSPATH>
+                    <PATH>:nsNSSDialogHelper.cpp</PATH>
+                    <PATHFORMAT>MacOS</PATHFORMAT>
+                    <FILEKIND>Text</FILEKIND>
+                    <FILEFLAGS></FILEFLAGS>
+                </FILE>
+                <FILE>
+                    <PATHTYPE>PathRelative</PATHTYPE>
+                    <PATHROOT>Project</PATHROOT>
+                    <ACCESSPATH>::src:</ACCESSPATH>
                     <PATH>:nsNSSDialogs.cpp</PATH>
                     <PATHFORMAT>MacOS</PATHFORMAT>
                     <FILEKIND>Text</FILEKIND>
@@ -2258,6 +2308,20 @@
                     <PATHTYPE>PathRelative</PATHTYPE>
                     <PATHROOT>Project</PATHROOT>
                     <ACCESSPATH>::src:</ACCESSPATH>
+                    <PATH>:nsFormSigningDialog.cpp</PATH>
+                    <PATHFORMAT>MacOS</PATHFORMAT>
+                </FILEREF>
+                <FILEREF>
+                    <PATHTYPE>PathRelative</PATHTYPE>
+                    <PATHROOT>Project</PATHROOT>
+                    <ACCESSPATH>::src:</ACCESSPATH>
+                    <PATH>:nsNSSDialogHelper.cpp</PATH>
+                    <PATHFORMAT>MacOS</PATHFORMAT>
+                </FILEREF>
+                <FILEREF>
+                    <PATHTYPE>PathRelative</PATHTYPE>
+                    <PATHROOT>Project</PATHROOT>
+                    <ACCESSPATH>::src:</ACCESSPATH>
                     <PATH>:nsNSSDialogs.cpp</PATH>
                     <PATHFORMAT>MacOS</PATHFORMAT>
                 </FILEREF>
@@ -2342,6 +2406,22 @@
 
     <GROUPLIST>
         <GROUP><NAME>src</NAME>
+            <FILEREF>
+                <TARGETNAME>PIPPKIDebug.shlb</TARGETNAME>
+                <PATHTYPE>PathRelative</PATHTYPE>
+                <PATHROOT>Project</PATHROOT>
+                <ACCESSPATH>::src:</ACCESSPATH>
+                <PATH>:nsFormSigningDialog.cpp</PATH>
+                <PATHFORMAT>MacOS</PATHFORMAT>
+            </FILEREF>
+            <FILEREF>
+                <TARGETNAME>PIPPKIDebug.shlb</TARGETNAME>
+                <PATHTYPE>PathRelative</PATHTYPE>
+                <PATHROOT>Project</PATHROOT>
+                <ACCESSPATH>::src:</ACCESSPATH>
+                <PATH>:nsNSSDialogHelper.cpp</PATH>
+                <PATHFORMAT>MacOS</PATHFORMAT>
+            </FILEREF>
             <FILEREF>
                 <TARGETNAME>PIPPKIDebug.shlb</TARGETNAME>
                 <PATHTYPE>PathRelative</PATHTYPE>

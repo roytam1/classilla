@@ -47,7 +47,7 @@ function OpenURL(url)
 {
   //dump("\n\nOpenURL from XUL\n\n\n");
   messenger.SetWindow(window, msgWindow);
-  messenger.OpenURL(url);
+  messenger.OpenURL(url, true);
 }
 
 function GetMsgFolderFromResource(folderResource)
@@ -101,44 +101,44 @@ function LoadMessageByUri(uri)
 
 function setTitleFromFolder(msgfolder, subject)
 {
-    if (!msgfolder) return;
-
     var title;
-    var server = msgfolder.server;
-
+    
     if (null != subject)
-      title = subject+" - ";
+      title = subject;
     else
       title = "";
-
-    if (msgfolder.isServer) 
-      title += server.prettyName;
-    else {
+    
+    if (msgfolder)
+    {
+      var server = msgfolder.server;
+    
+      title +=" - ";
+    
+      if (msgfolder.isServer)
+        title += server.prettyName;
+      else {
         var middle;
         var end;
         if (server.type == "nntp") {
-            // <folder> on <hostname>
-            middle = gMessengerBundle.getString("titleNewsPreHost");
-            end = server.hostName;
+          // <folder> on <hostname>
+          middle = gMessengerBundle.getString("titleNewsPreHost");
+          end = server.hostName;
         } else {
-            var identity;
-            try {
-                var identities = accountManager.GetIdentitiesForServer(server);
+          var identity;
+          try {
+            var identities = accountManager.GetIdentitiesForServer(server);
 
-                identity = identities.QueryElementAt(0, Components.interfaces.nsIMsgIdentity);
-                // <folder> for <email>
-                middle = gMessengerBundle.getString("titleMailPreHost");
-                end = identity.email;
-            } catch (ex) {
-            }
-
+            identity = identities.QueryElementAt(0, Components.interfaces.nsIMsgIdentity);
+            // <folder> for <email>
+            middle = gMessengerBundle.getString("titleMailPreHost");
+            end = identity.email;
+          } catch (ex) {}
         }
-
         title += msgfolder.prettyName;
         if (middle) title += " " + middle;
         if (end) title += " " + end;
+      }
     }
-
     title += " - " + gBrandBundle.getString("brandShortName");
     window.title = title;
 }

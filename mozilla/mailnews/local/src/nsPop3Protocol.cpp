@@ -27,6 +27,8 @@
  * Date             Modified by     Description of modification
  * 04/20/2000       IBM Corp.      OS/2 VisualAge build.
  * 06/07/2000       Jason Eager    Added check for out of disk space
+ *
+ * Andrew Taylor <ataylor@its.to>
  */
 
 #ifdef MOZ_LOGGING
@@ -61,6 +63,35 @@
 #define kLargeNumberOfMessages 50000
 
 static PRLogModuleInfo *POP3LOGMODULE = nsnull;
+
+nsresult ExpandToHex(const unsigned char* src, PRUint16 src_length, char* dest, PRUint16 dest_length)
+{
+    if ((src_length * 2) + 1 > dest_length)
+        return NS_ERROR_FAILURE;
+
+    PRUint16 value;
+
+    for (PRUint16 i = 0; i < src_length; ++i, ++src) {
+        value = (*src >> 4) & 0xf;
+        if (value < 10)
+            *dest = value + '0';
+        else
+            *dest = value - 10 + 'a';
+
+        ++dest;
+
+        value = *src & 0xf;
+        if (value < 10)
+            *dest = value + '0';
+        else
+            *dest = value - 10 + 'a';
+
+        ++dest;
+    }
+    
+    *dest = '\0';
+    return NS_OK;
+}
 
 static NS_DEFINE_CID(kPrefServiceCID, NS_PREF_CID); 
 
@@ -436,7 +467,8 @@ nsresult nsPop3Protocol::Initialize(nsIURI * aURL)
 
   if (aURL)
   {
-    PRBool isSecure = PR_FALSE;
+    mIsSecure = PR_FALSE;
+    mDoAPOP = PR_FALSE;
 
     // extract out message feedback if there is any.
     nsCOMPtr<nsIMsgMailNewsUrl> mailnewsUrl = do_QueryInterface(aURL);
@@ -447,7 +479,10 @@ nsresult nsPop3Protocol::Initialize(nsIURI * aURL)
       mailnewsUrl->GetServer(getter_AddRefs(server));
       NS_ENSURE_TRUE(server, NS_MSG_INVALID_OR_MISSING_SERVER);
 
-      rv = server->GetIsSecure(&isSecure);
+      rv = server->GetIsSecure(&mIsSecure);
+      NS_ENSURE_SUCCESS(rv,rv);
+
+      rv = server->GetRequireMD5DigestAuthentication(&mDoAPOP);
       NS_ENSURE_SUCCESS(rv,rv);
 
       m_pop3Server = do_QueryInterface(server);
@@ -477,7 +512,7 @@ nsresult nsPop3Protocol::Initialize(nsIURI * aURL)
     rv = NS_ExamineForProxy("pop", hostName.get(), port, getter_AddRefs(proxyInfo));
     if (NS_FAILED(rv)) proxyInfo = nsnull;
 
-    if (isSecure)
+    if (mIsSecure)
       rv = OpenNetworkSocketWithInfo(hostName.get(), port, "ssl", proxyInfo, ir);
     else
       rv = OpenNetworkSocketWithInfo(hostName.get(), port, nsnull, proxyInfo, ir);
@@ -494,6 +529,9 @@ nsresult nsPop3Protocol::Initialize(nsIURI * aURL)
 	  return NS_ERROR_OUT_OF_MEMORY;
 
   mStringService = do_GetService(NS_MSG_POPSTRINGSERVICE_CONTRACTID);
+
+  mHashGenerator = do_GetService(SIGNATURE_VERIFIER_CONTRACTID);
+
   return rv;
 }
 
@@ -507,6 +545,8 @@ nsPop3Protocol::~nsPop3Protocol()
 	FreeMsgInfo();
 	PR_Free(m_pop3ConData->only_uidl);
 	PR_Free(m_pop3ConData);
+    if (m_pop3ConData->apop_time_stamp)
+        PL_strfree(m_pop3ConData->apop_time_stamp);
 
 	if (m_lineStreamBuffer)
 		delete m_lineStreamBuffer;
@@ -777,6 +817,7 @@ nsPop3Protocol::WaitForStartOfConnectionResponse(nsIInputStream* aInputStream,
   if(*line == '+')
   {
     m_pop3ConData->command_succeeded = PR_TRUE;
+
     if(PL_strlen(line) > 4)
       m_commandResponse = line+4;
     else
@@ -784,6 +825,24 @@ nsPop3Protocol::WaitForStartOfConnectionResponse(nsIInputStream* aInputStream,
     
     m_pop3ConData->next_state = m_pop3ConData->next_state_after_response;
     m_pop3ConData->pause_for_read = PR_FALSE; /* don't pause */
+ 
+    /* look for a server timestamp that can be used for APOP authentication */
+    char *time_stamp_begin;
+    char *time_stamp_end = line + strlen(line); // points to zero termination byte
+
+    while (time_stamp_end > line)
+    {
+        --time_stamp_end;
+        if (*time_stamp_end != ' ')
+            break;
+    }
+
+    if (*time_stamp_end == '>' &&
+        (time_stamp_begin = strrchr(line, '<'))) {
+
+        /* if strdup fails, that's ok, NULL means no APOP time stamp */
+        m_pop3ConData->apop_time_stamp = PL_strndup(time_stamp_begin, time_stamp_end - time_stamp_begin + 1);
+    }
   }
   PR_Free(line);
   return(1);  /* everything ok */
@@ -968,7 +1027,9 @@ PRInt32 nsPop3Protocol::AuthResponse(nsIInputStream* inputStream,
         /* now that we've read all the AUTH responses, decide which 
         * state to go to next 
         */
-        if (m_pop3ConData->capability_flags & POP3_HAS_AUTH_LOGIN)
+        if (mDoAPOP && mHashGenerator && m_pop3ConData->apop_time_stamp)
+            m_pop3ConData->next_state = POP3_SEND_USERNAME;
+        else if (m_pop3ConData->capability_flags & POP3_HAS_AUTH_LOGIN)
             m_pop3ConData->next_state = POP3_AUTH_LOGIN;
         else
             m_pop3ConData->next_state = POP3_SEND_USERNAME;
@@ -1019,9 +1080,17 @@ PRInt32 nsPop3Protocol::AuthLoginResponse()
     return 0;
 }
 
-
 PRInt32 nsPop3Protocol::SendUsername()
 {
+    nsresult rv;
+    PRBool sendPassword = PR_TRUE;
+
+    if (mDoAPOP)
+    {
+        // must never send plain password if user requested APOP
+        sendPassword = PR_FALSE;
+    }
+
     /* check login response */
     if(!m_pop3ConData->command_succeeded)
         return(Error(POP3_SERVER_ERROR));
@@ -1031,7 +1100,46 @@ PRInt32 nsPop3Protocol::SendUsername()
 
     nsCAutoString cmd;
 
-    if (POP3_HAS_AUTH_LOGIN & m_pop3ConData->capability_flags) 
+    if (mDoAPOP && mHashGenerator && m_pop3ConData->apop_time_stamp) {
+        nsCAutoString apop_pwd;
+
+        nsXPIDLCString password;
+        PRBool okayValue = PR_TRUE;
+        rv = GetPassword(getter_Copies(password), &okayValue);
+        if (NS_SUCCEEDED(rv) && !okayValue) {
+            // user canceled the password prompt
+            m_pop3ConData->next_state = POP3_ERROR_DONE;
+            return NS_ERROR_ABORT;
+        }
+        if (NS_FAILED(rv) || !password) {
+            return Error(POP3_PASSWORD_UNDEFINED);
+        }
+
+        apop_pwd = m_pop3ConData->apop_time_stamp;
+        apop_pwd += password;
+
+        HASHContextStr *hid;
+        const digest_length = 16;
+        unsigned char cbuf[digest_length], *chash = cbuf;
+        PRUint32 clen;
+        char hashHex[2*digest_length+1];
+
+        rv = mHashGenerator->HashBegin(nsISignatureVerifier::MD5, &hid);
+        if (NS_FAILED(rv)) return rv;
+        rv = mHashGenerator->HashUpdate(hid, apop_pwd.get(), apop_pwd.Length());
+        if (NS_FAILED(rv)) return rv;
+        rv = mHashGenerator->HashEnd(hid, &chash, &clen, digest_length);
+        if (NS_FAILED(rv)) return rv;
+
+        rv = ExpandToHex(chash, digest_length, hashHex, sizeof(hashHex));
+        if (NS_FAILED(rv)) return rv;
+
+        cmd = NS_LITERAL_CSTRING("APOP ") +
+            m_username +
+            NS_LITERAL_CSTRING(" ") +
+            nsDependentCString(hashHex);
+    }
+    else if (POP3_HAS_AUTH_LOGIN & m_pop3ConData->capability_flags) 
 	{
         char * str =
             PL_Base64Encode(m_username.get(), m_username.Length(), nsnull);
@@ -1040,12 +1148,21 @@ PRInt32 nsPop3Protocol::SendUsername()
     }
     else 
 	{
-        cmd = "USER ";
-        cmd += m_username;
+        if (mDoAPOP)
+            return(Error(CANNOT_SEND_APOP_PASSWORD));
+
+        cmd = NS_LITERAL_CSTRING("USER ") + m_username;
     }
     cmd += CRLF;
 
-    m_pop3ConData->next_state_after_response = POP3_SEND_PASSWORD;
+    if (sendPassword)
+        m_pop3ConData->next_state_after_response = POP3_SEND_PASSWORD;
+    else {
+        if (m_pop3ConData->get_url)
+            m_pop3ConData->next_state_after_response = POP3_SEND_GURL;
+        else
+            m_pop3ConData->next_state_after_response = POP3_SEND_STAT;
+    }
 
     return SendData(m_url, cmd.get());
 }
@@ -2705,6 +2822,8 @@ nsresult nsPop3Protocol::ProcessProtocolState(nsIURI * url, nsIInputStream * aIn
               {
                 if (m_pop3ConData->capability_flags & POP3_AUTH_LOGIN_UNDEFINED)
                   m_pop3ConData->next_state = POP3_SEND_AUTH;
+                else if (mDoAPOP && mHashGenerator && m_pop3ConData->apop_time_stamp)
+                  m_pop3ConData->next_state = POP3_SEND_USERNAME;
                 else if (m_pop3ConData->capability_flags & POP3_HAS_AUTH_LOGIN)
                   m_pop3ConData->next_state = POP3_AUTH_LOGIN;
                 else
@@ -2738,6 +2857,8 @@ nsresult nsPop3Protocol::ProcessProtocolState(nsIURI * url, nsIInputStream * aIn
             if (prefBool) {
                 if (m_pop3ConData->capability_flags & POP3_AUTH_LOGIN_UNDEFINED)
                     m_pop3ConData->next_state_after_response = POP3_SEND_AUTH;
+                if (mDoAPOP && mHashGenerator && m_pop3ConData->apop_time_stamp)
+                    m_pop3ConData->next_state = POP3_SEND_USERNAME;
                 else if (m_pop3ConData->capability_flags & POP3_HAS_AUTH_LOGIN)
                     m_pop3ConData->next_state_after_response = POP3_AUTH_LOGIN;
                 else
@@ -2745,6 +2866,7 @@ nsresult nsPop3Protocol::ProcessProtocolState(nsIURI * url, nsIInputStream * aIn
             }
             else
                 m_pop3ConData->next_state_after_response = POP3_SEND_USERNAME;
+
             break;
         }
 

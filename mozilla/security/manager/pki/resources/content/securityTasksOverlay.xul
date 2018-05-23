@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+
+<!DOCTYPE overlay SYSTEM "chrome://pippki/locale/securityTasksOverlay.dtd">
+
+<overlay id="securityTasksOverlay"
+         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+
+  <script type="application/x-javascript" src="chrome://pippki/content/pref-security.js"/>
+  <script type="application/x-javascript" src="chrome://pippki/content/openManager.js"/>
+
+  <!-- tasksOverlay menu items -->
+  <menupopup id="taskPopup">
+    <menu id="menu_securityManager"
+          insertbefore="downloadmgr"
+          label="&securityMenu.label;"
+          accesskey="&securityMenu.accesskey;">
+      <menupopup>
+        <menuitem label="&securityCertManagerCmd.label;"
+                  accesskey="&securityCertManagerCmd.accesskey;"
+                  oncommand="openCertManager();"/>
+        <menuitem label="&securityDeviceManagerCmd.label;"
+                  accesskey="&securityDeviceManagerCmd.accesskey;"
+                  oncommand="openDeviceManager();"/>
+        <menuitem label="&securityCrlManagerCmd.label;"
+                  accesskey="&securityCrlManagerCmd.accesskey;"
+                  oncommand="openCrlManager();"/>
+      </menupopup>
+    </menu>
+  </menupopup>
+</overlay>

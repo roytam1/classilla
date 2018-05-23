@@ -1811,9 +1811,10 @@ nsNSSComponent::RememberCert(CERTCertificate *cert)
 
 
 
-NS_IMPL_ISUPPORTS1(PipUIContext, nsIInterfaceRequestor)
+NS_IMPL_ISUPPORTS2(PipUIContext, nsIInterfaceRequestor, nsISupportsCString)
 
-PipUIContext::PipUIContext()
+PipUIContext::PipUIContext(const char *info)
+:mInfo(info)
 {
 }
 
@@ -1821,10 +1822,35 @@ PipUIContext::~PipUIContext()
 {
 }
 
+NS_IMETHODIMP PipUIContext::GetType(PRUint16 *aType)
+{
+    NS_ASSERTION(aType, "Bad pointer");
+
+    *aType = TYPE_CSTRING;
+    return NS_OK;
+}
+
+
+NS_IMETHODIMP PipUIContext::GetData(nsACString& aData)
+{
+    aData = mInfo;
+    return NS_OK;
+}
+
+NS_IMETHODIMP PipUIContext::ToString(char **_retval)
+{
+    return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+NS_IMETHODIMP PipUIContext::SetData(const nsACString& aData)
+{
+    return NS_ERROR_NOT_IMPLEMENTED;
+}
+
 /* void getInterface (in nsIIDRef uuid, [iid_is (uuid), retval] out nsQIResult result); */
 NS_IMETHODIMP PipUIContext::GetInterface(const nsIID & uuid, void * *result)
 {
-  nsresult rv = NS_OK;
+  nsresult rv = NS_ERROR_NO_INTERFACE;
 
   if (uuid.Equals(NS_GET_IID(nsIPrompt))) {
     nsCOMPtr<nsIProxyObjectManager> proxyman(do_GetService(NS_XPCOMPROXY_CONTRACTID));
@@ -1843,8 +1869,19 @@ NS_IMETHODIMP PipUIContext::GetInterface(const nsIID & uuid, void * *result)
         NS_ADDREF((nsIPrompt*)*result);
       }
     }
-  } else {
-    rv = NS_ERROR_NO_INTERFACE;
+
+    rv = NS_OK;
+  }
+  else if (uuid.Equals(NS_GET_IID(nsISupportsCString))) {
+    nsCOMPtr<nsISupportsCString> cstr(do_QueryInterface((nsISupportsCString*)this));
+    if (cstr) {
+      *result = cstr;
+      NS_ADDREF((nsISupportsCString*)*result);
+      rv = NS_OK;
+    }
+    else {
+      rv = NS_ERROR_FAILURE;
+    }
   }
 
   return rv;
@@ -2020,7 +2057,7 @@ PSMContentDownloader::OnStopRequest(nsIRequest* request,
   nsCOMPtr<nsICRLManager> crlManager;
 
   nsresult rv;
-  nsCOMPtr<nsIInterfaceRequestor> ctx = new PipUIContext();
+  nsCOMPtr<nsIInterfaceRequestor> ctx = new PipUIContext("Import a downloaded certificate.");
 
   switch (mType) {
   case PSMContentDownloader::X509_CA_CERT:

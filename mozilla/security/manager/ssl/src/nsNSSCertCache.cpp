@@ -91,7 +91,7 @@ nsNSSCertCache::CacheAllCerts()
     }
   }
 
-  nsCOMPtr<nsIInterfaceRequestor> cxt = new PipUIContext();
+  nsCOMPtr<nsIInterfaceRequestor> cxt = new PipUIContext("Obtain a list of available certificates.");
   
   CERTCertList *newList = PK11_ListCerts(PK11CertListUnique, cxt);
 

@@ -62,6 +62,8 @@
 #include "nsUsageArrayHelper.h"
 #include "nsICertificateDialogs.h"
 #include "nsNSSCertHelper.h"
+#include "nsISupportsPrimitives.h"
+#include "nsUnicharUtils.h"
 
 #include "nspr.h"
 extern "C" {
@@ -149,7 +151,7 @@ void nsNSSCertificate::destructorSafeDestroyNSSReference()
 
   if (mPermDelete) {
     if (mCertType == nsNSSCertificate::USER_CERT) {
-      nsCOMPtr<nsIInterfaceRequestor> cxt = new PipUIContext();
+      nsCOMPtr<nsIInterfaceRequestor> cxt = new PipUIContext("Delete a certificate and its key pair.");
       PK11_DeleteTokenCertAndKey(mCert, cxt);
     } else if (!PK11_IsReadOnly(mCert->slot)) {
       // If the list of built-ins does contain a non-removable
@@ -187,7 +189,7 @@ nsNSSCertificate::MarkForPermDeletion()
     return NS_ERROR_NOT_AVAILABLE;
 
   // make sure user is logged in to the token
-  nsCOMPtr<nsIInterfaceRequestor> ctx = new PipUIContext();
+  nsCOMPtr<nsIInterfaceRequestor> ctx = new PipUIContext("Delete a certificate and its key pair.");
 
   if (PK11_NeedLogin(mCert->slot)
       && !PK11_NeedUserInit(mCert->slot)
@@ -241,21 +243,14 @@ nsNSSCertificate::FormatUIStrings(const nsAutoString &nickname, nsAutoString &ni
 
     if (NS_SUCCEEDED(nssComponent->GetPIPNSSBundleString(NS_LITERAL_STRING("CertInfoIssuedFor").get(), info))) {
       details.Append(info);
-      details.Append(NS_LITERAL_STRING("\n"));
-    }
-
-    if (NS_SUCCEEDED(x509Proxy->GetSubjectName(temp1)) && !temp1.IsEmpty()) {
-      details.Append(NS_LITERAL_STRING("  "));
-      if (NS_SUCCEEDED(nssComponent->GetPIPNSSBundleString(NS_LITERAL_STRING("CertDumpSubject").get(), info))) {
-        details.Append(info);
-        details.Append(NS_LITERAL_STRING(": "));
+      details.Append(NS_LITERAL_STRING(" "));
+      if (NS_SUCCEEDED(x509Proxy->GetSubjectName(temp1)) && !temp1.IsEmpty()) {
+        details.Append(temp1);
       }
-      details.Append(temp1);
-      details.Append(NS_LITERAL_STRING("\n"));
     }
 
     if (NS_SUCCEEDED(x509Proxy->GetSerialNumber(temp1)) && !temp1.IsEmpty()) {
-      details.Append(NS_LITERAL_STRING("  "));
+      details.Append(NS_LITERAL_STRING("\n  "));
       if (NS_SUCCEEDED(nssComponent->GetPIPNSSBundleString(NS_LITERAL_STRING("CertDumpSerialNo").get(), info))) {
         details.Append(info);
         details.Append(NS_LITERAL_STRING(": "));
@@ -265,8 +260,6 @@ nsNSSCertificate::FormatUIStrings(const nsAutoString &nickname, nsAutoString &ni
       nickWithSerial.Append(NS_LITERAL_STRING(" ["));
       nickWithSerial.Append(temp1);
       nickWithSerial.Append(NS_LITERAL_STRING("]"));
-
-      details.Append(NS_LITERAL_STRING("\n"));
     }
 
 
@@ -283,7 +276,7 @@ nsNSSCertificate::FormatUIStrings(const nsAutoString &nickname, nsAutoString &ni
       }
 
       if (validity) {
-        details.Append(NS_LITERAL_STRING("  "));
+        details.Append(NS_LITERAL_STRING("\n  "));
         if (NS_SUCCEEDED(nssComponent->GetPIPNSSBundleString(NS_LITERAL_STRING("CertInfoValid").get(), info))) {
           details.Append(info);
         }
@@ -305,47 +298,49 @@ nsNSSCertificate::FormatUIStrings(const nsAutoString &nickname, nsAutoString &ni
           details.Append(NS_LITERAL_STRING(" "));
           details.Append(temp1);
         }
-
-        details.Append(NS_LITERAL_STRING("\n"));
       }
     }
 
     PRUint32 tempInt = 0;
     if (NS_SUCCEEDED(x509Proxy->GetUsagesString(PR_FALSE, &tempInt, temp1)) && !temp1.IsEmpty()) {
-      details.Append(NS_LITERAL_STRING("  "));
+      details.Append(NS_LITERAL_STRING("\n  "));
       if (NS_SUCCEEDED(nssComponent->GetPIPNSSBundleString(NS_LITERAL_STRING("CertInfoPurposes").get(), info))) {
         details.Append(info);
       }
       details.Append(NS_LITERAL_STRING(": "));
       details.Append(temp1);
-      details.Append(NS_LITERAL_STRING("\n"));
     }
 
     if (NS_SUCCEEDED(nssComponent->GetPIPNSSBundleString(NS_LITERAL_STRING("CertInfoIssuedBy").get(), info))) {
-      details.Append(info);
       details.Append(NS_LITERAL_STRING("\n"));
+      details.Append(info);
+      details.Append(NS_LITERAL_STRING(" "));
+
+      if (NS_SUCCEEDED(x509Proxy->GetIssuerName(temp1)) && !temp1.IsEmpty()) {
+        details.Append(temp1);
+      }
     }
 
-    if (NS_SUCCEEDED(x509Proxy->GetIssuerName(temp1)) && !temp1.IsEmpty()) {
-      details.Append(NS_LITERAL_STRING("  "));
-      if (NS_SUCCEEDED(nssComponent->GetPIPNSSBundleString(NS_LITERAL_STRING("CertDumpSubject").get(), info))) {
-        details.Append(info);
-        details.Append(NS_LITERAL_STRING(": "));
-      }
-      details.Append(temp1);
+    if (NS_SUCCEEDED(nssComponent->GetPIPNSSBundleString(NS_LITERAL_STRING("CertInfoStoredIn").get(), info))) {
       details.Append(NS_LITERAL_STRING("\n"));
+      details.Append(info);
+      details.Append(NS_LITERAL_STRING(" "));
+
+      if (NS_SUCCEEDED(x509Proxy->GetTokenName(temp1)) && !temp1.IsEmpty()) {
+        details.Append(temp1);
+      }
     }
+
 
     /*
       the above produces output the following output:
 
-      Issued to: 
-        Subject: $subjectName
+      Issued to: $subjectName
         Serial number: $serialNumber
         Valid from: $starting_date to $expriation_date
         Purposes: $purposes
-      Issued by:
-        Subject: $issuerName
+      Issued by: $issuerName
+      Stored in: $token
     */
   }
   
@@ -413,6 +408,7 @@ nsNSSCertificate::GetNickname(nsAString &_nickname)
   if (isAlreadyShutDown())
     return NS_ERROR_NOT_AVAILABLE;
 
+// XXX kaie: this is bad. We return a non localizable hardcoded string.
   const char *nickname = (mCert->nickname) ? mCert->nickname : "(no nickname)";
   _nickname = NS_ConvertUTF8toUCS2(nickname);
   return NS_OK;
@@ -425,8 +421,83 @@ nsNSSCertificate::GetEmailAddress(nsAString &_emailAddress)
   if (isAlreadyShutDown())
     return NS_ERROR_NOT_AVAILABLE;
 
+// XXX kaie: this is bad. We return a non localizable hardcoded string.
+//           And agents could be confused, assuming the email address == "(no nickname)"
   const char *email = (mCert->emailAddr) ? mCert->emailAddr : "(no email address)";
   _emailAddress = NS_ConvertUTF8toUCS2(email);
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsNSSCertificate::GetEmailAddresses(PRUint32 *aLength, PRUnichar*** aAddresses)
+{
+  nsNSSShutDownPreventionLock locker;
+  if (isAlreadyShutDown())
+    return NS_ERROR_NOT_AVAILABLE;
+
+  NS_ENSURE_ARG(aLength);
+  NS_ENSURE_ARG(aAddresses);
+
+  *aLength = 0;
+
+  const char *aAddr;
+  for (aAddr = CERT_GetFirstEmailAddress(mCert)
+       ;
+       aAddr
+       ;
+       aAddr = CERT_GetNextEmailAddress(mCert, aAddr))
+  {
+    ++(*aLength);
+  }
+
+  *aAddresses = (PRUnichar **)nsMemory::Alloc(sizeof(PRUnichar *) * (*aLength));
+  if (!aAddresses)
+    return NS_ERROR_OUT_OF_MEMORY;
+
+  PRUint32 iAddr;
+  for (aAddr = CERT_GetFirstEmailAddress(mCert), iAddr = 0
+       ;
+       aAddr
+       ;
+       aAddr = CERT_GetNextEmailAddress(mCert, aAddr), ++iAddr)
+  {
+    (*aAddresses)[iAddr] = ToNewUnicode(NS_ConvertUTF8toUCS2(aAddr));
+  }
+
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsNSSCertificate::ContainsEmailAddress(const nsAString &aEmailAddress, PRBool *result)
+{
+  nsNSSShutDownPreventionLock locker;
+  if (isAlreadyShutDown())
+    return NS_ERROR_NOT_AVAILABLE;
+
+  NS_ENSURE_ARG(result);
+  *result = PR_FALSE;
+
+  const char *aAddr = nsnull;
+  for (aAddr = CERT_GetFirstEmailAddress(mCert)
+       ;
+       aAddr
+       ;
+       aAddr = CERT_GetNextEmailAddress(mCert, aAddr))
+  {
+    NS_ConvertUTF8toUCS2 certAddr(aAddr);
+    ToLowerCase(certAddr);
+
+    nsAutoString testAddr(aEmailAddress);
+    ToLowerCase(testAddr);
+    
+    if (certAddr == testAddr)
+    {
+      *result = PR_TRUE;
+      break;
+    }
+
+  }
+  
   return NS_OK;
 }
 

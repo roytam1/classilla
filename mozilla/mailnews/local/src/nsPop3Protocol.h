@@ -49,6 +49,7 @@
 #include "nsLocalStringBundle.h"
 #include "nsIMsgStatusFeedback.h"
 #include "nsIMsgFolder.h" // TO include biffState enum. Change to bool later...
+#include "nsISignatureVerifier.h"
 
 #include "prerror.h"
 #include "plhash.h"
@@ -248,6 +249,8 @@ typedef struct _Pop3ConData {
     PRInt32 pop3_size;
     PRBool dot_fix;
     PRBool assumed_end;
+
+    char *apop_time_stamp;
 } Pop3ConData;
 
 // State Flags (Note, I use the word state in terms of storing 
@@ -309,6 +312,10 @@ private:
   Pop3ConData* m_pop3ConData;
   void FreeMsgInfo();
   void Abort();
+
+  PRBool mDoAPOP;
+  nsCOMPtr<nsISignatureVerifier> mHashGenerator;
+  PRBool mIsSecure;
 
     //////////////////////////////////////////////////////////////////////////////////////////
 	// Begin Pop3 protocol state handlers

@@ -958,9 +958,26 @@ nsresult nsMsgDBView::LoadMessageByMsgKeyHelper(nsMsgKey aMsgKey, PRBool forceAl
     {
       uri.Append("?fetchCompleteMessage=true");
     }
-    mMessengerInstance->OpenURL(uri);
+    mMessengerInstance->OpenURL(uri, PR_TRUE);
     m_currentlyDisplayedMsgKey = aMsgKey;
     UpdateDisplayMessage(aMsgKey);
+  }
+
+  return NS_OK;
+}
+
+
+// Load a message.
+NS_IMETHODIMP nsMsgDBView::LoadMessageByUrl(const char* aUrl)
+{
+  NS_ASSERTION(aUrl,"trying to load a null url");
+  if (!aUrl) return NS_ERROR_UNEXPECTED;
+
+  if (!mSuppressMsgDisplay)
+  {
+    nsCAutoString urlStr(aUrl);
+    mMessengerInstance->OpenURL(aUrl, PR_FALSE);
+    m_currentlyDisplayedMsgKey = nsMsgKey_None;
   }
 
   return NS_OK;
@@ -5529,37 +5546,6 @@ nsresult nsMsgDBView::CopyDBView(nsMsgDBView *aNewMsgDBView, nsIMessenger *aMess
 
   return NS_OK;
 }
-
-NS_IMETHODIMP
-nsMsgDBView::GetSearchSession(nsIMsgSearchSession* *aSession)
-{
-  NS_ASSERTION(PR_FALSE, "should be overriden by child class");
-  return NS_ERROR_NOT_IMPLEMENTED;
-}
-
-NS_IMETHODIMP
-nsMsgDBView::SetSearchSession(nsIMsgSearchSession *aSession)
-{
-  NS_ASSERTION(PR_FALSE, "should be overriden by child class");
-  return NS_ERROR_NOT_IMPLEMENTED;
-}
-
-NS_IMETHODIMP
-nsMsgDBView::GetSupportsThreading(PRBool *aResult)
-{
-  NS_ENSURE_ARG_POINTER(aResult);
-  *aResult = PR_FALSE;
-  return NS_OK;
-}
-
-NS_IMETHODIMP
-nsMsgDBView::FindIndexFromKey(nsMsgKey aMsgKey, PRBool aExpand, nsMsgViewIndex *aIndex)
-{
-  NS_ENSURE_ARG_POINTER(aIndex);
-
-  *aIndex = FindKey(aMsgKey, aExpand);
-  return NS_OK;
-}
  
 static void getDateFormatPref( const nsCOMPtr<nsIPrefBranch>& _prefBranch, const char* _prefLocalName, nsDateFormatSelector& _format )
 {
@@ -5593,4 +5579,35 @@ nsresult nsMsgDBView::InitDisplayFormats()
   getDateFormatPref( dateFormatPrefs, "thisweek", m_dateFormatThisWeek );
   getDateFormatPref( dateFormatPrefs, "today", m_dateFormatToday );
   return rv;
+}
+
+NS_IMETHODIMP
+nsMsgDBView::GetSearchSession(nsIMsgSearchSession* *aSession)
+{
+  NS_ASSERTION(PR_FALSE, "should be overriden by child class");
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+NS_IMETHODIMP
+nsMsgDBView::SetSearchSession(nsIMsgSearchSession *aSession)
+{
+  NS_ASSERTION(PR_FALSE, "should be overriden by child class");
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+NS_IMETHODIMP
+nsMsgDBView::GetSupportsThreading(PRBool *aResult)
+{
+  NS_ENSURE_ARG_POINTER(aResult);
+  *aResult = PR_FALSE;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsMsgDBView::FindIndexFromKey(nsMsgKey aMsgKey, PRBool aExpand, nsMsgViewIndex *aIndex)
+{
+  NS_ENSURE_ARG_POINTER(aIndex);
+
+  *aIndex = FindKey(aMsgKey, aExpand);
+  return NS_OK;
 }

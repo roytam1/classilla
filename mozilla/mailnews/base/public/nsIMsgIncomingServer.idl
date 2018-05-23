@@ -167,6 +167,9 @@ interface nsIMsgIncomingServer : nsISupports {
   /* should we use a secure channel? */
   attribute boolean isSecure;
 
+  /* should we require MD5 digest authentication? */
+  attribute boolean requireMD5DigestAuthentication;
+
   /* can server support a secure channel? */
   readonly attribute boolean isSecureServer;
 
