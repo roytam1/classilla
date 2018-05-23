@@ -241,6 +241,7 @@ nsProfileDirServiceProvider::GetFile(const char *prop, PRBool *persistant, nsIFi
     }
   }
   else if (inAtom == sApp_UsersMimeTypes50) {
+  	*persistant = PR_FALSE; // Classilla issue 111
     rv = mProfileDir->Clone(getter_AddRefs(localFile));
     if (NS_SUCCEEDED(rv)) {
       rv = localFile->AppendNative(MIME_TYPES_FILE_50_NAME);
@@ -249,9 +250,9 @@ nsProfileDirServiceProvider::GetFile(const char *prop, PRBool *persistant, nsIFi
     }
   }
   else if (inAtom == sApp_BookmarksFile50) {
-#ifdef XP_MACOSX
+//#ifdef XP_MACOSX
     *persistant = PR_FALSE; // See bug 192124
-#endif
+//#endif
     rv = mProfileDir->Clone(getter_AddRefs(localFile));
     if (NS_SUCCEEDED(rv))
       rv = localFile->AppendNative(BOOKMARKS_FILE_50_NAME);

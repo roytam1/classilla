@@ -70,6 +70,10 @@
 #include "rdf.h"
 #include "nsCRT.h"
 
+// Classilla issue 111
+//#define WE_CACHE_THIS(x) (nsCRT::strncasecmp(x, "urn:mimetype", 11) && nsCRT::strcasecmp(x, "rdf:null"))
+#define WE_CACHE_THIS(x) (1)
+
 ////////////////////////////////////////////////////////////////////////
 
 static NS_DEFINE_CID(kRDFXMLDataSourceCID,    NS_RDFXMLDATASOURCE_CID);
@@ -996,6 +1000,10 @@ RDFServiceImpl::GetResource(const char* aURI, nsIRDFResource** aResource)
 
     PR_LOG(gLog, PR_LOG_DEBUG, ("rdfserv get-resource %s", aURI));
 
+// Classilla issue 111
+// Never fetch from cache for selected urn:s because they go haywire.
+if (WE_CACHE_THIS(aURI)) {
+
     // First, check the cache to see if we've already created and
     // registered this thing.
     PLDHashEntryHdr *hdr =
@@ -1006,6 +1014,7 @@ RDFServiceImpl::GetResource(const char* aURI, nsIRDFResource** aResource)
         NS_ADDREF(*aResource = entry->mResource);
         return NS_OK;
     }
+}// end issue
 
     // Nope. So go to the repository to create it.
 
@@ -1513,6 +1522,7 @@ RDFServiceImpl::GetDataSource(const char* aURI, PRBool aBlock, nsIRDFDataSource*
 
     // First, check the cache to see if we already have this
     // datasource loaded and initialized.
+    if(WE_CACHE_THIS(aURI)) // Classilla issue 111
     {
         nsIRDFDataSource* cached =
             NS_STATIC_CAST(nsIRDFDataSource*, PL_HashTableLookup(mNamedDataSources, spec.get()));

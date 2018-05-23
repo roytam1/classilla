@@ -48,7 +48,6 @@ function initMenus()
         {
             params = { sourceWindow: window };
         }
-            
         dispatch (commandName, params);
 
         delete console.menuManager.cx;
@@ -79,7 +78,7 @@ function initMenus()
     };
 
     console.menuSpecs["mainmenu:file"] = {
-        label: MSG_MNU_FILE,
+        label: "Venkman",
         items:
         [
          ["open-url"],

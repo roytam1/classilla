@@ -92,7 +92,8 @@
       <textbox id="histDay" size="3"
                  preftype="int" prefstring="browser.history_expire_days"/>
       <label value="&days.label;"/>
-      <spacer flex="1"/>
+    </hbox>
+    <hbox align="center">
       <button label="&clearHistory.label;" accesskey="&clearHistory.accesskey;"
         oncommand="prefClearGlobalHistory(); this.disabled = true;"
         id="browserClearHistory"
@@ -105,11 +106,11 @@
     <caption label="&locationBarHistory.label;"/>
     <hbox align="center">
       <description flex="1">&clearLocationBar.label;</description>
-      <hbox align="center" pack="end">
+    </hbox>
+    <hbox align="center" pack="end">
         <button id="ClearUrlBarHistoryButton" label="&clearLocationBarButton.label;" accesskey="&clearLocationBarButton.accesskey;"
          oncommand="prefClearUrlbarHistory(); this.disabled = true;"
          prefstring="pref.browser.history.disable_button.clear_urlbar"/>
-      </hbox>
     </hbox>
   </groupbox>  
 </page>

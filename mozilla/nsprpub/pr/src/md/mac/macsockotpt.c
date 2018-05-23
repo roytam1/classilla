@@ -98,6 +98,9 @@ OTClientContextPtr  clientContext = NULL;
 static OTNotifyUPP	DNSNotifierRoutineUPP;
 static OTNotifyUPP NotifierRoutineUPP;
 static OTNotifyUPP RawEndpointNotifierRoutineUPP;
+static void *packets[16];
+static int put_packets = 0;
+static int read_packets = 0;
 
 void _MD_InitNetAccess()
 {
@@ -322,6 +325,7 @@ static pascal void  NotifierRoutine(void * contextPtr, OTEventCode code, OTResul
     OSStatus      err;
     OTResult      resultOT;
     TDiscon       discon;
+    size_t		  bytes = 0; // issue 161
 
     switch (code)
     {
@@ -355,6 +359,19 @@ static pascal void  NotifierRoutine(void * contextPtr, OTEventCode code, OTResul
             break;
 
         case T_DATA:        // Standard data is available
+        	// We got data at least once, so we don't treat this as a regular T_DISCONNECT. (Classilla issue 161)
+        	secret->md.everGotData = PR_TRUE;
+   
+   /*     	
+        	result = OTCountDataBytes(endpoint, &bytes);
+        	if (result == kOTNoError && bytes) {
+        		while (bytes > 0) {
+        			packets[write_packets] = OTAllocMem(bytes);
+        			result = OTRcv(endpoint, packets[write_packets], bytes, NULL);
+        			write_packets = (++write_packets) & 15;
+        	}
+   */
+        	
             // Mark this socket as readable.
             secret->md.readReady = PR_TRUE;
 
@@ -369,15 +386,19 @@ static pascal void  NotifierRoutine(void * contextPtr, OTEventCode code, OTResul
             return;
 
         case T_DISCONNECT:  // A disconnect is available
-            discon.udata.len = 0;
-            err = OTRcvDisconnect(endpoint, &discon);
-            PR_ASSERT(err == kOTNoError);
+        	//if (!secret->md.everGotData && !secret->md.writeReady) {
+            	discon.udata.len = 0;
+            	err = OTRcvDisconnect(endpoint, &discon);
+           		PR_ASSERT(err == kOTNoError);
+            	md->disconnectError = discon.reason;    // save for _MD_mac_get_nonblocking_connect_error
+
+            	// wake up waiting threads, if any
+            	result = -3199 - discon.reason; // obtain the negative error code
+            //} else {
+            //	secret->md.deferredDi = PR_TRUE; // issue 161
+            //}
             secret->md.exceptReady = PR_TRUE;       // XXX Check this
 
-            md->disconnectError = discon.reason;    // save for _MD_mac_get_nonblocking_connect_error
-
-            // wake up waiting threads, if any
-            result = -3199 - discon.reason; // obtain the negative error code
             if ((readThread = secret->md.read.thread) != NULL) {
                 secret->md.read.thread    = NULL;
                 secret->md.read.cookie    = cookie;
@@ -398,10 +419,11 @@ static pascal void  NotifierRoutine(void * contextPtr, OTEventCode code, OTResul
             break;
 
         case T_ORDREL:      // An orderly release is available
-            err = OTRcvOrderlyDisconnect(endpoint);
+            err = OTRcvOrderlyDisconnect(endpoint); // safe to close here.
             PR_ASSERT(err == kOTNoError);
             secret->md.readReady      = PR_TRUE;   // mark readable (to emulate bsd sockets)
             // remember connection is closed, so we can return 0 on read or receive
+            //secret->md.deferredOD = PR_TRUE;
             secret->md.orderlyDisconnect = PR_TRUE;
             
             readThread = secret->md.read.thread;
@@ -1387,6 +1409,28 @@ ErrorExit:
     return -1;
 }
 
+// handle T_ORDREL and T_DISCONNECT
+// deferredDi will only be set if we got data on this socket
+// TCP does not support passing data with the TDiscon object (see OT docs)
+// Classilla issue 161
+void DeferredSocketCleanup(PRFileDesc *fd, EndpointRef endpoint) {
+        if (fd->secret->md.deferredOD) {
+        	fd->secret->md.orderlyDisconnect = PR_TRUE;
+        	(void)OTRcvOrderlyDisconnect(endpoint);
+        }
+        if (fd->secret->md.deferredDi) {
+        	TDiscon discon;
+        	discon.udata.len = 0;
+        	if(OTRcvDisconnect(endpoint, &discon) == kOTNoError) {
+      		  	fd->secret->md.deferredDi = PR_FALSE;
+       			if (discon.reason != 54) { // Treat connection reset by peer as not an error.
+        			PRThread *thread = _PR_MD_CURRENT_THREAD();
+        			thread->md.osErrCode = -3199 - discon.reason;
+        		}
+        	}
+        }
+}
+#define CLEANUP DeferredSocketCleanup(fd, endpoint)
 
 // Errors:
 // EBADF -- bad socket id
@@ -1420,6 +1464,7 @@ static PRInt32 SendReceiveStream(PRFileDesc *fd, void *buf, PRInt32 amount,
     while (bytesLeft > 0)
     {
         Boolean disabledNotifications = OTEnterNotifier(endpoint);
+        //Boolean disabledNotifications = false;
     
         PrepareForAsyncCompletion(me, fd->secret->md.osfd);    
 
@@ -1427,7 +1472,19 @@ static PRInt32 SendReceiveStream(PRFileDesc *fd, void *buf, PRInt32 amount,
         	do {
 				fd->secret->md.write.thread = me;
 				fd->secret->md.writeReady = PR_FALSE;				// expect the worst
+				otsndagain:
 	            result = OTSnd(endpoint, buf, bytesLeft, NULL);
+	            // issue 161
+	            if (result == kOTLookErr) {
+	            	// This is almost certainly a T_DISCONNECT
+	            	OTResult result2 = OTLook(endpoint);
+	            	if (result2 == T_DISCONNECT) {
+	            		fd->secret->md.deferredDi = PR_TRUE;
+	            		result = kOTFlowErr;
+	            		//goto otsndagain;
+	            	}
+	            }
+	            	
 				fd->secret->md.writeReady = (result != kOTFlowErr);
 				if (fd->secret->nonblocking)							// hope for the best
 					break;
@@ -1457,8 +1514,19 @@ static PRInt32 SendReceiveStream(PRFileDesc *fd, void *buf, PRInt32 amount,
         } else {
         	do {
 				fd->secret->md.read.thread = me;
-				fd->secret->md.readReady = PR_FALSE;				// expect the worst			
+				fd->secret->md.readReady = PR_FALSE;				// expect the worst
+				otrcvagain:
 	            result = OTRcv(endpoint, buf, bytesLeft, NULL);
+	            // issue 161
+	            if (result == kOTLookErr) {
+	            	// This is almost certainly a T_DISCONNECT
+	            	OTResult result2 = OTLook(endpoint);
+	            	if (result2 == T_DISCONNECT) {
+	            		fd->secret->md.deferredDi = PR_TRUE;
+	            		result = kOTNoDataErr;
+	            		//goto otrcvagain;
+	            	}
+	            }	            
 	            if (fd->secret->nonblocking) {
 					fd->secret->md.readReady = (result != kOTNoDataErr);
 					break;
@@ -1500,12 +1568,14 @@ static PRInt32 SendReceiveStream(PRFileDesc *fd, void *buf, PRInt32 amount,
             fd->secret->md.write.thread = NULL;
         else
             fd->secret->md.read.thread  = NULL;
-
+            
+        CLEANUP;
+        
         // turn notifications back on
         if (disabledNotifications)
             OTLeaveNotifier(endpoint);
 
-        if (result > 0) {
+       if (result > 0) {
             buf = (void *) ( (UInt32) buf + (UInt32)result );
             bytesLeft -= result;
             if (opCode == kSTREAM_RECEIVE) {
@@ -1516,6 +1586,7 @@ static PRInt32 SendReceiveStream(PRFileDesc *fd, void *buf, PRInt32 amount,
 			switch (result) {
 				case kOTLookErr:
 				    PR_ASSERT(!"call to OTLook() required after all.");
+				    CLEANUP;
 					break;
 				
 				case kOTFlowErr:
@@ -1539,8 +1610,8 @@ static PRInt32 SendReceiveStream(PRFileDesc *fd, void *buf, PRInt32 amount,
 					if (err != kOTNoError)
 						goto ErrorExit;				
 					break;
-					
-				case kOTOutStateErr:	// if provider already closed, fall through to handle error
+
+				case kOTOutStateErr:	// if provider already closed, don't fall through to handle error
 					if (fd->secret->md.orderlyDisconnect) {
 						amount = 0;
 						goto NormalExit;
@@ -1554,11 +1625,13 @@ static PRInt32 SendReceiveStream(PRFileDesc *fd, void *buf, PRInt32 amount,
     }
 
 NormalExit:
+	CLEANUP;
     PR_ASSERT(opCode == kSTREAM_SEND ? fd->secret->md.write.thread == NULL :
                                        fd->secret->md.read.thread  == NULL);
     return amount;
 
 ErrorExit:
+	CLEANUP;
     PR_ASSERT(opCode == kSTREAM_SEND ? fd->secret->md.write.thread == NULL :
                                        fd->secret->md.read.thread  == NULL);
     macsock_map_error(err);
@@ -1723,6 +1796,7 @@ static PRBool GetState(PRFileDesc *fd, PRBool *readReady, PRBool *writeReady, PR
     OTResult resultOT;
     // hack to emulate BSD sockets; say that a socket that has disconnected
     // is still readable.
+    // This actually doesn't work right; Classilla issue 161 uses a different solution.
     size_t   availableData = 1;
     if (!fd->secret->md.orderlyDisconnect)
         OTCountDataBytes((EndpointRef)fd->secret->md.osfd, &availableData);

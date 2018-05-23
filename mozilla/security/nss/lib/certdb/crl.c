@@ -1176,7 +1176,7 @@ PRBool CRLStillExists(CERTSignedCrl* crl)
         if (SECITEM_CompareItem(oldSubject, &subject) != SECEqual) {
             xstatus = PR_FALSE;
         }
-        if (CKO_NETSCAPE_CRL != crl_class) {
+        if (CKO_NSS_CRL != crl_class) {
             xstatus = PR_FALSE;
         }
     } else {

@@ -382,8 +382,8 @@ static const struct mechanismList mechanisms[] = {
      {CKM_PBE_MD2_DES_CBC,		{8, 8, CKF_DERIVE},   PR_TRUE},
      {CKM_PBE_MD5_DES_CBC,		{8, 8, CKF_DERIVE},   PR_TRUE},
      /* ------------------ NETSCAPE PBE Key Derivations  ------------------- */
-     {CKM_NETSCAPE_PBE_SHA1_DES_CBC,	     { 8, 8, CKF_GENERATE}, PR_TRUE},
-     {CKM_NETSCAPE_PBE_SHA1_FAULTY_3DES_CBC, {24,24, CKF_GENERATE}, PR_TRUE},
+     {CKM_NSS_PBE_SHA1_DES_CBC,	     { 8, 8, CKF_GENERATE}, PR_TRUE},
+     {CKM_NSS_PBE_SHA1_FAULTY_3DES_CBC, {24,24, CKF_GENERATE}, PR_TRUE},
      {CKM_PBE_SHA1_DES3_EDE_CBC,	     {24,24, CKF_GENERATE}, PR_TRUE},
      {CKM_PBE_SHA1_DES2_EDE_CBC,	     {24,24, CKF_GENERATE}, PR_TRUE},
      {CKM_PBE_SHA1_RC2_40_CBC,		     {40,40, CKF_GENERATE}, PR_TRUE},
@@ -391,9 +391,9 @@ static const struct mechanismList mechanisms[] = {
      {CKM_PBE_SHA1_RC4_40,		     {40,40, CKF_GENERATE}, PR_TRUE},
      {CKM_PBE_SHA1_RC4_128,		     {128,128, CKF_GENERATE}, PR_TRUE},
      {CKM_PBA_SHA1_WITH_SHA1_HMAC,	     {20,20, CKF_GENERATE}, PR_TRUE},
-     {CKM_NETSCAPE_PBE_SHA1_HMAC_KEY_GEN,    {20,20, CKF_GENERATE}, PR_TRUE},
-     {CKM_NETSCAPE_PBE_MD5_HMAC_KEY_GEN,     {16,16, CKF_GENERATE}, PR_TRUE},
-     {CKM_NETSCAPE_PBE_MD2_HMAC_KEY_GEN,     {16,16, CKF_GENERATE}, PR_TRUE},
+     {CKM_NSS_PBE_SHA1_HMAC_KEY_GEN,    {20,20, CKF_GENERATE}, PR_TRUE},
+     {CKM_NSS_PBE_MD5_HMAC_KEY_GEN,     {16,16, CKF_GENERATE}, PR_TRUE},
+     {CKM_NSS_PBE_MD2_HMAC_KEY_GEN,     {16,16, CKF_GENERATE}, PR_TRUE},
 };
 static CK_ULONG mechanismCount = sizeof(mechanisms)/sizeof(mechanisms[0]);
 
@@ -657,7 +657,7 @@ pk11_handleCertObject(PK11Session *session,PK11Object *object)
 	/*
 	 * Add a NULL S/MIME profile if necessary.
 	 */
-	email = pk11_getString(object,CKA_NETSCAPE_EMAIL);
+	email = pk11_getString(object,CKA_NSS_EMAIL);
 	if (email) {
 	    certDBEntrySMime *entry;
 
@@ -683,17 +683,17 @@ pk11_MapTrust(CK_TRUST trust, PRBool clientAuth)
     unsigned int trustCA = clientAuth ? CERTDB_TRUSTED_CLIENT_CA :
 							CERTDB_TRUSTED_CA;
     switch (trust) {
-    case CKT_NETSCAPE_TRUSTED:
+    case CKT_NSS_TRUSTED:
 	return CERTDB_VALID_PEER|CERTDB_TRUSTED;
-    case CKT_NETSCAPE_TRUSTED_DELEGATOR:
+    case CKT_NSS_TRUSTED_DELEGATOR:
 	return CERTDB_VALID_CA|trustCA;
-    case CKT_NETSCAPE_UNTRUSTED:
+    case CKT_NSS_UNTRUSTED:
 	return CERTDB_NOT_TRUSTED;
-    case CKT_NETSCAPE_MUST_VERIFY:
+    case CKT_NSS_MUST_VERIFY:
 	return 0;
-    case CKT_NETSCAPE_VALID: /* implies must verify */
+    case CKT_NSS_VALID: /* implies must verify */
 	return CERTDB_VALID_PEER;
-    case CKT_NETSCAPE_VALID_DELEGATOR: /* implies must verify */
+    case CKT_NSS_VALID_DELEGATOR: /* implies must verify */
 	return CERTDB_VALID_CA;
     default:
 	break;
@@ -735,10 +735,10 @@ pk11_handleTrustObject(PK11Session *session,PK11Object *object)
 	PK11Attribute *serial = NULL;
 	NSSLOWCERTCertificate *cert = NULL;
 	PK11Attribute *trust;
-        CK_TRUST sslTrust = CKT_NETSCAPE_TRUST_UNKNOWN;
-        CK_TRUST clientTrust = CKT_NETSCAPE_TRUST_UNKNOWN;
-        CK_TRUST emailTrust = CKT_NETSCAPE_TRUST_UNKNOWN;
-        CK_TRUST signTrust = CKT_NETSCAPE_TRUST_UNKNOWN;
+        CK_TRUST sslTrust = CKT_NSS_TRUST_UNKNOWN;
+        CK_TRUST clientTrust = CKT_NSS_TRUST_UNKNOWN;
+        CK_TRUST emailTrust = CKT_NSS_TRUST_UNKNOWN;
+        CK_TRUST signTrust = CKT_NSS_TRUST_UNKNOWN;
  	NSSLOWCERTCertTrust dbTrust = { 0 };
 	SECStatus rv;
 
@@ -838,7 +838,7 @@ pk11_handleSMimeObject(PK11Session *session,PK11Object *object)
     if ( !pk11_hasAttribute(object,CKA_SUBJECT) ) {
 	return CKR_TEMPLATE_INCOMPLETE;
     }
-    if ( !pk11_hasAttribute(object,CKA_NETSCAPE_EMAIL) ) {
+    if ( !pk11_hasAttribute(object,CKA_NSS_EMAIL) ) {
 	return CKR_TEMPLATE_INCOMPLETE;
     }
 
@@ -873,7 +873,7 @@ pk11_handleSMimeObject(PK11Session *session,PK11Object *object)
 	}
 
 	/* lookup Time */
-	time = pk11_FindAttribute(object,CKA_NETSCAPE_SMIME_TIMESTAMP);
+	time = pk11_FindAttribute(object,CKA_NSS_SMIME_TIMESTAMP);
 	if (time) {
 	    rawTime.data = (unsigned char *)time->attrib.pValue;
 	    rawTime.len = time->attrib.ulValueLen ;
@@ -882,7 +882,7 @@ pk11_handleSMimeObject(PK11Session *session,PK11Object *object)
 	}
 
 
-	email = pk11_getString(object,CKA_NETSCAPE_EMAIL);
+	email = pk11_getString(object,CKA_NSS_EMAIL);
 
 	/* Store CRL by SUBJECT */
 	rv = nsslowcert_SaveSMimeProfile(slot->certDB, email, &derSubj, 
@@ -951,8 +951,8 @@ pk11_handleCrlObject(PK11Session *session,PK11Object *object)
 	derCrl.len = crl->attrib.ulValueLen ;
 
 
-	url = pk11_getString(object,CKA_NETSCAPE_URL);
-	isKRL = pk11_isTrue(object,CKA_NETSCAPE_KRL);
+	url = pk11_getString(object,CKA_NSS_URL);
+	isKRL = pk11_isTrue(object,CKA_NSS_KRL);
 
 	/* Store CRL by SUBJECT */
 	rv = nsslowcert_AddCrl(slot->certDB, &derCrl, &derSubj, url, isKRL);
@@ -1129,7 +1129,7 @@ pk11_handlePrivateKeyObject(PK11Session *session,PK11Object *object,CK_KEY_TYPE 
 	/* make sure Netscape DB attribute is set correctly */
 	crv = pk11_Attribute2SSecItem(NULL, &mod, object, CKA_MODULUS);
 	if (crv != CKR_OK) return crv;
-	crv = pk11_forceAttribute(object, CKA_NETSCAPE_DB, 
+	crv = pk11_forceAttribute(object, CKA_NSS_DB, 
 						pk11_item_expand(&mod));
 	if (mod.data) PORT_Free(mod.data);
 	if (crv != CKR_OK) return crv;
@@ -1139,7 +1139,7 @@ pk11_handlePrivateKeyObject(PK11Session *session,PK11Object *object,CK_KEY_TYPE 
 	if ( !pk11_hasAttribute(object, CKA_SUBPRIME)) {
 	    return CKR_TEMPLATE_INCOMPLETE;
 	}
-	if ( !pk11_hasAttribute(object, CKA_NETSCAPE_DB)) {
+	if ( !pk11_hasAttribute(object, CKA_NSS_DB)) {
 	    return CKR_TEMPLATE_INCOMPLETE;
 	}
 	/* fall through */
@@ -1200,7 +1200,7 @@ pk11_handlePrivateKeyObject(PK11Session *session,PK11Object *object,CK_KEY_TYPE 
 	if (privKey == NULL) return crv;
 	label = pk11_getString(object,CKA_LABEL);
 
-	crv = pk11_Attribute2SSecItem(NULL,&pubKey,object,CKA_NETSCAPE_DB);
+	crv = pk11_Attribute2SSecItem(NULL,&pubKey,object,CKA_NSS_DB);
 	if (crv != CKR_OK) {
 	    if (label) PORT_Free(label);
 	    nsslowkey_DestroyPrivateKey(privKey);
@@ -1532,17 +1532,17 @@ pk11_handleDSAParameterObject(PK11Session *session, PK11Object *object)
     params.base.data = baseAttr->attrib.pValue;
     params.base.len = baseAttr->attrib.ulValueLen;
 
-    attribute = pk11_FindAttribute(object, CKA_NETSCAPE_PQG_COUNTER);
+    attribute = pk11_FindAttribute(object, CKA_NSS_PQG_COUNTER);
     if (attribute != NULL) {
 	vfy.counter = *(CK_ULONG *) attribute->attrib.pValue;
 	pk11_FreeAttribute(attribute);
 
-	seedAttr = pk11_FindAttribute(object, CKA_NETSCAPE_PQG_SEED);
+	seedAttr = pk11_FindAttribute(object, CKA_NSS_PQG_SEED);
 	if (seedAttr == NULL) goto loser;
 	vfy.seed.data = seedAttr->attrib.pValue;
 	vfy.seed.len = seedAttr->attrib.ulValueLen;
 
-	hAttr = pk11_FindAttribute(object, CKA_NETSCAPE_PQG_H);
+	hAttr = pk11_FindAttribute(object, CKA_NSS_PQG_H);
 	if (hAttr == NULL) goto loser;
 	vfy.h.data = hAttr->attrib.pValue;
 	vfy.h.len = hAttr->attrib.ulValueLen;
@@ -1662,13 +1662,13 @@ pk11_handleObject(PK11Object *object, PK11Session *session)
     case CKO_CERTIFICATE:
 	crv = pk11_handleCertObject(session,object);
 	break;
-    case CKO_NETSCAPE_TRUST:
+    case CKO_NSS_TRUST:
 	crv = pk11_handleTrustObject(session,object);
 	break;
-    case CKO_NETSCAPE_CRL:
+    case CKO_NSS_CRL:
 	crv = pk11_handleCrlObject(session,object);
 	break;
-    case CKO_NETSCAPE_SMIME:
+    case CKO_NSS_SMIME:
 	crv = pk11_handleSMimeObject(session,object);
 	break;
     case CKO_PRIVATE_KEY:
@@ -1866,7 +1866,7 @@ pk11_mkPrivKey(PK11Object *object, CK_KEY_TYPE key_type, CK_RV *crvp)
 							object,CKA_VALUE);
     	if (crv != CKR_OK) break;
     	crv = pk11_Attribute2SSecItem(arena,&privKey->u.dsa.publicValue,
-							object,CKA_NETSCAPE_DB);
+							object,CKA_NSS_DB);
 	/* can't set the public value.... */
 	break;
 
@@ -1882,7 +1882,7 @@ pk11_mkPrivKey(PK11Object *object, CK_KEY_TYPE key_type, CK_RV *crvp)
 							object,CKA_VALUE);
     	if (crv != CKR_OK) break;
     	crv = pk11_Attribute2SSecItem(arena,&privKey->u.dh.publicValue,
-							object,CKA_NETSCAPE_DB);
+							object,CKA_NSS_DB);
 	break;
     default:
 	crv = CKR_KEY_TYPE_INCONSISTENT;
@@ -4271,11 +4271,11 @@ pk11_searchTokenList(PK11Slot *slot, PK11SearchResults *search,
 	case CKA_LABEL:
 	    copy = &name;
 	    break;
-	case CKA_NETSCAPE_EMAIL:
+	case CKA_NSS_EMAIL:
 	    copy = &email;
 	    classFlags &= NSC_SMIME|NSC_CERT;
 	    break;
-	case CKA_NETSCAPE_SMIME_TIMESTAMP:
+	case CKA_NSS_SMIME_TIMESTAMP:
 	    classFlags &= NSC_SMIME;
 	    break;
 	case CKA_CLASS:
@@ -4287,13 +4287,13 @@ pk11_searchTokenList(PK11Slot *slot, PK11SearchResults *search,
 	    case CKO_CERTIFICATE:
 		classFlags &= NSC_CERT;
 		break;
-	    case CKO_NETSCAPE_TRUST:
+	    case CKO_NSS_TRUST:
 		classFlags &= NSC_TRUST;
 		break;
-	    case CKO_NETSCAPE_CRL:
+	    case CKO_NSS_CRL:
 		classFlags &= NSC_CRL;
 		break;
-	    case CKO_NETSCAPE_SMIME:
+	    case CKO_NSS_SMIME:
 		classFlags &= NSC_SMIME;
 		break;
 	    case CKO_PRIVATE_KEY:
@@ -4359,7 +4359,7 @@ pk11_searchTokenList(PK11Slot *slot, PK11SearchResults *search,
 	    copy = &key_id;
 	    classFlags &= (NSC_CERT|NSC_PRIVATE|NSC_KEY|NSC_PUBLIC);
 	    break;
-	case CKA_NETSCAPE_KRL:
+	case CKA_NSS_KRL:
 	    if (pTemplate[i].ulValueLen != sizeof(CK_BBOOL)) {
 		classFlags = 0;
 	    }

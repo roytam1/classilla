@@ -561,6 +561,8 @@
             type = this.mOuter.getTypeAtIndex(this.mOuter.firstSelectedIndex);
             if (type != this.mOuter.NC_NS + "Bookmark" && type != this.mOuter.NC_NS + "BookmarkSeparator" && type != this.mOuter.NC_NS + "Folder")
               return false;
+            if (this.mOuter.treeBuilder.getResourceAtIndex(this.mOuter.firstSelectedIndex).Value == "NC:PersonalToolbarFolder")
+              return false; // Classilla issue 153
             return bo.selection.count > 0;
           case "cmd_bm_find":
             return true;
@@ -578,6 +580,8 @@
             if (type != this.mOuter.NC_NS + "Bookmark" && type != this.mOuter.NC_NS + "BookmarkSeparator" &&
                 type != this.mOuter.NC_NS + "Folder" && type != this.mOuter.NC_NS + "IEFavoriteFolder")
               return false;
+            if (this.mOuter.treeBuilder.getResourceAtIndex(this.mOuter.firstSelectedIndex).Value == "NC:PersonalToolbarFolder")
+            	return false; // Classilla issue 153
             return bo.selection.count >= 1;
           case "cmd_bm_selectAll":
             // "Select All" is disabled when all visible rows are selected.

@@ -201,8 +201,13 @@ BookmarksUIElement.prototype = {
   {
     var type = BookmarksUtils.resolveType(aNodeID);
     if (!type) {
-      if (aNodeID == "NC:PersonalToolbarFolder" || aNodeID == "NC:BookmarksRoot")
-        type = "http://home.netscape.com/NC-rdf#Folder";
+      if (aNodeID == "NC:PersonalToolbarFolder" || aNodeID == "NC:BookmarksRoot") {
+              commands = ["bm_openfolder", "bm_openinnewwindow", "bm_separator", 
+                  "bm_newfolder", "bm_separator",
+                  "bm_paste", "bm_separator",
+                  "bm_properties"];
+              return new CommandArrayEnumerator(commands); // Classilla issue 153
+	  }
       else
         return null;
     }
@@ -607,11 +612,14 @@ BookmarksUIElement.prototype = {
 
     var nextElement;
     var count = 0;
-
+    
     var selectionLength = aSelection.length;
     while (aSelection.length && aSelection[count]) {
       const currParent = this.findRDFNode(aSelection[count], false);
       const kSelectionURI = aSelection[count].id;
+      
+      //alert("uri id: "+kSelectionURI); // for debugging
+      //return;
 
       // Disallow the removal of certain 'special' nodes
       if (kSelectionURI == "NC:BookmarksRoot") {

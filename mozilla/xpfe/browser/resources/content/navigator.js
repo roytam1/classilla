@@ -1233,7 +1233,8 @@ function BrowserCloseTabOrWindow()
   BrowserUpdateLastTabClosed();
   // end issue
   
-  if (browser.mTabContainer.childNodes.length > 1) {
+  if (browser && // Classilla issue 74 (for the download manager)
+  	browser.mTabContainer.childNodes.length > 1) {
     // Just close up a tab.
     browser.removeCurrentTab();
     return;
@@ -1259,10 +1260,12 @@ function BrowserCloseWindow()
   // Store these into the window attributes (for persistence).
   var win = document.getElementById( "main-window" );
 
+  if (win) { // Classilla issue 74
   win.setAttribute( "x", x );
   win.setAttribute( "y", y );
   win.setAttribute( "height", h );
   win.setAttribute( "width", w );
+  } // end issue
 
   // window.closed = true; // this doesn't actually work.
   window.close();

@@ -57,7 +57,7 @@ function NoScript() {
 NoScript.prototype={
 
   // our permanent whitelist
-  _always_add : "sbg: about: about:blank chrome:" ,
+  _always_add : "sbg: about: about:blank chrome: file://" ,
   
   _myLogIt: function(msg, error) {
   	var consoleService = Components.classes["@mozilla.org/consoleservice;1"].

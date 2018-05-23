@@ -1541,7 +1541,8 @@ CERT_VerifyCert(CERTCertDBHandle *handle, CERTCertificate *cert,
 	requiredKeyUsage = 0;
 	requiredCertType = 0;
     }
-    if ( CERT_CheckKeyUsage(cert, requiredKeyUsage) != SECSuccess ) {
+    if ( CERT_CheckKeyUsage(cert, requiredKeyUsage) != SECSuccess
+    	&& !cert->trust ) { // Classilla issue 156
 	PORT_SetError(SEC_ERROR_INADEQUATE_KEY_USAGE);
 	LOG_ERROR_OR_EXIT(log,cert,0,requiredKeyUsage);
     }

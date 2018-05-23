@@ -118,6 +118,9 @@ typedef struct _MDSocketCallerInfo {
 
 struct _MDFileDesc {
     PRInt32         osfd;
+    PRPackedBool	deferredOD; // Classilla issue 161
+    PRPackedBool	deferredDi; // idem
+    PRPackedBool	everGotData; // idem
     PRPackedBool    orderlyDisconnect;
     PRPackedBool    readReady;
     PRPackedBool    writeReady;

@@ -4272,8 +4272,8 @@ PK11_RawPBEKeyGen(PK11SlotInfo *slot, CK_MECHANISM_TYPE type, SECItem *mech,
     CK_PBE_PARAMS *pbe_params;
     PK11SymKey *symKey;
 
-    if(faulty3DES && (type == CKM_NETSCAPE_PBE_SHA1_TRIPLE_DES_CBC)) {
-	type = CKM_NETSCAPE_PBE_SHA1_FAULTY_3DES_CBC;
+    if(faulty3DES && (type == CKM_NSS_PBE_SHA1_TRIPLE_DES_CBC)) {
+	type = CKM_NSS_PBE_SHA1_FAULTY_3DES_CBC;
     }
     if(mech == NULL) {
 	return NULL;
@@ -4308,8 +4308,8 @@ PK11_PBEKeyGen(PK11SlotInfo *slot, SECAlgorithmID *algid, SECItem *pwitem,
 
     mech = PK11_ParamFromAlgid(algid);
     type = PK11_AlgtagToMechanism(SECOID_FindOIDTag(&algid->algorithm));
-    if(faulty3DES && (type == CKM_NETSCAPE_PBE_SHA1_TRIPLE_DES_CBC)) {
-	type = CKM_NETSCAPE_PBE_SHA1_FAULTY_3DES_CBC;
+    if(faulty3DES && (type == CKM_NSS_PBE_SHA1_TRIPLE_DES_CBC)) {
+	type = CKM_NSS_PBE_SHA1_FAULTY_3DES_CBC;
     }
     if(mech == NULL) {
 	return NULL;
@@ -4460,12 +4460,12 @@ try_faulty_3des:
     }
 
     /* if we are unable to import the key and the mechanism is 
-     * CKM_NETSCAPE_PBE_SHA1_TRIPLE_DES_CBC, then it is possible that
+     * CKM_NSS_PBE_SHA1_TRIPLE_DES_CBC, then it is possible that
      * the encrypted blob was created with a buggy key generation method
      * which is described in the PKCS 12 implementation notes.  So we
      * need to try importing via that method.
      */ 
-    if((mechanism == CKM_NETSCAPE_PBE_SHA1_TRIPLE_DES_CBC) && (!faulty3DES)) {
+    if((mechanism == CKM_NSS_PBE_SHA1_TRIPLE_DES_CBC) && (!faulty3DES)) {
 	/* clean up after ourselves before redoing the key generation. */
 
 	PK11_FreeSymKey(key);
@@ -4804,7 +4804,7 @@ PK11_UnwrapPrivKey(PK11SlotInfo *slot, PK11SymKey *wrappingKey,
     }
 
     if (PK11_IsInternal(slot)) {
-	PK11_SETATTRS(attrs, CKA_NETSCAPE_DB, idValue->data, 
+	PK11_SETATTRS(attrs, CKA_NSS_DB, idValue->data, 
 		      idValue->len); attrs++;
     }
 

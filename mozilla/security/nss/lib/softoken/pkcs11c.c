@@ -2649,14 +2649,14 @@ nsc_parameter_gen(CK_KEY_TYPE key_type, PK11Object *key)
     primeBits = (unsigned int) *(CK_ULONG *)attribute->attrib.pValue;
     pk11_FreeAttribute(attribute);
 
-    attribute = pk11_FindAttribute(key, CKA_NETSCAPE_PQG_SEED_BITS);
+    attribute = pk11_FindAttribute(key, CKA_NSS_PQG_SEED_BITS);
     if (attribute != NULL) {
 	seedBits = (unsigned int) *(CK_ULONG *)attribute->attrib.pValue;
 	pk11_FreeAttribute(attribute);
     }
 
     pk11_DeleteAttributeType(key,CKA_PRIME_BITS);
-    pk11_DeleteAttributeType(key,CKA_NETSCAPE_PQG_SEED_BITS);
+    pk11_DeleteAttributeType(key,CKA_NSS_PQG_SEED_BITS);
 
     if (seedBits == 0) {
 	rv = PQG_ParamGen(primeBits, &params, &vfy);
@@ -2677,12 +2677,12 @@ nsc_parameter_gen(CK_KEY_TYPE key_type, PK11Object *key)
 				 params->base.data, params->base.len);
     if (crv != CKR_OK) goto loser;
     counter = vfy->counter;
-    crv = pk11_AddAttributeType(key,CKA_NETSCAPE_PQG_COUNTER,
+    crv = pk11_AddAttributeType(key,CKA_NSS_PQG_COUNTER,
 				 &counter, sizeof(counter));
-    crv = pk11_AddAttributeType(key,CKA_NETSCAPE_PQG_SEED,
+    crv = pk11_AddAttributeType(key,CKA_NSS_PQG_SEED,
 				 vfy->seed.data, vfy->seed.len);
     if (crv != CKR_OK) goto loser;
-    crv = pk11_AddAttributeType(key,CKA_NETSCAPE_PQG_H,
+    crv = pk11_AddAttributeType(key,CKA_NSS_PQG_H,
 				 vfy->h.data, vfy->h.len);
     if (crv != CKR_OK) goto loser;
 
@@ -2797,16 +2797,16 @@ nsc_SetupHMACKeyGen(CK_MECHANISM_PTR pMechanism, NSSPKCS5PBEParameter **pbe)
 	return CKR_HOST_MEMORY;
     }
     switch (pMechanism->mechanism) {
-    case CKM_NETSCAPE_PBE_SHA1_HMAC_KEY_GEN:
+    case CKM_NSS_PBE_SHA1_HMAC_KEY_GEN:
     case CKM_PBA_SHA1_WITH_SHA1_HMAC:
 	params->hashType = HASH_AlgSHA1; 
 	params->keyLen = 20;
 	break;
-    case CKM_NETSCAPE_PBE_MD5_HMAC_KEY_GEN:
+    case CKM_NSS_PBE_MD5_HMAC_KEY_GEN:
 	params->hashType = HASH_AlgMD5; 
 	params->keyLen = 16;
 	break;
-    case CKM_NETSCAPE_PBE_MD2_HMAC_KEY_GEN:
+    case CKM_NSS_PBE_MD2_HMAC_KEY_GEN:
 	params->hashType = HASH_AlgMD2; 
 	params->keyLen = 16;
 	break;
@@ -2949,21 +2949,21 @@ CK_RV NSC_GenerateKey(CK_SESSION_HANDLE hSession,
 	key_gen_type = nsc_ssl;
 	break;
     case CKM_PBA_SHA1_WITH_SHA1_HMAC:
-    case CKM_NETSCAPE_PBE_SHA1_HMAC_KEY_GEN:
-    case CKM_NETSCAPE_PBE_MD5_HMAC_KEY_GEN:
-    case CKM_NETSCAPE_PBE_MD2_HMAC_KEY_GEN:
+    case CKM_NSS_PBE_SHA1_HMAC_KEY_GEN:
+    case CKM_NSS_PBE_MD5_HMAC_KEY_GEN:
+    case CKM_NSS_PBE_MD2_HMAC_KEY_GEN:
 	key_gen_type = nsc_pbe;
 	key_type = CKK_GENERIC_SECRET;
 	crv = nsc_SetupHMACKeyGen(pMechanism, &pbe_param);
 	break;
-    case CKM_NETSCAPE_PBE_SHA1_FAULTY_3DES_CBC:
+    case CKM_NSS_PBE_SHA1_FAULTY_3DES_CBC:
 	faultyPBE3DES = PR_TRUE;
-    case CKM_NETSCAPE_PBE_SHA1_TRIPLE_DES_CBC:
-    case CKM_NETSCAPE_PBE_SHA1_40_BIT_RC2_CBC:
-    case CKM_NETSCAPE_PBE_SHA1_DES_CBC:
-    case CKM_NETSCAPE_PBE_SHA1_128_BIT_RC2_CBC:
-    case CKM_NETSCAPE_PBE_SHA1_40_BIT_RC4:
-    case CKM_NETSCAPE_PBE_SHA1_128_BIT_RC4:
+    case CKM_NSS_PBE_SHA1_TRIPLE_DES_CBC:
+    case CKM_NSS_PBE_SHA1_40_BIT_RC2_CBC:
+    case CKM_NSS_PBE_SHA1_DES_CBC:
+    case CKM_NSS_PBE_SHA1_128_BIT_RC2_CBC:
+    case CKM_NSS_PBE_SHA1_40_BIT_RC4:
+    case CKM_NSS_PBE_SHA1_128_BIT_RC4:
     case CKM_PBE_SHA1_DES3_EDE_CBC:
     case CKM_PBE_SHA1_DES2_EDE_CBC:
     case CKM_PBE_SHA1_RC2_128_CBC:
@@ -3164,7 +3164,7 @@ CK_RV NSC_GenerateKeyPair (CK_SESSION_HANDLE hSession,
     case CKM_RSA_PKCS_KEY_PAIR_GEN:
 	/* format the keys */
     	pk11_DeleteAttributeType(publicKey,CKA_MODULUS);
-    	pk11_DeleteAttributeType(privateKey,CKA_NETSCAPE_DB);
+    	pk11_DeleteAttributeType(privateKey,CKA_NSS_DB);
     	pk11_DeleteAttributeType(privateKey,CKA_MODULUS);
     	pk11_DeleteAttributeType(privateKey,CKA_PRIVATE_EXPONENT);
     	pk11_DeleteAttributeType(privateKey,CKA_PUBLIC_EXPONENT);
@@ -3200,7 +3200,7 @@ CK_RV NSC_GenerateKeyPair (CK_SESSION_HANDLE hSession,
 			   pk11_item_expand(&rsaPriv->modulus));
 	if (crv != CKR_OK) goto kpg_done;
         /* now fill in the RSA dependent paramenters in the private key */
-        crv = pk11_AddAttributeType(privateKey,CKA_NETSCAPE_DB,
+        crv = pk11_AddAttributeType(privateKey,CKA_NSS_DB,
 			   pk11_item_expand(&rsaPriv->modulus));
 	if (crv != CKR_OK) goto kpg_done;
         crv = pk11_AddAttributeType(privateKey,CKA_MODULUS,
@@ -3229,7 +3229,7 @@ kpg_done:
 	break;
     case CKM_DSA_KEY_PAIR_GEN:
     	pk11_DeleteAttributeType(publicKey,CKA_VALUE);
-    	pk11_DeleteAttributeType(privateKey,CKA_NETSCAPE_DB);
+    	pk11_DeleteAttributeType(privateKey,CKA_NSS_DB);
 	pk11_DeleteAttributeType(privateKey,CKA_PRIME);
 	pk11_DeleteAttributeType(privateKey,CKA_SUBPRIME);
 	pk11_DeleteAttributeType(privateKey,CKA_BASE);
@@ -3290,7 +3290,7 @@ kpg_done:
 	if (crv != CKR_OK) goto dsagn_done;
 
         /* now fill in the RSA dependent paramenters in the private key */
-        crv = pk11_AddAttributeType(privateKey,CKA_NETSCAPE_DB,
+        crv = pk11_AddAttributeType(privateKey,CKA_NSS_DB,
 			   pk11_item_expand(&dsaPriv->publicValue));
 	if (crv != CKR_OK) goto dsagn_done;
         crv = pk11_AddAttributeType(privateKey,CKA_VALUE,
@@ -3305,7 +3305,7 @@ dsagn_done:
 	pk11_DeleteAttributeType(privateKey,CKA_PRIME);
 	pk11_DeleteAttributeType(privateKey,CKA_BASE);
 	pk11_DeleteAttributeType(privateKey,CKA_VALUE);
-    	pk11_DeleteAttributeType(privateKey,CKA_NETSCAPE_DB);
+    	pk11_DeleteAttributeType(privateKey,CKA_NSS_DB);
 	key_type = CKK_DH;
 
 	/* extract the necessary parameters and copy them to private keys */
@@ -3340,7 +3340,7 @@ dsagn_done:
 				pk11_item_expand(&dhPriv->publicValue));
 	if (crv != CKR_OK) goto dhgn_done;
 
-        crv = pk11_AddAttributeType(privateKey,CKA_NETSCAPE_DB,
+        crv = pk11_AddAttributeType(privateKey,CKA_NSS_DB,
 			   pk11_item_expand(&dhPriv->publicValue));
 	if (crv != CKR_OK) goto dhgn_done;
 
@@ -3744,8 +3744,8 @@ pk11_unwrapPrivateKey(PK11Object *key, SECItem *bpki)
     switch (lpk->keyType) {
         case NSSLOWKEYRSAKey:
 	    keyType = CKK_RSA;
-	    if(pk11_hasAttribute(key, CKA_NETSCAPE_DB)) {
-		pk11_DeleteAttributeType(key, CKA_NETSCAPE_DB);
+	    if(pk11_hasAttribute(key, CKA_NSS_DB)) {
+		pk11_DeleteAttributeType(key, CKA_NSS_DB);
 	    }
 	    crv = pk11_AddAttributeType(key, CKA_KEY_TYPE, &keyType, 
 					sizeof(keyType));
@@ -3788,7 +3788,7 @@ pk11_unwrapPrivateKey(PK11Object *key, SECItem *bpki)
 	    break;
         case NSSLOWKEYDSAKey:
 	    keyType = CKK_DSA;
-	    crv = (pk11_hasAttribute(key, CKA_NETSCAPE_DB)) ? CKR_OK :
+	    crv = (pk11_hasAttribute(key, CKA_NSS_DB)) ? CKR_OK :
 						CKR_KEY_TYPE_INCONSISTENT;
 	    if(crv != CKR_OK) break;
 	    crv = pk11_AddAttributeType(key, CKA_KEY_TYPE, &keyType, 

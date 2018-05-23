@@ -373,6 +373,7 @@ function add_node_to_current_list(registry, service)
   var tree_root = tree.getElementsByTagName("treechildren")[1];
   
   // Check to see if the panel already exists...
+  if (tree_root) { // Classilla issue 128. If the root is gone, we're dead.
   var i = 0;
   for (var treeitem = tree_root.firstChild; treeitem; treeitem = treeitem.nextSibling) {
     if (treeitem.id == service.Value) {
@@ -384,6 +385,10 @@ function add_node_to_current_list(registry, service)
     }
     ++i;
   }
+  } else {
+	alert("Your profile is corrupt. Please create a new one to utilize the Sidebar."); // L10n
+	return;
+  } // end issue
 
   // Create a treerow for the new panel
   var item = document.createElement('treeitem');
@@ -406,6 +411,7 @@ function add_node_to_current_list(registry, service)
 }
 
 // Remove the selected panel(s) from the current list tree.
+// Classilla issue 128: don't remove the last one.
 function RemovePanel()
 {
   var tree = document.getElementById('current-panels');
@@ -419,6 +425,10 @@ function RemovePanel()
     for (var index = max.value; index >= min.value; --index) {
       var item = tree.contentView.getItemAtIndex(index);
       nextNode = item.nextSibling ? index : -1;
+      if (nextNode == -1) {
+      	alert("You may not remove the last item."); // L10n
+      	return;
+      } // end issue
       item.parentNode.removeChild(item);
     }
   }

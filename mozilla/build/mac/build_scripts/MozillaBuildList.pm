@@ -2604,7 +2604,7 @@ sub BuildProjects()
 
     if ($main::RUNTIME)
     {
-        BuildStubs();
+        #BuildStubs();
         BuildRuntimeProjects();
         return;        
     }

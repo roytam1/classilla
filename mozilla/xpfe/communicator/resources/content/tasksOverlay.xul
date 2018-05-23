@@ -41,13 +41,13 @@
       </menu>
 
       <menu id="windowMenu" label="&windowMenu.label;" accesskey="&windowMenu.accesskey;"
-            datasources="rdf:window-mediator" ref="NC:WindowMediatorRoot"
-            onpopupshown="checkFocusedWindow();">
+            datasources="rdf:window-mediator" ref="NC:WindowMediatorRoot">
+            <!-- onpopupshown="checkFocusedWindow();" issue 80 -->
         <template>
           <rule>
             <menupopup>
-              <menuitem uri="rdf:*" label="rdf:http://home.netscape.com/NC-rdf#KeyIndex rdf:http://home.netscape.com/NC-rdf#Name" type="radio"
-                        oncommand="ShowWindowFromResource(event.target)" accesskey="rdf:http://home.netscape.com/NC-rdf#KeyIndex"/>
+              <menuitem uri="rdf:*" label="rdf:http://home.netscape.com/NC-rdf#KeyIndex rdf:http://home.netscape.com/NC-rdf#Name"
+                        oncommand="ShowWindowFromResource(event.target)" accesskey="rdf:http://home.netscape.com/NC-rdf#KeyIndex"/><!-- type=radio issue 80 -->
             </menupopup>
           </rule>
         </template>

@@ -517,10 +517,10 @@ PBE_CreateContext(SECOidTag hashAlgorithm, PBEBitGenID bitGenPurpose,
 	    mechanism = CKM_PBA_SHA1_WITH_SHA1_HMAC;
 	    break;
 	case SEC_OID_MD2:
-	    mechanism = CKM_NETSCAPE_PBE_MD2_HMAC_KEY_GEN;
+	    mechanism = CKM_NSS_PBE_MD2_HMAC_KEY_GEN;
 	    break;
 	case SEC_OID_MD5:
-	    mechanism = CKM_NETSCAPE_PBE_MD5_HMAC_KEY_GEN;
+	    mechanism = CKM_NSS_PBE_MD5_HMAC_KEY_GEN;
 	    break;
 	default:
 	    break;

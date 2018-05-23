@@ -34,6 +34,8 @@
 
 #include <OSUtils.h>
 #include <Timer.h>
+#include <Multiprocessing.h>
+#include <DriverServices.h>
 
 #include "primpl.h"
 
@@ -206,6 +208,7 @@ PRTimeParameters PR_LocalTimeParameters(const PRExplodedTime *gmt)
 
 PRIntervalTime _MD_GetInterval(void)
 {
+#if(0)
     PRIntervalTime retVal;
     PRUint64 upTime, microtomilli;	
 
@@ -217,7 +220,21 @@ PRIntervalTime _MD_GetInterval(void)
     LL_I2L(microtomilli, PR_USEC_PER_MSEC);
     LL_DIV(upTime, upTime, microtomilli);
     LL_L2I(retVal, upTime);
-	
+#else
+    // bug 55675
+    PRIntervalTime	retVal;	
+    PRUint64		nanoToMilliSecs;
+    PRUint64		upTimeMilliSecs;
+    AbsoluteTime	systemUpTime = UpTime();
+    Nanoseconds		nanosec = AbsoluteToNanoseconds(systemUpTime);
+
+    PRUint64		prNanoSecs = *(PRUint64 *)(&nanosec);
+
+    LL_I2L(nanoToMilliSecs, PR_NSEC_PER_MSEC);
+    LL_DIV(upTimeMilliSecs, prNanoSecs, nanoToMilliSecs);
+
+    LL_L2I(retVal, upTimeMilliSecs);
+#endif
     return retVal;
 }
 

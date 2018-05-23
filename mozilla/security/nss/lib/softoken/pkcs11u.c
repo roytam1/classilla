@@ -292,13 +292,13 @@ static const PK11Attribute pk11_StaticOneAttr =
 CK_CERTIFICATE_TYPE pk11_staticX509Value = CKC_X_509;
 static const PK11Attribute pk11_StaticX509Attr =
   PK11_DEF_ATTRIBUTE(&pk11_staticX509Value, sizeof(pk11_staticX509Value));
-CK_TRUST pk11_staticTrustedValue = CKT_NETSCAPE_TRUSTED;
-CK_TRUST pk11_staticTrustedDelegatorValue = CKT_NETSCAPE_TRUSTED_DELEGATOR;
-CK_TRUST pk11_staticValidDelegatorValue = CKT_NETSCAPE_VALID_DELEGATOR;
-CK_TRUST pk11_staticUnTrustedValue = CKT_NETSCAPE_UNTRUSTED;
-CK_TRUST pk11_staticTrustUnknownValue = CKT_NETSCAPE_TRUST_UNKNOWN;
-CK_TRUST pk11_staticValidPeerValue = CKT_NETSCAPE_VALID;
-CK_TRUST pk11_staticMustVerifyValue = CKT_NETSCAPE_MUST_VERIFY;
+CK_TRUST pk11_staticTrustedValue = CKT_NSS_TRUSTED;
+CK_TRUST pk11_staticTrustedDelegatorValue = CKT_NSS_TRUSTED_DELEGATOR;
+CK_TRUST pk11_staticValidDelegatorValue = CKT_NSS_VALID_DELEGATOR;
+CK_TRUST pk11_staticUnTrustedValue = CKT_NSS_UNTRUSTED;
+CK_TRUST pk11_staticTrustUnknownValue = CKT_NSS_TRUST_UNKNOWN;
+CK_TRUST pk11_staticValidPeerValue = CKT_NSS_VALID;
+CK_TRUST pk11_staticMustVerifyValue = CKT_NSS_MUST_VERIFY;
 static const PK11Attribute pk11_StaticTrustedAttr =
   PK11_DEF_ATTRIBUTE(&pk11_staticTrustedValue,
 				sizeof(pk11_staticTrustedValue));
@@ -326,7 +326,7 @@ pk11_getSMime(PK11TokenObject *object)
 {
     certDBEntrySMime *entry;
 
-    if (object->obj.objclass != CKO_NETSCAPE_SMIME) {
+    if (object->obj.objclass != CKO_NSS_SMIME) {
 	return NULL;
     }
     if (object->obj.objectInfo) {
@@ -346,7 +346,7 @@ pk11_getCrl(PK11TokenObject *object)
     certDBEntryRevocation *crl;
     PRBool isKrl;
 
-    if (object->obj.objclass != CKO_NETSCAPE_CRL) {
+    if (object->obj.objclass != CKO_NSS_CRL) {
 	return NULL;
     }
     if (object->obj.objectInfo) {
@@ -367,7 +367,7 @@ pk11_getCert(PK11TokenObject *object)
     NSSLOWCERTCertificate *cert;
     CK_OBJECT_CLASS objClass = object->obj.objclass;
 
-    if ((objClass != CKO_CERTIFICATE) && (objClass != CKO_NETSCAPE_TRUST)) {
+    if ((objClass != CKO_CERTIFICATE) && (objClass != CKO_NSS_TRUST)) {
 	return NULL;
     }
     if (objClass == CKO_CERTIFICATE && object->obj.objectInfo) {
@@ -386,7 +386,7 @@ pk11_getTrust(PK11TokenObject *object)
 {
     NSSLOWCERTTrust *trust;
 
-    if (object->obj.objclass != CKO_NETSCAPE_TRUST) {
+    if (object->obj.objclass != CKO_NSS_TRUST) {
 	return NULL;
     }
     if (object->obj.objectInfo) {
@@ -853,10 +853,10 @@ pk11_FindSMIMEAttribute(PK11TokenObject *object, CK_ATTRIBUTE_TYPE type)
     case CKA_PRIVATE:
     case CKA_MODIFIABLE:
 	return (PK11Attribute *) &pk11_StaticFalseAttr;
-    case CKA_NETSCAPE_EMAIL:
+    case CKA_NSS_EMAIL:
 	return pk11_NewTokenAttribute(type,object->dbKey.data,
 						object->dbKey.len-1, PR_FALSE);
-    case CKA_NETSCAPE_SMIME_TIMESTAMP:
+    case CKA_NSS_SMIME_TIMESTAMP:
     case CKA_SUBJECT:
     case CKA_VALUE:
 	break;
@@ -868,7 +868,7 @@ pk11_FindSMIMEAttribute(PK11TokenObject *object, CK_ATTRIBUTE_TYPE type)
 	return NULL;
     }
     switch (type) {
-    case CKA_NETSCAPE_SMIME_TIMESTAMP:
+    case CKA_NSS_SMIME_TIMESTAMP:
 	return pk11_NewTokenAttribute(type,entry->optionsDate.data,
 					entry->optionsDate.len, PR_FALSE);
     case CKA_SUBJECT:
@@ -985,13 +985,13 @@ pk11_FindCrlAttribute(PK11TokenObject *object, CK_ATTRIBUTE_TYPE type)
     case CKA_PRIVATE:
     case CKA_MODIFIABLE:
 	return (PK11Attribute *) &pk11_StaticFalseAttr;
-    case CKA_NETSCAPE_KRL:
+    case CKA_NSS_KRL:
 	return (PK11Attribute *) ((object->obj.handle == PK11_TOKEN_KRL_HANDLE) 
 			? &pk11_StaticTrueAttr : &pk11_StaticFalseAttr);
     case CKA_SUBJECT:
 	return pk11_NewTokenAttribute(type,object->dbKey.data,
 						object->dbKey.len, PR_FALSE);	
-    case CKA_NETSCAPE_URL:
+    case CKA_NSS_URL:
     case CKA_VALUE:
 	break;
     default:
@@ -1003,7 +1003,7 @@ pk11_FindCrlAttribute(PK11TokenObject *object, CK_ATTRIBUTE_TYPE type)
 	return NULL;
     }
     switch (type) {
-    case CKA_NETSCAPE_URL:
+    case CKA_NSS_URL:
 	if (crl->url == NULL) {
 	    return (PK11Attribute *) &pk11_StaticNullAttr;
 	}
@@ -1040,7 +1040,7 @@ pk11_FindCertAttribute(PK11TokenObject *object, CK_ATTRIBUTE_TYPE type)
     case CKA_SUBJECT:
     case CKA_ISSUER:
     case CKA_SERIAL_NUMBER:
-    case CKA_NETSCAPE_EMAIL:
+    case CKA_NSS_EMAIL:
 	break;
     default:
 	return NULL;
@@ -1083,7 +1083,7 @@ pk11_FindCertAttribute(PK11TokenObject *object, CK_ATTRIBUTE_TYPE type)
     case CKA_SERIAL_NUMBER:
 	return pk11_NewTokenAttribute(type,cert->derSN.data,
 						cert->derSN.len, PR_FALSE);
-    case CKA_NETSCAPE_EMAIL:
+    case CKA_NSS_EMAIL:
 	return cert->emailAddr ? pk11_NewTokenAttribute(type, cert->emailAddr,
 				PORT_Strlen(cert->emailAddr), PR_FALSE) :
 					(PK11Attribute *) &pk11_StaticNullAttr;
@@ -1117,11 +1117,11 @@ pk11_FindTokenAttribute(PK11TokenObject *object,CK_ATTRIBUTE_TYPE type)
     switch (object->obj.objclass) {
     case CKO_CERTIFICATE:
 	return pk11_FindCertAttribute(object,type);
-    case CKO_NETSCAPE_CRL:
+    case CKO_NSS_CRL:
 	return pk11_FindCrlAttribute(object,type);
-    case CKO_NETSCAPE_TRUST:
+    case CKO_NSS_TRUST:
 	return pk11_FindTrustAttribute(object,type);
-    case CKO_NETSCAPE_SMIME:
+    case CKO_NSS_SMIME:
 	return pk11_FindSMIMEAttribute(object,type);
     case CKO_PUBLIC_KEY:
 	return pk11_FindPublicKeyAttribute(object,type);
@@ -1309,7 +1309,7 @@ pk11_SetCertAttribute(PK11TokenObject *to, CK_ATTRIBUTE_TYPE type,
 
     /* we can't change  the EMAIL values, but let the
      * upper layers feel better about the fact we tried to set these */
-    if (type == CKA_NETSCAPE_EMAIL) {
+    if (type == CKA_NSS_EMAIL) {
 	return CKR_OK;
     }
 
@@ -1486,10 +1486,10 @@ pk11_forceTokenAttribute(PK11Object *object,CK_ATTRIBUTE_TYPE type,
 	/* change NICKNAME, EMAIL,  */
 	crv = pk11_SetCertAttribute(to,type,value,len);
 	break;
-    case CKO_NETSCAPE_CRL:
+    case CKO_NSS_CRL:
 	/* change URL */
 	break;
-    case CKO_NETSCAPE_TRUST:
+    case CKO_NSS_TRUST:
 	crv = pk11_SetTrustAttribute(to,type,value,len);
 	break;
     case CKO_PRIVATE_KEY:
@@ -1631,7 +1631,7 @@ pk11_modifyType(CK_ATTRIBUTE_TYPE type, CK_OBJECT_CLASS inClass)
     case CKA_VALUE_LEN:
     case CKA_ALWAYS_SENSITIVE:
     case CKA_NEVER_EXTRACTABLE:
-    case CKA_NETSCAPE_DB:
+    case CKA_NSS_DB:
 	mtype = PK11_NEVER;
 	break;
 
@@ -2673,7 +2673,7 @@ pk11_addHandle(PK11SearchResults *search, CK_OBJECT_HANDLE handle)
 
 static const CK_OBJECT_HANDLE pk11_classArray[] = {
     0, CKO_PRIVATE_KEY, CKO_PUBLIC_KEY, CKO_SECRET_KEY,
-    CKO_NETSCAPE_TRUST, CKO_NETSCAPE_CRL, CKO_NETSCAPE_SMIME,
+    CKO_NSS_TRUST, CKO_NSS_CRL, CKO_NSS_SMIME,
      CKO_CERTIFICATE };
 
 #define handleToClass(handle) \

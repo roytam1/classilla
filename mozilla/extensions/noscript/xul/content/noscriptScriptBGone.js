@@ -37,7 +37,7 @@ function _noScript_openOptions(ev) {
 }
 
 function sbg_setup() {
-	sbg_sites = window.arguments[0].sites;
+	sbg_sites = sbg_last_resort_filter(window.arguments[0].sites);
 	sbg_docdoc = window.arguments[0].docdoc;
 	sbg_ns = window.arguments[0].ns;
 	sbg_window = window.arguments[0].browser;
@@ -52,6 +52,20 @@ function sbg_setup() {
 	document.getElementById('lalld').value = sbg_sites.join("\n");
 	document.getElementById('lthis').value = " (" + sbg_docdoc + ")";
 	document.getElementById('dothis').selectedIndex = 0;
+}
+
+function sbg_last_resort_filter(q) {
+	// This is to deal with things like about:blank which sometimes
+	// sneak in, and can be hard to deal with at the overlay level.
+	var j = q.length;
+	var n = new Array();
+	var i;
+	
+	for (i=0; i<j; i++) {
+		if (q[i] != "about:blank")
+			n.push(q[i]);
+	}
+	return n;
 }
 
 function sbg_done() {

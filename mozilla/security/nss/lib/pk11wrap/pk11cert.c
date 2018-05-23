@@ -489,7 +489,7 @@ pk11_HandleTrustObject(PK11SlotInfo *slot, CERTCertificate *cert, CERTCertTrust 
     { CKA_CERT_SHA1_HASH, NULL, 0 },
   };
 
-  CK_OBJECT_CLASS tobjc = CKO_NETSCAPE_TRUST;
+  CK_OBJECT_CLASS tobjc = CKO_NSS_TRUST;
   CK_OBJECT_HANDLE tobjID;
   unsigned char sha1_hash[SHA1_LENGTH];
 
@@ -533,31 +533,31 @@ pk11_HandleTrustObject(PK11SlotInfo *slot, CERTCertificate *cert, CERTCertTrust 
   /* First implementation: keep it simple for testing.  We can study what other
    * mappings would be appropriate and add them later.. fgmr 20000724 */
 
-  if ( serverAuth ==  CKT_NETSCAPE_TRUSTED ) {
+  if ( serverAuth ==  CKT_NSS_TRUSTED ) {
     trust->sslFlags |= CERTDB_VALID_PEER | CERTDB_TRUSTED;
   }
 
-  if ( serverAuth == CKT_NETSCAPE_TRUSTED_DELEGATOR ) {
+  if ( serverAuth == CKT_NSS_TRUSTED_DELEGATOR ) {
     trust->sslFlags |= CERTDB_VALID_CA | CERTDB_TRUSTED_CA | 
 							CERTDB_NS_TRUSTED_CA;
   }
-  if ( clientAuth == CKT_NETSCAPE_TRUSTED_DELEGATOR ) {
+  if ( clientAuth == CKT_NSS_TRUSTED_DELEGATOR ) {
     trust->sslFlags |=  CERTDB_TRUSTED_CLIENT_CA ;
   }
 
-  if ( emailProtection == CKT_NETSCAPE_TRUSTED ) {
+  if ( emailProtection == CKT_NSS_TRUSTED ) {
     trust->emailFlags |= CERTDB_VALID_PEER | CERTDB_TRUSTED;
   }
 
-  if ( emailProtection == CKT_NETSCAPE_TRUSTED_DELEGATOR ) {
+  if ( emailProtection == CKT_NSS_TRUSTED_DELEGATOR ) {
     trust->emailFlags |= CERTDB_VALID_CA | CERTDB_TRUSTED_CA | CERTDB_NS_TRUSTED_CA;
   }
 
-  if( codeSigning == CKT_NETSCAPE_TRUSTED ) {
+  if( codeSigning == CKT_NSS_TRUSTED ) {
     trust->objectSigningFlags |= CERTDB_VALID_PEER | CERTDB_TRUSTED;
   }
 
-  if( codeSigning == CKT_NETSCAPE_TRUSTED_DELEGATOR ) {
+  if( codeSigning == CKT_NSS_TRUSTED_DELEGATOR ) {
     trust->objectSigningFlags |= CERTDB_VALID_CA | CERTDB_TRUSTED_CA | CERTDB_NS_TRUSTED_CA;
   }
 
@@ -841,8 +841,8 @@ pk11_CollectCrls(PK11SlotInfo *slot, CK_OBJECT_HANDLE crlID, void *arg)
     CERTCrlNode *new_node = NULL;
     CK_ATTRIBUTE fetchCrl[3] = {
 	 { CKA_VALUE, NULL, 0},
-	 { CKA_NETSCAPE_KRL, NULL, 0},
-	 { CKA_NETSCAPE_URL, NULL, 0},
+	 { CKA_NSS_KRL, NULL, 0},
+	 { CKA_NSS_URL, NULL, 0},
     };
     const int fetchCrlSize = sizeof(fetchCrl)/sizeof(fetchCrl[2]);
     CK_RV crv;
@@ -1071,13 +1071,13 @@ PK11_LookupCrls(CERTCrlHeadNode *nodes, int type, void *wincx) {
     pk11TraverseSlot creater;
     CK_ATTRIBUTE theTemplate[2];
     CK_ATTRIBUTE *attrs;
-    CK_OBJECT_CLASS certClass = CKO_NETSCAPE_CRL;
+    CK_OBJECT_CLASS certClass = CKO_NSS_CRL;
 
     attrs = theTemplate;
     PK11_SETATTRS(attrs, CKA_CLASS, &certClass, sizeof(certClass)); attrs++;
     if (type != -1) {
 	CK_BBOOL isKrl = (CK_BBOOL) (type == SEC_KRL_TYPE);
-        PK11_SETATTRS(attrs, CKA_NETSCAPE_KRL, &isKrl, sizeof(isKrl)); attrs++;
+        PK11_SETATTRS(attrs, CKA_NSS_KRL, &isKrl, sizeof(isKrl)); attrs++;
     }
 
     creater.callback = pk11_CollectCrls;
@@ -1608,8 +1608,8 @@ PK11_ImportCert(PK11SlotInfo *slot, CERTCertificate *cert,
 	{ CKA_ISSUER, NULL, 0},
 	{ CKA_SERIAL_NUMBER,  NULL, 0},
 	{ CKA_VALUE,  NULL, 0},
-	{ CKA_NETSCAPE_TRUST,  NULL, 0},
-	{ CKA_NETSCAPE_EMAIL,  NULL, 0},
+	{ CKA_NSS_TRUST,  NULL, 0},
+	{ CKA_NSS_EMAIL,  NULL, 0},
     };
     int certCount = sizeof(certAttrs)/sizeof(certAttrs[0]), keyCount = 2;
     int realCount = 0;
@@ -1657,11 +1657,11 @@ PK11_ImportCert(PK11SlotInfo *slot, CERTCertificate *cert,
 	    return rv;
 	}
 	*certUsage = certUsageUserCertImport;
-	PK11_SETATTRS(attrs,CKA_NETSCAPE_TRUST, certUsage,
+	PK11_SETATTRS(attrs,CKA_NSS_TRUST, certUsage,
 							 sizeof(SECCertUsage));
 	attrs++;
 	if (cert->emailAddr) {
-	    PK11_SETATTRS(attrs,CKA_NETSCAPE_EMAIL, cert->emailAddr,
+	    PK11_SETATTRS(attrs,CKA_NSS_EMAIL, cert->emailAddr,
 						PORT_Strlen(cert->emailAddr);
 	    attrs++;
 	}
@@ -3647,15 +3647,15 @@ PK11_FindCrlByName(PK11SlotInfo **slot, CK_OBJECT_HANDLE *crlHandle,
 					 SECItem *name, int type, char **url)
 {
 #ifdef NSS_CLASSIC
-    CK_OBJECT_CLASS crlClass = CKO_NETSCAPE_CRL;
+    CK_OBJECT_CLASS crlClass = CKO_NSS_CRL;
     CK_ATTRIBUTE theTemplate[] = {
 	{ CKA_SUBJECT, NULL, 0 },
 	{ CKA_CLASS, NULL, 0 },
-	{ CKA_NETSCAPE_KRL, NULL, 0 },
+	{ CKA_NSS_KRL, NULL, 0 },
     };
     CK_ATTRIBUTE crlData[] = {
 	{ CKA_VALUE, NULL, 0 },
-	{ CKA_NETSCAPE_URL, NULL, 0 },
+	{ CKA_NSS_URL, NULL, 0 },
     };
     /* if you change the array, change the variable below as well */
     int tsize = sizeof(theTemplate)/sizeof(theTemplate[0]);
@@ -3668,7 +3668,7 @@ PK11_FindCrlByName(PK11SlotInfo **slot, CK_OBJECT_HANDLE *crlHandle,
 
     PK11_SETATTRS(attrs, CKA_SUBJECT, name->data, name->len); attrs++;
     PK11_SETATTRS(attrs, CKA_CLASS, &crlClass, sizeof(crlClass)); attrs++;
-    PK11_SETATTRS(attrs, CKA_NETSCAPE_KRL, (type == SEC_CRL_TYPE) ? 
+    PK11_SETATTRS(attrs, CKA_NSS_KRL, (type == SEC_CRL_TYPE) ? 
 			&ck_false : &ck_true, sizeof (CK_BBOOL)); attrs++;
 
     if (*slot) {
@@ -3794,12 +3794,12 @@ PK11_PutCrl(PK11SlotInfo *slot, SECItem *crl, SECItem *name,
 							char *url, int type)
 {
 #ifdef NSS_CLASSIC
-    CK_OBJECT_CLASS crlClass = CKO_NETSCAPE_CRL;
+    CK_OBJECT_CLASS crlClass = CKO_NSS_CRL;
     CK_ATTRIBUTE theTemplate[] = {
 	{ CKA_SUBJECT, NULL, 0 },
 	{ CKA_CLASS, NULL, 0 },
-	{ CKA_NETSCAPE_KRL, NULL, 0 },
-	{ CKA_NETSCAPE_URL, NULL, 0 },
+	{ CKA_NSS_KRL, NULL, 0 },
+	{ CKA_NSS_URL, NULL, 0 },
 	{ CKA_VALUE, NULL, 0 },
 	{ CKA_TOKEN, NULL, 0 }
     };
@@ -3814,10 +3814,10 @@ PK11_PutCrl(PK11SlotInfo *slot, SECItem *crl, SECItem *name,
 
     PK11_SETATTRS(attrs, CKA_SUBJECT, name->data, name->len); attrs++;
     PK11_SETATTRS(attrs, CKA_CLASS, &crlClass, sizeof(crlClass)); attrs++;
-    PK11_SETATTRS(attrs, CKA_NETSCAPE_KRL, (type == SEC_CRL_TYPE) ? 
+    PK11_SETATTRS(attrs, CKA_NSS_KRL, (type == SEC_CRL_TYPE) ? 
 			&ck_false : &ck_true, sizeof (CK_BBOOL)); attrs++;
     if (url) {
-	PK11_SETATTRS(attrs, CKA_NETSCAPE_URL, url, PORT_Strlen(url)+1); attrs++;
+	PK11_SETATTRS(attrs, CKA_NSS_URL, url, PORT_Strlen(url)+1); attrs++;
     }
     PK11_SETATTRS(attrs, CKA_VALUE,crl->data,crl->len); attrs++;
     PK11_SETATTRS(attrs, CKA_TOKEN, &ck_true,sizeof(CK_BBOOL)); attrs++;
@@ -3921,11 +3921,11 @@ SECItem *
 PK11_FindSMimeProfile(PK11SlotInfo **slot, char *emailAddr,
 				 SECItem *name, SECItem **profileTime)
 {
-    CK_OBJECT_CLASS smimeClass = CKO_NETSCAPE_SMIME;
+    CK_OBJECT_CLASS smimeClass = CKO_NSS_SMIME;
     CK_ATTRIBUTE theTemplate[] = {
 	{ CKA_SUBJECT, NULL, 0 },
 	{ CKA_CLASS, NULL, 0 },
-	{ CKA_NETSCAPE_EMAIL, NULL, 0 },
+	{ CKA_NSS_EMAIL, NULL, 0 },
     };
     CK_ATTRIBUTE smimeData[] =  {
 	{ CKA_SUBJECT, NULL, 0 },
@@ -3940,7 +3940,7 @@ PK11_FindSMimeProfile(PK11SlotInfo **slot, char *emailAddr,
 
     PK11_SETATTRS(attrs, CKA_SUBJECT, name->data, name->len); attrs++;
     PK11_SETATTRS(attrs, CKA_CLASS, &smimeClass, sizeof(smimeClass)); attrs++;
-    PK11_SETATTRS(attrs, CKA_NETSCAPE_EMAIL, emailAddr, strlen(emailAddr)); 
+    PK11_SETATTRS(attrs, CKA_NSS_EMAIL, emailAddr, strlen(emailAddr)); 
 								    attrs++;
 
     if (*slot) {
@@ -3967,7 +3967,7 @@ PK11_FindSMimeProfile(PK11SlotInfo **slot, char *emailAddr,
     }
 
     if (profileTime) {
-    	PK11_SETATTRS(smimeData, CKA_NETSCAPE_SMIME_TIMESTAMP, NULL, 0);
+    	PK11_SETATTRS(smimeData, CKA_NSS_SMIME_TIMESTAMP, NULL, 0);
     } 
     
     crv = PK11_GetAttributes(NULL,*slot,smimeh,smimeData,2);
@@ -4021,14 +4021,14 @@ SECStatus
 PK11_SaveSMimeProfile(PK11SlotInfo *slot, char *emailAddr, SECItem *derSubj,
 				 SECItem *emailProfile,  SECItem *profileTime)
 {
-    CK_OBJECT_CLASS smimeClass = CKO_NETSCAPE_SMIME;
+    CK_OBJECT_CLASS smimeClass = CKO_NSS_SMIME;
     CK_BBOOL ck_true = CK_TRUE;
     CK_ATTRIBUTE theTemplate[] = {
 	{ CKA_CLASS, NULL, 0 },
 	{ CKA_TOKEN, NULL, 0 },
 	{ CKA_SUBJECT, NULL, 0 },
-	{ CKA_NETSCAPE_EMAIL, NULL, 0 },
-	{ CKA_NETSCAPE_SMIME_TIMESTAMP, NULL, 0 },
+	{ CKA_NSS_EMAIL, NULL, 0 },
+	{ CKA_NSS_SMIME_TIMESTAMP, NULL, 0 },
 	{ CKA_VALUE, NULL, 0 }
     };
     /* if you change the array, change the variable below as well */
@@ -4045,10 +4045,10 @@ PK11_SaveSMimeProfile(PK11SlotInfo *slot, char *emailAddr, SECItem *derSubj,
     PK11_SETATTRS(attrs, CKA_CLASS, &smimeClass, sizeof(smimeClass)); attrs++;
     PK11_SETATTRS(attrs, CKA_TOKEN, &ck_true, sizeof(ck_true)); attrs++;
     PK11_SETATTRS(attrs, CKA_SUBJECT, derSubj->data, derSubj->len); attrs++;
-    PK11_SETATTRS(attrs, CKA_NETSCAPE_EMAIL, 
+    PK11_SETATTRS(attrs, CKA_NSS_EMAIL, 
 				emailAddr, PORT_Strlen(emailAddr)+1); attrs++;
     if (profileTime) {
-	PK11_SETATTRS(attrs, CKA_NETSCAPE_SMIME_TIMESTAMP, profileTime->data,
+	PK11_SETATTRS(attrs, CKA_NSS_SMIME_TIMESTAMP, profileTime->data,
 	                                            profileTime->len); attrs++;
 	PK11_SETATTRS(attrs, CKA_VALUE,emailProfile->data,
 	                                            emailProfile->len); attrs++;

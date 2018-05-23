@@ -303,21 +303,6 @@
         <menuseparator />
         <menuitem accesskey="&pageSourceCmd.accesskey;" label="&pageSourceCmd.label;" key="key_viewSource" command="View:PageSource"/>
         <menuitem accesskey="&pageInfoCmd.accesskey;"   label="&pageInfoCmd.label;"   key="key_viewInfo"   command="View:PageInfo"/>
-        <menuseparator />
-        <menu label="&applyTheme.label;" accesskey="&applyTheme.accesskey;">
-          <menupopup id="theme" datasources="rdf:chrome" ref="urn:mozilla:skin:root" oncommand="applyTheme(event.target)" onpopupshowing="checkTheme()">
-            <menuitem label="&getNewThemesCmd.label;" accesskey="&getNewThemesCmd.accesskey;" oncommand="getNewThemes();"/>
-            <menuseparator/>
-            <template>
-            <menuitem uri="..."
-                      label="rdf:http://www.mozilla.org/rdf/chrome#displayName"
-                      accesskey="rdf:http://www.mozilla.org/rdf/chrome#accessKey"
-                      id="rdf:http://www.mozilla.org/rdf/chrome#name"
-                      type="radio"
-                      name="themeGroup"/>
-            </template>
-          </menupopup>
-        </menu>
       </menupopup>
     </menu>
 

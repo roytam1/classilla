@@ -64,9 +64,9 @@ PK11_PQG_ParamGenSeedLen( unsigned int j, unsigned int seedBytes,
 	{ CKA_BASE, NULL, 0 },
     };
     CK_ATTRIBUTE vTemplate[] = {
-	{ CKA_NETSCAPE_PQG_COUNTER, NULL, 0 },
-	{ CKA_NETSCAPE_PQG_SEED, NULL, 0 },
-	{ CKA_NETSCAPE_PQG_H, NULL, 0 },
+	{ CKA_NSS_PQG_COUNTER, NULL, 0 },
+	{ CKA_NSS_PQG_SEED, NULL, 0 },
+	{ CKA_NSS_PQG_H, NULL, 0 },
     };
     int pTemplateCount = sizeof(pTemplate)/sizeof(pTemplate[0]);
     int vTemplateCount = sizeof(vTemplate)/sizeof(vTemplate[0]);
@@ -82,7 +82,7 @@ PK11_PQG_ParamGenSeedLen( unsigned int j, unsigned int seedBytes,
 
     PK11_SETATTRS(attrs, CKA_PRIME_BITS,&primeBits,sizeof(primeBits)); attrs++;
     if (seedBits != 0) {
-    	PK11_SETATTRS(attrs, CKA_NETSCAPE_PQG_SEED_BITS, 
+    	PK11_SETATTRS(attrs, CKA_NSS_PQG_SEED_BITS, 
 					&seedBits, sizeof(seedBits)); attrs++;
     }
     count = attrs - genTemplate;
@@ -208,9 +208,9 @@ PK11_PQG_VerifyParams(const PQGParams *params, const PQGVerify *vfy,
 	{ CKA_SUBPRIME, NULL, 0 },
 	{ CKA_BASE, NULL, 0 },
 	{ CKA_TOKEN, NULL, 0 },
-	{ CKA_NETSCAPE_PQG_COUNTER, NULL, 0 },
-	{ CKA_NETSCAPE_PQG_SEED, NULL, 0 },
-	{ CKA_NETSCAPE_PQG_H, NULL, 0 },
+	{ CKA_NSS_PQG_COUNTER, NULL, 0 },
+	{ CKA_NSS_PQG_SEED, NULL, 0 },
+	{ CKA_NSS_PQG_H, NULL, 0 },
     };
     CK_ATTRIBUTE *attrs;
     CK_BBOOL ckfalse = CK_FALSE;
@@ -234,11 +234,11 @@ PK11_PQG_VerifyParams(const PQGParams *params, const PQGVerify *vfy,
     PK11_SETATTRS(attrs, CKA_TOKEN, &ckfalse, sizeof(ckfalse)); attrs++;
     if (vfy) {
 	counter = vfy->counter;
-	PK11_SETATTRS(attrs, CKA_NETSCAPE_PQG_COUNTER, 
+	PK11_SETATTRS(attrs, CKA_NSS_PQG_COUNTER, 
 			&counter, sizeof(counter)); attrs++;
-	PK11_SETATTRS(attrs, CKA_NETSCAPE_PQG_SEED, 
+	PK11_SETATTRS(attrs, CKA_NSS_PQG_SEED, 
 			vfy->seed.data, vfy->seed.len); attrs++;
-	PK11_SETATTRS(attrs, CKA_NETSCAPE_PQG_H, 
+	PK11_SETATTRS(attrs, CKA_NSS_PQG_H, 
 			vfy->h.data, vfy->h.len); attrs++;
     }
 

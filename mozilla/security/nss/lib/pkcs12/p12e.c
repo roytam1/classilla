@@ -1708,11 +1708,11 @@ sec_pkcs12_encoder_start_context(SEC_PKCS12ExportContext *p12exp)
 
 	    switch (p12exp->integrityInfo.pwdInfo.algorithm) {
 	    case SEC_OID_SHA1:
-		integrityMech = CKM_NETSCAPE_PBE_SHA1_HMAC_KEY_GEN; break;
+		integrityMech = CKM_NSS_PBE_SHA1_HMAC_KEY_GEN; break;
 	    case SEC_OID_MD5:
-		integrityMech = CKM_NETSCAPE_PBE_MD5_HMAC_KEY_GEN;  break;
+		integrityMech = CKM_NSS_PBE_MD5_HMAC_KEY_GEN;  break;
 	    case SEC_OID_MD2:
-		integrityMech = CKM_NETSCAPE_PBE_MD2_HMAC_KEY_GEN;  break;
+		integrityMech = CKM_NSS_PBE_MD2_HMAC_KEY_GEN;  break;
 	    default:
 		goto loser;
 	    }

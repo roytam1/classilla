@@ -1373,6 +1373,8 @@ ssl3_SendRecord(   sslSocket *        ss,
     PRInt32                   cipherBytes = -1;
     PRBool                    isBlocking  = ssl_SocketIsBlocking(ss);
     PRBool                    ssl3WasNull = PR_FALSE;
+// Classilla issue 167
+PRBool duong = PR_FALSE;
 
     SSL_TRC(3, ("%d: SSL3[%d] SendRecord type: %s bytes=%d",
 		SSL_GETPID(), ss->fd, ssl3_DecodeContentType(type),
@@ -1400,13 +1402,23 @@ ssl3_SendRecord(   sslSocket *        ss,
 	return SECFailure;
     }
 
+
     while (bytes > 0) {
     	PRInt32   count;
 	PRUint32  contentLen;
 	PRUint32  fragLen;
 	PRUint32  macLen;
 
-	contentLen = PR_MIN(bytes, MAX_FRAGMENT_LENGTH);
+
+// Classilla issue 167
+// We aborted this fix; it doesn't seem to work reliably on all sites.
+	//if (duong) {
+		contentLen = PR_MIN(bytes, MAX_FRAGMENT_LENGTH);
+	//} else {
+	//	duong = PR_TRUE;
+	//	contentLen = 1; // always.
+	//}
+	
 	if (write->space < contentLen + SSL3_BUFFER_FUDGE) {
 	    rv = sslBuffer_Grow(write, contentLen + SSL3_BUFFER_FUDGE);
 	    if (rv != SECSuccess) {

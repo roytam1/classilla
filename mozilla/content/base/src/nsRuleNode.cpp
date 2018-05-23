@@ -5405,8 +5405,15 @@ nsRuleNode::GetStyleData(nsStyleStructID aSID,
 void
 nsRuleNode::Mark()
 {
+return; // 9.2.3 temporary fix
+
+  if (!this->mParent || !this->mDependentBits) {
+  	// Try to mark ourselves, and escape. this isn't generally good enough.
+  	mDependentBits |= NS_RULE_NODE_GC_MARK;
+  	return;
+  }
   for (nsRuleNode *node = this;
-       node && !(node->mDependentBits & NS_RULE_NODE_GC_MARK);
+       node && node->mDependentBits && !(node->mDependentBits & NS_RULE_NODE_GC_MARK);
        node = node->mParent)
     node->mDependentBits |= NS_RULE_NODE_GC_MARK;
 }
@@ -5426,6 +5433,8 @@ SweepRuleNodeChildren(PLDHashTable *table, PLDHashEntryHdr *hdr,
 PRBool
 nsRuleNode::Sweep()
 {
+return PR_FALSE; // 9.2.3 temporary fix
+
   // If we're not marked, then we have to delete ourself.
   if (!(mDependentBits & NS_RULE_NODE_GC_MARK)) {
     Destroy();

@@ -48,7 +48,7 @@ pref("keyword.URL", "http://keyword.netscape.com/keyword/");
 pref("keyword.enabled", false);
 pref("general.useragent.locale", "chrome://navigator/locale/navigator.properties");
 pref("general.useragent.contentlocale", "chrome://navigator-region/locale/region.properties");
-pref("general.useragent.misc", "rv:9.2.1");
+pref("general.useragent.misc", "rv:9.2.3");
 // these are synced up by UA override support in Classilla 9.0.4+ using g.u.misc.
 pref("general.useragent.override_template", "");
 pref("general.useragent.override", "");

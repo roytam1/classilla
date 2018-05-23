@@ -53,6 +53,7 @@
       <commandset id="globalEditMenuItems"/>
       <commandset id="undoEditMenuItems"/>
       <commandset id="clipboardEditMenuItems"/>
+      <command id="cmd_close"/>
       <command id="cmd_undo"/>
       <command id="cmd_redo"/>
       <command id="cmd_cut"/>
@@ -79,6 +80,8 @@
       <key id="key_paste"/>
       <key id="key_delete"/>
       <key id="key_selectAll"/>
+      
+      <key id="key_foclus" modifiers="accel" key="W" oncommand="window.close()"/>
 
       <!-- Tasks keys, from overlay -->
       <keyset id="tasksKeys"/>
@@ -88,6 +91,14 @@
     <toolbox flex="1" id="main-toolbox" collapsed="true">
       <menubar id="mainmenu" persist="collapsed" collapsed="true"
         grippytooltiptext="&MenuBar.tooltip;">
+        
+        <!-- This doesn't work and I don't know why.
+        <menu id="menu_File">
+          <menupopup id="menu_FilePopup">
+            <menuitem id="foclus" label="CloseF" key="key_foclus" oncommand="window.close()"/>
+            <menuitem id="menu_quit"/>
+          </menupopup>
+        </menu> -->
 
         <!-- File menu placeholder, see venkman-menus.js -->
         <menu id="mainmenu:file"/>

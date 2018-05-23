@@ -78,7 +78,7 @@ is_string_attribute
     PRBool isString;
     switch (aType) {
     case CKA_LABEL:
-    case CKA_NETSCAPE_EMAIL:
+    case CKA_NSS_EMAIL:
 	isString = PR_TRUE;
 	break;
     default:
@@ -351,7 +351,7 @@ nssCryptokiCertificate_GetAttributes
 	NSS_CK_SET_ATTRIBUTE_NULL(attr, CKA_SUBJECT);
     }
     if (emailOpt) {
-	NSS_CK_SET_ATTRIBUTE_NULL(attr, CKA_NETSCAPE_EMAIL);
+	NSS_CK_SET_ATTRIBUTE_NULL(attr, CKA_NSS_EMAIL);
     }
     NSS_CK_TEMPLATE_FINISH(cert_template, attr, template_size);
     if (template_size == 0) {
@@ -535,14 +535,14 @@ get_nss_trust
 {
     nssTrustLevel t;
     switch (ckt) {
-    case CKT_NETSCAPE_UNTRUSTED: t = nssTrustLevel_NotTrusted; break;
-    case CKT_NETSCAPE_TRUSTED_DELEGATOR: t = nssTrustLevel_TrustedDelegator; 
+    case CKT_NSS_UNTRUSTED: t = nssTrustLevel_NotTrusted; break;
+    case CKT_NSS_TRUSTED_DELEGATOR: t = nssTrustLevel_TrustedDelegator; 
 	break;
-    case CKT_NETSCAPE_VALID_DELEGATOR: t = nssTrustLevel_ValidDelegator; break;
-    case CKT_NETSCAPE_TRUSTED: t = nssTrustLevel_Trusted; break;
-    case CKT_NETSCAPE_VALID: t = nssTrustLevel_Valid; break;
-    case CKT_NETSCAPE_MUST_VERIFY:
-    case CKT_NETSCAPE_TRUST_UNKNOWN:
+    case CKT_NSS_VALID_DELEGATOR: t = nssTrustLevel_ValidDelegator; break;
+    case CKT_NSS_TRUSTED: t = nssTrustLevel_Trusted; break;
+    case CKT_NSS_VALID: t = nssTrustLevel_Valid; break;
+    case CKT_NSS_MUST_VERIFY:
+    case CKT_NSS_TRUST_UNKNOWN:
     default:
 	t = nssTrustLevel_Unknown; break;
     }
@@ -582,7 +582,7 @@ nssCryptokiTrust_GetAttributes
 
     status = nssToken_GetCachedObjectAttributes(trustObject->token, NULL,
                                                 trustObject, 
-                                                CKO_NETSCAPE_TRUST,
+                                                CKO_NSS_TRUST,
                                                 trust_template, trust_size);
     if (status != PR_SUCCESS) {
 	session = sessionOpt ? 
@@ -635,10 +635,10 @@ nssCryptokiCRL_GetAttributes
 	NSS_CK_SET_ATTRIBUTE_NULL(attr, CKA_VALUE);
     }
     if (urlOpt) {
-	NSS_CK_SET_ATTRIBUTE_NULL(attr, CKA_NETSCAPE_URL);
+	NSS_CK_SET_ATTRIBUTE_NULL(attr, CKA_NSS_URL);
     }
     if (isKRLOpt) {
-	NSS_CK_SET_ATTRIBUTE_NULL(attr, CKA_NETSCAPE_KRL);
+	NSS_CK_SET_ATTRIBUTE_NULL(attr, CKA_NSS_KRL);
     }
     if (subjectOpt) {
 	NSS_CK_SET_ATTRIBUTE_NULL(attr, CKA_SUBJECT);
@@ -647,7 +647,7 @@ nssCryptokiCRL_GetAttributes
 
     status = nssToken_GetCachedObjectAttributes(crlObject->token, NULL,
                                                 crlObject, 
-                                                CKO_NETSCAPE_CRL,
+                                                CKO_NSS_CRL,
                                                 crl_template, crl_size);
     if (status != PR_SUCCESS) {
 	session = sessionOpt ? 
