@@ -25,7 +25,7 @@ if ($given_date ne "") {
 	# The gecko date does not use hour resolution
 	chop($given_date);
 	chop($given_date);
-	printf("#define PRODUCT_VERSION \"%08d\"\n", $given_date);
+	printf("#define PRODUCT_VERSION \"%08d wamcom.org\"\n", $given_date);
 	exit(0);
 }
 
@@ -34,4 +34,4 @@ if ($given_date ne "") {
 ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime;
 # localtime returns year minus 1900
 $year = $year + 1900;
-printf("#define PRODUCT_VERSION \"%04d%02d%02d\"\n", $year, 1+$mon, $mday);
+printf("#define PRODUCT_VERSION \"%04d%02d%02d wamcom.org\"\n", $year, 1+$mon, $mday);

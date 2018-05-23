@@ -34,7 +34,7 @@
 /*
  * PKCS7 decoding, verification.
  *
- * $Id: p7decode.c,v 1.8 2002/07/30 22:51:13 relyea%netscape.com Exp $
+ * $Id: p7decode.c,v 1.8.12.1 2003/06/11 01:50:29 wtc%netscape.com Exp $
  */
 
 #include "nssrenam.h"
@@ -281,11 +281,8 @@ sec_pkcs7_decoder_start_digests (SEC_PKCS7DecoderContext *p7dcx, int depth,
 
     /*
      * No algorithms means no work to do.
-     * This is not expected, so cause an assert.
-     * But if it does happen, just act as if there were
-     * no algorithms specified.
+     * Just act as if there were no algorithms specified.
      */
-    PORT_Assert (digcnt != 0);
     if (digcnt == 0)
 	return SECSuccess;
 
