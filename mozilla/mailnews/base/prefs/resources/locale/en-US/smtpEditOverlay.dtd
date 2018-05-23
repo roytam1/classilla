@@ -1,11 +1,11 @@
 <!ENTITY serverName.label "Server Name:">
-<!ENTITY serverPort.label "Alternate Port:">
-<!ENTITY serverPort.label2 "(optional)">
+<!ENTITY defaultPort.label "Default Port:">
+<!ENTITY serverPort.label "Use Alternate Port:">
 <!ENTITY alwaysUseUsername.label "Use name and password">
 <!ENTITY userName.label "User Name:">
 <!ENTITY savePassword.label "Save my password">
 <!ENTITY neverSecure.label "Use a standard SMTP connection">
 <!ENTITY alwaysSecure.label "Always use a secure SMTP/STARTTLS connection">
-<!ENTITY alwaysSmtpS.label "Always use a secure SMTPS connection">
+<!ENTITY alwaysSmtpS.label "Always use a secure SMTP/SSL connection">
 <!ENTITY sometimesSecure.label "Use a secure SMTP/STARTTLS connection, when available">
 <!ENTITY smtpEditTitle.label "SMTP Server">

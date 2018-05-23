@@ -196,6 +196,7 @@ pref("browser.tabs.opentabfor.middleclick", false);
 pref("browser.tabs.opentabfor.urlbar", false);
 pref("browser.tabs.opentabfor.windowopen", false);
 pref("browser.tabs.opentabfor.bookmarks", false);
+pref("browser.tabs.warnOnClose", true);
 
 // view source
 pref("view_source.syntax_highlight", true);

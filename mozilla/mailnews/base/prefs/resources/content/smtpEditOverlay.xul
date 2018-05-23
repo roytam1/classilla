@@ -32,32 +32,14 @@
   <script src="smtpEditOverlay.js"/>
 
   <vbox id="smtpServerEditor">
-    <grid>
-      <columns>
-        <column/>
-        <column/>
-      </columns>
-      <rows>
-        <row align = "center">
-          <label value="&serverName.label;"/>
-          <textbox id="smtp.hostname" flex="1"
-                   preftype="string"
-                   class="uri-element"
-                   prefstring="mail.smtpserver.%serverkey%.hostname"/>
-        </row>
-        <row align="center">
-          <hbox align="center">
-            <label value="&serverPort.label;"/>
-          </hbox>
-          <hbox align="center">
-            <textbox id="smtp.port" size="5"
-                     preftype="int"
-                     prefstring="mail.smtpserver.%serverkey%.port"/>
-            <label value="&serverPort.label2;"/>
-          </hbox>
-        </row>
-      </rows>
-    </grid>
+    <hbox align="center">
+      <label value="&serverName.label;"/>
+      <textbox id="smtp.hostname" flex="1"
+               preftype="string"
+               class="uri-element"
+               prefstring="mail.smtpserver.%serverkey%.hostname"/>
+    </hbox>
+
     <!-- use a grid here when it's implemented -->
     <vbox>
       <!-- This hidden one will hold the integer version
@@ -77,15 +59,28 @@
                    prefstring="mail.smtpserver.%serverkey%.username"/>
         </hbox>
       </vbox>
-     </vbox>
-     <radiogroup id="smtp.trySSL"
-                 prefstring="mail.smtpserver.%serverkey%.try_ssl">
-       <vbox>
-         <radio value="0" label="&neverSecure.label;" id="smtp.neverSecure"/>
-         <radio value="1" label="&sometimesSecure.label;" id="smtp.sometimesSecure"/>
-         <radio value="2" label="&alwaysSecure.label;" id="smtp.alwaysSecure"/>
-         <radio value="3" label="&alwaysSmtpS.label;" id="smtp.alwaysSmtpS"/>
-       </vbox>
-     </radiogroup>
+    </vbox>
+    <radiogroup id="smtp.trySSL"
+               prefstring="mail.smtpserver.%serverkey%.try_ssl"
+               oncommand="selectProtocol();">
+      <vbox>
+        <radio value="0" label="&neverSecure.label;" id="smtp.neverSecure"/>
+        <radio value="1" label="&sometimesSecure.label;" id="smtp.sometimesSecure"/>
+        <radio value="2" label="&alwaysSecure.label;" id="smtp.alwaysSecure"/>
+        <radio value="3" label="&alwaysSmtpS.label;" id="smtp.alwaysSmtpS"/>
+      </vbox>
+    </radiogroup>
+
+    <hbox align="center">
+      <label value="&defaultPort.label;"/>
+      <label id="smtp.defaultPort"/>
+    </hbox>
+
+    <hbox align="center">
+      <label value="&serverPort.label;"/>
+      <textbox id="smtp.port" size="5"
+               preftype="int"
+               prefstring="mail.smtpserver.%serverkey%.port"/>
+    </hbox>
   </vbox>
 </overlay>

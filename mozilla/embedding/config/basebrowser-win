@@ -205,6 +205,12 @@ plugins\npnul32.dll
 components\wallet.dll
 components\wallet.xpt                  
 
+; spellchecker
+; Optional
+components\myspell.dll
+components\spellchk.dll
+components\spellchecker.xpt
+
 ; download progress
 ; Optional - you can implement your own download progress dialog
 ;   then this is no longer required

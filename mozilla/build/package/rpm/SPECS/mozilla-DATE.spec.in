@@ -145,6 +145,14 @@ This is a tool that allows you to inspect the DOM for web pages in
 Mozilla.  This is of great use to people who are doing Mozilla chrome
 development or web page development.
 
+%package spellchecker
+Summary: Spellchecker for Mozilla
+Group: Applications/Internet
+Prereq: fileutils mozilla = %{version}-%{release}
+
+%description spellchecker
+Spellchecker package for Mozilla.
+
 %prep
 
 %setup -q -n mozilla
@@ -240,6 +248,7 @@ BUILD_OFFICIAL=1 MOZILLA_OFFICIAL=1 \
 /bin/rm -f %{builddir}/mozilla-chat.list
 /bin/rm -f %{builddir}/mozilla-js-debugger.list
 /bin/rm -f %{builddir}/mozilla-dom-inspector.list
+/bin/rm -f %{builddir}/mozilla-spellchecker.list
 
 # NSS and NSPR are both installed into /usr/lib instead of
 # /usr/lib/mozilla-VERSION
@@ -333,6 +342,11 @@ echo %{_libdir}/mozilla-%{version}/libnssckbi.so >> %{builddir}/mozilla-nss.list
     --package-file $RPM_BUILD_DIR/mozilla/xpinstall/packager/packages-unix \
     --install-dir $RPM_BUILD_ROOT/%{_libdir}/mozilla-%{version} \
     --install-root %{_libdir}/mozilla-%{version}
+
+%{SOURCE7} --package spellchecker --output-file %{builddir}/mozilla-spellchecker.list \
+    --package-file $RPM_BUILD_DIR/mozilla/xpinstall/packager/packages-unix \
+    --install-dir $RPM_BUILD_ROOT/usr/lib/mozilla-%{version} \
+    --install-root /usr/lib/mozilla-%{version}
 
 # build our initial component and chrome registry
 
@@ -646,6 +660,22 @@ if [ -f %{_libdir}/mozilla-%{version}/mozilla-rebuild-databases.pl ]; then
     %{_libdir}/mozilla-%{version}/mozilla-rebuild-databases.pl
 fi
 
+%post spellchecker
+# run ldconfig before regxpcom
+/sbin/ldconfig >/dev/null 2>/dev/null
+
+if [ -f /usr/lib/mozilla-%{version}/mozilla-rebuild-databases.pl ]; then
+    /usr/lib/mozilla-%{version}/mozilla-rebuild-databases.pl
+fi
+
+%postun spellchecker
+# run ldconfig before regxpcom
+/sbin/ldconfig >/dev/null 2>/dev/null
+
+if [ -f /usr/lib/mozilla-%{version}/mozilla-rebuild-databases.pl ]; then
+    /usr/lib/mozilla-%{version}/mozilla-rebuild-databases.pl
+fi
+
 %files -f mozilla.list
 %defattr(-,root,root)
 %{prefix}/bin/mozilla
@@ -730,6 +760,9 @@ fi
 %defattr(-,root,root)
 
 %files dom-inspector -f mozilla-dom-inspector.list
+%defattr(-,root,root)
+
+%files spellchecker -f mozilla-spellchecker.list
 %defattr(-,root,root)
 
 %files devel -f mozilla-devel.list

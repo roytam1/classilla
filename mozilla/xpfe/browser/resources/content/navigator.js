@@ -454,6 +454,8 @@ function Startup()
                                 .getService(Components.interfaces.nsIPrefService);
     pref = prefService.getBranch(null);
 
+    window.tryToClose = WindowIsClosing;
+
     webNavigation = getWebNavigation();
     if (!webNavigation)
       throw "no XBL binding for browser";
@@ -1165,7 +1167,7 @@ function BrowserEditBookmarks()
 function updateCloseItems()
 {
   var browser = getBrowser();
-  if (browser && browser.localName == 'tabbrowser' && browser.getStripVisibility()) {
+  if (browser.getStripVisibility()) {
     document.getElementById('menu_close').setAttribute('label', gNavigatorBundle.getString('tabs.closeTab'));
     document.getElementById('menu_closeWindow').hidden = false;
     document.getElementById('menu_closeOtherTabs').hidden = false;
@@ -1189,7 +1191,7 @@ function BrowserCloseOtherTabs()
 function BrowserCloseTabOrWindow()
 {
   var browser = getBrowser();
-  if (browser && browser.localName == 'tabbrowser' && browser.mTabContainer.childNodes.length > 1) {
+  if (browser.mTabContainer.childNodes.length > 1) {
     // Just close up a tab.
     browser.removeCurrentTab();
     return;
@@ -2182,25 +2184,36 @@ function maybeInitPopupContext()
   return null;
 }
 
-function WindowIsClosing() {
+function WindowIsClosing()
+{
   var browser = getBrowser();
-  if (browser && browser.localName == 'tabbrowser') {
-    var numtabs = browser.mTabContainer.childNodes.length;
-    if (numtabs > 1) {
-      var promptService = Components.classes["@mozilla.org/embedcomp/prompt-service;1"].
-                          getService(Components.interfaces.nsIPromptService);
-      if (promptService) {
-        var checkValue = {value:false};
-        var buttonPressed = promptService.confirmEx(window, 
-              gNavigatorBundle.getString('tabs.closeWarningTitle'), 
-              gNavigatorBundle.getFormattedString("tabs.closeWarning", [numtabs]),
-              (promptService.BUTTON_TITLE_IS_STRING * promptService.BUTTON_POS_0) +
-              (promptService.BUTTON_TITLE_CANCEL * promptService.BUTTON_POS_1),
-              gNavigatorBundle.getString('tabs.closeButton'),
-              null, null, null, checkValue);
-        return (0 == buttonPressed);
+  var numtabs = browser.mTabContainer.childNodes.length;
+  var reallyClose = true;
+
+  if (numtabs > 1) {
+    var shouldPrompt = pref.getBoolPref("browser.tabs.warnOnClose");
+    if (shouldPrompt) {
+      var promptService =
+        Components.classes["@mozilla.org/embedcomp/prompt-service;1"]
+                  .getService(Components.interfaces.nsIPromptService);
+      //default to true: if it were false, we wouldn't get this far
+      var warnOnClose = {value:true};
+
+       var buttonPressed = promptService.confirmEx(window, 
+         gNavigatorBundle.getString('tabs.closeWarningTitle'), 
+         gNavigatorBundle.getFormattedString("tabs.closeWarning", [numtabs]),
+         (promptService.BUTTON_TITLE_IS_STRING * promptService.BUTTON_POS_0)
+          + (promptService.BUTTON_TITLE_CANCEL * promptService.BUTTON_POS_1),
+            gNavigatorBundle.getString('tabs.closeButton'),
+            null, null,
+            gNavigatorBundle.getString('tabs.closeWarningPromptMe'),
+            warnOnClose);
+      reallyClose = (buttonPressed == 0);
+      //don't set the pref unless they press OK and it's false
+      if (reallyClose && !warnOnClose.value) {
+        pref.setBoolPref("browser.tabs.warnOnClose", false);
       }
-    }
-  }
-  return true;
+    } //if the warn-me pref was true
+  } //if multiple tabs are open
+  return reallyClose;
 }

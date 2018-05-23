@@ -1133,6 +1133,13 @@ for extension in $MOZ_EXTENSIONS; do
             extensions/pref/autoconfig/src/Makefile
             extensions/pref/autoconfig/resources/Makefile
             " ;;
+        spellcheck ) MAKEFILES_extensions="$MAKEFILES_extensions
+            extensions/spellcheck/Makefile
+            extensions/spellcheck/idl/Makefile
+            extensions/spellcheck/myspell/Makefile
+            extensions/spellcheck/myspell/dictionaries/Makefile
+            extensions/spellcheck/src/Makefile
+            " ;;
         transformiix ) MAKEFILES_extensions="$MAKEFILES_extensions
             $MAKEFILES_transformiix"
             ;;
