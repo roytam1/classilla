@@ -20,6 +20,8 @@
    
    Contributor(s): 
      Ben Goodger <ben@netscape.com>, original implementor
+     
+     Modified for Classilla by Cameron Kaiser
   -->
 
 <?xml-stylesheet href="chrome://communicator/skin/" type="text/css"?>
@@ -38,7 +40,9 @@
 
     <script type="application/x-javascript">
     <![CDATA[  
-    var _elementIDs = ["useNSPluginFinder"];
+    var _elementIDs = [
+    	//"useNSPluginFinder"
+    	];
     ]]>
     </script>
         
@@ -115,6 +119,7 @@
       </groupbox>    
     </vbox>
   </groupbox>
+  <!-- disabled in Classilla, since we no longer get the benefit on OS 9
   <groupbox id="pluginFinderBox">
     <caption label="&plugins.label;"/>
     <vbox>
@@ -122,5 +127,5 @@
                 prefstring="application.use_ns_plugin_finder"/>
       <description>&pluginFinderDesc.label;</description>
     </vbox>
-  </groupbox>
+  </groupbox> -->
 </page>

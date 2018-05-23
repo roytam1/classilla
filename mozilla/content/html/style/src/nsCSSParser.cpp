@@ -83,6 +83,8 @@
 
 //#define ENABLE_COUNTERS  // un-comment this to enable counters (bug 15174)
 
+// bug 98765
+#if(0)
 MOZ_DECL_CTOR_COUNTER(SelectorList)
 
 // e.g. "P B, H1 B { ... }" has a selector list with two elements,
@@ -138,6 +140,9 @@ void SelectorList::Dump()
 {
 }
 #endif
+
+#endif
+// end bug
 
 //----------------------------------------------------------------------
 
@@ -239,8 +244,14 @@ protected:
   void ParseLangSelector(nsCSSSelector& aSelector, PRInt32& aParsingStatus,
                          PRInt32& aErrorCode);
 
+// bug 98765
+#if(0)
   PRBool ParseSelectorList(PRInt32& aErrorCode, SelectorList*& aListHead);
   PRBool ParseSelectorGroup(PRInt32& aErrorCode, SelectorList*& aListHead);
+#else
+  PRBool ParseSelectorList(PRInt32& aErrorCode, nsCSSSelectorList*& aListHead);
+  PRBool ParseSelectorGroup(PRInt32& aErrorCode, nsCSSSelectorList*& aListHead);
+#endif
   PRBool ParseSelector(PRInt32& aErrorCode, nsCSSSelector& aSelectorResult);
   nsCSSDeclaration* ParseDeclarationBlock(PRInt32& aErrorCode,
                                            PRBool aCheckForBraces);
@@ -667,12 +678,27 @@ CSSParserImpl::ParseStyleAttribute(const nsAString& aAttributeValue,
     haveBraces = PR_FALSE;
   }
 
+// bug 98765
+#if(0)
   nsCSSDeclaration* declaration =
       ParseDeclarationBlock(errorCode, haveBraces);
   if (nsnull != declaration) {
     // Create a style rule for the delcaration
     nsICSSStyleRule* rule = nsnull;
     NS_NewCSSStyleRule(&rule, nsCSSSelector());
+#else
+  nsCSSDeclaration* declaration = ParseDeclarationBlock(errorCode, haveBraces);
+  if (declaration) {
+    // Create a style rule for the delcaration
+    nsICSSStyleRule* rule = nsnull;
+    rv = NS_NewCSSStyleRule(&rule, nsnull);
+    if (NS_FAILED(rv)) {
+      declaration->RuleAbort();
+      return rv;
+    }
+#endif
+// end bug
+
     rule->SetDeclaration(declaration);
     *aResult = rule;
   }
@@ -1468,7 +1494,8 @@ void CSSParserImpl::AppendRule(nsICSSRule* aRule)
 PRBool CSSParserImpl::ParseRuleSet(PRInt32& aErrorCode, RuleAppendFunc aAppendFunc, void* aData)
 {
   // First get the list of selectors for the rule
-  SelectorList* slist = nsnull;
+//  SelectorList* slist = nsnull;
+  nsCSSSelectorList* slist = nsnull; // bug 98765
   PRUint32 linenum = mScanner->GetLineNumber();
   if (! ParseSelectorList(aErrorCode, slist)) {
     REPORT_UNEXPECTED(
@@ -1497,6 +1524,8 @@ PRBool CSSParserImpl::ParseRuleSet(PRInt32& aErrorCode, RuleAppendFunc aAppendFu
 
   // Translate the selector list and declaration block into style data
 
+// bug 98765
+#if(0)
   SelectorList* list = slist;
 
   while (nsnull != list) {
@@ -1522,13 +1551,30 @@ PRBool CSSParserImpl::ParseRuleSet(PRInt32& aErrorCode, RuleAppendFunc aAppendFu
 
   // Release temporary storage
   delete slist;
+#else
+  nsCOMPtr<nsICSSStyleRule> rule;
+  NS_NewCSSStyleRule(getter_AddRefs(rule), slist);
+  if (!rule) {
+    aErrorCode = NS_ERROR_OUT_OF_MEMORY;
+    delete slist;
+    return PR_FALSE;
+  }
+  rule->SetLineNumber(linenum);
+  rule->SetDeclaration(declaration);
+  (*aAppendFunc)(rule, aData);
+#endif
+// end bug
+
   return PR_TRUE;
 }
 
 PRBool CSSParserImpl::ParseSelectorList(PRInt32& aErrorCode,
-                                        SelectorList*& aListHead)
+                                        //SelectorList*& aListHead)
+                                        nsCSSSelectorList*& aListHead) // bug 98765
 {
-  SelectorList* list = nsnull;
+  //SelectorList* list = nsnull;
+  nsCSSSelectorList* list = nsnull; // bug 98765
+  
   if (! ParseSelectorGroup(aErrorCode, list)) {
     // must have at least one selector group
     aListHead = nsnull;
@@ -1547,7 +1593,9 @@ PRBool CSSParserImpl::ParseSelectorList(PRInt32& aErrorCode,
 
     if (eCSSToken_Symbol == tk->mType) {
       if (',' == tk->mSymbol) {
-        SelectorList* newList = nsnull;
+        //SelectorList* newList = nsnull;
+        nsCSSSelectorList* newList = nsnull; // bug 98765
+        
         // Another selector group must follow
         if (! ParseSelectorGroup(aErrorCode, newList)) {
           break;
@@ -1598,9 +1646,12 @@ static PRBool IsTreePseudoElement(nsIAtom* aPseudo)
 #endif
 
 PRBool CSSParserImpl::ParseSelectorGroup(PRInt32& aErrorCode,
-                                         SelectorList*& aList)
+                                         //SelectorList*& aList)
+                                         nsCSSSelectorList*& aList)
 {
-  SelectorList* list = nsnull;
+  //SelectorList* list = nsnull;
+  nsCSSSelectorList* list = nsnull; // bug 98765
+  
   PRUnichar     combinator = PRUnichar(0);
   PRInt32       weight = 0;
   PRBool        havePseudoElement = PR_FALSE;
@@ -1610,7 +1661,8 @@ PRBool CSSParserImpl::ParseSelectorGroup(PRInt32& aErrorCode,
       break;
     }
     if (nsnull == list) {
-      list = new SelectorList();
+      //list = new SelectorList();
+      list = new nsCSSSelectorList(); // bug 98765
       if (nsnull == list) {
         aErrorCode = NS_ERROR_OUT_OF_MEMORY;
         return PR_FALSE;
@@ -3039,6 +3091,19 @@ PRBool CSSParserImpl::ParsePositiveVariant(PRInt32& aErrorCode,
   } 
   return PR_FALSE; 
 } 
+/*
+PRBool ParseGreaterThanZeroVariant(PRInt32& aErrorCode, 
+                                           nsCSSValue& aValue, 
+                                           PRInt32 aVariantMask, 
+                                           const PRInt32 aKeywordTable[]) {
+       if(ParsePositiveVariant(aErrorCode, aValue, aVariantMask, aKeywordTable)) {
+       	if(aValue.GetFloatValue() < 1) // unit is irrelevant
+       		aValue.SetFloatValue(1, eCSSUnit_Number);
+        return PR_TRUE;
+       }
+       return PR_FALSE;
+}
+*/
 
 PRBool CSSParserImpl::ParseVariant(PRInt32& aErrorCode, nsCSSValue& aValue,
                                    PRInt32 aVariantMask,
@@ -3956,10 +4021,12 @@ PRBool CSSParserImpl::ParseSingleValueProperty(PRInt32& aErrorCode,
     return ParseMarks(aErrorCode, aValue);
   case eCSSProperty_max_height:
   case eCSSProperty_max_width:
-    return ParseVariant(aErrorCode, aValue, VARIANT_HLPO, nsnull);
+    //return ParseVariant(aErrorCode, aValue, VARIANT_HLPO, nsnull);
+    return ParsePositiveVariant(aErrorCode, aValue, VARIANT_HLPO, nsnull); // bug 227819
   case eCSSProperty_min_height:
   case eCSSProperty_min_width:
-    return ParseVariant(aErrorCode, aValue, VARIANT_HLP, nsnull);
+    //return ParseVariant(aErrorCode, aValue, VARIANT_HLP, nsnull);
+    return ParsePositiveVariant(aErrorCode, aValue, VARIANT_HLP, nsnull); // bug 227819
   case eCSSProperty_opacity:
     return ParseVariant(aErrorCode, aValue, VARIANT_HPN, nsnull);
   case eCSSProperty_orphans:

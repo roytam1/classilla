@@ -123,6 +123,8 @@ public:
                                                   aReturn); }
 
   // nsIDOM3Node
+// bug 210451. this one was admittedly obvious in hindsight.
+#if(0)
   NS_IMETHOD    GetBaseURI(nsAString& aURI)
   { aURI.Truncate(); return NS_OK; }
   NS_IMETHOD    CompareDocumentPosition(nsIDOMNode *aOther,
@@ -136,6 +138,9 @@ public:
                                    nsAString& aNamespaceURI) {
     aNamespaceURI.Truncate(); return NS_OK;
   }
+#endif
+  NS_DECL_NSIDOM3NODE
+// end bug
 
   // nsIContent
   NS_IMETHOD SetParent(nsIContent* aParent)
@@ -394,6 +399,53 @@ nsDocumentFragment::CloneNode(PRBool aDeep, nsIDOMNode** aReturn)
   return CallQueryInterface(newFragment, aReturn);
 }
 
+// added due to my dogged refusal to eliminate LookupNamespacePrefix
+NS_IMETHODIMP
+nsDocumentFragment::LookupNamespacePrefix(const nsAString& aNamespaceURI,
+                                 nsAString& aPrefix)
+{
+  aPrefix.Truncate();
+
+  return NS_OK;
+}
+
+// bug 210451
+NS_IMETHODIMP
+nsDocumentFragment::GetBaseURI(nsAString& aURI)
+{
+  aURI.Truncate();
+
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDocumentFragment::LookupPrefix(const nsAString& aNamespaceURI,
+                                 nsAString& aPrefix)
+{
+  aPrefix.Truncate();
+
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDocumentFragment::LookupNamespaceURI(const nsAString& aNamespacePrefix,
+                                       nsAString& aNamespaceURI)
+{
+  aNamespaceURI.Truncate();
+
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDocumentFragment::IsDefaultNamespace(const nsAString& aNamespaceURI,
+                                       PRBool* aReturn)
+{
+  NS_NOTYETIMPLEMENTED("nsDocumentFragment::IsDefaultNamespace()");
+
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+// end bug
+
 NS_IMETHODIMP
 nsDocumentFragment::CompareDocumentPosition(nsIDOMNode* aOther,
                                             PRUint16* aReturn)
@@ -463,3 +515,69 @@ nsDocumentFragment::IsSameNode(nsIDOMNode* aOther,
   return NS_OK;
 }
 
+// bug 210451
+NS_IMETHODIMP
+nsDocumentFragment::IsEqualNode(nsIDOMNode* aOther, PRBool* aReturn)
+{
+  NS_NOTYETIMPLEMENTED("nsDocumentFragment::IsEqualNode()");
+
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+NS_IMETHODIMP
+nsDocumentFragment::GetFeature(const nsAString& aFeature,
+                               const nsAString& aVersion,
+                               nsISupports** aReturn)
+{
+  NS_NOTYETIMPLEMENTED("nsDocumentFragment::GetFeature()");
+
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+// we don't even have the prototypes for these yet. see nsIDOM3Node.idl for why. */
+#if (0)
+NS_IMETHODIMP
+nsDocumentFragment::SetUserData(const nsAString& aKey,
+                                nsIVariant* aData,
+                                nsIDOMUserDataHandler* aHandler,
+                                nsIVariant** aReturn)
+{
+  NS_NOTYETIMPLEMENTED("nsDocumentFragment::SetUserData()");
+
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+NS_IMETHODIMP
+nsDocumentFragment::GetUserData(const nsAString& aKey,
+                                nsIVariant** aReturn)
+{
+  NS_NOTYETIMPLEMENTED("nsDocumentFragment::GetUserData()");
+
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+#endif
+
+NS_IMETHODIMP
+nsDocumentFragment::GetTextContent(nsAString &aTextContent)
+{
+// replaced by Mozilla 1.8
+#if(0)
+  if (mOwnerDocument) {
+    return nsNode3Tearoff::GetTextContent(mOwnerDocument,
+                                          this,
+                                          aTextContent);
+  }
+
+  SetDOMStringToNull(aTextContent);
+
+  return NS_OK;
+#endif
+  return nsNode3Tearoff::GetTextContent(this, aTextContent);
+}
+
+NS_IMETHODIMP
+nsDocumentFragment::SetTextContent(const nsAString& aTextContent)
+{
+  return nsNode3Tearoff::SetTextContent(this, aTextContent);
+}
+// end bug

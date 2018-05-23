@@ -475,7 +475,8 @@ public:
 protected:
   nsresult GetURI(nsIURI** aURL);
   nsresult GetWritableURI(nsIURI** aURL);
-  nsresult SetURI(nsIURI* aURL);
+//  nsresult SetURI(nsIURI* aURL); // bug 277224
+  nsresult SetURI(nsIURI* aURL, PRBool aReplace = PR_FALSE); // bug 277224
   nsresult SetHrefWithBase(const nsAString& aHref, nsIURI* aBase,
                            PRBool aReplace);
   nsresult SetHrefWithContext(JSContext* cx, const nsAString& aHref,

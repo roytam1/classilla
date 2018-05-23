@@ -218,8 +218,16 @@
                                                         Components.interfaces.nsISupportsString).data;
           } catch(ex) {
             this.ensureDefaultEnginePrefs(rdf, ds);
+            // for Classilla we need to catch this again!
+            // moved to a second try below.
+          }
+          
+          // second try for modified DefaultEnginePrefs in classilla
+          try {
             defaultEngine = this.mPrefs.getComplexValue("browser.search.defaultengine",
                                                         Components.interfaces.nsISupportsString).data;
+          } catch(ex) {
+            return; // won't work; don't hork the holdbar (as above). serious error if we do!
           }
           
           if (defaultEngine) {

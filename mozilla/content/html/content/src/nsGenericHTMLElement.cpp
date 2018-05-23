@@ -1958,6 +1958,8 @@ nsGenericHTMLElement::SetHTMLAttribute(nsIAtom* aAttribute,
 
       mDocument->AttributeWillChange(this, kNameSpaceID_None, aAttribute);
 
+// bug 171830
+#if(0)
       if (nsHTMLAtoms::style == aAttribute) {
         nsHTMLValue oldValue;
         nsChangeHint oldImpact = NS_STYLE_HINT_NONE;
@@ -1972,6 +1974,9 @@ nsGenericHTMLElement::SetHTMLAttribute(nsIAtom* aAttribute,
         impact = GetStyleImpactFrom(aValue);
         NS_UpdateHint(impact, oldImpact);
       }
+#endif
+// end bug
+
     }
     sheet = dont_AddRef(GetAttrStyleSheet(mDocument));
     if (sheet) {
@@ -3215,6 +3220,7 @@ nsGenericHTMLElement::GetCommonMappedAttributesImpact(const nsIAtom* aAttribute,
     aHint = NS_STYLE_HINT_REFLOW; // LANG attribute affects font selection
     return PR_TRUE;
   }
+// bug 171830 removes this block completely.  
   /*
      We should not REFRAME for a class change;
      let the resulting style decide the impact

@@ -152,6 +152,8 @@ inDOMUtils::GetStyleRules(nsIDOMElement *aElement, nsISupportsArray **_retval)
   return NS_OK;
 }
 
+// bug 98765
+#if(0)
 NS_IMETHODIMP
 inDOMUtils::GetRuleWeight(nsIDOMCSSStyleRule *aRule, PRUint32 *_retval)
 {
@@ -161,6 +163,8 @@ inDOMUtils::GetRuleWeight(nsIDOMCSSStyleRule *aRule, PRUint32 *_retval)
   *_retval = cssrule->GetWeight();
   return NS_OK;
 }
+#endif
+// end bug
 
 NS_IMETHODIMP
 inDOMUtils::GetRuleLine(nsIDOMCSSStyleRule *aRule, PRUint32 *_retval)

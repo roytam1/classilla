@@ -171,6 +171,9 @@ BodyRule::MapRuleInfoInto(nsRuleData* aData)
   PRInt32 bodyMarginHeight = -1;
   PRInt32 bodyTopMargin = -1;
   PRInt32 bodyLeftMargin = -1;
+  // bug 205850
+  PRInt32 bodyBottomMargin = -1;
+  PRInt32 bodyRightMargin = -1;
 
   // check the mode (fortunately, the ruleData has a presContext for us to use!)
   nsCompatibility mode;
@@ -213,6 +216,18 @@ BodyRule::MapRuleInfoInto(nsRuleData* aData)
           margin->mTop.SetFloatValue((float)bodyTopMargin, eCSSUnit_Pixel);
       }
 
+	// bug 205850      
+      // bottommargin (IE-attribute)
+      mPart->GetHTMLAttribute(nsHTMLAtoms::bottommargin, value);
+      if (eHTMLUnit_Pixel == value.GetUnit()) {
+        bodyBottomMargin = value.GetPixelValue();
+        if (bodyBottomMargin < 0) bodyBottomMargin = 0;
+        nsCSSRect* margin = aData->mMarginData->mMargin;
+        if (margin->mBottom.GetUnit() == eCSSUnit_Null)
+          margin->mBottom.SetFloatValue((float)bodyBottomMargin, eCSSUnit_Pixel);
+      }
+
+
       // leftmargin (IE-attribute)
       mPart->GetHTMLAttribute(nsHTMLAtoms::leftmargin, value);
       if (eHTMLUnit_Pixel == value.GetUnit()) {
@@ -222,6 +237,18 @@ BodyRule::MapRuleInfoInto(nsRuleData* aData)
         if (margin->mLeft.GetUnit() == eCSSUnit_Null)
           margin->mLeft.SetFloatValue((float)bodyLeftMargin, eCSSUnit_Pixel);
       }
+      
+    // bug 205850 
+      // rightmargin (IE-attribute)
+      mPart->GetHTMLAttribute(nsHTMLAtoms::rightmargin, value);
+      if (eHTMLUnit_Pixel == value.GetUnit()) {
+        bodyRightMargin = value.GetPixelValue();
+        if (bodyRightMargin < 0) bodyRightMargin = 0;
+        nsCSSRect* margin = aData->mMarginData->mMargin;
+        if (margin->mRight.GetUnit() == eCSSUnit_Null)
+          margin->mRight.SetFloatValue((float)bodyRightMargin, eCSSUnit_Pixel);
+      }
+      
     }
 
   }
@@ -522,7 +549,10 @@ nsHTMLBodyElement::StringToAttribute(nsIAtom* aAttribute,
   else if ((aAttribute == nsHTMLAtoms::marginwidth) ||
            (aAttribute == nsHTMLAtoms::marginheight) ||
            (aAttribute == nsHTMLAtoms::topmargin) ||
-           (aAttribute == nsHTMLAtoms::leftmargin)) {
+//           (aAttribute == nsHTMLAtoms::leftmargin)) { // bug 205850
+           (aAttribute == nsHTMLAtoms::bottommargin) ||
+           (aAttribute == nsHTMLAtoms::leftmargin) ||
+           (aAttribute == nsHTMLAtoms::rightmargin)) {
     if (aResult.ParseIntWithBounds(aValue, eHTMLUnit_Pixel, 0)) {
       return NS_CONTENT_ATTR_HAS_VALUE;
     }

@@ -139,12 +139,24 @@ public:
 #ifdef DEBUG
   void SizeOf(nsISizeOfHandler *aSizeOfHandler, PRUint32 &aSize);
 #endif
+
+// bug 98765
+#if(0)
   nsresult ToString( nsAString& aString, nsICSSStyleSheet* aSheet,
                     PRBool aIsPseudoElem, PRInt8 aNegatedIndex ) const;
+#else
+  void ToString(nsAString& aString, nsICSSStyleSheet* aSheet) const;
+#endif
+// end bug
 
 private:
 
   void AppendNegationToString(nsAString& aString);
+// bug 98765
+  void ToStringInternal(nsAString& aString, nsICSSStyleSheet* aSheet,
+                        PRBool aIsPseudoElem,
+                        PRIntn aNegatedIndex) const;
+
 
 public:
   PRInt32         mNameSpace;
@@ -160,6 +172,40 @@ public:
   nsCSSSelector*  mNext;
 };
 
+// bug 98765
+/**
+ * A selector list is the unit of selectors that each style rule has.
+ * For example, "P B, H1 B { ... }" would be a selector list with two
+ * items (where each |nsCSSSelectorList| object's |mSelectors| has
+ * an |mNext| for the P or H1).  We represent them as linked lists.
+ */
+struct nsCSSSelectorList {
+  nsCSSSelectorList(void);
+  ~nsCSSSelectorList(void);
+
+  /**
+   * Push a copy of |aSelector| on to the beginning of |mSelectors|,
+   * setting its |mNext| to the current value of |mSelectors|.
+   *
+   * The caller is responsible for updating |mWeight|.
+   */
+  void AddSelector(const nsCSSSelector& aSelector);
+
+  /**
+   * Should be used only on the first in the list
+   */
+  void ToString(nsAString& aResult, nsICSSStyleSheet* aSheet);
+
+  /**
+   * Do a deep clone.  Should be used only on the first in the list.
+   */
+  nsCSSSelectorList* Clone();
+
+  nsCSSSelector*     mSelectors;
+  PRInt32            mWeight;
+  nsCSSSelectorList* mNext;
+};
+// end bug
 
 // IID for the nsICSSStyleRule interface {7c277af0-af19-11d1-8031-006008159b5a}
 #define NS_ICSS_STYLE_RULE_IID     \
@@ -169,11 +215,18 @@ class nsICSSStyleRule : public nsICSSRule {
 public:
   NS_DEFINE_STATIC_IID_ACCESSOR(NS_ICSS_STYLE_RULE_IID)
 
+// bug 98765
+#if(0)
   virtual nsCSSSelector* FirstSelector(void) = 0;
   virtual void AddSelector(const nsCSSSelector& aSelector) = 0;
   virtual void DeleteSelector(nsCSSSelector* aSelector) = 0;
   virtual void SetSourceSelectorText(const nsString& aSelectorText) = 0;
   virtual void GetSourceSelectorText(nsString& aSelectorText) const = 0;
+#else
+  // null for style attribute
+  virtual nsCSSSelectorList* Selector(void) = 0;
+#endif
+// end bug
 
   virtual PRUint32 GetLineNumber(void) const = 0;
   virtual void SetLineNumber(PRUint32 aLineNumber) = 0;
@@ -181,8 +234,9 @@ public:
   virtual nsCSSDeclaration* GetDeclaration(void) const = 0;
   virtual void SetDeclaration(nsCSSDeclaration* aDeclaration) = 0;
 
-  virtual PRInt32 GetWeight(void) const = 0;
-  virtual void SetWeight(PRInt32 aWeight) = 0;
+  // bug 98765
+  //virtual PRInt32 GetWeight(void) const = 0;
+  //virtual void SetWeight(PRInt32 aWeight) = 0;
 
   virtual already_AddRefed<nsIStyleRule> GetImportantRule(void) = 0;
 
@@ -191,6 +245,7 @@ public:
 };
 
 extern NS_EXPORT nsresult
-  NS_NewCSSStyleRule(nsICSSStyleRule** aInstancePtrResult, const nsCSSSelector& aSelector);
+  NS_NewCSSStyleRule(nsICSSStyleRule** aInstancePtrResult, //const nsCSSSelector& aSelector);
+  	nsCSSSelectorList* aSelector); // bug 98765
 
 #endif /* nsICSSStyleRule_h___ */

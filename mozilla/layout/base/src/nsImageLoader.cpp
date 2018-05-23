@@ -134,7 +134,7 @@ NS_IMETHODIMP nsImageLoader::OnStartDecode(imgIRequest *aRequest, nsISupports *a
 
 NS_IMETHODIMP nsImageLoader::OnStartContainer(imgIRequest *aRequest, nsISupports *aContext, imgIContainer *aImage)
 {
-  if (aImage)
+  if (aImage && mPresContext)
   {
     /* Get requested animation policy from the pres context:
      *   normal = 0

@@ -2576,7 +2576,7 @@ NS_IMETHODIMP nsViewManager::ResizeView(nsIView *aView, const nsRect &aRect, PRB
         view->ConvertToParentCoords(&oldDimensions.x, &oldDimensions.y);
         UpdateView(parentView, oldDimensions, NS_VMREFRESH_NO_SYNC);
       } else {
-        view->SetDimensions(aRect, PR_FALSE);
+        view->SetDimensions(aRect, PR_TRUE); // PR_FALSE); // bug 194638
 
         InvalidateRectDifference(view, aRect, oldDimensions, NS_VMREFRESH_NO_SYNC);
         nsRect r = aRect;

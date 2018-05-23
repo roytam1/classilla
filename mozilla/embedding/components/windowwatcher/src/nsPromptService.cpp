@@ -43,11 +43,16 @@
 #include "nsIComponentManager.h"
 #include "nsIDialogParamBlock.h"
 #include "nsIDOMWindow.h"
+#include "nsPIDOMWindow.h"
 #include "nsIServiceManager.h"
 #include "nsISupportsUtils.h"
 #include "nsString.h"
 #include "nsIStringBundle.h"
 #include "nsXPIDLString.h"
+#include "nsIDOMEventTarget.h"
+#include "nsIDOMFocusListener.h"
+#include "nsIDOMWindowInternal.h"
+
 
 static const char *kPromptURL="chrome://global/content/commonDialog.xul";
 static const char *kSelectPromptURL="chrome://global/content/selectDialog.xul";
@@ -632,7 +637,8 @@ nsPromptService::DoDialog(nsIDOMWindow *aParent,
   rv = mWatcher->OpenWindow(aParent, aChromeURL, "_blank",
                             "centerscreen,chrome,modal,titlebar", arguments,
                             getter_AddRefs(dialog));
-
+  //dialog->Focus();
+  // hmmm.
   return rv;
 }
 

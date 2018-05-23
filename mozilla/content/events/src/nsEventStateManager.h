@@ -215,7 +215,8 @@ protected:
   nsresult DoWheelScroll(nsIPresContext* aPresContext,
                          nsIFrame* aTargetFrame,
                          nsMouseScrollEvent* msEvent, PRInt32 numLines,
-                         PRBool scrollPage, PRBool aUseTargetFrame);
+                         //PRBool scrollPage, PRBool aUseTargetFrame); // bug 97283
+                         PRBool aScrollPage);
   void ForceViewUpdate(nsIView* aView);
   nsresult getPrefBranch();
   nsresult ChangeTextSize(PRInt32 change);

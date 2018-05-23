@@ -1754,7 +1754,17 @@ nsCSSDeclaration::AppendValue(nsCSSProperty aProperty, const nsCSSValue& aValue)
           case eCSSProperty_min_width:  thePosition->mMinWidth = aValue;   break;
           case eCSSProperty_max_width:  thePosition->mMaxWidth = aValue;   break;
           case eCSSProperty_height:     thePosition->mHeight = aValue;     break;
-          case eCSSProperty_min_height: thePosition->mMinHeight = aValue;  break;
+          case eCSSProperty_min_height: {
+          	nsCSSValue fixupCSS = aValue;
+          	// FIX-UP: we don't handle min_height of zero correctly.
+          	// per nsCSSValue.h we really only need to care about floats.
+          	// basically, we suppress setting any value of zero.
+          	if(eCSSUnit_Percent < aValue.GetUnit()) // do we need to handle % min-height??
+          	 if(aValue.GetFloatValue() <= 0.0f) // I did this for the debugger, sorry.
+          		break; // DON'T SET!
+          	thePosition->mMinHeight = fixupCSS;  
+          	break;
+          }
           case eCSSProperty_max_height: thePosition->mMaxHeight = aValue;  break;
           case eCSSProperty_box_sizing: thePosition->mBoxSizing = aValue;  break;
           case eCSSProperty_z_index:    thePosition->mZIndex = aValue;     break;
@@ -4044,6 +4054,9 @@ nsCSSDeclaration::RemoveProperty(nsCSSProperty aProperty)
   if (NS_OK == result && nsnull != mOrder) {
     mOrder->RemoveValue(aProperty);
   }
+  if (result == NS_ERROR_NOT_AVAILABLE)
+  	return NS_OK; // KLUDGE! we don't care if it's not there or not, the result is the same
+  	
   return result;
 }
 

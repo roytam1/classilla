@@ -74,6 +74,8 @@ inline nscoord CalcSideFor(const nsIFrame* aFrame, const nsStyleCoord& aCoord,
       // Auto margins are handled by layout
       break;
 
+// bug 205790
+#if(0)
     case eStyleUnit_Inherit:
       nsIFrame* parentFrame;
       aFrame->GetParent(&parentFrame);  // XXX may not be direct parent...
@@ -115,6 +117,7 @@ inline nscoord CalcSideFor(const nsIFrame* aFrame, const nsStyleCoord& aCoord,
         }
       }
       break;
+#endif
 
     case eStyleUnit_Percent:
       {

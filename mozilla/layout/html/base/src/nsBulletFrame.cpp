@@ -1360,10 +1360,13 @@ nsBulletFrame::GetDesiredSize(nsIPresContext*  aCX,
                               const nsHTMLReflowState& aReflowState,
                               nsHTMLReflowMetrics& aMetrics)
 {
+  //mPadding.SizeTo(0, 0, 0, 0);
+  
   const nsStyleList* myList = (const nsStyleList*)mStyleContext->GetStyleData(eStyleStruct_List);
   nscoord ascent;
 
   if (!myList->mListStyleImage.IsEmpty() && mImageRequest) {
+  //if (myList->mListStyleImage && mImageRequest) {
     PRUint32 status;
     mImageRequest->GetImageStatus(&status);
     if (status & imgIRequest::STATUS_SIZE_AVAILABLE &&

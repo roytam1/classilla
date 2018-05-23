@@ -93,6 +93,12 @@ public:
   NS_IMETHOD AddStyleBit(const PRUint32& aBit) { mBits |= aBit; return NS_OK; };
   NS_IMETHOD GetStyleBits(PRUint32* aBits) { *aBits = mBits; return NS_OK; };
 
+  /*
+   * Mark this style context's rule node (and its ancestors) to prevent
+   * it from being garbage collected. (bug 117316 -- moved here from nsStyleContext.h)
+   */
+  void Mark();
+
   virtual const nsStyleStruct* GetStyleData(nsStyleStructID aSID);
   const nsStyleStruct* PeekStyleData(nsStyleStructID aSID);
 
@@ -170,6 +176,17 @@ nsStyleContext::nsStyleContext(nsIStyleContext* aParent,
 nsStyleContext::~nsStyleContext()
 {
   NS_ASSERTION((nsnull == mChild) && (nsnull == mEmptyChild), "destructing context with children");
+  
+  // bug 117316 modified for 1.3
+  //nsIPresContext *presContext = mRuleNode->PresContext();
+  nsCOMPtr<nsIPresContext> presContext;
+  mRuleNode->GetPresContext(getter_AddRefs(presContext));
+  nsCOMPtr<nsIPresShell> shell;
+  presContext->GetShell(getter_AddRefs(shell));
+  nsCOMPtr<nsIStyleSet> set;
+  shell->GetStyleSet(getter_AddRefs(set));
+  set->NotifyStyleContextDestroyed(presContext, this);
+  // end bug
 
   if (mParent) {
     mParent->RemoveChild(this);
@@ -178,8 +195,7 @@ nsStyleContext::~nsStyleContext()
 
   // Free up our data structs.
   if (mCachedStyleData.mResetData || mCachedStyleData.mInheritedData) {
-    nsCOMPtr<nsIPresContext> presContext;
-    mRuleNode->GetPresContext(getter_AddRefs(presContext));
+    // presContext code moved above by bug 117316
     mCachedStyleData.Destroy(mBits, presContext);
   }
 }
@@ -380,10 +396,26 @@ nsStyleContext::GetBorderPaddingFor(nsStyleBorderPadding& aBorderPadding)
 nsStyleStruct* 
 nsStyleContext::GetUniqueStyleData(nsIPresContext* aPresContext, const nsStyleStructID& aSID)
 {
+
+// bug 233480 attachment 140919 (and all NS_STATIC_CASTs below)
+  // If we already own the struct and no kids could depend on it, then
+  // just return it.  (We leak in this case if there are kids -- and this
+  // function really shouldn't be called for style contexts that could
+  // have kids depending on the data.  ClearStyleData would be OK, but
+  // this test for no mChild or mEmptyChild doesn't catch that case.)
+  const nsStyleStruct *current = GetStyleData(aSID);
+  if (!mChild && !mEmptyChild &&
+      !(mBits & nsCachedStyleData::GetBitForSID(aSID)) &&
+      mCachedStyleData.GetStyleData(aSID))
+    return NS_CONST_CAST(nsStyleStruct*, current);
+// end bug
+
   nsStyleStruct* result = nsnull;
   switch (aSID) {
   case eStyleStruct_Display: {
-    const nsStyleDisplay* dis = (const nsStyleDisplay*)GetStyleData(aSID);
+    const nsStyleDisplay* dis = 
+    	NS_STATIC_CAST(const nsStyleDisplay*, current);
+    	// (const nsStyleDisplay*)GetStyleData(aSID);
     nsStyleDisplay* newDis = new (aPresContext) nsStyleDisplay(*dis);
     SetStyle(aSID, newDis);
     result = newDis;
@@ -391,7 +423,9 @@ nsStyleContext::GetUniqueStyleData(nsIPresContext* aPresContext, const nsStyleSt
     break;
   }
   case eStyleStruct_Background: {
-    const nsStyleBackground* bg = (const nsStyleBackground*)GetStyleData(aSID);
+    const nsStyleBackground* bg = 
+    	NS_STATIC_CAST(const nsStyleBackground*, current);
+    	// (const nsStyleBackground*)GetStyleData(aSID);
     nsStyleBackground* newBG = new (aPresContext) nsStyleBackground(*bg);
     SetStyle(aSID, newBG);
     result = newBG;
@@ -399,7 +433,9 @@ nsStyleContext::GetUniqueStyleData(nsIPresContext* aPresContext, const nsStyleSt
     break;
   }
   case eStyleStruct_Text: {
-    const nsStyleText* text = (const nsStyleText*)GetStyleData(aSID);
+    const nsStyleText* text = 
+    	NS_STATIC_CAST(const nsStyleText*, current);
+    	// (const nsStyleText*)GetStyleData(aSID);
     nsStyleText* newText = new (aPresContext) nsStyleText(*text);
     SetStyle(aSID, newText);
     result = newText;
@@ -407,15 +443,19 @@ nsStyleContext::GetUniqueStyleData(nsIPresContext* aPresContext, const nsStyleSt
     break;
   }
   case eStyleStruct_TextReset: {
-    const nsStyleTextReset* reset = (const nsStyleTextReset*)GetStyleData(aSID);
+    const nsStyleTextReset* reset = 
+    	NS_STATIC_CAST(const nsStyleTextReset*, current);
+    	// (const nsStyleTextReset*)GetStyleData(aSID);
     nsStyleTextReset* newReset = new (aPresContext) nsStyleTextReset(*reset);
     SetStyle(aSID, newReset);
     result = newReset;
     mBits &= ~NS_STYLE_INHERIT_BIT(TextReset);
     break;
   }
+  /* I just kept the #define UNIQUE_CASE(c_)  code in longhand. -- Cameron */
   default:
     NS_ERROR("Struct type not supported.  Please find another way to do this if you can!\n");
+  	return nsnull; // bug 233480
   }
 
   return result;
@@ -548,6 +588,8 @@ nsStyleContext::ClearStyleData(nsIPresContext* aPresContext, nsIStyleRule* aRule
 NS_IMETHODIMP
 nsStyleContext::CalcStyleDifference(nsIStyleContext* aOther, nsChangeHint& aHint)
 {
+// bug 196603 modified for 1.3.1
+#if(0)    
   if (aOther) {
     // If our rule nodes are the same, then we are looking at the same style
     // data.  We know this because CalcStyleDifference is always called on two
@@ -560,7 +602,7 @@ nsStyleContext::CalcStyleDifference(nsIStyleContext* aOther, nsChangeHint& aHint
       return NS_OK;
 
     nsChangeHint maxHint = NS_STYLE_HINT_FRAMECHANGE;
-    
+
     // We begin by examining those style structs that are capable of causing the maximal
     // difference, a FRAMECHANGE.
     // FRAMECHANGE Structs: Display, XUL, Content, UserInterface, Visibility, Quotes
@@ -792,8 +834,126 @@ nsStyleContext::CalcStyleDifference(nsIStyleContext* aOther, nsChangeHint& aHint
       }
     }
   }
+
+#else
+// bug 196603 modified for 1.3
+  nsChangeHint hint = NS_STYLE_HINT_NONE;
+  NS_ENSURE_TRUE(aOther, hint);
+  // We must always ensure that we populate the structs on the new style
+  // context that are filled in on the old context, so that if we get
+  // two style changes in succession, the second of which causes a real
+  // style change, the PeekStyleData doesn't fail.
+
+  // If our rule nodes are the same, then we are looking at the same
+  // style data.  We know this because CalcStyleDifference is always
+  // called on two style contexts that point to the same element, so we
+  // know that our position in the style context tree is the same and
+  // our position in the rule node tree is also the same.
+  
+  //PRBool compare = mRuleNode != aOther->mRuleNode; 
+  nsRuleNode* ruleNode;
+  aOther->GetRuleNode(&ruleNode);
+  PRBool compare = mRuleNode != ruleNode;
+  
+  nsChangeHint maxHint = NS_STYLE_HINT_FRAMECHANGE;
+
+#define DO_STRUCT_DIFFERENCE(struct_)                                         \
+  {                                                                           \
+    const nsStyle##struct_* this##struct_ =                                   \
+        NS_STATIC_CAST(const nsStyle##struct_*,                               \
+                      PeekStyleData(NS_GET_STYLESTRUCTID(nsStyle##struct_))); \
+    if (this##struct_) {                                                      \
+      const nsStyle##struct_* other##struct_ =                                \
+          NS_STATIC_CAST(const nsStyle##struct_*,                             \
+               aOther->GetStyleData(NS_GET_STYLESTRUCTID(nsStyle##struct_))); \
+      if (compare &&                                                          \
+          !NS_IsHintSubset(maxHint, aHint) &&                                  \
+          this##struct_ != other##struct_) {                                  \
+        NS_UpdateHint(aHint, this##struct_->CalcDifference(*other##struct_));  \
+      }                                                                       \
+    }                                                                         \
+  }
+
+  // We begin by examining those style structs that are capable of
+  // causing the maximal difference, a FRAMECHANGE.
+  // FRAMECHANGE Structs: Display, XUL, Content, UserInterface,
+  // Visibility, Quotes
+  DO_STRUCT_DIFFERENCE(Display)
+#ifdef INCLUDE_XUL
+  DO_STRUCT_DIFFERENCE(XUL)
+#endif
+  DO_STRUCT_DIFFERENCE(Content)
+  DO_STRUCT_DIFFERENCE(UserInterface)
+  DO_STRUCT_DIFFERENCE(Visibility)
+#ifdef MOZ_SVG
+  DO_STRUCT_DIFFERENCE(SVG)
+#endif
+  // If the quotes implementation is ever going to change we might not need
+  // a framechange here and a reflow should be sufficient.  See bug 35768.
+  DO_STRUCT_DIFFERENCE(Quotes)
+
+  // At this point, we know that the worst kind of damage we could do is
+  // a reflow.
+  maxHint = NS_STYLE_HINT_REFLOW;
+      
+  // The following structs cause (as their maximal difference) a reflow
+  // to occur.  REFLOW Structs: Font, Margin, Padding, Border, List,
+  // Position, Text, TextReset, Table, TableBorder
+  DO_STRUCT_DIFFERENCE(Font)
+  DO_STRUCT_DIFFERENCE(Margin)
+  DO_STRUCT_DIFFERENCE(Padding)
+  DO_STRUCT_DIFFERENCE(Border)
+  DO_STRUCT_DIFFERENCE(List)
+  DO_STRUCT_DIFFERENCE(Position)
+  DO_STRUCT_DIFFERENCE(Text)
+  DO_STRUCT_DIFFERENCE(TextReset)
+  DO_STRUCT_DIFFERENCE(Table)
+  DO_STRUCT_DIFFERENCE(TableBorder)
+
+  // At this point, we know that the worst kind of damage we could do is
+  // a re-render (i.e., a VISUAL change).
+  maxHint = NS_STYLE_HINT_VISUAL;
+
+  // The following structs cause (as their maximal difference) a
+  // re-render to occur.  VISUAL Structs: Color, Background, Outline,
+  // UIReset
+  DO_STRUCT_DIFFERENCE(Color)
+  DO_STRUCT_DIFFERENCE(Background)
+  DO_STRUCT_DIFFERENCE(Outline)
+  DO_STRUCT_DIFFERENCE(UIReset)
+
+#undef DO_STRUCT_DIFFERENCE
+
+#endif
+// end bug
   return NS_OK;
 }
+
+// bug 117316
+void
+nsStyleContext::Mark()
+{
+  // Mark our rule node.
+  mRuleNode->Mark();
+
+  // Mark our children (i.e., tell them to mark their rule nodes, etc.).
+  if (mChild) {
+    nsStyleContext* child = mChild;
+    do {
+      child->Mark();
+      child = child->mNextSibling;
+    } while (mChild != child);
+  }
+  
+  if (mEmptyChild) {
+    nsStyleContext* child = mEmptyChild;
+    do {
+      child->Mark();
+      child = child->mNextSibling;
+    } while (mEmptyChild != child);
+  }
+ }
+// end bug
 
 #ifdef DEBUG
 void nsStyleContext::List(FILE* out, PRInt32 aIndent)

@@ -284,7 +284,7 @@ nsresult
 nsLineBox::IsEmpty(nsCompatibility aCompatMode, PRBool aParentIsPre,
                    PRBool *aResult) const
 {
-  if (IsBlock())
+  if (mFirstChild && IsBlock())
     return mFirstChild->IsEmpty(aCompatMode, aParentIsPre, aResult);
 
   *aResult = PR_TRUE;

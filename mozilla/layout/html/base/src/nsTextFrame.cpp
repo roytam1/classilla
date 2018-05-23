@@ -274,7 +274,7 @@ void nsBlinkTimer::Start()
   nsresult rv;
   mTimer = do_CreateInstance("@mozilla.org/timer;1", &rv);
   if (NS_OK == rv) {
-    mTimer->InitWithCallback(this, 750, nsITimer::TYPE_REPEATING_PRECISE);
+    mTimer->InitWithCallback(this, 250, nsITimer::TYPE_REPEATING_PRECISE); // reduced by 1.7
   }
 }
 
@@ -1163,6 +1163,7 @@ DrawSelectionIterator::FillCurrentData()
   if (!mTypes)
   {
     mCurrentIdx+=mCurrentLength;
+    mCurrentLength = 0; // pull up
     if (mCurrentIdx >= mLength)
     {
       mDone = PR_TRUE;
@@ -1183,6 +1184,8 @@ DrawSelectionIterator::FillCurrentData()
   }
   else
   {
+// pull up 1.7
+#if(0)
     mCurrentIdx+=mCurrentLength;//advance to this chunk
     if (mCurrentIdx >= mLength)
     {
@@ -1195,6 +1198,19 @@ DrawSelectionIterator::FillCurrentData()
       mCurrentLength++;
     }
   }
+#endif
+    uint8 typevalue = mTypes[mCurrentIdx];
+    while (mCurrentIdx+mCurrentLength < mLength && typevalue == mTypes[mCurrentIdx+mCurrentLength])
+    {
+      mCurrentLength++;
+    }
+  }
+  // never overrun past mLength
+  if (mCurrentIdx+mCurrentLength > mLength)
+  {
+    mCurrentLength = mLength - mCurrentIdx;
+  }
+// end pull up
 }
 
 PRBool
@@ -1447,6 +1463,7 @@ nsTextFrame::GetLastInFlow() const
   return lastInFlow;
 }
 
+// equivalent of CharacterDataChanged
 NS_IMETHODIMP
 nsTextFrame::ContentChanged(nsIPresContext* aPresContext,
                             nsIContent*     aChild,
@@ -1485,16 +1502,18 @@ nsTextFrame::ContentChanged(nsIPresContext* aPresContext,
     }
   }
 
-  // Ask the parent frame to reflow me.  
+  // Ask the parent frame to reflow me. 
+  // removal of NS_SUCCEEDED and likewise are pull up to 1.7 
   nsresult rv;                                                    
   nsCOMPtr<nsIPresShell> shell;
   rv = aPresContext->GetShell(getter_AddRefs(shell));
-  if (NS_SUCCEEDED(rv) && shell && mParent) {
+  if (//NS_SUCCEEDED(rv) && 
+  	shell && mParent) {
     mParent->ReflowDirtyChild(shell, targetTextFrame);
   }
   
 
-  return rv;
+  return NS_OK; // rv;
 }
 
 NS_IMETHODIMP
@@ -2813,7 +2832,9 @@ nsTextFrame::RenderString(nsIRenderingContext& aRenderingContext,
       pendingCount = bp - runStart;
       if (0 != pendingCount) {
         // Measure previous run of characters using the previous font
-        //aRenderingContext.SetColor(aTextStyle.mColor->mColor); commenting out redundat(and destructive) call to setcolor
+        aRenderingContext.SetColor(aTextStyle.mColor->mColor); 
+        // commenting out redundat(and destructive) call to setcolor
+        // uncommenting it again to pull up to 1.7
         aRenderingContext.DrawString(runStart, pendingCount,
                                      aX, aY + mAscent, -1,
                                      spacing ? sp0 : nsnull);
@@ -3747,9 +3768,9 @@ nsTextFrame::SetSelected(nsIPresContext* aPresContext,
     }
   }
   else {
-    if ( aSelected != (PRBool)(frameState | NS_FRAME_SELECTED_CONTENT) ){
+    //if ( aSelected != (PRBool)(frameState | NS_FRAME_SELECTED_CONTENT) ){ // pull up
       found = PR_TRUE;
-    }
+    //}
   }
 
   if ( aSelected )
@@ -3798,9 +3819,10 @@ nsTextFrame::SetSelected(nsIPresContext* aPresContext,
   }
   SetFrameState(frameState);
   if (found){ //if range contains this frame...
-    nsRect frameRect;
-    GetRect(frameRect);
-    nsRect rect(0, 0, frameRect.width, frameRect.height);
+    //nsRect frameRect;
+    //GetRect(frameRect);
+    nsRect rect(0, 0, mRect.width, mRect.height); // pull up frameRect -> mRect
+    	//frameRect.width, frameRect.height);
     if (!rect.IsEmpty())
       Invalidate(aPresContext, rect, PR_FALSE);
 //    ForceDrawFrame(this);
@@ -4784,7 +4806,7 @@ nsTextFrame::MeasureText(nsIPresContext*          aPresContext,
     aTextData.mDescent = 0;
     return NS_FRAME_COMPLETE;
   }
-#if defined(_WIN32) || defined(XP_OS2) || defined(MOZ_X11)
+#if defined(_WIN32) || defined(XP_OS2) || defined(MOZ_X11) || defined(XP_BEOS)
   // see if we have implementation for GetTextDimensions()
   PRUint32 hints = 0;
   aReflowState.rendContext->GetHints(hints);
@@ -4813,6 +4835,7 @@ nsTextFrame::MeasureText(nsIPresContext*          aPresContext,
       }
       nextBidi->GetOffsets(start, end);
       if (start <= mContentOffset) {
+        // we lack AdjustOffsetsForBidi
         nextBidi->SetOffsets(mContentOffset + mContentLength, end);
         nsFrameState frameState;
         nextBidi->GetFrameState(&frameState);
@@ -4994,12 +5017,13 @@ nsTextFrame::MeasureText(nsIPresContext*          aPresContext,
       } //(aTextData.mMeasureText)
     }
     else {
+    /* pull up to 1.7
       // See if the first thing in the section of text is a
       // non-breaking space (html nbsp entity). If it is then make
       // note of that fact for the line layout logic.
       if (aTextData.mWrapping && firstThing && (firstChar == ' ')) {
         textStartsWithNBSP = PR_TRUE;
-      }
+      } */
       aTextData.mSkipWhitespace = PR_FALSE;
 
       if (aTextData.mFirstLetterOK) {
@@ -5092,7 +5116,7 @@ nsTextFrame::MeasureText(nsIPresContext*          aPresContext,
     continue;
 
   MeasureTextRun:
-#if defined(_WIN32) || defined(XP_OS2) || defined(MOZ_X11)
+#if defined(_WIN32) || defined(XP_OS2) || defined(MOZ_X11) || defined(XP_BEOS)
   // see if we have implementation for GetTextDimensions()
   if (hints & NS_RENDERING_HINT_FAST_MEASURE) {
     PRInt32 numCharsFit;

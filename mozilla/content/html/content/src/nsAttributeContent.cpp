@@ -208,6 +208,8 @@ public:
                    PRBool aNotify);
   NS_IMETHOD IsOnlyWhitespace(PRBool* aResult);
   NS_IMETHOD CloneContent(PRBool aCloneText, nsITextContent** aClone); 
+  NS_IMETHOD AppendTextTo(nsAString &foo); // stub for nsTextFragment's AppendTextTo support
+  									   	   // to avoid an 'illegal use of abstract class'
 
   //----------------------------------------
 
@@ -540,6 +542,12 @@ nsAttributeContent::CloneContent(PRBool aCloneText, nsITextContent** aReturn)
   }
   it->mText = mText;
   return result;
+}
+
+// stub for nsTextFragment having AppendTo and we're not.
+NS_IMETHODIMP
+nsAttributeContent::AppendTextTo(nsAString &foo) {
+	return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 #ifdef DEBUG

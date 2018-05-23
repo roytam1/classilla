@@ -384,6 +384,19 @@ public:
   nsresult GetIBSpecialParent(nsIPresContext* aPresContext,
                               nsIFrame** aSpecialParent);
 
+// bug 197581
+  // return the previously stored overflow area, if the frame does not 
+  // overflow  and a creation is not requested it will return nsnull
+  virtual nsRect* GetOverflowAreaProperty(nsIPresContext* aPresContext,
+                                  PRBool          aCreateIfNecessary = PR_FALSE);
+
+  // if necessary set the NS_FRAME_OUTSIDE_CHILDREN flag and store the overflow
+  // area via the frame manager, by this it can be retrieved later without 
+  // reflowing the frame
+  void StoreOverflow(nsIPresContext*      aPresContext,
+                     nsHTMLReflowMetrics& aMetrics);
+// end bug
+
   //Mouse Capturing code used by the frames to tell the view to capture all the following events
   NS_IMETHOD CaptureMouse(nsIPresContext* aPresContext, PRBool aGrabMouseEvents);
   PRBool   IsMouseCaptured(nsIPresContext* aPresContext);

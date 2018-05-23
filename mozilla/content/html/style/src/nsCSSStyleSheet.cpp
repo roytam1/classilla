@@ -190,8 +190,29 @@ nsHashKey* DependentAtomKey::Clone(void) const
 }
 
 struct RuleValue {
+
+// bug 98765
+#if(0)
   RuleValue(nsICSSStyleRule* aRule, PRInt32 aIndex, RuleValue *aNext)
     : mRule(aRule), mIndex(aIndex), mNext(aNext) {}
+#else
+  /**
+   * |RuleValue|s are constructed before they become part of the
+   * |RuleHash|, to act as rule/selector pairs.  |Add| is called when
+   * they are added to the |RuleHash|, and can be considered the second
+   * half of the constructor.
+   */
+  RuleValue(nsICSSStyleRule* aRule, nsCSSSelector* aSelector)
+    : mRule(aRule), mSelector(aSelector) {}
+ 
+  RuleValue* Add(PRInt32 aIndex, RuleValue *aNext)
+  {
+    mIndex = aIndex;
+    mNext = aNext;
+    return this;
+  }
+#endif
+// end bug
 
   // CAUTION: ~RuleValue will never get called as RuleValues are arena
   // allocated and arena cleanup will take care of deleting memory.
@@ -210,6 +231,7 @@ struct RuleValue {
   }
 
   nsICSSStyleRule*  mRule;
+  nsCSSSelector*    mSelector; // which of |mRule|'s selectors // bug 98765
   PRInt32           mIndex; // High index means low weight/order.
   RuleValue*        mNext;
 };
@@ -271,32 +293,37 @@ RuleHash_CSMatchEntry(PLDHashTable *table, const PLDHashEntryHdr *hdr,
   return match_atom == entry_atom;
 }
 
+// the iterative type changes below are all bug 98765
 PR_STATIC_CALLBACK(const void*)
 RuleHash_TagTable_GetKey(PLDHashTable *table, PLDHashEntryHdr *hdr)
 {
   RuleHashTableEntry *entry = NS_STATIC_CAST(RuleHashTableEntry*, hdr);
-  return entry->mRules->mRule->FirstSelector()->mTag;
+  //return entry->mRules->mRule->FirstSelector()->mTag;
+  return entry->mRules->mSelector->mTag;
 }
 
 PR_STATIC_CALLBACK(const void*)
 RuleHash_ClassTable_GetKey(PLDHashTable *table, PLDHashEntryHdr *hdr)
 {
   RuleHashTableEntry *entry = NS_STATIC_CAST(RuleHashTableEntry*, hdr);
-  return entry->mRules->mRule->FirstSelector()->mClassList->mAtom;
+  //return entry->mRules->mRule->FirstSelector()->mClassList->mAtom;
+  return entry->mRules->mSelector->mClassList->mAtom;
 }
 
 PR_STATIC_CALLBACK(const void*)
 RuleHash_IdTable_GetKey(PLDHashTable *table, PLDHashEntryHdr *hdr)
 {
   RuleHashTableEntry *entry = NS_STATIC_CAST(RuleHashTableEntry*, hdr);
-  return entry->mRules->mRule->FirstSelector()->mIDList->mAtom;
+  //return entry->mRules->mRule->FirstSelector()->mIDList->mAtom;
+  return entry->mRules->mSelector->mIDList->mAtom;
 }
 
 PR_STATIC_CALLBACK(const void*)
 RuleHash_NameSpaceTable_GetKey(PLDHashTable *table, PLDHashEntryHdr *hdr)
 {
   RuleHashTableEntry *entry = NS_STATIC_CAST(RuleHashTableEntry*, hdr);
-  return NS_INT32_TO_PTR(entry->mRules->mRule->FirstSelector()->mNameSpace);
+  //return NS_INT32_TO_PTR(entry->mRules->mRule->FirstSelector()->mNameSpace);
+  return NS_INT32_TO_PTR(entry->mRules->mSelector->mNameSpace);
 }
 
 PR_STATIC_CALLBACK(PLDHashNumber)
@@ -314,8 +341,10 @@ RuleHash_NameSpaceTable_MatchEntry(PLDHashTable *table,
     NS_STATIC_CAST(const RuleHashTableEntry*, hdr);
 
   return NS_PTR_TO_INT32(key) ==
-         entry->mRules->mRule->FirstSelector()->mNameSpace;
+         //entry->mRules->mRule->FirstSelector()->mNameSpace;
+         entry->mRules->mSelector->mNameSpace;
 }
+// end bug 98765
 
 static PLDHashTableOps RuleHash_TagTable_Ops = {
   PL_DHashAllocTable,
@@ -408,23 +437,29 @@ static PLDHashTableOps RuleHash_NameSpaceTable_Ops = {
 #endif
 
 // Enumerator callback function.
-typedef void (*RuleEnumFunc)(nsICSSStyleRule* aRule, void *aData);
+typedef void (*RuleEnumFunc)(nsICSSStyleRule* aRule, 
+	nsCSSSelector* aSelector, // bug 98765
+	void *aData);
 
 class RuleHash {
 public:
   RuleHash(PRBool aQuirksMode);
   ~RuleHash();
-  void PrependRule(nsICSSStyleRule* aRule);
+  //void PrependRule(nsICSSStyleRule* aRule);
+  void PrependRule(RuleValue *aRuleInfo); // bug 98765
   void EnumerateAllRules(PRInt32 aNameSpace, nsIAtom* aTag, nsIAtom* aID,
                          const nsVoidArray& aClassList,
                          RuleEnumFunc aFunc, void* aData);
   void EnumerateTagRules(nsIAtom* aTag,
                          RuleEnumFunc aFunc, void* aData);
+  PLArenaPool& Arena() { return mArena; } // added as pull up for bug 98765
 
 protected:
   void PrependRuleToTable(PLDHashTable* aTable, const void* aKey,
-                          nsICSSStyleRule* aRule);
-  void PrependUniversalRule(nsICSSStyleRule* aRule);
+//                          nsICSSStyleRule* aRule);
+                          RuleValue* aRuleInfo); // bug 98765
+//  void PrependUniversalRule(nsICSSStyleRule* aRule);
+  void PrependUniversalRule(RuleValue* aRuleInfo); // bug 98765
 
   // All rule values in these hashtables are arena allocated
   PRInt32     mRuleCount;
@@ -522,7 +557,18 @@ RuleHash::~RuleHash(void)
       do {
         nsAutoString selectorText;
         PRUint32 lineNumber = value->mRule->GetLineNumber();
+
+// bug 98765
+#if(0)
         value->mRule->GetSourceSelectorText(selectorText);
+#else
+        nsCOMPtr<nsIStyleSheet> sheet;
+        value->mRule->GetStyleSheet(*getter_AddRefs(sheet));
+        nsCOMPtr<nsICSSStyleSheet> cssSheet = do_QueryInterface(sheet);
+        value->mSelector->ToString(selectorText, cssSheet);
+#endif
+// end bug
+
         printf("    line %d, %s\n",
                lineNumber, NS_ConvertUCS2toUTF8(selectorText).get());
         value = value->mNext;
@@ -546,44 +592,56 @@ RuleHash::~RuleHash(void)
 }
 
 void RuleHash::PrependRuleToTable(PLDHashTable* aTable,
-                                  const void* aKey, nsICSSStyleRule* aRule)
+                                  const void* aKey, 
+                                  RuleValue* aRuleInfo) // bug 98765
+                                  //nsICSSStyleRule* aRule)
 {
   // Get a new or existing entry.
   RuleHashTableEntry *entry = NS_STATIC_CAST(RuleHashTableEntry*,
       PL_DHashTableOperate(aTable, aKey, PL_DHASH_ADD));
   if (!entry)
     return;
-  entry->mRules = new (mArena) RuleValue(aRule, mRuleCount++, entry->mRules);
+  //entry->mRules = new (mArena) RuleValue(aRule, mRuleCount++, entry->mRules);
+  entry->mRules = aRuleInfo->Add(mRuleCount++, entry->mRules); // bug 98765
 }
 
-void RuleHash::PrependUniversalRule(nsICSSStyleRule* aRule)
+//void RuleHash::PrependUniversalRule(nsICSSStyleRule* aRule)
+void RuleHash::PrependUniversalRule(RuleValue *aRuleInfo) // bug 98765
 {
-  mUniversalRules =
-      new (mArena) RuleValue(aRule, mRuleCount++, mUniversalRules);
+  //mUniversalRules = new (mArena) RuleValue(aRule, mRuleCount++, mUniversalRules);
+  mUniversalRules = aRuleInfo->Add(mRuleCount++, mUniversalRules); // bug 98765
 }
 
-void RuleHash::PrependRule(nsICSSStyleRule* aRule)
+// the following iterative changes are all bug 98765
+//void RuleHash::PrependRule(nsICSSStyleRule* aRule)
+void RuleHash::PrependRule(RuleValue *aRuleInfo) // bug 98765
 {
-  nsCSSSelector*  selector = aRule->FirstSelector();
+  nsCSSSelector*  selector = aRuleInfo->mSelector; //aRule->FirstSelector();
   if (nsnull != selector->mIDList) {
-    PrependRuleToTable(&mIdTable, selector->mIDList->mAtom, aRule);
+    // PrependRuleToTable(&mIdTable, selector->mIDList->mAtom, aRule);
+    PrependRuleToTable(&mIdTable, selector->mIDList->mAtom, aRuleInfo);
     RULE_HASH_STAT_INCREMENT(mIdSelectors);
   }
   else if (nsnull != selector->mClassList) {
-    PrependRuleToTable(&mClassTable, selector->mClassList->mAtom, aRule);
+    //PrependRuleToTable(&mClassTable, selector->mClassList->mAtom, aRule);
+    PrependRuleToTable(&mClassTable, selector->mClassList->mAtom, aRuleInfo);
     RULE_HASH_STAT_INCREMENT(mClassSelectors);
   }
   else if (nsnull != selector->mTag) {
-    PrependRuleToTable(&mTagTable, selector->mTag, aRule);
+    //PrependRuleToTable(&mTagTable, selector->mTag, aRule);
+    PrependRuleToTable(&mTagTable, selector->mTag, aRuleInfo);
     RULE_HASH_STAT_INCREMENT(mTagSelectors);
   }
   else if (kNameSpaceID_Unknown != selector->mNameSpace) {
     PrependRuleToTable(&mNameSpaceTable,
-                       NS_INT32_TO_PTR(selector->mNameSpace), aRule);
+                       //NS_INT32_TO_PTR(selector->mNameSpace), aRule);
+                       NS_INT32_TO_PTR(selector->mNameSpace), aRuleInfo);
     RULE_HASH_STAT_INCREMENT(mNameSpaceSelectors);
   }
   else {  // universal tag selector
-    PrependUniversalRule(aRule);
+    //PrependUniversalRule(aRule);
+    PrependUniversalRule(aRuleInfo);
+// end bug 98765
     RULE_HASH_STAT_INCREMENT(mUniversalSelectors);
   }
 }
@@ -679,15 +737,25 @@ void RuleHash::EnumerateAllRules(PRInt32 aNameSpace, nsIAtom* aTag,
           highestRuleIndex = ruleIndex;
         }
       }
+// bug 98765
+#if(0)
       (*aFunc)(mEnumList[valueIndex]->mRule, aData);
       RuleValue *next = mEnumList[valueIndex]->mNext;
+#else
+      RuleValue *cur = mEnumList[valueIndex];
+      (*aFunc)(cur->mRule, cur->mSelector, aData);
+      RuleValue *next = cur->mNext;
+#endif
+// end bug
+
       mEnumList[valueIndex] = next ? next : mEnumList[--valueCount];
     }
 
     // Fast loop over single value.
     RuleValue* value = mEnumList[0];
     do {
-      (*aFunc)(value->mRule, aData);
+      //(*aFunc)(value->mRule, aData);
+      (*aFunc)(value->mRule, value->mSelector, aData); // bug 98765
       value = value->mNext;
     } while (value);
   }
@@ -703,7 +771,8 @@ void RuleHash::EnumerateTagRules(nsIAtom* aTag, RuleEnumFunc aFunc, void* aData)
     RuleValue *tagValue = entry->mRules;
     do {
       RULE_HASH_STAT_INCREMENT(mPseudoTagCalls);
-      (*aFunc)(tagValue->mRule, aData);
+      //(*aFunc)(tagValue->mRule, aData);
+      (*aFunc)(tagValue->mRule, tagValue->mSelector, aData); // bug 98765
       tagValue = tagValue->mNext;
     } while (tagValue);
   }
@@ -711,24 +780,31 @@ void RuleHash::EnumerateTagRules(nsIAtom* aTag, RuleEnumFunc aFunc, void* aData)
 
 //--------------------------------
 
+/* I toyed with supporting mAttributeSelectors, but it's too much stuff right now */
+
 struct RuleCascadeData {
   RuleCascadeData(nsIAtom *aMedium, PRBool aQuirksMode)
-    : mWeightedRules(nsnull),
+    : 
+    //mWeightedRules(nsnull), // bug 98765
       mRuleHash(aQuirksMode),
       mStateSelectors(),
       mMedium(aMedium),
       mNext(nsnull)
   {
-    NS_NewISupportsArray(&mWeightedRules);
+//    NS_NewISupportsArray(&mWeightedRules); // bug 98765
+//     PL_DHashTableInit(&mAttributeSelectors, &AttributeSelectorOps, nsnull,
+//                       sizeof(AttributeSelectorEntry), 16); // pull up for bug 98765
   }
 
   ~RuleCascadeData(void)
   {
-    NS_IF_RELEASE(mWeightedRules);
+//    NS_IF_RELEASE(mWeightedRules);
+//	PL_DHashTableFinish(&mAttributeSelectors); // pull up for bug 98765
   }
-  nsISupportsArray* mWeightedRules;
+ // nsISupportsArray* mWeightedRules; // bug 98765
   RuleHash          mRuleHash;
   nsVoidArray       mStateSelectors;
+ // PLDHashTable      mAttributeSelectors; // nsIAtom* -> nsVoidArray* // pull up for bug 98765
 
   nsCOMPtr<nsIAtom> mMedium;
   RuleCascadeData*  mNext; // for a different medium
@@ -2242,7 +2318,7 @@ CSSStyleSheetImpl::PrependStyleRule(nsICSSRule* aRule)
         // no api to prepend a namespace (ugh), release old ones and re-create them all
         mInner->RebuildNameSpaces();
       } else {
-        CheckRuleForAttributes(aRule);
+        CheckRuleForAttributes(aRule); // pull up for bug 98765
       }
     }
   }
@@ -2285,7 +2361,7 @@ CSSStyleSheetImpl::AppendStyleRule(nsICSSRule* aRule)
           }
         }
       } else {
-        CheckRuleForAttributes(aRule);
+        CheckRuleForAttributes(aRule); // pull up to 1.7 for bug 98765
       }
         
     }
@@ -2304,6 +2380,8 @@ CheckRuleForAttributesEnum(nsISupports *aRule, void *aData)
 NS_IMETHODIMP
 CSSStyleSheetImpl::CheckRuleForAttributes(nsICSSRule *aRule)
 {
+// heavily modified for bug 98765
+#if(0)
   PRInt32 ruleType = nsICSSRule::UNKNOWN_RULE;
   aRule->GetType(ruleType);
   switch (ruleType) {
@@ -2353,6 +2431,60 @@ CSSStyleSheetImpl::CheckRuleForAttributes(nsICSSRule *aRule)
     default:
       return NS_OK;
   }
+#else
+  PRInt32 ruleType = nsICSSRule::UNKNOWN_RULE;
+  aRule->GetType(ruleType);
+  switch (ruleType) {
+    case nsICSSRule::MEDIA_RULE: {
+      nsICSSMediaRule *mediaRule = (nsICSSMediaRule *)aRule;
+      return mediaRule->EnumerateRulesForwards(CheckRuleForAttributesEnum,
+                                               (void *)this);
+    }
+    case nsICSSRule::STYLE_RULE: {
+      nsICSSStyleRule *styleRule = NS_STATIC_CAST(nsICSSStyleRule *, aRule);
+      nsCSSSelectorList *iiter;
+      for (iiter = styleRule->Selector(); iiter; iiter = iiter->mNext) {
+       for (nsCSSSelector *iter = iiter->mSelectors; iter; iter = iter->mNext) {
+        /* P.classname means we have to check the attribute "class" */
+        if (iter->mIDList) {
+          DependentAtomKey idKey(nsHTMLAtoms::id);
+          mInner->mRelevantAttributes.Put(&idKey, nsHTMLAtoms::id);
+        }
+        if (iter->mClassList) {
+          DependentAtomKey classKey(nsHTMLAtoms::kClass);
+          mInner->mRelevantAttributes.Put(&classKey, nsHTMLAtoms::kClass);
+        }
+        for (nsAttrSelector *sel = iter->mAttrList; sel; sel = sel->mNext) {
+          /* store it in this sheet's attributes-that-matter table */
+          /* XXX store tag name too, but handle collisions */
+#ifdef DEBUG_shaver_off
+          nsAutoString str;
+          sel->mAttr->ToString(str);
+          char * chars = ToNewCString(str);
+          fprintf(stderr, "[%s@%p]", chars, this);
+          nsMemory::Free(chars);
+#endif
+          DependentAtomKey key(sel->mAttr);
+          mInner->mRelevantAttributes.Put(&key, sel->mAttr);
+        }
+
+        // Search for the :lang() pseudo class.  If it is there add
+        // the lang attribute to the relevant attribute list.
+        for (nsAtomStringList* p = iter->mPseudoClassList; p; p = p->mNext) {
+          if (p->mAtom == nsCSSPseudoClasses::lang) {
+            DependentAtomKey langKey(nsHTMLAtoms::lang);
+            mInner->mRelevantAttributes.Put(&langKey, nsHTMLAtoms::lang);
+            break;
+          }
+        }
+      }
+     }
+    } /* fall-through */
+    default:
+      return NS_OK;
+  }
+#endif
+// end bug
 }
 
 NS_IMETHODIMP
@@ -2864,6 +2996,11 @@ CSSStyleSheetImpl::InsertRule(const nsAString& aRule,
     return NS_ERROR_DOM_INVALID_ACCESS_ERR;
   }
   
+  if(aRule.IsEmpty()) {
+  	// Nothing to do here
+  	return NS_OK;
+  }
+  
   nsresult result;
   result = WillDirty();
   if (NS_FAILED(result))
@@ -3007,7 +3144,7 @@ CSSStyleSheetImpl::InsertRule(const nsAString& aRule,
       }
     }
     else {
-      CheckRuleForAttributes(cssRule);
+      CheckRuleForAttributes(cssRule); // pull up for bug 98765 for 1.3.1
     }
 
     // We don't notify immediately for @import rules, but rather when
@@ -3024,7 +3161,7 @@ CSSStyleSheetImpl::InsertRule(const nsAString& aRule,
     }
     if (mDocument && notify) {
       result = mDocument->StyleRuleAdded(this, cssRule);
-      NS_ENSURE_SUCCESS(result, result);
+      //NS_ENSURE_SUCCESS(result, result); // pull up to 1.7
     }
   }
   
@@ -3155,6 +3292,11 @@ CSSStyleSheetImpl::InsertRuleIntoGroup(const nsAString & aRule, nsICSSGroupRule*
     return NS_ERROR_INVALID_ARG;
   }
 
+  if (aRule.IsEmpty()) {
+  	// Nothing to do here
+  	return NS_OK;
+  }
+  
   // get the css parser
   nsCOMPtr<nsICSSLoader> loader;
   nsCOMPtr<nsICSSParser> css;
@@ -3211,11 +3353,11 @@ CSSStyleSheetImpl::InsertRuleIntoGroup(const nsAString & aRule, nsICSSGroupRule*
   DidDirty();
   for (counter = 0; counter < rulecount; counter++) {
     rule = dont_AddRef((nsICSSRule*)rules->ElementAt(counter));
-    CheckRuleForAttributes(rule);
+    CheckRuleForAttributes(rule); // pull up 1.7 for bug 98765
   
     if (mDocument) {
       result = mDocument->StyleRuleAdded(this, rule);
-      NS_ENSURE_SUCCESS(result, result);
+      // NS_ENSURE_SUCCESS(result, result); // pull up 1.7
     }
   }
 
@@ -4150,14 +4292,25 @@ static PRBool SelectorMatchesTree(RuleProcessorData &data,
   return PRBool(nsnull == selector);  // matches if ran out of selectors
 }
 
-static void ContentEnumFunc(nsICSSStyleRule* aRule, void* aData)
+//static void ContentEnumFunc(nsICSSStyleRule* aRule, void* aData)
+static void ContentEnumFunc(nsICSSStyleRule* aRule, nsCSSSelector* aSelector,
+                            void* aData) // bug 98765
 {
   ElementRuleProcessorData* data = (ElementRuleProcessorData*)aData;
 
+// bug 98765
+#if(0)
   nsCSSSelector* selector = aRule->FirstSelector();
   if (SelectorMatches(*data, selector, 0, 0)) {
     selector = selector->mNext;
     if (SelectorMatchesTree(*data, selector)) {
+#else
+  if (SelectorMatches(*data, aSelector, 0, 0)) { // modified for 1.3.1 // nsnull, 0)) {
+    nsCSSSelector *next = aSelector->mNext;
+    if (!next || SelectorMatchesTree(*data, next)) {
+#endif
+// end bug
+
       // for performance, require that every implementation of
       // nsICSSStyleRule return the same pointer for nsIStyleRule (why
       // would anything multiply inherit nsIStyleRule anyway?)
@@ -4193,10 +4346,14 @@ CSSRuleProcessor::RulesMatching(ElementRuleProcessorData *aData,
   return NS_OK;
 }
 
-static void PseudoEnumFunc(nsICSSStyleRule* aRule, void* aData)
+//static void PseudoEnumFunc(nsICSSStyleRule* aRule, void* aData)
+static void PseudoEnumFunc(nsICSSStyleRule* aRule, nsCSSSelector* aSelector,
+                           void* aData) // bug 98765
 {
   PseudoRuleProcessorData* data = (PseudoRuleProcessorData*)aData;
 
+// bug 98765
+#if(0)
   nsCSSSelector* selector = aRule->FirstSelector();
 
   NS_ASSERTION(selector->mTag == data->mPseudoTag, "RuleHash failure");
@@ -4206,7 +4363,16 @@ static void PseudoEnumFunc(nsICSSStyleRule* aRule, void* aData)
 
   if (matches) {
     selector = selector->mNext;
+#else
+  NS_ASSERTION(aSelector->mTag == data->mPseudoTag, "RuleHash failure");
+  PRBool matches = PR_TRUE;
+  if (data->mComparator)
+    data->mComparator->PseudoMatches(data->mPseudoTag, aSelector, &matches);
 
+  if (matches) {
+    nsCSSSelector *selector = aSelector->mNext;
+#endif
+// end bug
     if (selector) { // test next selector specially
       if (PRUnichar('+') == selector->mOperator) {
         return; // not valid here, can't match
@@ -4481,6 +4647,10 @@ PRBool IsStateSelector(nsCSSSelector& aSelector)
   return PR_FALSE;
 }
 
+// bug 98765 modified for 1.3
+// the rest of this goes into CheckRuleForAttributes() because of our different
+// object encapsulation, not this which acts as our substitute for Add_Rule().
+#if(0)
 static PRBool
 BuildRuleHashAndStateSelectors(nsISupports* aRule, void* aCascade)
 {
@@ -4495,18 +4665,56 @@ BuildRuleHashAndStateSelectors(nsISupports* aRule, void* aCascade)
     if (IsStateSelector(*selector))
       array->AppendElement(selector);
 
+}
+#else
+static PRBool
+BuildRuleHashAndStateSelectors(//nsISupports* aRule, void* aCascade)
+	void* aRuleInfo, void* aCascade)
+{
+  // nsICSSStyleRule* rule = NS_STATIC_CAST(nsICSSStyleRule*, aRule);
+  RuleValue* ruleInfo = NS_STATIC_CAST(RuleValue*, aRuleInfo);
+  RuleCascadeData *cascade = NS_STATIC_CAST(RuleCascadeData*, aCascade);
+
+  // Build the rule hash.
+  // cascade->mRuleHash.PrependRule(rule);
+  cascade->mRuleHash.PrependRule(ruleInfo);
+
+  nsVoidArray* array = &cascade->mStateSelectors;
+  //for (nsCSSSelector* selector = rule->FirstSelector();
+  for (nsCSSSelector* selector = ruleInfo->mSelector;
+           selector; selector = selector->mNext)
+    // Build mStateSelectors.
+    if (IsStateSelector(*selector))
+      array->AppendElement(selector);
+      
+  return PR_TRUE;
+}
+#endif
+// end bug
+
+// we may not need this for 1.3.
+PR_STATIC_CALLBACK(PRIntn)
+RuleArraysDestroy(nsHashKey *aKey, void *aData, void *aClosure)
+{
+  delete NS_STATIC_CAST(nsAutoVoidArray*, aData);
   return PR_TRUE;
 }
 
 struct CascadeEnumData {
-  CascadeEnumData(nsIAtom* aMedium)
+//  CascadeEnumData(nsIAtom* aMedium)
+  CascadeEnumData(nsIAtom* aMedium, PLArenaPool& aArena) // bug 98765
     : mMedium(aMedium),
-      mRuleArrays(64)
+      //mRuleArrays(64)
+      mRuleArrays(nsnull, nsnull, RuleArraysDestroy, nsnull, 64),
+      mArena(aArena) // both bug 98765
   {
   }
 
   nsIAtom* mMedium;
-  nsSupportsHashtable mRuleArrays; // of nsISupportsArray
+  //nsSupportsHashtable mRuleArrays; // of nsISupportsArray
+  nsObjectHashtable mRuleArrays; // of nsAutoVoidArray
+  PLArenaPool& mArena; // bug 98765
+
 };
 
 static PRBool
@@ -4520,6 +4728,8 @@ InsertRuleByWeight(nsISupports* aRule, void* aData)
   if (nsICSSRule::STYLE_RULE == type) {
     nsICSSStyleRule* styleRule = (nsICSSStyleRule*)rule;
 
+// bug 98765
+#if(0)
     PRInt32 weight = styleRule->GetWeight();
     nsPRUint32Key key(weight);
     nsCOMPtr<nsISupportsArray> rules(dont_AddRef(
@@ -4528,8 +4738,25 @@ InsertRuleByWeight(nsISupports* aRule, void* aData)
       NS_NewISupportsArray(getter_AddRefs(rules));
       if (!rules) return PR_FALSE; // out of memory
       data->mRuleArrays.Put(&key, rules);
+#else
+    for (nsCSSSelectorList *sel = styleRule->Selector();
+         sel; sel = sel->mNext) {
+      PRInt32 weight = sel->mWeight;
+      nsPRUint32Key key(weight);
+      nsAutoVoidArray *rules =
+        NS_STATIC_CAST(nsAutoVoidArray*, data->mRuleArrays.Get(&key));
+      if (!rules) {
+        rules = new nsAutoVoidArray();
+        if (!rules) return PR_FALSE; // out of memory
+        data->mRuleArrays.Put(&key, rules);
+      }
+      RuleValue *info =
+        new (data->mArena) RuleValue(styleRule, sel->mSelectors);
+      rules->AppendElement(info);
+#endif
     }
-    rules->AppendElement(styleRule);
+//    rules->AppendElement(styleRule);
+// end bug
   }
   else if (nsICSSRule::MEDIA_RULE == type) {
     nsICSSMediaRule* mediaRule = (nsICSSMediaRule*)rule;
@@ -4566,7 +4793,8 @@ CSSRuleProcessor::CascadeSheetRulesInto(nsISupports* aSheet, void* aData)
 
 struct RuleArrayData {
   PRInt32 mWeight;
-  nsISupportsArray* mRuleArray;
+  //nsISupportsArray* mRuleArray;
+  nsVoidArray* mRuleArray; // bug 98765
 };
 
 PR_STATIC_CALLBACK(int) CompareArrayData(const void* aArg1, const void* aArg2,
@@ -4588,11 +4816,13 @@ struct FillArrayData {
   RuleArrayData* mArrayData;
 };
 
-PR_STATIC_CALLBACK(PRBool) FillArray(nsHashKey* aKey, void* aData,
-                                     void* aClosure)
+//PR_STATIC_CALLBACK(PRBool) FillArray(nsHashKey* aKey, void* aData, void* aClosure)
+PR_STATIC_CALLBACK(PRBool)
+FillArray(nsHashKey* aKey, void* aData, void* aClosure) // bug 98765
 {
   nsPRUint32Key* key = NS_STATIC_CAST(nsPRUint32Key*, aKey);
-  nsISupportsArray* weightArray = NS_STATIC_CAST(nsISupportsArray*, aData);
+  //nsISupportsArray* weightArray = NS_STATIC_CAST(nsISupportsArray*, aData);
+  nsVoidArray* weightArray = NS_STATIC_CAST(nsVoidArray*, aData); // bug 98765
   FillArrayData* data = NS_STATIC_CAST(FillArrayData*, aClosure);
 
   RuleArrayData& ruleData = data->mArrayData[data->mIndex++];
@@ -4607,8 +4837,10 @@ PR_STATIC_CALLBACK(PRBool) FillArray(nsHashKey* aKey, void* aData,
  * puts them all in one big array which has a primary sort by weight
  * and secondary sort by order.
  */
-static void PutRulesInList(nsSupportsHashtable* aRuleArrays,
-                           nsISupportsArray* aWeightedRules)
+//static void PutRulesInList(nsSupportsHashtable* aRuleArrays,
+//                           nsISupportsArray* aWeightedRules)
+static void PutRulesInList(nsObjectHashtable* aRuleArrays,
+                           nsVoidArray* aWeightedRules) // bug 98765
 {
   PRInt32 arrayCount = aRuleArrays->Count();
   RuleArrayData* arrayData = new RuleArrayData[arrayCount];
@@ -4617,7 +4849,8 @@ static void PutRulesInList(nsSupportsHashtable* aRuleArrays,
   NS_QuickSort(arrayData, arrayCount, sizeof(RuleArrayData),
                CompareArrayData, nsnull);
   for (PRInt32 i = 0; i < arrayCount; ++i)
-    aWeightedRules->AppendElements(arrayData[i].mRuleArray);
+    //aWeightedRules->AppendElements(arrayData[i].mRuleArray);
+    aWeightedRules->AppendElements(*arrayData[i].mRuleArray); // bug 98765
 
   delete [] arrayData;
 }
@@ -4639,6 +4872,8 @@ CSSRuleProcessor::GetRuleCascade(nsIPresContext* aPresContext, nsIAtom* aMedium)
 
     cascade = new RuleCascadeData(aMedium,
                                   eCompatibility_NavQuirks == quirkMode);
+// bug 98765 plus backbugs modified for 1.3.1
+#if(0)
     if (cascade) {
       *cascadep = cascade;
 
@@ -4648,6 +4883,23 @@ CSSRuleProcessor::GetRuleCascade(nsIPresContext* aPresContext, nsIAtom* aMedium)
 
       cascade->mWeightedRules->EnumerateBackwards(
                                       BuildRuleHashAndStateSelectors, cascade);
+#else
+    if (cascade) {
+      
+      CascadeEnumData data(aMedium, cascade->mRuleHash.Arena());
+      mSheets->EnumerateForwards(CascadeSheetRulesInto, &data);
+      nsVoidArray weightedRules;
+      PutRulesInList(&data.mRuleArrays, &weightedRules);
+
+      if (!weightedRules.EnumerateBackwards(BuildRuleHashAndStateSelectors, cascade)) {
+      		// AddRule, cascade)) {
+        delete cascade;
+        cascade = nsnull;
+      }
+ 
+      *cascadep = cascade;
+#endif
+// end bug
     }
   }
   return cascade;

@@ -783,10 +783,10 @@ protected:
   PRBool UseXBLForms();
 
   nsresult RecreateFramesForContent(nsIPresContext*  aPresContext,
-                                    nsIContent*      aContent, 
+                                    nsIContent*      aContent); /* bug 171830 , 
                                     PRBool           aInlineStyle = PR_FALSE,
                                     nsIStyleRule*    aRule = nsnull,
-                                    nsIStyleContext* aContext = nsnull);
+                                    nsIStyleContext* aContext = nsnull); */
 
   nsresult RecreateFramesOnAttributeChange(nsIPresContext* aPresContext,
                                            nsIContent*     aContent,
@@ -884,7 +884,8 @@ protected:
 
   PRBool WipeContainingBlock(nsIPresContext*          aPresContext,
                              nsFrameConstructorState& aState,
-                             nsIContent*              blockContent,
+ //                            nsIContent*              blockContent,
+ 							 nsIFrame*				  blockContent, // bug 244454
                              nsIFrame*                aFrame,
                              nsIFrame*                aFrameList);
 

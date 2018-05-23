@@ -30,7 +30,8 @@
 #include "nsICSSStyleSheet.h"
 #include "nsIDOMCSSStyleSheet.h"
 #include "nsICSSRule.h"
-#include "nsICSSStyleRule.h"
+//#include "nsICSSStyleRule.h"
+#include "nsIDOMCSSStyleRule.h"
 #include "nsStyleChangeList.h"
 #include "nsIFrameManager.h"
 #include "nsNetUtil.h"
@@ -671,8 +672,15 @@ nsMathMLFrame::MapAttributesIntoCSS(nsIPresContext* aPresContext,
       nsAutoString tmpSelector;
       nsCOMPtr<nsICSSRule> tmpRule;
       cssSheet->GetStyleRuleAt(k, *getter_AddRefs(tmpRule));
+// bug 98765 modified for 1.3.1
+#if(0)
       nsCOMPtr<nsICSSStyleRule> tmpStyleRule(do_QueryInterface(tmpRule));
       tmpStyleRule->GetSourceSelectorText(tmpSelector);
+#else
+	  nsCOMPtr<nsIDOMCSSStyleRule> tmpStyleRule(do_QueryInterface(tmpRule));
+	  tmpStyleRule->GetSelectorText(tmpSelector);
+#endif
+// end bug
       if (tmpSelector.Equals(selector)) {
         k = -1;
         break;

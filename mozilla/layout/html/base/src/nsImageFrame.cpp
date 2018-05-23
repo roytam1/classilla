@@ -2174,7 +2174,7 @@ nsresult nsImageFrame::LoadIcons(nsIPresContext *aPresContext)
 #ifdef NOISY_ICON_LOADING
       printf( "Allocating IconLoad (%p)\n", this);
 #endif
-    mIconLoad = new IconLoad(aPresContext);
+    mIconLoad = new IconLoad(aPresContext, mListener); // mListener from 199021
     if (!mIconLoad) 
       return NS_ERROR_OUT_OF_MEMORY;
     doLoad = PR_TRUE;

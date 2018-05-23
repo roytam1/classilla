@@ -169,7 +169,13 @@ public:
                                                nsIAtom* aPseudoTag,
                                                nsIStyleContext* aParentContext);
 
-  NS_IMETHOD Shutdown();
+  // bug 117316 modified for 1.3.1
+  //NS_IMETHOD Shutdown();
+  NS_IMETHOD BeginShutdown(nsIPresContext* aPresContext);
+  NS_IMETHOD Shutdown(nsIPresContext* aPresContext);
+  NS_IMETHOD NotifyStyleContextDestroyed(nsIPresContext* aPresContext,
+                                         nsIStyleContext* aStyleContext);//nsStyleContext* aStyleContext);
+  // end bug
 
   // bug 32732
   PRBool GetAuthorStyleDisabled();
@@ -192,10 +198,16 @@ public:
   
   virtual nsresult GetRuleTree(nsRuleNode** aResult);
   virtual nsresult ClearCachedDataInRuleTree(nsIStyleRule* aRule);
-  
+
+// bug 171830
+#if(0)  
   virtual nsresult AddRuleNodeMapping(nsRuleNode* aRuleNode);
 
   virtual nsresult ClearStyleData(nsIPresContext* aPresContext, nsIStyleRule* aRule, nsIStyleContext* aContext);
+#else
+  virtual nsresult ClearStyleData(nsIPresContext* aPresContext, nsIStyleRule* aRule);
+#endif
+// end bug
 
   virtual nsresult GetStyleFrameConstruction(nsIStyleFrameConstruction** aResult) {
     *aResult = mFrameConstructor;
@@ -373,7 +385,12 @@ protected:
   nsRuleWalker* mRuleWalker;   // This is an instance of a rule walker that can be used
                                // to navigate through our tree.
   PRBool mAuthorStyleDisabled; // bug 32732 -- whether Author styles are off
-  nsHashtable mRuleMappings; // A hashtable from rules to rule node lists.
+ //  nsHashtable mRuleMappings; // A hashtable from rules to rule node lists. // bug 171830
+
+  // bug 117316
+  PRBool mInShutdown;
+  PRInt32 mDestroyedCount;
+  nsVoidArray mRoots; // style contexts with no parent
 
   MOZ_TIMER_DECLARE(mStyleResolutionWatch)
 
@@ -392,8 +409,11 @@ StyleSetImpl::StyleSetImpl()
     mRuleTree(nsnull),
     mOldRuleTree(nsnull),
     mRuleWalker(nsnull),
-    mAuthorStyleDisabled(PR_FALSE), // bug 32732 modified for 1.3
-    mRuleMappings(32)
+    mAuthorStyleDisabled(PR_FALSE) , // bug 32732 modified for 1.3
+    //mRuleMappings(32) // bug 171830
+    mInShutdown(PR_FALSE), // bug 117316
+    mDestroyedCount(0) // bug 117316
+
 #ifdef MOZ_PERF_METRICS
     ,mTimerEnabled(PR_FALSE)
 #endif
@@ -1047,10 +1067,13 @@ nsIStyleContext* StyleSetImpl::GetContext(nsIPresContext* aPresContext,
     fprintf(stdout, "+++ NewSC %d +++\n", ++gNewCount);
 #endif
 
-  if (!result)
+  if (!result) {
     NS_NewStyleContext(&result, aParentContext, aPseudoTag, ruleNode,
                        aPresContext);
-
+    // bug 117316
+    if (!aParentContext && result)
+      mRoots.AppendElement(result);
+  }
   return result;
 }
 
@@ -1381,12 +1404,27 @@ PRBool PR_CALLBACK DeleteRuleNodeLists(nsHashKey* aKey, void* aData, void* aClos
   return PR_TRUE;
 }
 
+// bug 117316
 NS_IMETHODIMP
-StyleSetImpl::Shutdown()
+StyleSetImpl::BeginShutdown(nsIPresContext* aPresContext)
 {
+  mInShutdown = PR_TRUE;
+  mRoots.Clear(); // no longer valid, since we won't keep it up to date
+  return NS_OK;
+}
+// why are we passing a prescontext? I'm keeping the old function def.
+NS_IMETHODIMP
+  StyleSetImpl::Shutdown(nsIPresContext* aPresContext) 
+// end bug
+/*NS_IMETHODIMP
+StyleSetImpl::Shutdown()*/
+{
+// bug 171830
+#if(0)
   mRuleMappings.Enumerate(DeleteRuleNodeLists);
   mRuleMappings.Reset();
-
+#endif
+// end bug
   delete mRuleWalker;
   if (mRuleTree)
   {
@@ -1396,6 +1434,48 @@ StyleSetImpl::Shutdown()
   return NS_OK;
 }
 
+// bug 117316 modified for 1.3.1
+static const PRInt32 kGCInterval = 1000;
+
+NS_IMETHODIMP
+StyleSetImpl::NotifyStyleContextDestroyed(nsIPresContext* aPresContext,
+                                          nsIStyleContext* aStyleContext) //nsStyleContext* aStyleContext)
+{
+  if (mInShutdown)
+    return NS_OK;
+
+  //if (!aStyleContext->GetParent()) {
+  nsCOMPtr<nsIStyleContext> styleParent = aStyleContext->GetParent();
+  if (styleParent == nsnull) {
+    mRoots.RemoveElement(aStyleContext);
+  }
+
+  if (++mDestroyedCount == kGCInterval) {
+    mDestroyedCount = 0;
+
+    // Mark the style context tree by marking all roots, which will mark
+    // all descendants.  This will reach style contexts in the
+    // undisplayed map and "additional style contexts" since they are
+    // descendants of the root.
+    for (PRInt32 i = mRoots.Count() - 1; i >= 0; --i) {
+      //NS_STATIC_CAST(nsStyleContext*,mRoots[i])->Mark();
+      NS_STATIC_CAST(nsIStyleContext*,mRoots[i])->Mark();
+    }
+
+    // Sweep the rule tree.
+    if (mRuleTree->Sweep()) {
+      // On the rare occasion that we have no style contexts, the root
+      // will be destroyed, so delete it.
+      mRuleTree = nsnull;
+      delete mRuleWalker;
+      mRuleWalker = nsnull;
+    }
+  }
+
+  return NS_OK;
+}
+// end bug
+
 nsresult
 StyleSetImpl::GetRuleTree(nsRuleNode** aResult)
 {
@@ -1403,6 +1483,8 @@ StyleSetImpl::GetRuleTree(nsRuleNode** aResult)
   return NS_OK;
 }
 
+// bug 171830
+#if(0)
 nsresult 
 StyleSetImpl::AddRuleNodeMapping(nsRuleNode* aRuleNode)
 {
@@ -1413,6 +1495,8 @@ StyleSetImpl::AddRuleNodeMapping(nsRuleNode* aRuleNode)
   mRuleMappings.Put(&key, ruleList);
   return NS_OK;
 }
+#endif
+// end bug
 
 nsresult
 StyleSetImpl::BeginRuleTreeReconstruct()
@@ -1421,8 +1505,8 @@ StyleSetImpl::BeginRuleTreeReconstruct()
   mRuleWalker = nsnull;
   mOldRuleTree = mRuleTree;
   mRuleTree = nsnull;
-  mRuleMappings.Enumerate(DeleteRuleNodeLists);
-  mRuleMappings.Reset();
+  //mRuleMappings.Enumerate(DeleteRuleNodeLists); // bug 171830
+  //mRuleMappings.Reset(); // bug 171830
   return NS_OK;
 }
 
@@ -1445,8 +1529,11 @@ StyleSetImpl::ClearCachedDataInRuleTree(nsIStyleRule* aInlineStyleRule)
 }
 
 nsresult
-StyleSetImpl::ClearStyleData(nsIPresContext* aPresContext, nsIStyleRule* aRule, nsIStyleContext* aContext)
+//StyleSetImpl::ClearStyleData(nsIPresContext* aPresContext, nsIStyleRule* aRule, nsIStyleContext* aContext)
+StyleSetImpl::ClearStyleData(nsIPresContext* aPresContext, nsIStyleRule* aRule) // bug 171830
 {
+// bug 171830 modified for 1.3.1
+#if(0)
   // XXXdwh.  If we're willing to *really* optimize this
   // invalidation, we could only invalidate the struct data
   // that actually changed.  For example, if someone changes
@@ -1503,16 +1590,47 @@ StyleSetImpl::ClearStyleData(nsIPresContext* aPresContext, nsIStyleRule* aRule, 
       if (rootContext)
         rootContext->ClearStyleData(aPresContext, aRule);
     }
+#else
+  // XXXdwh This is not terribly fast, but fortunately this case is rare (and often a full tree
+  // invalidation anyway).  Improving performance here would involve a footprint
+  // increase.  Mappings from rule nodes to their associated style contexts as well as
+  // mappings from rules to their associated rule nodes would enable us to avoid the two
+  // tree walks that occur here.
+  
+  // Crawl the entire rule tree and blow away all data for rule nodes (and their descendants)
+  // that have the given rule.
+  if (mRuleTree)
+    mRuleTree->ClearCachedDataInSubtree(aRule);
+  
+  // We need to crawl the entire style context tree, and for each style context we need 
+  // to see if the specified rule is matched.  If so, that context and all its descendant
+  // contexts must have their data wiped.
+  nsCOMPtr<nsIPresShell> shell;
+  aPresContext->GetShell(getter_AddRefs(shell));
+  nsIFrame* rootFrame;
+  shell->GetRootFrame(&rootFrame);
+  if (rootFrame) {
+    //nsStyleContext* rootContext = rootFrame->GetStyleContext();
+    nsCOMPtr<nsIStyleContext> rootContext;
+    rootFrame->GetStyleContext(getter_AddRefs(rootContext));
+
+    if (rootContext)
+      rootContext->ClearStyleData(aPresContext, aRule);
+#endif
+// end bug
   }
 
   return NS_OK;
 }
 
+// bug 117316 is a little tricky here. the bug sends back an already
+// AddRefed object, but we actually have our own in aNewStyleContext in 1.3.
+// thus we have to alter the bug to handle our earlier calling convention.
 NS_IMETHODIMP
 StyleSetImpl::ReParentStyleContext(nsIPresContext* aPresContext,
                                    nsIStyleContext* aStyleContext, 
                                    nsIStyleContext* aNewParentContext,
-                                   nsIStyleContext** aNewStyleContext)
+                                   nsIStyleContext** aNewStyleContext) // << AddRefed in 117316
 {
   NS_ASSERTION(aPresContext, "must have pres context");
   NS_ASSERTION(aStyleContext, "must have style context");
@@ -1529,12 +1647,14 @@ StyleSetImpl::ReParentStyleContext(nsIPresContext* aPresContext,
       *aNewStyleContext = aStyleContext;
     }
     else {  // really a new parent
+
       nsIStyleContext*  newChild = nsnull;
       nsCOMPtr<nsIAtom>  pseudoTag;
       aStyleContext->GetPseudoType(*getter_AddRefs(pseudoTag));
 
       nsRuleNode* ruleNode;
       aStyleContext->GetRuleNode(&ruleNode);
+#if(0)
       if (aNewParentContext) {
         result = aNewParentContext->FindChildWithRules(pseudoTag, ruleNode, newChild);
       }
@@ -1548,7 +1668,23 @@ StyleSetImpl::ReParentStyleContext(nsIPresContext* aPresContext,
     }
   }
   return result;
+#else
+      EnsureRuleWalker(aPresContext);
+      mRuleWalker->SetCurrentNode(ruleNode);
+
+      //already_AddRefed<nsStyleContext> result =
+      *aNewStyleContext =
+          GetContext(aPresContext, aNewParentContext, pseudoTag);
+      mRuleWalker->Reset();
+      //return result;
+      return NS_OK;
+    }
+  }
+  //return nsnull;
+  return result;
+#endif
 }
+// end bug
 
 struct StatefulData : public StateRuleProcessorData {
   StatefulData(nsIPresContext* aPresContext, nsIAtom* aMedium,

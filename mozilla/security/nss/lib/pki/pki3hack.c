@@ -264,6 +264,8 @@ nss3certificate_matchIdentifier(nssDecodedCert *dc, void *id)
     nssCertIDMatch match = nssCertIDMatch_Unknown;
 
     /* keyIdentifier */
+// bug 384459
+#if(0)
     if (authKeyID->keyID.len > 0) {
 	if (CERT_FindSubjectKeyIDExtension(c, &skid) == SECSuccess) {
 	    PRBool skiEqual;
@@ -301,6 +303,19 @@ nss3certificate_matchIdentifier(nssDecodedCert *dc, void *id)
 	    return nssCertIDMatch_No;
 	}
     }
+#endif
+    if (authKeyID->keyID.len > 0 &&
+        CERT_FindSubjectKeyIDExtension(c, &skid) == SECSuccess) {
+      PRBool skiEqual;
+      skiEqual = SECITEM_ItemsAreEqual(&authKeyID->keyID, &skid);
+      PORT_Free(skid.data);
+      if (skiEqual) {
+        match = nssCertIDMatch_Yes;
+      } else {
+        match = nssCertIDMatch_No;
+      }
+    }
+// end bug
 
     /* If the issued cert has a keyIdentifier field with a value, but
      * this issuer cert does not have a subjectKeyID extension, and

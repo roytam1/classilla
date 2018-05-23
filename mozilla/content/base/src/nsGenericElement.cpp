@@ -42,11 +42,13 @@
 #include "nsIAtom.h"
 #include "nsINodeInfo.h"
 #include "nsIDocument.h"
+#include "nsIDocumentEncoder.h" // bug 210451
 #include "nsIDOMNodeList.h"
 #include "nsIDOMDocument.h"
 #include "nsIDOMRange.h"
 #include "nsIDOMText.h"
 #include "nsIDOMEventReceiver.h"
+#include "nsITextContent.h" // bug 210451
 #include "nsRange.h"
 #include "nsIEventListenerManager.h"
 #include "nsILinkHandler.h"
@@ -101,6 +103,9 @@
 #include "nsIXMLDocument.h"
 #include "nsIDOMXPathEvaluator.h"
 
+// for mozilla 1.8
+#include "nsIContentIterator.h"
+
 #ifdef DEBUG_waterson
 
 /**
@@ -117,6 +122,8 @@ DebugListContentTree(nsIContent* aElement)
 
 PLDHashTable nsGenericElement::sRangeListsHash;
 PLDHashTable nsGenericElement::sEventListenerManagersHash;
+// Mozilla 1.8
+nsresult NS_NewContentIterator(nsIContentIterator** aInstancePtrResult);
 
 //----------------------------------------------------------------------
 
@@ -240,6 +247,156 @@ nsNode3Tearoff::GetBaseURI(nsAString& aURI)
   return NS_OK;
 }
 
+// bug 210451
+NS_IMETHODIMP
+nsNode3Tearoff::GetTextContent(nsAString &aTextContent)
+{
+  nsCOMPtr<nsIDOMNode> node(do_QueryInterface(mContent));
+  NS_ASSERTION(node, "We have an nsIContent which doesn't support nsIDOMNode");
+
+  PRUint16 nodeType;
+  node->GetNodeType(&nodeType);
+  if (nodeType == nsIDOMNode::DOCUMENT_TYPE_NODE ||
+      nodeType == nsIDOMNode::NOTATION_NODE) {
+    SetDOMStringToNull(aTextContent);
+
+    return NS_OK;
+  }
+
+  if (nodeType == nsIDOMNode::TEXT_NODE ||
+      nodeType == nsIDOMNode::CDATA_SECTION_NODE ||
+      nodeType == nsIDOMNode::COMMENT_NODE ||
+      nodeType == nsIDOMNode::PROCESSING_INSTRUCTION_NODE) {
+    return node->GetNodeValue(aTextContent);
+  }
+
+#if(0)
+  /* this is where we fail in Classilla. */
+  nsCOMPtr<nsIDocument> doc;
+  mContent->GetDocument(*getter_AddRefs(doc)); // * needed for 1.3
+  if (!doc) {
+    NS_ERROR("Need a document to do text serialization");
+
+    return NS_ERROR_FAILURE;
+  }
+
+  return GetTextContent(doc, node, aTextContent);
+#endif
+  // this is backported from mozilla 1.8
+  return GetTextContent(mContent, aTextContent);
+}
+
+//static
+nsresult
+nsNode3Tearoff::GetTextContent(//nsIDocument *aDocument, // backport 1.8
+                               //nsIDOMNode *aNode, // backport 1.8
+                               nsIContent *aContent,
+                               nsAString &aTextContent)
+{
+#if(0)
+  NS_ENSURE_ARG_POINTER(aDocument);
+  NS_ENSURE_ARG_POINTER(aNode);
+
+  nsCOMPtr<nsIDocumentEncoder> docEncoder =
+    do_CreateInstance(NS_DOC_ENCODER_CONTRACTID_BASE "text/plain");
+
+  if (!docEncoder) {
+    NS_ERROR("Could not get a document encoder.");
+
+    return NS_ERROR_FAILURE;
+  }
+
+  docEncoder->Init(aDocument, NS_LITERAL_STRING("text/plain"),
+                   nsIDocumentEncoder::OutputRaw);
+
+  docEncoder->SetNode(aNode);
+
+  return docEncoder->EncodeToString(aTextContent);
+#endif
+  // this is backported from mozilla 1.8
+  NS_ENSURE_ARG_POINTER(aContent);
+  
+  nsCOMPtr<nsIContentIterator> iter;
+  NS_NewContentIterator(getter_AddRefs(iter));
+  nsresult rv;
+  rv = iter->Init(aContent); 
+  NS_ENSURE_SUCCESS(rv, rv);
+  
+  nsString tempString;
+  aTextContent.Truncate();
+  iter->First();
+  while (NS_ENUMERATOR_FALSE == iter->IsDone()) { 
+  		// this is different than 1.8. see nsContentIterator
+  	//nsIContent *content = iter->GetCurrentNode();
+  	nsCOMPtr<nsIContent> content;
+  	iter->CurrentNode(getter_AddRefs(content));
+  	if (content->IsContentOfType(nsIContent::eTEXT)) {
+  		nsCOMPtr<nsITextContent> textContent(do_QueryInterface(content));
+  		if (textContent)
+  			textContent->AppendTextTo(aTextContent); // added from 1.8 also.
+  	}
+  	else { 
+  		// NS_ERROR("so far no content");
+  	} // remove later
+  	iter->Next();
+  }
+  return NS_OK;
+  // end backport
+}
+
+NS_IMETHODIMP
+nsNode3Tearoff::SetTextContent(const nsAString &aTextContent)
+{
+  nsCOMPtr<nsIDOMNode> node(do_QueryInterface(mContent));
+  NS_ASSERTION(node, "We have an nsIContent which doesn't support nsIDOMNode");
+
+  PRUint16 nodeType;
+  node->GetNodeType(&nodeType);
+  if (nodeType == nsIDOMNode::DOCUMENT_TYPE_NODE ||
+      nodeType == nsIDOMNode::NOTATION_NODE) {
+    return NS_OK;
+  }
+
+  if (nodeType == nsIDOMNode::TEXT_NODE ||
+      nodeType == nsIDOMNode::CDATA_SECTION_NODE ||
+      nodeType == nsIDOMNode::COMMENT_NODE ||
+      nodeType == nsIDOMNode::PROCESSING_INSTRUCTION_NODE) {
+    return node->SetNodeValue(aTextContent);
+  }
+
+  return SetTextContent(mContent, aTextContent);
+}
+
+// static
+nsresult
+nsNode3Tearoff::SetTextContent(nsIContent* aContent,
+                               const nsAString &aTextContent)
+{
+  PRInt32 childCount = 0;
+  aContent->ChildCount(childCount);
+
+  for (PRInt32 i = childCount - 1; i >= 0; --i) {
+    aContent->RemoveChildAt(i, PR_TRUE);
+  }
+  
+  if (!aTextContent.IsEmpty()) // 1.8
+  	return NS_OK;
+
+  nsCOMPtr<nsITextContent> textContent;
+  nsresult rv = NS_NewTextNode(getter_AddRefs(textContent));
+  NS_ENSURE_SUCCESS(rv, rv);
+  if (!textContent) {
+    return NS_ERROR_UNEXPECTED;
+  }
+
+  textContent->SetText(aTextContent, PR_TRUE);
+
+  aContent->AppendChildTo(textContent, PR_TRUE, PR_FALSE);
+
+  return NS_OK;
+}
+// end bug
+
 NS_IMETHODIMP
 nsNode3Tearoff::CompareDocumentPosition(nsIDOMNode* aOther,
                                         PRUint16* aReturn)
@@ -312,6 +469,104 @@ nsNode3Tearoff::IsSameNode(nsIDOMNode* aOther,
   }
 
   *aReturn = sameNode;
+  return NS_OK;
+}
+
+// bug 210451
+NS_IMETHODIMP
+nsNode3Tearoff::IsEqualNode(nsIDOMNode* aOther, PRBool* aReturn)
+{
+  NS_NOTYETIMPLEMENTED("nsNode3Tearoff::IsEqualNode()");
+
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+NS_IMETHODIMP
+nsNode3Tearoff::GetFeature(const nsAString& aFeature,
+                           const nsAString& aVersion,
+                           nsISupports** aReturn)
+{
+  NS_NOTYETIMPLEMENTED("nsNode3Tearoff::GetFeature()");
+
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+/* we don't even have prototypes for these. see nsIDOM3Node.idl for why. */
+#if(0)
+NS_IMETHODIMP
+nsNode3Tearoff::SetUserData(const nsAString& aKey,
+                            nsIVariant* aData,
+                            nsIDOMUserDataHandler* aHandler,
+                            nsIVariant** aReturn)
+{
+  NS_NOTYETIMPLEMENTED("nsNode3Tearoff::SetUserData()");
+
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+NS_IMETHODIMP
+nsNode3Tearoff::GetUserData(const nsAString& aKey,
+                            nsIVariant** aReturn)
+{
+  NS_NOTYETIMPLEMENTED("nsNode3Tearoff::GetUserData()");
+
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+#endif
+// end bug
+
+// bug 210451 removed LookupNamespacePrefix. for backwards
+// compatibility we'll just stub one to the other.
+NS_IMETHODIMP
+nsNode3Tearoff::LookupPrefix(const nsAString& aNamespaceURI,
+                             nsAString& aPrefix)
+{
+  SetDOMStringToNull(aPrefix);
+
+  // XXX Waiting for DOM spec to list error codes.
+
+  // Get the namespace id for the URI
+  PRInt32 namespaceId;
+  nsContentUtils::GetNSManagerWeakRef()->GetNameSpaceID(aNamespaceURI,
+                                                        namespaceId);
+  if (namespaceId == kNameSpaceID_Unknown) {
+    return NS_OK;
+  }
+
+  nsAutoString ns;
+
+  // Trace up the content parent chain looking for the namespace
+  // declaration that defines the aNamespaceURI namespace. Once found,
+  // return the prefix (i.e. the attribute localName).
+  nsCOMPtr<nsIContent> content(mContent);
+  while (content) {
+    PRInt32 attrCount, i;
+
+    nsCOMPtr<nsIAtom> name, prefix;
+    PRInt32 namespace_id;
+
+    content->GetAttrCount(attrCount);
+
+    for (i = 0; i < attrCount; i++) {
+      content->GetAttrNameAt(i, namespace_id, *getter_AddRefs(name),
+                             *getter_AddRefs(prefix));
+
+      if (namespace_id == kNameSpaceID_XMLNS) {
+        nsresult rv = content->GetAttr(namespace_id, name, ns);
+
+        if (rv == NS_CONTENT_ATTR_HAS_VALUE &&
+            ns.Equals(aNamespaceURI)) {
+          name->ToString(aPrefix);
+
+          return NS_OK;
+        }
+      }
+    }
+
+    nsCOMPtr<nsIContent> tmp(content);
+    tmp->GetParent(*getter_AddRefs(content));
+  }
+
   return NS_OK;
 }
 
@@ -401,6 +656,16 @@ nsNode3Tearoff::LookupNamespaceURI(const nsAString& aNamespacePrefix,
   return NS_OK;
 }
 
+// bug 210451
+NS_IMETHODIMP
+nsNode3Tearoff::IsDefaultNamespace(const nsAString& aNamespaceURI,
+                                   PRBool* aReturn)
+{
+  NS_NOTYETIMPLEMENTED("nsNode3Tearoff::IsDefaultNamespace()");
+
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+// end bug
 
 nsDOMEventRTTearoff *
 nsDOMEventRTTearoff::mCachedEventTearoff[NS_EVENT_TEAROFF_CACHE_SIZE];
@@ -2686,6 +2951,10 @@ nsGenericElement::doReplaceChild(nsIDOMNode* aNewChild,
 
   nsCOMPtr<nsIContent> oldContent(do_QueryInterface(aOldChild, &res));
 
+// bug 237566
+// if oldContent is null IndexOf will return < 0, which is what we want
+// since aOldChild couldn't be a child.
+#if(0)
   if (NS_FAILED(res)) {
     /*
      * If aOldChild doesn't support the nsIContent interface it can't be
@@ -2693,6 +2962,7 @@ nsGenericElement::doReplaceChild(nsIDOMNode* aNewChild,
      */
     return NS_ERROR_DOM_NOT_FOUND_ERR;
   }
+#endif
 
   IndexOf(oldContent, oldPos);
 
@@ -2734,7 +3004,11 @@ nsGenericElement::doReplaceChild(nsIDOMNode* aNewChild,
   if (NS_FAILED(res)) {
     return NS_ERROR_DOM_HIERARCHY_REQUEST_ERR;
   }
-
+  
+  // bug 237566
+  // nsIDocument* elemDoc = aElement->GetDocument();
+  // in 1.3, mDocument appears to be equivalent.
+  
   nsCOMPtr<nsIDocument> old_doc;
   newContent->GetDocument(*getter_AddRefs(old_doc));
   if (old_doc && old_doc != mDocument &&
@@ -2755,6 +3029,9 @@ nsGenericElement::doReplaceChild(nsIDOMNode* aNewChild,
     return NS_ERROR_DOM_HIERARCHY_REQUEST_ERR;
   }
 
+// we don't have this.
+// mozAutoDocUpdate updateBatch(elemDoc, UPDATE_CONTENT_MODEL, PR_TRUE);
+
   /*
    * Check if this is a document fragment. If it is, we need
    * to remove the children of the document fragment and add them
@@ -2765,6 +3042,10 @@ nsGenericElement::doReplaceChild(nsIDOMNode* aNewChild,
     PRInt32 count, i;
 
     newContent->ChildCount(count);
+    
+    // bug 237566
+    res = RemoveChildAt(oldPos, PR_TRUE); // we have no aElement->
+    NS_ENSURE_SUCCESS(res, res);
 
     /*
      * Iterate through the fragments children, removing each from
@@ -2780,11 +3061,15 @@ nsGenericElement::doReplaceChild(nsIDOMNode* aNewChild,
       }
 
       res = newContent->RemoveChildAt(0, PR_FALSE);
-
+		/*
       if (NS_FAILED(res)) {
         return res;
       }
+      */
+      NS_ENSURE_SUCCESS(res, res);
 
+// bug 237566
+#if(0)
       // Insert the child and increment the insertion position
       if (i) {
         res = InsertChildAt(childContent, oldPos++, PR_TRUE, PR_TRUE);
@@ -2795,14 +3080,21 @@ nsGenericElement::doReplaceChild(nsIDOMNode* aNewChild,
       if (NS_FAILED(res)) {
         return res;
       }
+#endif
+	  res = InsertChildAt(childContent, oldPos++, PR_TRUE, PR_TRUE);
+	  // aElement->
+	  NS_ENSURE_SUCCESS(res, res);
+// end bug
     }
   } else {
     nsCOMPtr<nsIDOMNode> oldParent;
     res = aNewChild->GetParentNode(getter_AddRefs(oldParent));
-
+	/*
     if (NS_FAILED(res)) {
       return res;
     }
+    */
+    NS_ENSURE_SUCCESS(res, res);
 
     /*
      * Remove the element from the old parent if one exists, since oldParent
@@ -2846,7 +3138,8 @@ nsGenericElement::doReplaceChild(nsIDOMNode* aNewChild,
 
     nsContentUtils::ReparentContentWrapper(newContent, this, mDocument,
                                            old_doc);
-
+// bug 237566                                           
+#if(0)
     if (aNewChild == aOldChild) {
       // We're replacing a child with itself. In this case the child
       // has already been removed from this element once we get here
@@ -2862,6 +3155,16 @@ nsGenericElement::doReplaceChild(nsIDOMNode* aNewChild,
     if (NS_FAILED(res)) {
       return res;
     }
+#endif
+	// If we're replacing a child with itself the child
+	// has already been removed from this element once we get here.
+	if (aNewChild != aOldChild) {
+		res = RemoveChildAt(oldPos, PR_TRUE); // aElement->
+		NS_ENSURE_SUCCESS(res, res);
+	}
+	res = InsertChildAt(newContent, oldPos, PR_TRUE, PR_TRUE); // aElement->
+	NS_ENSURE_SUCCESS(res, res);
+// end bug
   }
 
   return CallQueryInterface(replacedChild, aReturn);

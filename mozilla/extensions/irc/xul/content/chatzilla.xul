@@ -37,7 +37,7 @@
 <window id="chatzilla-window"
   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
   xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
-  orient="vertical" onload="onLoad();" onunload="onUnload();"
+  orient="vertical" onload="alert('Chatzilla is deprecated as of Classilla 9.0.4 and will be removed in future releases for security reasons.');onLoad();" onunload="onUnload();"
   onclose="return onClose();" onmouseover="onMouseOver(event);"
   persist="width height screenX screenY" windowtype="irc:chatzilla">
 

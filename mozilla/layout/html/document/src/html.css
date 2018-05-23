@@ -39,7 +39,7 @@
 
 /* blocks */
 
-html, div, map, dt, isindex, form {
+html, div, map, dt, isindex { /* form is no longer a block ... ck */
   display: block;
 }
 
@@ -171,7 +171,8 @@ table[rules] {
   border-collapse: collapse;
 }
 
-/* make sure backgrounds are inherited in tables  -- see bug 4510*/
+/* make sure backgrounds are inherited in tables  -- see bug 4510 */
+/* this is the temporary patch. LEAVE IT ALONE FOR NOW. */
 td, th, tr {
   background: inherit;
 }
@@ -221,6 +222,11 @@ thead {
 
 tfoot {
   display: table-footer-group;
+  vertical-align: middle;
+}
+
+/* for XHTML tables without tbody */
+table > tr {
   vertical-align: middle;
 }
 
@@ -360,10 +366,14 @@ dir ol dir,   dir ul dir,   dir menu dir,   dir dir dir {
 
 /* leafs */
 
+/* we do not have the <hr> nsHTMLHRElement code fully working yet */
 hr {
   display: block;
   border: 1px inset;
   margin: 0 auto 0 auto;
+}
+hr[size="1"] {
+  border-style: -moz-bg-solid none none none;
 }
 
 *|*:-moz-any-link img, img[usemap], object[usemap] {
@@ -382,7 +392,7 @@ object, embed, applet {
 
 frameset {
   display: block ! important;
-  overflow: hidden;
+  overflow: hidden; /* later versions are -moz-hidden-unscrollable. not changing yet */
 }
 
 frame {
@@ -419,6 +429,7 @@ noembed, noscript, param {
 }
 
 /* emulation of non-standard HTML <marquee> tag */
+/* Jumping Ahura Mazda. why the FRICK do we support this? -- ck */
 marquee {
   display: block;
   -moz-binding: url('chrome://xbl-marquee/content/xbl-marquee.xml#marquee-horizontal');
@@ -434,6 +445,8 @@ marquee[direction="up"], marquee[direction="down"] {
 /* PRINT ONLY rules follow */
 
 @media print {
+
+  marquee { -moz-binding: none; } /* hah! */
  
   *|*:-moz-any-link img, img[usemap], object[usemap],
   img[usemap], object[usemap], object, embed, applet, iframe {

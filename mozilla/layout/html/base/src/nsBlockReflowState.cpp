@@ -74,6 +74,7 @@ nsBlockReflowState::nsBlockReflowState(const nsHTMLReflowState& aReflowState,
     mFlags(0),
     mFloaterBreakType(NS_STYLE_CLEAR_NONE)
 {
+  SetFlag(BRS_ISFIRSTINFLOW, aFrame->GetPrevInFlow() == nsnull);
   const nsMargin& borderPadding = BorderPadding();
 
 // bug 209694
@@ -551,8 +552,40 @@ nsBlockReflowState::RecoverFloaters(nsLineList::iterator aLine,
   } else if (aLine->IsBlock()) {
     nsBlockFrame *kid = nsnull;
     aLine->mFirstChild->QueryInterface(kBlockFrameCID, (void**)&kid);
-    if (kid) {
+//    nsFrameState frameState;
+//    kid->GetFrameState(&frameState); // kid->GetStateBits()
+//   if (kid && (frameState & NS_BLOCK_SPACE_MGR)) { // pull up 1.7.1
+	 if(kid) { 
       nscoord kidx = kid->mRect.x, kidy = kid->mRect.y;
+
+#if(0)      
+      // pull up to 1.7.1
+      // If the element is relatively positioned, then adjust x and y
+      // accordingly so that we consider relatively positioned frames
+      // at their original position.
+      //if (NS_STYLE_POSITION_RELATIVE == kid->GetStyleDisplay()->mPosition) {
+      const nsStyleDisplay* display;
+      kid->GetStyleData(eStyleStruct_Display, (const nsStyleStruct*&)display);
+	  if (display->mPosition == NS_STYLE_POSITION_RELATIVE)
+        //nsPoint *offsets = NS_STATIC_CAST(nsPoint*,
+          //mPresContext->FrameManager()->GetFrameProperty(kid,
+          //                          nsLayoutAtoms::computedOffsetProperty, 0));    	  
+    	nsPoint *offsets;
+    	nsCOMPtr<nsIPresShell> presShell;
+    	mPresContext->GetShell(getter_AddRefs(presShell));
+    	nsCOMPtr<nsIFrameManager> frameManager;
+    	presShell->GetFrameManager(getter_AddRefs(frameManager));
+    	frameManager->GetFrameProperty(kid, nsLayoutAtoms::computedOffsetProperty, 0,
+    		&offsets);
+        if (offsets) {
+          kidx -= offsets->x; // tx -= offsets->x;
+          kidy -= offsets->y; // ty -= offsets->y;
+        }
+      }
+      // end pull up
+#endif
+// we don't have computedOffsetProperty.
+      
       mSpaceManager->Translate(kidx, kidy);
       for (nsBlockFrame::line_iterator line = kid->begin_lines(),
                                    line_end = kid->end_lines();
@@ -617,6 +650,23 @@ nsBlockReflowState::RecoverStateFrom(nsLineList::iterator aLine,
 #endif
     UpdateMaximumWidth(aLine->mMaximumWidth);
   }
+
+#if(0)
+// I don't know why this doesn't work.
+// pull up to 1.7.1
+    // Recover the float MEWs for floats in this line (but not in
+    // blocks within it, since their MEWs are already part of the block's
+    // MEW).
+    //if (aLine->HasFloats()) {
+    if (aLine->HasFloaters()) {
+      //for (nsFloatCache* fc = aLine->GetFirstFloat(); fc; fc = fc->Next())
+      for (nsFloaterCache *fc = aLine->GetFirstFloater(); fc; fc = fc->Next())
+        //UpdateMaxElementWidth(fc->mMaxElementWidth);
+        UpdateMaxElementWidth(fc->mMaxElementWidth);
+    }
+  }
+#endif
+
 
   // Place floaters for this line into the space manager
   if (aLine->HasFloaters() || aLine->IsBlock()) {
@@ -1084,6 +1134,22 @@ nsBlockReflowState::FlowAndPlaceFloater(nsFloaterCache* aFloaterCache,
       (NS_UNCONSTRAINEDSIZE != mContentArea.height)) {
     region.height = PR_MAX(region.height, mContentArea.height);
   }
+
+// bug 312777 modified for 1.3.1
+  // Don't send rectangles with negative margin-box width or height to
+  // the space manager; it can't deal with them.
+  if (region.width < 0) {
+    // Preserve the right margin-edge for left floats and the left
+    // margin-edge for right floats
+    if (isLeftFloater) { // isLeftFloat) {
+      region.x = region.XMost();
+    }
+    region.width = 0;
+  }
+  if (region.height < 0) {
+    region.height = 0;
+  }
+// end bug
 #ifdef DEBUG
   nsresult rv =
 #endif

@@ -193,7 +193,9 @@ nsXULAttribute::Create(nsIContent* aContent,
 NS_INTERFACE_MAP_BEGIN(nsXULAttribute)
     NS_INTERFACE_MAP_ENTRY(nsIDOMAttr)
     NS_INTERFACE_MAP_ENTRY(nsIDOMNode)
+    /* bug 210451
     NS_INTERFACE_MAP_ENTRY(nsIDOM3Node)
+    */
     NS_INTERFACE_MAP_ENTRY_AMBIGUOUS(nsISupports, nsIDOMAttr)
     NS_INTERFACE_MAP_ENTRY_CONTENT_CLASSINFO(XULAttr)
 NS_INTERFACE_MAP_END
@@ -390,7 +392,9 @@ nsXULAttribute::IsSupported(const nsAString& aFeature,
 }
 
 // nsIDOM3Node interface
+// obsoleted by bug 210451
 
+#if(0)
 NS_IMETHODIMP
 nsXULAttribute::GetBaseURI(nsAString &aURI)
 {
@@ -430,7 +434,7 @@ nsXULAttribute::LookupNamespaceURI(const nsAString& aNamespacePrefix,
   NS_NOTYETIMPLEMENTED("write me");
   return NS_ERROR_NOT_IMPLEMENTED;
 }
-
+#endif
 
 // nsIDOMAttr interface
 

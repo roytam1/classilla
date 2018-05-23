@@ -42,6 +42,8 @@
 
 <!ENTITY viewMenu.label "View">
 <!ENTITY viewMenu.accesskey "v">
+<!ENTITY viewFixups.label "Use Experimental Renderer">
+<!ENTITY viewFixups.commandkey "X">
 
 <!ENTITY toolbarsCmd.label "Show/Hide">
 <!ENTITY toolbarsCmd.accesskey "w">
@@ -196,7 +198,7 @@
 <!ENTITY  homeButton.label            "Home">
 
 <!-- Statusbar -->
-<!ENTITY  statusText.label            "Done">
+<!ENTITY  statusText.label            "Classilla successfully started.">
 
 <!ENTITY historyCmd.label           "History">  
 <!ENTITY historyCmd.accesskey       "i">

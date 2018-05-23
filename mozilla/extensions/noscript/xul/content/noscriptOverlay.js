@@ -189,6 +189,7 @@ NoScriptOverlay.prototype={
   }
 ,
   syncUI: function(ev) {
+  	// return; // test
     var ns=this.ns;
     
     //alert("sync UI 2");

@@ -21,6 +21,8 @@
    
    Contributor(s): 
      Ben Goodger <ben@netscape.com>
+   
+   Updated for Classilla by Cameron Kaiser
   -->
 
 <?xul-overlay href="chrome://communicator/content/pref/platformPrefOverlay.xul"?>
@@ -103,6 +105,11 @@
         <treeitem>
           <treerow>
             <treecell url="chrome://communicator/content/pref/pref-download.xul" label="&download.label;"/>
+          </treerow>
+        </treeitem>
+        <treeitem>
+          <treerow>
+            <treecell url="chrome://communicator/content/pref/pref-ua.xul" label="&ua.label;"/>
           </treerow>
         </treeitem>
         <!-- Taking out Policies panel b/c bug 44121

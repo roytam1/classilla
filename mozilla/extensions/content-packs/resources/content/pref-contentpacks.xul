@@ -12,6 +12,8 @@
 
   Contributor(s):   J.Betak     <jbetak@netscape.com>
                     Josh Soref  <timeless@mac.com>
+                    
+                    Modified for Classilla by Cameron Kaiser
   -->
 
 <?xml-stylesheet href="chrome://communicator/skin/" type="text/css"?>
@@ -194,7 +196,7 @@
   <hbox class="box-smallheader" title="&lHeader;"/>
 
   <!-- Language pack listbox -->
-  <description>&languageIntro.label;</description>
+  <description>&languageIntro.label; &restartOnLangChange.label;</description>
   <separator class="thin"/>
 
   <description>&installedLanguagePacks.label;</description>
@@ -292,9 +294,5 @@
             oncommand="DownloadRegionPacks()"/>
     </vbox>
   </hbox>
-
-  <separator class="thin"/>
-  <description>&restartOnLangChange.label;</description>
-  <separator class="thin"/>
 
 </page>

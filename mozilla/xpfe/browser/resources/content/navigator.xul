@@ -161,6 +161,7 @@ Changes for Classilla (C)2009 Cameron Kaiser
                        tooltiptext="&stopButton.tooltip;"/>
       </hbox>
  
+ <!-- bug 104778: oninput="window.XULBrowserWindow.userTyped.value=true;" -->
       <hbox id="nav-bar-inner" flex="1">
         <observes element="nav-bar" attribute="buttonstyle"/>
         <textbox id="urlbar" class="chromeclass-location uri-element" flex="1"
@@ -170,7 +171,7 @@ Changes for Classilla (C)2009 Cameron Kaiser
                  defaultSearchEngine="true" tabScrolling="true"
                  showCommentColumn="true"
                  inputtooltiptext="&locationBar.tooltip;"
-                 oninput="window.XULBrowserWindow.userTyped.value=true;"
+                 oninput="gBrowser.userTypedValue = this.value;"
                  ontextcommand="return handleURLBarCommand(eventParam, domEvent);"
                  ontextrevert="return handleURLBarRevert();"
                  onfocus="URLBarFocusHandler(event);"

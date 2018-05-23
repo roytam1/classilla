@@ -358,6 +358,12 @@ private:
   nsRuleList* ChildrenList() {
     return NS_REINTERPRET_CAST(nsRuleList*, mChildrenTaggedPtr);
   }
+  
+  // added by bug 117316
+  nsRuleList** ChildrenListPtr() {
+    return NS_REINTERPRET_CAST(nsRuleList**, &mChildrenTaggedPtr);
+  }
+
   PLDHashTable* ChildrenHash() {
     return (PLDHashTable*) (PRWord(mChildrenTaggedPtr) & ~PRWord(kTypeMask));
   }
@@ -545,7 +551,8 @@ public:
   static void CreateRootNode(nsIPresContext* aPresContext, nsRuleNode** aResult);
 
   nsresult GetBits(PRInt32 aType, PRUint32* aResult);
-  nsresult Transition(nsIStyleRule* aRule, PRBool aIsInlineStyle, nsRuleNode** aResult);
+  //nsresult Transition(nsIStyleRule* aRule, PRBool aIsInlineStyle, nsRuleNode** aResult);
+  nsresult Transition(nsIStyleRule* aRule, nsRuleNode** aResult); // bug 171830
   nsRuleNode* GetParent() { return mParent; }
   PRBool IsRoot() { return mParent == nsnull; }
   nsresult GetRule(nsIStyleRule** aResult)
@@ -570,6 +577,17 @@ public:
   const nsStyleStruct* GetStyleData(nsStyleStructID aSID, 
                                     nsIStyleContext* aContext,
                                     PRBool aComputeData);
+
+// bug 117316
+  /*
+   * Garbage collection.  Mark walks up the tree, marking any unmarked
+   * ancestors until it reaches a marked one.  Sweep recursively sweeps
+   * the children, destroys any that are unmarked, and clears marks,
+   * returning true if the node on which it was called was destroyed.
+   */
+  void Mark();
+  PRBool Sweep();
+  
 };
 
 #endif

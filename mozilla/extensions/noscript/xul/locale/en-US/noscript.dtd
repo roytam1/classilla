@@ -1,11 +1,12 @@
 <!ENTITY noscriptOptions "Options">
 <!ENTITY noscriptOptionsLong "NoScript Options">
 <!ENTITY noscriptAbout "About NoScript">
-<!ENTITY noscriptPermissionsText "You can specify which web sites are allowed to execute JavaScript. Type the exact address of the site you want to allow and then click Allow.">
+<!ENTITY noscriptPermissionsText "You can specify which web sites are allowed to execute JavaScript. Type the site's exact address and then click Allow.">
 <!ENTITY noscriptWebAddress "Address of web site:">
 <!ENTITY noscriptAllow "Allow">
 <!ENTITY noscriptRemoveSelected "Remove Selected Sites">
 <!ENTITY noscriptGloballyEnabled "JavaScript Globally Allowed (not recommended!)">
+<!ENTITY noscriptGloballyEnabledWarning "It is recommended that this be used only when on known safe sites.">
 <!ENTITY noscriptManagerLabel "Script Control Manager">
 <!ENTITY noscriptManagerELabel "Find and Enable Scripts on this Page">
 <!ENTITY noscriptManagerSLabel "Manage Script Permissions">

@@ -426,7 +426,10 @@ NS_IMETHODIMP gfxImageFrame::GetTimeout(PRInt32 *aTimeout)
   // Ensure a minimal time between updates so we don't throttle the UI thread.
   // consider 0 == unspecified and make it fast but not too fast.
   // 100 is compatible with IE and Opera among others
-  if (mTimeout >= 0 && mTimeout < 100)
+  // It seems that there are broken tools out there that set a 0ms or 10ms
+  // timeout when they really want a "default" one.  So munge values in that
+  // range.
+  if (mTimeout >= 0 && mTimeout < 10) // bug 207059: not 100
     *aTimeout = 100;
   else
     *aTimeout = mTimeout;

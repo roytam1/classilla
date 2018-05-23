@@ -1321,9 +1321,11 @@ nsComputedDOMStyle::GetZIndex(nsIFrame *aFrame,
       case eStyleUnit_Auto:
         val->SetIdent(NS_LITERAL_STRING("auto"));
         break;
+      /* bug 205790
       case eStyleUnit_Inherit:
         val->SetIdent(NS_LITERAL_STRING("inherit"));
         break;
+      */
       default:
         NS_WARNING("Double Check the Unit!");
         val->SetIdent(NS_LITERAL_STRING("auto"));
@@ -1608,9 +1610,11 @@ nsComputedDOMStyle::GetTextIndent(nsIFrame *aFrame,
           }
           break;
         }
+      /* bug 205790
       case eStyleUnit_Inherit:
         val->SetIdent(NS_LITERAL_STRING("inherit"));
         break;
+      */
       default:
         val->SetTwips(0);
         break;
@@ -2351,9 +2355,11 @@ nsComputedDOMStyle::GetHeight(nsIFrame *aFrame,
         case eStyleUnit_Auto:
           val->SetIdent(NS_LITERAL_STRING("auto"));
           break;
+        /* bug 205790
         case eStyleUnit_Inherit:
           val->SetIdent(NS_LITERAL_STRING("inherit"));
           break;
+        */
         default:
           NS_WARNING("Double check the unit");
           val->SetTwips(0);
@@ -2428,9 +2434,11 @@ nsComputedDOMStyle::GetWidth(nsIFrame *aFrame,
         case eStyleUnit_Auto:
           val->SetIdent(NS_LITERAL_STRING("auto"));
           break;
+        /* bug 205790
         case eStyleUnit_Inherit:
           val->SetIdent(NS_LITERAL_STRING("inherit"));
           break;
+        */
         default:
           NS_WARNING("Double check the unit");
           val->SetTwips(0);
@@ -2494,10 +2502,12 @@ nsComputedDOMStyle::GetMaxHeight(nsIFrame *aFrame,
         }
 
         break;
+      /* bug 205790
       case eStyleUnit_Inherit:
         val->SetIdent(NS_LITERAL_STRING("inherit"));
 
         break;
+      */
       default:
         val->SetIdent(NS_LITERAL_STRING("none"));
 
@@ -2560,10 +2570,12 @@ nsComputedDOMStyle::GetMaxWidth(nsIFrame *aFrame,
         }
 
         break;
+      /* bug 205790
       case eStyleUnit_Inherit:
         val->SetIdent(NS_LITERAL_STRING("inherit"));
 
         break;
+      */
       default:
         val->SetIdent(NS_LITERAL_STRING("none"));
 
@@ -2608,18 +2620,20 @@ nsComputedDOMStyle::GetMinHeight(nsIFrame *aFrame,
         }
 
         break;
+      /* bug 205790
       case eStyleUnit_Inherit:
         val->SetIdent(NS_LITERAL_STRING("inherit"));
 
         break;
+      */
       default:
         val->SetTwips(0);
 
         break;
     }
-  } else {
+  } /* else {
     val->SetTwips(0);
-  }
+  } */ // pull up 1.7
 
   return CallQueryInterface(val, aValue);
 }
@@ -2655,9 +2669,11 @@ nsComputedDOMStyle::GetMinWidth(nsIFrame *aFrame,
           val->SetPercent(positionData->mMinWidth.GetPercentValue());
         }
         break;
+      /* bug 205790
       case eStyleUnit_Inherit:
         val->SetIdent(NS_LITERAL_STRING("inherit"));
         break;
+      */
       default:
         val->SetTwips(0);
         break;
@@ -3281,6 +3297,7 @@ nsComputedDOMStyle::GetBorderRadiusFor(PRUint8 aSide, nsIFrame *aFrame,
           val->SetPercent(coord.GetPercentValue());
         }
         break;
+      /* bug 205790
       case eStyleUnit_Inherit:
         // XXX This will only happen if we are inheriting from
         // a node with a percentage style unit for its relevant
@@ -3288,6 +3305,7 @@ nsComputedDOMStyle::GetBorderRadiusFor(PRUint8 aSide, nsIFrame *aFrame,
         // one inherit case, so we do the same thing here.
         val->SetIdent(NS_LITERAL_STRING("inherit"));
         break;
+      */
       default:
 #ifdef DEBUG_ComputedDOMStyle
         NS_WARNING("double check the border radius");

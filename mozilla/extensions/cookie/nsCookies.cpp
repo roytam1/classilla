@@ -62,6 +62,7 @@
 #include "nsIHttpChannelInternal.h"  
 
 #ifdef MOZ_LOGGING
+//#error "it's good"
 // in order to do logging, the following environment variables need to be set:
 //
 //    set NSPR_LOG_MODULES=cookie:3 -- shows rejected cookies
@@ -78,7 +79,7 @@ PRLogModuleInfo* gCookieLog = nsnull;
 #endif /* PR_LOGGING */
 
 #define MAX_NUMBER_OF_COOKIES 300
-#define MAX_COOKIES_PER_SERVER 20
+#define MAX_COOKIES_PER_SERVER 32  /* this is NOT desirable. Cameron */
 #define MAX_BYTES_PER_COOKIE 4096  /* must be at least 1 */
 
 #ifdef MOZ_PHOENIX
@@ -1669,7 +1670,9 @@ COOKIE_SetCookieStringFromHttp(nsIURI * curURL, nsIURI * firstURL, nsIPrompt *aP
   }
 
   /* check if a Mail/News message is setting the cookie */
-  if (cookie_GetDisableCookieForMailNewsPref() && cookie_isFromMailNews(firstURL)) {
+  if (cookie_GetDisableCookieForMailNewsPref() && 
+    // modified from bug 198870
+  	firstURL && (cookie_isFromMailNews(firstURL) || cookie_isFromMailNews(curURL))) {
 #if defined(PR_LOGGING)
     cookie_LogFailure(SET_COOKIE, curURL, setCookieHeader, "Cookies disabled for mailnews");
 #endif
@@ -1875,7 +1878,8 @@ COOKIE_Read() {
    * cookie can have tabs
    */
 
-#define BUFSIZE 4096
+#define BUFSIZE 8192
+/* Cameron is paranoid */
   char readbuffer[BUFSIZE];
   PRInt32 next = BUFSIZE, count = BUFSIZE;
   while (CKutil_GetLine(strm, readbuffer, BUFSIZE, next, count, buffer) != -1){

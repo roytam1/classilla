@@ -5600,6 +5600,18 @@ NS_IMETHODIMP
 NavigatorImpl::GetAppVersion(nsAString& aAppVersion)
 {
   nsresult res;
+  // modified from bug 166395
+  if (gPrefBranch) {
+  	nsXPIDLCString override;
+  	res = gPrefBranch->GetCharPref("general.appversion.override",
+  	                              getter_Copies(override));
+  	if(NS_SUCCEEDED(res)) {
+  		// we don't have CopyASCIItoUTF16, so we use CopyASCIItoUCS2.
+  		CopyASCIItoUCS2(override, aAppVersion);
+  		return NS_OK;
+  	}
+  }
+  // end bug
   nsCOMPtr<nsIHttpProtocolHandler>
     service(do_GetService(kHTTPHandlerCID, &res));
   if (NS_SUCCEEDED(res) && service) {
@@ -5630,7 +5642,17 @@ NavigatorImpl::GetAppVersion(nsAString& aAppVersion)
 NS_IMETHODIMP
 NavigatorImpl::GetAppName(nsAString& aAppName)
 {
-  aAppName.Assign(NS_LITERAL_STRING("Netscape"));
+  // modified from bug 166395
+  if (gPrefBranch) {
+  	nsXPIDLCString override;
+  	nsresult rv = gPrefBranch->GetCharPref("general.appname.override",
+  	                                       getter_Copies(override));
+  	if (NS_SUCCEEDED(rv)) {
+  	  CopyASCIItoUCS2(override, aAppName);
+  	  return NS_OK;
+  	}
+  }                                       
+  aAppName.Assign(NS_LITERAL_STRING("Netscape")); // for compatibility. DON'T CHANGE!
   return NS_OK;
 }
 
@@ -5653,6 +5675,19 @@ NS_IMETHODIMP
 NavigatorImpl::GetPlatform(nsAString& aPlatform)
 {
   nsresult res;
+  
+  // modified from bug 166395
+  if (gPrefBranch) {
+    nsXPIDLCString override;
+    res = gPrefBranch->GetCharPref("general.platform.override",
+                                   getter_Copies(override));
+    if(NS_SUCCEEDED(res)) {
+      CopyASCIItoUCS2(override, aPlatform);
+      return NS_OK;
+    }
+  }
+  // end bug
+                                 
   nsCOMPtr<nsIHttpProtocolHandler>
     service(do_GetService(kHTTPHandlerCID, &res));
   if (NS_SUCCEEDED(res) && service) {

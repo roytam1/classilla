@@ -1375,6 +1375,9 @@ nsresult nsContentSubtreeIterator::Init(nsIDOMRange* aRange)
   cEndP = do_QueryInterface(endParent);
   aRange->GetEndOffset(&endIndx);
   
+  if (!cStartP || !cEndP)
+  	return NS_ERROR_NOT_IMPLEMENTED; // bug 302775 for when either one does not QI to nsIContent.
+  	
   // short circuit when start node == end node
   if (startParent == endParent)
   {

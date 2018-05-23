@@ -197,7 +197,7 @@ inDOMView::SetRootNode(nsIDOMNode* aNode)
   } else {
     mRootDocument = nsnull;
   }
-
+  
   return NS_OK;
 }
 

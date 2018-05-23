@@ -228,18 +228,25 @@ nsBlockReflowContext::AlignBlockHorizontally(nscoord                 aWidth,
 
   // Get style unit associated with the left and right margins
   nsStyleUnit leftUnit = mStyleMargin->mMargin.GetLeftUnit();
+// bug 205790
+#if(0)
   if (eStyleUnit_Inherit == leftUnit) {
     leftUnit = GetRealMarginLeftUnit();
   }
+#endif
   nsStyleUnit rightUnit = mStyleMargin->mMargin.GetRightUnit();
+#if(0)
   if (eStyleUnit_Inherit == rightUnit) {
     rightUnit = GetRealMarginRightUnit();
   }
+#endif
+// end bug
 
   // Apply post-reflow horizontal alignment. When a block element
   // doesn't use it all of the available width then we need to
   // align it using the text-align property.
-  if (NS_UNCONSTRAINEDSIZE != mSpace.width) {
+  if (NS_UNCONSTRAINEDSIZE != mSpace.width
+  		&& NS_UNCONSTRAINEDSIZE != mOuterReflowState.mComputedWidth) { // bug 229654
     // It is possible that the object reflowed was given a
     // constrained width and ended up picking a different width
     // (e.g. a table width a set width that ended up larger
@@ -549,6 +556,17 @@ nsBlockReflowContext::ReflowBlock(const nsRect&       aSpace,
     }
   }
 
+// "// Adjust spacemanager coordinate system for the frame. The"
+   // Compute the translation to be used for adjusting the spacemanagager
+   // coordinate system for the frame.  The spacemanager coordinates are
+   // <b>inside</b> the callers border+padding, but the x/y coordinates
+   // are not (recall that frame coordinates are relative to the parents
+   // origin and that the parents border/padding is <b>inside</b> the
+   // parent frame. Therefore we have to subtract out the parents
+   // border+padding before translating.
+   nscoord tx = x - mOuterReflowState.mComputedBorderPadding.left;
+   nscoord ty = y - mOuterReflowState.mComputedBorderPadding.top;
+
   // If the element is relatively positioned, then adjust x and y accordingly
   if (NS_STYLE_POSITION_RELATIVE == aFrameRS.mStyleDisplay->mPosition) {
     x += aFrameRS.mComputedOffsets.left;
@@ -574,6 +592,8 @@ nsBlockReflowContext::ReflowBlock(const nsRect&       aSpace,
   }
 #endif
 
+// moved above by pull up
+#if(0)
   // Adjust spacemanager coordinate system for the frame. The
   // spacemanager coordinates are <b>inside</b> the callers
   // border+padding, but the x/y coordinates are not (recall that
@@ -583,6 +603,7 @@ nsBlockReflowContext::ReflowBlock(const nsRect&       aSpace,
   // border+padding before translating.
   nscoord tx = x - mOuterReflowState.mComputedBorderPadding.left;
   nscoord ty = y - mOuterReflowState.mComputedBorderPadding.top;
+#endif
   mOuterReflowState.mSpaceManager->Translate(tx, ty);
 
   // See if this is the child's initial reflow and we are supposed to
@@ -733,7 +754,7 @@ nsBlockReflowContext::PlaceBlock(const nsHTMLReflowState& aReflowState,
   aBottomMarginResult.Include(mMargin.bottom);
 
   // See if the block will fit in the available space
-  PRBool fits = PR_TRUE;
+  PRBool fits; // bug 273193 // = PR_TRUE;
   nscoord x = mX;
   nscoord y = mY;
 // bug 209694 modified for 1.3
@@ -777,8 +798,10 @@ nsBlockReflowContext::PlaceBlock(const nsHTMLReflowState& aReflowState,
            y, mSpace.y);
 #endif
 
+    // Empty blocks are placed at the top of the collapsed margin (bug 273193)
     y = mSpace.y;
-
+// bug 273193
+#if(0)
     // Now place the frame and complete the reflow process
     nsContainerFrame::FinishReflowChild(mFrame, mPresContext, &aReflowState, mMetrics, x, y, 0);
 
@@ -791,12 +814,18 @@ nsBlockReflowContext::PlaceBlock(const nsHTMLReflowState& aReflowState,
     aCombinedRect = mMetrics.mOverflowArea;
     aCombinedRect.x += x;
     aCombinedRect.y += y;
+#endif
+    // Empty blocks always fit.
+    fits = PR_TRUE;
+// end bug
   }
   else {
     // See if the frame fit. If its the first frame then it always
     // fits.
     if (aForceFit || (y + mMetrics.height <= mSpace.YMost())) 
     {
+// bug 273193
+#if(0)
       // Calculate the actual x-offset and left and right margin
       nsBlockHorizontalAlign  align;
       
@@ -831,7 +860,9 @@ nsBlockReflowContext::PlaceBlock(const nsHTMLReflowState& aReflowState,
 
       // Now place the frame and complete the reflow process
       nsContainerFrame::FinishReflowChild(mFrame, mPresContext, &aReflowState, mMetrics, x, y, 0);
-
+#endif
+      fits=PR_TRUE;
+// end bug
       // Adjust the max-element-size in the metrics to take into
       // account the margins around the block element. Note that we
       // use the collapsed top and bottom margin values. ... until bug 217369
@@ -857,7 +888,8 @@ nsBlockReflowContext::PlaceBlock(const nsHTMLReflowState& aReflowState,
           ComputeShrinkwrapMargins(mStyleMargin, mMetrics.mMaxElementWidth,
                                    maxElemMargin, dummyXOffset);
         //}
-
+        mMetrics.mMaxElementWidth += maxElemMargin.left + maxElemMargin.right; // pull up
+#if(0)
         // Do not allow auto margins to impact the max-element size
         // since they are springy and don't really count!
         if ((eStyleUnit_Auto != mStyleMargin->mMargin.GetLeftUnit()) && 
@@ -868,7 +900,30 @@ nsBlockReflowContext::PlaceBlock(const nsHTMLReflowState& aReflowState,
             (eStyleUnit_Null != mStyleMargin->mMargin.GetRightUnit())) {
           mMetrics.mMaxElementWidth += maxElemMargin.right;
         }
+#endif
       }
+      // do the same for the maximum width
+      if (mComputeMaximumWidth) {
+        nsMargin maxWidthMargin;
+        const nsStyleSides &styleMargin = mStyleMargin->mMargin;
+        nsStyleCoord coord;
+        if (styleMargin.GetLeftUnit() == eStyleUnit_Coord)
+          maxWidthMargin.left = styleMargin.GetLeft(coord).GetCoordValue();
+        else
+          maxWidthMargin.left = 0;
+        if (styleMargin.GetRightUnit() == eStyleUnit_Coord)
+          maxWidthMargin.right = styleMargin.GetRight(coord).GetCoordValue();
+        else
+          maxWidthMargin.right = 0;
+
+        nscoord dummyXOffset;
+        // Base the margins on the maximum width
+        ComputeShrinkwrapMargins(mStyleMargin, mMetrics.mMaximumWidth,
+                                 maxWidthMargin, dummyXOffset);
+
+        mMetrics.mMaximumWidth += maxWidthMargin.left + maxWidthMargin.right;
+      }
+
     }
     else {
       // Send the DidReflow() notification, but don't bother placing
@@ -878,9 +933,45 @@ nsBlockReflowContext::PlaceBlock(const nsHTMLReflowState& aReflowState,
     }
   }
 
+// bug 273193 modified for 1.3.1
+  if (fits) {
+    // Calculate the actual x-offset and left and right margin
+    nsBlockHorizontalAlign  align;
+    align.mXOffset = x;
+    AlignBlockHorizontally(mMetrics.width, align);
+    x = align.mXOffset;
+    mMargin.left = align.mLeftMargin;
+    mMargin.right = align.mRightMargin;
+    
+    aInFlowBounds = nsRect(x, y, mMetrics.width, mMetrics.height);
+
+    // Apply CSS relative positioning
+    //const nsStyleDisplay* styleDisp = mFrame->GetStyleDisplay();
+      const nsStyleDisplay* styleDisp;
+      mFrame->GetStyleData(eStyleStruct_Display,
+                           (const nsStyleStruct*&)styleDisp);
+
+    if (NS_STYLE_POSITION_RELATIVE == styleDisp->mPosition) {
+      x += aComputedOffsets.left;
+      y += aComputedOffsets.top;
+    }
+
+    // Now place the frame and complete the reflow process
+    nsContainerFrame::FinishReflowChild(mFrame, mPresContext, &aReflowState, mMetrics, x, y, 0);
+
+    //aCombinedRect = mMetrics.mOverflowArea + nsPoint(x, y);
+      aCombinedRect.x = mMetrics.mOverflowArea.x + x;
+      aCombinedRect.y = mMetrics.mOverflowArea.y + y;
+      aCombinedRect.width = mMetrics.mOverflowArea.width;
+      aCombinedRect.height = mMetrics.mOverflowArea.height;
+  }
+// end bug
+
   return fits;
 }
 
+// bug 205790
+#if(0)
 // If we have an inherited margin its possible that its auto all the
 // way up to the top of the tree. If that is the case, we need to know
 // it.
@@ -922,3 +1013,5 @@ nsBlockReflowContext::GetRealMarginRightUnit()
   }
   return unit;
 }
+#endif
+// end bug (and file)

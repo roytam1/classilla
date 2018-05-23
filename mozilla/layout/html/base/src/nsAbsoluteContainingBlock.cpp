@@ -156,7 +156,8 @@ nsAbsoluteContainingBlock::ReplaceFrame(nsIFrame*       aDelegatingFrame,
   return result ? NS_OK : NS_ERROR_FAILURE;
 }
 
-
+// bug 197581
+#if(0)
 // Destructor function for the collapse offset frame property
 static void
 DestroyRectFunc(nsIPresContext* aPresContext,
@@ -201,6 +202,8 @@ GetOverflowAreaProperty(nsIPresContext* aPresContext,
 
   return nsnull;
 }
+#endif
+// end bug
 
 nsresult
 nsAbsoluteContainingBlock::Reflow(nsIFrame*                aDelegatingFrame,
@@ -257,7 +260,8 @@ nsAbsoluteContainingBlock::Reflow(nsIFrame*                aDelegatingFrame,
       kidFrame->GetFrameState(&kidFrameState);
       if (kidFrameState & NS_FRAME_OUTSIDE_CHILDREN) {
         // Get the property
-        nsRect* overflowArea = ::GetOverflowAreaProperty(aPresContext, kidFrame);
+        // :: -> kF-> bug 197581
+        nsRect* overflowArea = kidFrame->GetOverflowAreaProperty(aPresContext); // , kidFrame);
 
         if (overflowArea) {
           // The overflow area is in the child's coordinate space, so translate
@@ -291,7 +295,8 @@ nsAbsoluteContainingBlock::CalculateChildBounds(nsIPresContext* aPresContext,
     f->GetFrameState(&frameState);
     if (frameState & NS_FRAME_OUTSIDE_CHILDREN) {
       // Get the property
-      nsRect* overflowArea = ::GetOverflowAreaProperty(aPresContext, f);
+      // :: -> f-> bug 197581
+      nsRect* overflowArea = f->GetOverflowAreaProperty(aPresContext); // , f);
   
       if (overflowArea) {
         // The overflow area is in the child's coordinate space, so translate
@@ -468,13 +473,61 @@ nsAbsoluteContainingBlock::ReflowAbsoluteFrame(nsIFrame*                aDelegat
     NS_NOTYETIMPLEMENTED("percentage border");
   }
 
+// backbugs from bug 201897 modified for 1.3.1
+  nscoord availWidth = aReflowState.mComputedWidth;
+  enum { NOT_SHRINK_TO_FIT, SHRINK_TO_FIT_AVAILWIDTH, SHRINK_TO_FIT_MEW };
+  PRUint32 situation = NOT_SHRINK_TO_FIT;
+  while (1) {
+    nsHTMLReflowMetrics kidDesiredSize(nsnull);
+    if (situation == NOT_SHRINK_TO_FIT) {
+      // CSS2.1 10.3.7 width:auto and at least one of left/right is auto...
+      //const nsStylePosition* stylePosition = aKidFrame->GetStylePosition();
+      const nsStylePosition* stylePosition;
+      aKidFrame->GetStyleData(eStyleStruct_Position, (const nsStyleStruct *&)stylePosition); // modified for 1.3
+      if (stylePosition &&
+      		eStyleUnit_Auto == stylePosition->mWidth.GetUnit() &&
+          (eStyleUnit_Auto == stylePosition->mOffset.GetLeftUnit() ||
+           eStyleUnit_Auto == stylePosition->mOffset.GetRightUnit())) {
+        situation = SHRINK_TO_FIT_AVAILWIDTH;
+        if (aContainingBlockWidth != -1) {
+          availWidth = aContainingBlockWidth;
+        } else {
+          availWidth = aReflowState.mComputedWidth;
+        }
+        kidDesiredSize.mComputeMEW = PR_TRUE;
+      }
+    }
+// end bug + backbugs
+
   nsFrameState        kidFrameState;
   nsSize              availSize(aReflowState.mComputedWidth, NS_UNCONSTRAINEDSIZE);
-  nsHTMLReflowMetrics kidDesiredSize(nsnull);
+  //nsHTMLReflowMetrics kidDesiredSize(nsnull); // moved up above by bug 201897
   nsHTMLReflowState   kidReflowState(aPresContext, aReflowState, aKidFrame,
                                      availSize, aContainingBlockWidth,
                                      aContainingBlockHeight,
                                      aReason);
+
+    if (situation == SHRINK_TO_FIT_MEW) {
+      situation = NOT_SHRINK_TO_FIT; // This is the last reflow
+      kidReflowState.mComputedWidth = PR_MIN(availWidth, kidReflowState.mComputedMaxWidth);
+      if (kidReflowState.mComputedWidth < kidReflowState.mComputedMinWidth) {
+        kidReflowState.mComputedWidth = kidReflowState.mComputedMinWidth;
+      }
+    } else if (situation == SHRINK_TO_FIT_AVAILWIDTH) {
+      PRInt32 maxWidth = availWidth -
+        (kidReflowState.mComputedMargin.left + kidReflowState.mComputedBorderPadding.left +
+         kidReflowState.mComputedBorderPadding.right + kidReflowState.mComputedMargin.right);
+      if (NS_AUTOOFFSET != kidReflowState.mComputedOffsets.right) {
+        maxWidth -= kidReflowState.mComputedOffsets.right;
+      }
+      if (NS_AUTOOFFSET != kidReflowState.mComputedOffsets.left) {
+        maxWidth -= kidReflowState.mComputedOffsets.left;
+      }
+      // The following also takes care of maxWidth<0
+      if (kidReflowState.mComputedMaxWidth > maxWidth) {
+        kidReflowState.mComputedMaxWidth = PR_MAX(maxWidth, kidReflowState.mComputedMinWidth);
+      }
+    }
 
   // Send the WillReflow() notification and position the frame
   aKidFrame->WillReflow(aPresContext);
@@ -499,8 +552,40 @@ nsAbsoluteContainingBlock::ReflowAbsoluteFrame(nsIFrame*                aDelegat
     nsContainerFrame::PositionFrameView(aPresContext, aKidFrame);
   }
 
+// backbugs from bug 201897 + pull up to 1.8.1
   // Do the reflow
   rv = aKidFrame->Reflow(aPresContext, kidDesiredSize, kidReflowState, aStatus);
+
+    if (situation == SHRINK_TO_FIT_AVAILWIDTH) {
+      // ...continued CSS2.1 10.3.7 width:auto and at least one of left/right is auto
+      availWidth -= kidReflowState.mComputedMargin.left + kidReflowState.mComputedMargin.right;
+
+      if (NS_AUTOOFFSET == kidReflowState.mComputedOffsets.right) {
+        NS_ASSERTION(NS_AUTOOFFSET != kidReflowState.mComputedOffsets.left,
+                     "Can't solve for both left and right");
+        availWidth -= kidReflowState.mComputedOffsets.left;
+      } else {
+        NS_ASSERTION(NS_AUTOOFFSET == kidReflowState.mComputedOffsets.left,
+                     "Expected to solve for left");
+        availWidth -= kidReflowState.mComputedOffsets.right;
+      }
+      if (availWidth < 0) {
+        availWidth = 0;
+      }
+
+      // Shrink-to-fit: min(max(preferred minimum width, available width), preferred width).
+      // XXX this is not completely correct - see bug 201897 comment 56/58 and bug 268499.
+      if (kidDesiredSize.mMaxElementWidth > availWidth) {
+        aKidFrame->DidReflow(aPresContext, &kidReflowState, NS_FRAME_REFLOW_FINISHED);
+        availWidth = PR_MAX(0, kidDesiredSize.mMaxElementWidth -
+                               kidReflowState.mComputedBorderPadding.left -
+                               kidReflowState.mComputedBorderPadding.right);
+        situation = SHRINK_TO_FIT_MEW;
+        aReason = eReflowReason_Resize;
+        continue; // Do a second reflow constrained to MEW.
+      }
+    }
+
 
   // If we're solving for 'left' or 'top', then compute it now that we know the
   // width/height
@@ -567,7 +652,9 @@ nsAbsoluteContainingBlock::ReflowAbsoluteFrame(nsIFrame*                aDelegat
   aKidFrame->GetFrameState(&kidFrameState);
   if (kidFrameState & NS_FRAME_OUTSIDE_CHILDREN) {
     // Get the property (creating a rect struct if necessary)
-    nsRect* overflowArea = ::GetOverflowAreaProperty(aPresContext, aKidFrame, PR_TRUE);
+    // :: -> aKF-> bug 197581
+    nsRect* overflowArea = aKidFrame->GetOverflowAreaProperty(aPresContext, // aKidFrame,
+    	 PR_TRUE);
 
     NS_ASSERTION(overflowArea, "should have created rect");
     if (overflowArea) {
@@ -593,6 +680,9 @@ nsAbsoluteContainingBlock::ReflowAbsoluteFrame(nsIFrame*                aDelegat
     printf("\n");
   }
 #endif
+
+	break;
+} // this ends the backbug while(1)
   return rv;
 }
 

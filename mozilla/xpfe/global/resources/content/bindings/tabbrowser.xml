@@ -159,8 +159,10 @@
       </field>
 
       <!-- A web progress listener object definition for a given tab. --> 
+      <!-- *Browser parameter updated by bug 104778 -->
       <method name="mTabProgressListener">
         <parameter name="aTab"/>
+        <parameter name="aBrowser"/>
         <parameter name="aStartsBlank"/>
         <body>
         <![CDATA[
@@ -173,6 +175,7 @@
           return ({
             mTabBrowser: this,
             mTab: aTab,
+            mBrowser: aBrowser,
             mBlank: aStartsBlank,
             mIcon: "", 
 
@@ -204,18 +207,54 @@
 
               const nsIWebProgressListener = Components.interfaces.nsIWebProgressListener;
               const nsIChannel = Components.interfaces.nsIChannel;
-              if (!this.mBlank && aStateFlags & nsIWebProgressListener.STATE_START && 
+              //if (!this.mBlank && aStateFlags & nsIWebProgressListener.STATE_START && 
+              if (aStateFlags & nsIWebProgressListener.STATE_START && // bug 104778
                   aStateFlags & nsIWebProgressListener.STATE_IS_NETWORK) {
+                /*
                 this.mTab.setAttribute("busy", "true"); 
                 this.mTab.label = this.mTabBrowser.mStringBundle.getString("tabs.loading");
                 this.mTab.removeAttribute("image");
                 this.mIcon = "";
-
                 if (this.mTabBrowser.mCurrentTab == this.mTab)
                   this.mTabBrowser.mIsBusy = true;
+                */
+                // Reset so we can see if the user typed between the document
+                // load starting and the location changing.
+                // It's okay to clear what the user typed when we start
+                // loading a document. If the user types, this flag gets
+                // set to false, if the document load ends without an
+                // onLocationChange, this flag also gets set to false
+                // (so we keep it while switching tabs after failed load
+                if (aWebProgress.DOMWindow == this.mBrowser.contentWindow)
+                  //this.mBrowser.userTypedValue = null;
+                  this.mBrowser.userTypedClear += 2; // bug 306810 plus backbugs
+                  
+                if (!this.mBlank) {
+                  this.mTab.setAttribute("busy", "true");
+                  this.mTab.label = this.mTabBrowser.mStringBundle.getString("tabs.loading");
+                  this.mTab.removeAttribute("image");
+                  this.mIcon = "";
+                  
+                  if (this.mTabBrowser.mCurrentTab == this.mTab)
+                    this.mTabBrowser.mIsBusy = true;
+                }
+                // end bug
+                
               }
               else if (aStateFlags & nsIWebProgressListener.STATE_STOP &&
                        aStateFlags & nsIWebProgressListener.STATE_IS_NETWORK) {
+                
+                // bug 306810 plus backbugs
+                // The document is done loading, it's okay to clear
+                // the value again.
+                if (aWebProgress.DOMWindow == this.mBrowser.contentWindow) {
+                  //if (this.mBrowser.userTypedClear > 0)
+                  if (this.mBrowser.userTypedClear > 1)
+                    this.mBrowser.userTypedClear -= 2;
+                  else if (this.mBrowser.userTypedClear > 0)
+                    this.mBrowser.userTypedClear--;
+                }
+                     
                 if (this.mBlank)
                   this.mBlank = false;
                 
@@ -245,8 +284,28 @@
               }
             }
             ,
+            
+            // pull up to 1.7
+            // The first location change is gotoIndex called from mInstallSH,
+            // the second one is considered a user action.
+            mLocationChangeCount : 0,
 
             onLocationChange : function(aWebProgress, aRequest, aLocation) {
+            /* do we need this?
+              if (this.mLocationChangeCount > 0 ||
+                   aLocation.spec != "about:blank")
+                ++this.mLocationChangeCount;
+                
+              if (this.mLocationChangeCount == 2) {
+                this.mTabBrowser.backBrowserGroup = [];
+                this.mTabBrowser.forwardBrowserGroup = [];
+              }
+            */
+              // The document loaded correctly, clear the value if we should
+              if (this.mBrowser.userTypedClear > 0)
+                this.mBrowser.userTypedValue = null;
+            // end pull up
+            
               if (!this.mBlank && this.mTabBrowser.mCurrentTab == this.mTab) {
                 for (var i = 0; i < this.mTabBrowser.mProgressListeners.length; i++) {
                   var p = this.mTabBrowser.mProgressListeners[i];
@@ -405,6 +464,14 @@
             var loc = this.mCurrentBrowser.currentURI;
             var webProgress = this.mCurrentBrowser.webProgress;
             var securityUI = this.mCurrentBrowser.securityUI;
+            
+            // pull up to 1.7
+            // Remember the current clear state, then set it to false
+            // so we don't clear the userTypedValue when just switching
+            // tabs. Set it back to its old state after we're done.
+            var userTypedClear = this.mCurrentBrowser.userTypedClear;
+            this.mCurrentBrowser.userTypedClear = 0;
+            
             var i, p;
             for (i = 0; i < this.mProgressListeners.length; i++) {
               p = this.mProgressListeners[i];
@@ -417,6 +484,7 @@
                   p.onLinkIconAvailable(listener.mIcon);
               }
             }
+            this.mCurrentBrowser.userTypedClear = userTypedClear; // pull up to 1.7
 
             // Update the window title.
             this.updateTitlebar();
@@ -650,7 +718,9 @@
             }
 
             // Wire up a progress listener to our filter.
-            const listener = this.mTabProgressListener(this.mCurrentTab, false);
+            const listener = this.mTabProgressListener(this.mCurrentTab, 
+                                                       this.mCurrentBrowser, // bug 104778
+                                                       false);
             filter.addProgressListener(listener, Components.interfaces.nsIWebProgress.NOTIFY_ALL);
             this.mTabListeners[0] = listener;
           ]]>
@@ -701,7 +771,7 @@
             
             // wire up a progress listener for the new browser object.
             var position = this.mTabContainer.childNodes.length-1;
-            var tabListener = this.mTabProgressListener(t, blank);
+            var tabListener = this.mTabProgressListener(t, b, blank); // b from bug 104778
             const filter = Components.classes["@mozilla.org/appshell/component/browser-status-filter;1"]
                                      .createInstance(Components.interfaces.nsIWebProgress);
             filter.addProgressListener(tabListener, Components.interfaces.nsIWebProgress.NOTIFY_ALL);
@@ -1155,6 +1225,16 @@
       <property name="securityUI"
                 onget="return this.mCurrentBrowser.securityUI;"
                 readonly="true"/>
+
+<!-- pull up to 1.7 -->
+      <property name="userTypedClear"
+                onget="return this.mCurrentBrowser.userTypedClear;"
+                onset="return this.mCurrentBrowser.userTypedClear = val;"/>
+                                
+                <!-- bug 104778 -->
+      <property name="userTypedValue"
+                onget="return this.mCurrentBrowser.userTypedValue;"
+                onset="return this.mCurrentBrowser.userTypedValue = val;"/>
 
       <constructor>
         <![CDATA[

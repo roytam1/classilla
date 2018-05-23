@@ -2603,14 +2603,14 @@ sub BuildProjects()
 
     if ($main::RUNTIME)
     {
-        BuildStubs();
+        #BuildStubs();
         BuildRuntimeProjects();
         return;        
     }
 
     BuildXPIDLCompiler();
     BuildIDLProjects();    
-    BuildStubs();
+    #BuildStubs();
     
     BuildRuntimeProjects();
     BuildCommonProjects();
@@ -2633,6 +2633,7 @@ sub BuildProjects()
     # do this last so as not to pollute dist with
     # non-include files before building projects.
     BuildResources();
+    print "\007";
 }
 
 

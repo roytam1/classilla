@@ -18,6 +18,9 @@
     Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 ***** END LICENSE BLOCK ***** -->
+
+<!-- Modifications for Classilla by Cameron Kaiser -->
+
 <?xml-stylesheet href="chrome://global/skin/" type="text/css"?>
 
 <!DOCTYPE dialog [
@@ -36,9 +39,9 @@
   
   <script type="application/x-javascript" src="noscript.js" />
   <script type="application/x-javascript" src="noscriptOptions.js" />
-  <vbox>
+  <vbox flex="1">
   <hbox>
-  <description style="width: 300px; white-space: normal" id="permissionsText">&noscriptPermissionsText;</description>
+  <description style="white-space: normal" id="permissionsText" flex="1">&noscriptPermissionsText;</description>
   </hbox>
   <separator class="thin"/>
   <label value="&noscriptWebAddress;"/>
@@ -49,18 +52,22 @@
     <button disabled="true" id="addButton" label="&noscriptAllow;" oncommand="nso_allow()"/>
   </hbox>
   <separator class="thin"/>
+  <hbox flex="1">
   <listbox id="urlList" seltype="multiple" 
     onselect="nso_urlListChanged()" 
     flex="1"
-    rows="10"
   >
   <listitem id="fake_url_item" label=" " />
   </listbox>
+  </hbox>
   <separator class="thin"/>
+  <vbox pack="end">
   <hbox>
     <button id="removeButton" disabled="true" label="&noscriptRemoveSelected;" oncommand="nso_remove()"/>
   </hbox>
   <separator class="thin"/>
   <checkbox id="jsglobal" label="&noscriptGloballyEnabled;" />
+  <description flex="1">&noscriptGloballyEnabledWarning;</description>
+  </vbox>
   </vbox>
 </dialog>

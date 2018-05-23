@@ -229,6 +229,7 @@ public:
  */
 class nsNode3Tearoff : public nsIDOM3Node
 {
+public: // why? bug 210451
   NS_DECL_ISUPPORTS
 
   NS_DECL_NSIDOM3NODE
@@ -236,6 +237,20 @@ class nsNode3Tearoff : public nsIDOM3Node
   nsNode3Tearoff(nsIContent *aContent) : mContent(aContent)
   {
   }
+// bug 210451
+#if(0)
+  static nsresult GetTextContent(nsIDocument *aDoc,
+                                 nsIDOMNode *aNode,
+                                 nsAString &aTextContent);
+#endif
+  static nsresult GetTextContent(nsIContent *aContent,
+  								 nsAString &aTextContent); // mozilla 1.8
+  								 // really, that is SO much more consistent.
+  static nsresult SetTextContent(nsIContent *aContent,
+                                 const nsAString &aTextContent);
+
+protected:
+// end bug
   virtual ~nsNode3Tearoff() {};
 
 private:

@@ -1706,6 +1706,24 @@ NS_IMETHODIMP
 nsMacWindow::DispatchEvent ( void* anEvent, PRBool *_retval )
 {
   *_retval = PR_FALSE;
+  
+  // bug 353716
+  // This method is presently only used for mouse events, which are sent into
+  // into nsMacEventHandler::HandleOSEvent.  Mouse events can't be sent to
+  // windows that aren't shown, but in some cases, we'll see them anyway.  This
+  // can happen when a pop-up window is logically hidden but is physically in
+  // the process of fading out.
+  //
+  // If a pop-up is fading out because its parent widget hierarchy has
+  // disappeared (such as when its parent window is closed), then the pop-up
+  // will be destroyed as soon as it has faded out, and some of the objects
+  // in the pop-up, including the event handler, will be invalid.  To avoid
+  // definite crashes, filter out these events that logically should not
+  // even exist.
+  /*
+  if (!mShown)
+    return NS_OK;
+*/
   if (mMacEventHandler.get())
     *_retval = mMacEventHandler->HandleOSEvent(*NS_REINTERPRET_CAST(EventRecord*,anEvent));
 

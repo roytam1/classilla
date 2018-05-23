@@ -38,6 +38,9 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+/* startDocumentLoad, etc., and everything else in nsBrowserStatusHandler.js
+   is, well, in that file. -- Cameron */
+   
 const nsIWebNavigation = Components.interfaces.nsIWebNavigation;
 var gPrintSettingsAreGlobal = true;
 var gSavePrintSettings = true;

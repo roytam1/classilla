@@ -288,6 +288,70 @@ nsTextFragment::AppendTo(nsCString& aCString) const
   }
 }
 
+// this probably should just be moved into nsReadableUtils.h, but I only
+// have need of it here otherwise right now. -- Cameron
+template <class FromCharT, class ToCharT>
+class LossyConvertEncoding
+  {
+    public:
+      typedef FromCharT value_type;
+ 
+      typedef FromCharT input_type;
+      typedef ToCharT   output_type;
+
+      typedef typename nsCharTraits<FromCharT>::unsigned_char_type unsigned_input_type;
+
+    public:
+      LossyConvertEncoding( output_type* aDestination ) : mDestination(aDestination) { }
+
+      PRUint32
+      write( const input_type* aSource, PRUint32 aSourceLength )
+        {
+          const input_type* done_writing = aSource + aSourceLength;
+          while ( aSource < done_writing )
+            *mDestination++ = (output_type)(unsigned_input_type)(*aSource++);  // use old-style cast to mimic old |ns[C]String| behavior
+          return aSourceLength;
+        }
+
+      void
+      write_terminator()
+        {
+          *mDestination = output_type(0);
+        }
+
+    private:
+      output_type* mDestination;
+  };
+
+
+// added from Mozilla 1.8
+void
+nsTextFragment::AppendTo(nsAString& aString) const
+{
+  if (mState.mIs2b) {
+    aString.Append(m2b, mState.mLength);
+  } else {
+  /*
+    AppendASCIItoUTF16(Substring((char *)m1b, ((char *)m1b) + mState.mLength),
+                       aString);
+  */
+    // this is a small implementation of Mozilla 1.8's AppendASCIItoUTF16()
+    const nsACString& aSource = Substring((char *)m1b, ((char *)m1b) + mState.mLength);
+    // in the below, mentally substitute aString for aDest in the original source.
+    PRUint32 old_dest_length = aString.Length();
+    aString.SetLength(old_dest_length + aSource.Length());
+    nsACString::const_iterator fromBegin, fromEnd;
+    nsAString::iterator dest;
+    aString.BeginWriting(dest);
+    dest.advance(old_dest_length);
+    
+    // right now, this won't work on multi-fragment destinations
+    LossyConvertEncoding<char, PRUnichar> converter(dest.get());
+    copy_string(aSource.BeginReading(fromBegin), aSource.EndReading(fromEnd), converter);
+  }
+}
+// end bug
+
 void
 nsTextFragment::CopyTo(PRUnichar *aDest, PRInt32 aOffset, PRInt32 aCount)
 {

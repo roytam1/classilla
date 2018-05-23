@@ -433,6 +433,11 @@ function RegisterTabOpenObserver()
 
 function Startup()
 {
+// Much to my chagrin, says Cameron, this function is executed EVERY DAMN TIME
+// a browser window opens, so we can't hook this for app start up. Instead we
+// have to hook the app shell. FARK! So, see _AppShell.mcp for Classilla custom
+// startup code.
+//	alert("We get signal");
   // init globals
   gNavigatorBundle = document.getElementById("bundle_navigator");
   gBrandBundle = document.getElementById("bundle_brand");
@@ -945,7 +950,8 @@ function QualifySearchTerm()
   // If the text in the URL bar is the same as the currently loaded
   // page's URL then treat this as an empty search term.  This way
   // the user is taken to the search page where s/he can enter a term.
-  if (window.XULBrowserWindow.userTyped.value)
+  // if (window.XULBrowserWindow.userTyped.value) // bug 104778
+  if (gBrowser.userTypedValue !== null)
     return document.getElementById("urlbar").value;
   return "";
 }
@@ -1263,6 +1269,8 @@ function BrowserLoadURL(aTriggeringEvent)
                      : aTriggeringEvent.altKey;
       shiftPressed = aTriggeringEvent.shiftKey;
     }
+    
+    var browser = getBrowser();
 
     url = getShortcutOrURI(url);
     // Accept both Control and Meta (=Command) as New-Window-Modifiers
@@ -1276,18 +1284,20 @@ function BrowserLoadURL(aTriggeringEvent)
       }
       catch (ex) {}
 
-      if (openTab && getBrowser().localName == "tabbrowser") {
+      if (openTab) { // bug 104778 // && getBrowser().localName == "tabbrowser") {
         // Open link in new tab
-        var t = getBrowser().addTab(url);
+        var t = browser.addTab(url);
         // Focus new tab unless shift is pressed
-        if (!shiftPressed)
-          getBrowser().selectedTab = t;
+        if (!shiftPressed) {
+          browser.userTypedValue = null; // bug 104778
+          browser.selectedTab = t;
+        }
       }
       else {
         // Open a new window with the URL
         var newWin = openDialog(getBrowserURL(), "_blank", "all,dialog=no", url);
         // Reset url in the urlbar, copied from handleURLBarRevert()
-        var oldURL = getWebNavigation().currentURI.spec;
+        var oldURL = browser.currentURI.spec; // bug 104778 // getWebNavigation().currentURI.spec;
         if (oldURL != "about:blank") {
           gURLBar.value = oldURL;
           SetPageProxyState("valid", null);
@@ -1295,6 +1305,8 @@ function BrowserLoadURL(aTriggeringEvent)
         else
           gURLBar.value = "";
 
+		browser.userTypedValue = null; // bug 104778
+		
         // Focus old window if shift was pressed, as there's no
         // way to open a new window in the background
         // XXX this doesn't seem to work
@@ -1915,6 +1927,9 @@ function handleURLBarRevert()
     } else { //if about:blank, urlbar becomes ""
       gURLBar.value = "";
     }
+    
+    gBrowser.userTypedValue = null; // bug 104778
+    
   }
 
   // tell widget to revert to last typed text only if the user
@@ -2259,4 +2274,35 @@ function WindowIsClosing()
     } //if the warn-me pref was true
   } //if multiple tabs are open
   return reallyClose;
+}
+
+// for fixups (classilla.layout.fixup) -- see navigatorOverlay.xul, plus nsBrowserStatusHandler.js
+// "Use Experimental Renderer" menu option is handled here.
+function updateViewStates(t)
+{
+//	alert("we're updated");
+// DON'T UNCOMMENT THAT! it locks up the Mac! d'oh!
+// I left it here to remind me what NOT to do.
+
+  // we don't do anything with the menu object, but we might later.
+  
+  // fix up the fixup option, narf narf narf
+  var fixupBroadcaster = document.getElementById('isFixupRender');
+  fixupBroadcaster.removeAttribute('checked');
+  try {
+  	if (pref.getBoolPref("classilla.layout.fixup")) {
+  		fixupBroadcaster.setAttribute('checked', 'true');
+  	}
+  } catch(e) {
+  	// hmmmmmm
+  }
+
+}
+
+function BrowserToggleFixups()
+{
+//	alert("we're fixed up");
+	pref.setBoolPref("classilla.layout.fixup",
+		(pref.getBoolPref("classilla.layout.fixup") ? false : true));
+	BrowserReload();
 }

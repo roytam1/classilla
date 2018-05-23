@@ -1,0 +1,112 @@
+<?xml version="1.0"?> 
+
+<!--
+UA prefpane for Classilla 9.0.4
+Cameron Kaiser 
+  -->
+<?xml-stylesheet href="chrome://communicator/skin/" type="text/css"?>
+
+<!DOCTYPE page [
+<!ENTITY % brandDTD SYSTEM "chrome://global/locale/brand.dtd" >
+%brandDTD;
+<!ENTITY % uaDTD SYSTEM "chrome://communicator/locale/pref/pref-ua.dtd" >
+%uaDTD;
+]>
+
+<page xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+      onload="parent.initPanel('chrome://communicator/content/pref/pref-ua.xul');"
+      headertitle="&boxHeader;">
+
+  <script type="application/x-javascript">
+  <![CDATA[
+  
+    var panel = "chrome://communicator/content/pref/pref-ua.xul";
+    var _elementIDs = ["uaSelect"];
+    var islistening = 0;
+    
+    // this listener object will update the actual preference from the template
+    // as soon as the template is committed.
+    const updateGUOlistener = {
+    	observe : function(subject, topic, prefName) {
+    		var prefService;
+    		var pref;
+    		
+    		if (topic != "nsPref:changed")
+    			return;
+    		if (Components) { // Components is null if we fire in a bogus context. bad!
+  				// Get the preferences service
+    			prefService = Components.classes["@mozilla.org/preferences-service;1"]
+                                        .getService(Components.interfaces.nsIPrefService);
+            	if (prefService) {
+     				try {
+    					pref = prefService.getBranch(null);
+    					var k = pref.getCharPref(prefName);
+    					var l = pref.getCharPref("general.useragent.misc");
+    					l = "mimic; "+ l;
+    					k = k.replace("%s", l);
+    					pref.setCharPref("general.useragent.override", k);
+     				} catch(e) {
+    					// damn it
+     				}
+    			}
+    		}
+    		// no matter what, try to dig ourselves out of the pref service any chance we get.
+     		try {
+    			var pbi = pref.QueryInterface(Components.interfaces.nsIPrefBranchInternal);
+    			pbi.removeObserver("general.useragent.override_template", this);
+     		} catch(e) {
+    			// double damn it
+     		}
+    	}
+    };
+    
+    function Startup()
+    {
+    	listenin();
+    }
+    
+    function listenin()
+  	{
+  	   if (islistening)
+  	   	return;
+  	   	
+  	   var prefService = Components.classes["@mozilla.org/preferences-service;1"]
+                                   .getService(Components.interfaces.nsIPrefService);
+       var pref = prefService.getBranch(null);
+
+  	   // throw the listener object on to catch the template change at the right time.
+   	   try {
+			var pbi = pref.QueryInterface(Components.interfaces.nsIPrefBranchInternal);
+    		pbi.addObserver("general.useragent.override_template", updateGUOlistener, false);
+ 	   } catch(ex) {
+			dump("Failed to observe ua prefs: " + ex + "\n");
+       }
+       islistening = 1;
+    }
+
+  ]]>
+  </script>
+
+<groupbox>
+  <caption label="&rHeader;"/>
+  <vbox align="start" id="uaBlurb">
+    <description>&textUserAgent;</description>
+  </vbox>
+  <radiogroup id="uaSelect"
+              preftype="string"
+              prefstring="general.useragent.override_template">
+    <radio value=""
+           label="&uaDefault;"/>
+    <radio value="Mozilla/5.0 (Macintosh; U; PPC; en-US; %s) (mimic Gecko/20090729 Firefox/3.5.3) Classilla/CFM"
+           label="Mozilla Firefox 3.5"/>
+    <radio value="Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1; .NET CLR 1.1.4322; .NET CLR 2.0.50727; %s) Classilla/CFM"
+           label="Microsoft Internet Explorer 7 (Windows)"/>
+    <radio value="Mozilla/4.0 (Windows; U; MSIE 6.0; Windows NT 5.1; SV1; .NET CLR 2.0.50727; %s) Classilla/CFM"
+           label="Microsoft Internet Explorer 6 (Windows)"/>
+    <radio value="Mozilla/5.0 (iPhone; U; CPU iPhone OS 3_0 like Mac OS X; en-us; %s) AppleWebKit/528.18 (KHTML, like Gecko) Version/4.0 Mobile/7A341 Safari/528.16 Classilla/CFM"
+           label="iPhone Mobile Safari"/>  
+  </radiogroup>
+
+</groupbox>
+
+</page>

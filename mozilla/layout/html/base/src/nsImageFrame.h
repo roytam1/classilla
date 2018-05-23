@@ -267,13 +267,35 @@ private:
     // private class that wraps the data and logic needed for 
     // broken image and loading image icons
   public:
-    IconLoad(nsIPresContext *aPresContext):mRefCount(0),mIconsLoaded(PR_FALSE) { GetPrefs(aPresContext); }
+    IconLoad(nsIPresContext *aPresContext,
+    		imgIDecoderObserver* aObserver): // bug 199021
+    	mRefCount(0),
+    	mIconsLoaded(PR_FALSE) { GetPrefs(aPresContext); }
+
+    // bug 196797
+    ~IconLoad()
+    {
+      if (mIconLoads[0].mRequest) {
+        mIconLoads[0].mRequest->Cancel(NS_ERROR_FAILURE);
+      }
+      if (mIconLoads[1].mRequest) {
+        mIconLoads[1].mRequest->Cancel(NS_ERROR_FAILURE);
+      }
+    }
+    // end bug
+
     void AddRef(void) { ++mRefCount; }
     PRBool Release(void) { return --mRefCount == 0; }
     void GetPrefs(nsIPresContext *aPresContext);
 
     PRUint32         mRefCount;
+    // backbugs from bug 199021
+#define NS_ICON_LOADING_IMAGE (0)
+#define NS_ICON_BROKEN_IMAGE  (1) 
+//public: // not needed in 1.3, GetPrefs is a public method. goodness knows why ...
+    // end backbugs   
     struct ImageLoad mIconLoads[2];   // 0 is for the 'loading' icon, 1 is for the 'broken' icon
+    nsCOMPtr<imgIDecoderObserver> mLoadObserver; // keeps the observer alive bug 199021
     PRPackedBool     mIconsLoaded;
     PRPackedBool     mPrefForceInlineAltText;
     PRPackedBool     mPrefAllImagesBlocked;

@@ -329,6 +329,11 @@ nsEditingSession::SetupEditorOnWindow(nsIDOMWindow *aWindow)
         mEditorType = NS_LITERAL_CSTRING("text");
         mimeCType = "text/plain";
       }
+      else if (!mimeCType.Length()) 
+      { // KLUDGE. We treat a null string as text/html (example: Blogspot). -- Cameron
+        mEditorType = NS_LITERAL_CSTRING("html");
+        mimeCType = NS_LITERAL_CSTRING("text/html");
+      }      	
       else if (!mimeCType.Equals(NS_LITERAL_CSTRING("text/html")))
       {
         // Neither an acceptable text or html type.

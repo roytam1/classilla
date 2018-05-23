@@ -829,8 +829,16 @@ NS_METHOD nsTableCellFrame::Reflow(nsIPresContext*          aPresContext,
 
   aStatus = NS_FRAME_COMPLETE;
   nsSize availSize(aReflowState.availableWidth, availHeight);
-
-  PRBool contentEmptyBeforeReflow = GetContentEmpty();
+  
+  // needed for 1.3.1 for bug 271955
+  nsStyleTableBorder *cellTableStyle;
+  GetStyleData(eStyleStruct_TableBorder, ((const nsStyleStruct *&)cellTableStyle));
+  
+  PRBool contentEmptyBeforeReflow = GetContentEmpty()
+  //&& GetStyleTableBorder()->mEmptyCells != NS_STYLE_TABLE_EMPTY_CELLS_SHOW;;
+    && cellTableStyle->mEmptyCells != NS_STYLE_TABLE_EMPTY_CELLS_SHOW;
+  // end bug
+    
   /* XXX: remove tableFrame when border-collapse inherits */
   nsTableFrame* tableFrame = nsnull;
   rv = nsTableFrame::GetTableFrame(this, tableFrame); if (!tableFrame) ABORT1(NS_ERROR_NULL_POINTER);
@@ -960,7 +968,10 @@ NS_METHOD nsTableCellFrame::Reflow(nsIPresContext*          aPresContext,
   // see testcase "emptyCells.html"
   if ((0 == kidSize.width) || (0 == kidSize.height)) { // XXX why was this &&
     SetContentEmpty(PR_TRUE);
-    if (NS_UNCONSTRAINEDSIZE == kidReflowState.availableWidth) {
+    if (NS_UNCONSTRAINEDSIZE == kidReflowState.availableWidth
+    &&
+    //GetStyleTableBorder()->mEmptyCells != NS_STYLE_TABLE_EMPTY_CELLS_SHOW) {
+      cellTableStyle->mEmptyCells != NS_STYLE_TABLE_EMPTY_CELLS_SHOW) { // bug 271955 modified for 1.3.1
       // need to reduce the insets by border if the cell is empty
       leftInset   -= border.left;
       rightInset  -= border.right;

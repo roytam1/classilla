@@ -215,11 +215,11 @@ static NS_DEFINE_CID(kViewCID, NS_VIEW_CID);
 static PRUint32 gVerifyReflowFlags;
 
 struct VerifyReflowFlags {
-  char*    name;
+  const char*    name; // const from bug 231278
   PRUint32 bit;
 };
 
-static VerifyReflowFlags gFlags[] = {
+static const VerifyReflowFlags gFlags[] = { // const from bug 231278
   { "verify",                VERIFY_REFLOW_ON },
   { "reflow",                VERIFY_REFLOW_NOISY },
   { "all",                   VERIFY_REFLOW_ALL },
@@ -236,8 +236,9 @@ static void
 ShowVerifyReflowFlags()
 {
   printf("Here are the available GECKO_VERIFY_REFLOW_FLAGS:\n");
-  VerifyReflowFlags* flag = gFlags;
-  VerifyReflowFlags* limit = gFlags + NUM_VERIFY_REFLOW_FLAGS;
+  // both consts below from bug 231278
+  const VerifyReflowFlags* flag = gFlags;
+  const VerifyReflowFlags* limit = gFlags + NUM_VERIFY_REFLOW_FLAGS;
   while (flag < limit) {
     printf("  %s\n", flag->name);
     ++flag;
@@ -1443,8 +1444,9 @@ nsIPresShell::GetVerifyReflowEnable()
           *comma = '\0';
 
         PRBool found = PR_FALSE;
-        VerifyReflowFlags* flag = gFlags;
-        VerifyReflowFlags* limit = gFlags + NUM_VERIFY_REFLOW_FLAGS;
+        // consts from bug 231278
+        const VerifyReflowFlags* flag = gFlags;
+        const VerifyReflowFlags* limit = gFlags + NUM_VERIFY_REFLOW_FLAGS;
         while (flag < limit) {
           if (PL_strcasecmp(flag->name, flags) == 0) {
             gVerifyReflowFlags |= flag->bit;
@@ -1816,6 +1818,8 @@ PresShell::Destroy()
     mViewManager->SetViewObserver(nsnull);
     mViewManager = nsnull;
   }
+  
+  mStyleSet->BeginShutdown(mPresContext); // bug 117316
 
   // This shell must be removed from the document before the frame
   // hierarchy is torn down to avoid finding deleted frames through
@@ -1830,8 +1834,8 @@ PresShell::Destroy()
     NS_RELEASE(mFrameManager);
   }
 
-  // Let the style set do its cleanup.
-  mStyleSet->Shutdown();
+  // Let the style set do its cleanup.  
+  mStyleSet->Shutdown(mPresContext); // mPresContext added by bug 117316
   mStyleSet = nsnull;
 
   // We hold a reference to the pres context, and it holds a weak link back
@@ -2886,6 +2890,11 @@ PresShell::InitialReflow(nscoord aWidth, nscoord aHeight)
   }
 
   DidCauseReflow();
+  
+  // bug 231278
+  HandlePostedDOMEvents();
+  HandlePostedAttributeChanges();
+  HandlePostedReflowCallbacks();
 
   if (mViewManager && mCaret && !mViewEventListener) {
     nsIScrollableView* scrollingView = nsnull;
@@ -2948,12 +2957,13 @@ PresShell::ResizeReflow(nscoord aWidth, nscoord aHeight)
   PRBool firstReflow = PR_FALSE;
 
     // notice that we ignore the result
-  NotifyReflowObservers(NS_PRESSHELL_RESIZE_REFLOW);
-  mViewManager->CacheWidgetChanges(PR_TRUE);
+  // NotifyReflowObservers(NS_PRESSHELL_RESIZE_REFLOW); // backbugs from bug 231278
+  // mViewManager->CacheWidgetChanges(PR_TRUE); // bug 231278
+  WillCauseReflow(); // bug 231278
 
-  mCaret->EraseCaret();
+  if (mCaret) mCaret->EraseCaret();
   //StCaretHider  caretHider(mCaret);			// stack-based class hides caret until dtor.
-  WillCauseReflow();
+  //WillCauseReflow(); // moved above by bug 231278
 
   if (mPresContext) {
     nsRect r(0, 0, aWidth, aHeight);
@@ -3039,7 +3049,7 @@ PresShell::ResizeReflow(nscoord aWidth, nscoord aHeight)
   }
 #endif
   
-  mViewManager->CacheWidgetChanges(PR_FALSE);
+  //mViewManager->CacheWidgetChanges(PR_FALSE); // bug 231278
   HandlePostedDOMEvents();
   HandlePostedAttributeChanges();
   HandlePostedReflowCallbacks();
@@ -3568,6 +3578,11 @@ PresShell::StyleChangeReflow()
   }
 
   DidCauseReflow();
+  
+  // bug 231278
+  HandlePostedDOMEvents();
+  HandlePostedAttributeChanges();
+  HandlePostedReflowCallbacks();
 
   return NS_OK; //XXX this needs to be real. MMP
 }
@@ -3666,6 +3681,14 @@ PresShell::EndLoad(nsIDocument *aDocument)
     GetRootScrollFrame(mPresContext, rootFrame, &scrollFrame);
     if (scrollFrame) {
       mFrameManager->RestoreFrameStateFor(mPresContext, scrollFrame, historyState, nsIStatefulFrame::eDocumentScrollState);
+// bug 217120 (from simplified attachment 152645)
+	  nsHTMLReflowCommand* reflowCmd;
+	  nsresult rv = NS_NewHTMLReflowCommand(&reflowCmd, scrollFrame,
+	  										eReflowType_ReflowDirty, nsnull, nsnull);
+	  if (NS_SUCCEEDED(rv)) {
+	  	AppendReflowCommand(reflowCmd);										
+	  }
+// end bug
     }
   }
 
@@ -4093,6 +4116,59 @@ PresShell::GoToAnchor(const nsAString& aAnchorName, PRBool aScroll)
         jumpToRange->GetStartContainer(getter_AddRefs(node));
         if (node) {
           node->QueryInterface(NS_GET_IID(nsIContent),getter_AddRefs(content));
+          
+          // pull up to 1.8.1
+          
+          PRUint16 nodeType;
+          node->GetNodeType(&nodeType);
+          PRInt32 offset = -1;
+          jumpToRange->GetStartOffset(&offset);
+          switch(nodeType) {
+          	case nsIDOMNode::ATTRIBUTE_NODE:
+          	/*
+          	{
+          		// XXX Assuming jumping to the ownerElement is the sanest action.
+          		nsCOMPtr<nsIAttribute> attr = do_QueryInterface(node);
+          		//content = attr->GetContent();
+  				attr->GetContent(getter_AddRefs(content));
+				break;
+			}
+			*/
+			case nsIDOMNode::DOCUMENT_NODE:
+			/*
+			{
+				if (offset >= 0) {
+					nsCOMPtr<nsIDocument> document = do_QueryInterface(node);
+					content = document->GetChildAt(offset);
+				}
+				break;
+			}
+			*/
+          	case nsIDOMNode::DOCUMENT_FRAGMENT_NODE:
+          	case nsIDOMNode::ELEMENT_NODE:
+          	case nsIDOMNode::ENTITY_REFERENCE_NODE:
+          	/*
+          	{
+          		if (offset >= 0) {
+          			nsCOMPtr<nsIContent> parent = do_QueryInterface(node);
+          			content = parent->GetChildAt(offset);
+          		}
+          		break;
+          	}
+          	*/
+          	case nsIDOMNode::CDATA_SECTION_NODE:
+          	case nsIDOMNode::COMMENT_NODE:
+          	case nsIDOMNode::TEXT_NODE:
+          	case nsIDOMNode::PROCESSING_INSTRUCTION_NODE:
+          	{
+          		// XXX This should scroll to a specific position in the text.
+          		content = do_QueryInterface(node);
+          		break;
+          	}
+          }
+          
+          // end pull up
+          	
         }
       }
     }
@@ -5346,6 +5422,9 @@ BuildFramechangeList(nsIFrame *aFrame, void *aClosure)
 {
   nsStyleChangeList *changeList = NS_STATIC_CAST(nsStyleChangeList*, aClosure);
 
+  if (!aFrame)
+  	return PR_FALSE; // don't walk kids, we have none (we don't exist).
+  	
   // Ok, get our binding information.
   const nsStyleDisplay* oldDisplay;
   aFrame->GetStyleData(eStyleStruct_Display, (const nsStyleStruct*&)oldDisplay);
@@ -5700,7 +5779,7 @@ PresShell::BidiStyleChangeReflow()
   nsIFrame* rootFrame;
   mFrameManager->GetRootFrame(&rootFrame);
   if (rootFrame) {
-    mStyleSet->ClearStyleData(mPresContext, nsnull, nsnull);
+    mStyleSet->ClearStyleData(mPresContext, nsnull); // bug 171830 // , nsnull);
     ReconstructFrames();
   }
   return NS_OK;

@@ -2069,8 +2069,12 @@ NS_METHOD nsTableFrame::Reflow(nsIPresContext*          aPresContext,
 
       ReflowTable(aPresContext, aDesiredSize, aReflowState, availHeight, nextReason, 
                   lastChildReflowed, doCollapse, balanced, aStatus);
+      nextReason = eReflowReason_Resize; // bug 293761
       reflowedChildren = PR_TRUE;
     }
+    // the value might have changed; compute it again. -- added by bug 293761
+    willInitiateSpecialReflow = ((NeedToInitiateSpecialReflow() || InitiatedSpecialReflow()) && 
+                                 (aReflowState.mFlags.mSpecialHeightReflow || !NeedSpecialReflow()));
     if (willInitiateSpecialReflow && NS_FRAME_IS_COMPLETE(aStatus)) {
       // distribute extra vertical space to rows
       aDesiredSize.height = CalcDesiredHeight(aPresContext, aReflowState); 
@@ -4183,10 +4187,12 @@ nsTableFrame::IsAutoHeight()
     case eStyleUnit_Auto:         // specified auto width
     case eStyleUnit_Proportional: // illegal for table, so ignored
       break;
+    /* bug 205790
     case eStyleUnit_Inherit:
       // get width of parent and see if it is a specified value or not
       // XXX for now, just return true
       break;
+    */
     case eStyleUnit_Coord:
       isAuto = PR_FALSE;
       break;

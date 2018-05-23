@@ -44,7 +44,7 @@ function openCertManager()
       lastCertManager.focus();
     else {
       window.open('chrome://pippki/content/certManager.xul',  "",
-                  'chrome,width=500,height=400,resizable=yes,dialog=no');
+                  'chrome,width=620,height=400,resizable=yes,dialog=no');
     }
 }
 

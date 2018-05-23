@@ -325,6 +325,28 @@ nsGenericDOMDataNode::LookupNamespacePrefix(const nsAString& aNamespaceURI,
   return NS_OK;
 }
 
+// bug 210451 deleted LookupNamespacePrefix in favour of LookupPrefix. we're just
+// going to reimplement it.
+nsresult
+nsGenericDOMDataNode::LookupPrefix(const nsAString& aNamespaceURI,
+                                            nsAString& aPrefix)
+{
+  aPrefix.Truncate();
+
+  nsIContent *parent_weak = GetParentWeak();
+
+  // DOM Data Node passes the query on to its parent
+  nsCOMPtr<nsIDOM3Node> node(do_QueryInterface(parent_weak));
+
+  if (node) {
+    return node->LookupPrefix(aNamespaceURI, aPrefix);
+  }
+
+  return NS_OK;
+}
+// end bug
+
+
 nsresult
 nsGenericDOMDataNode::LookupNamespaceURI(const nsAString& aNamespacePrefix,
                                          nsAString& aNamespaceURI)
@@ -1356,6 +1378,14 @@ nsGenericDOMDataNode::CloneContent(PRBool aCloneText, nsITextContent** aClone)
   *aClone = nsnull;
 
   return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+/* implemented as a convenience function from Mozilla 1.8. also see nsTextFragment */
+NS_IMETHODIMP
+nsGenericDOMDataNode::AppendTextTo(nsAString& aResult)
+{
+	mText.AppendTo(aResult);
+	return NS_OK;
 }
 
 void

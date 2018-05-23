@@ -71,6 +71,9 @@
 #include "jsscript.h"
 #include "jsstr.h"
 
+// it's so much worse than 1.7 that it's good. Cameron Kaiser
+#define KAISERS_JS_HACK
+
 /*
  * JS parsers, from lowest to highest precedence.
  *
@@ -238,6 +241,7 @@ RecycleTree(JSParseNode *pn, JSTreeContext *tc)
 #endif
 }
 
+#ifndef KAISERS_JS_HACK
 static JSBool
 WellTerminated(JSContext *cx, JSTokenStream *ts, JSTokenType lastExprType)
 {
@@ -264,6 +268,7 @@ WellTerminated(JSContext *cx, JSTokenStream *ts, JSTokenType lastExprType)
     }
     return JS_TRUE;
 }
+#endif
 
 #if JS_HAS_GETTER_SETTER
 static JSTokenType
@@ -1004,8 +1009,10 @@ MatchLabel(JSContext *cx, JSTokenStream *ts, JSParseNode *pn)
     label = NULL;
 #endif
     pn->pn_atom = label;
+#ifndef KAISERS_JS_HACK
     if (pn->pn_pos.end.lineno == ts->lineno)
         return WellTerminated(cx, ts, TOK_ERROR);
+#endif
     return JS_TRUE;
 }
 
@@ -1144,10 +1151,12 @@ Statement(JSContext *cx, JSTokenStream *ts, JSTreeContext *tc)
             } while (js_MatchToken(cx, ts, TOK_COMMA));
         }
         pn->pn_pos.end = PN_LAST(pn)->pn_pos.end;
+#ifndef KAISERS_JS_HACK
         if (pn->pn_pos.end.lineno == ts->lineno &&
             !WellTerminated(cx, ts, TOK_ERROR)) {
             return NULL;
         }
+#endif
         tc->flags |= TCF_FUN_HEAVYWEIGHT;
         break;
 
@@ -1163,15 +1172,20 @@ Statement(JSContext *cx, JSTokenStream *ts, JSTreeContext *tc)
             PN_APPEND(pn, pn2);
         } while (js_MatchToken(cx, ts, TOK_COMMA));
         pn->pn_pos.end = PN_LAST(pn)->pn_pos.end;
+#ifndef KAISERS_JS_HACK
         if (pn->pn_pos.end.lineno == ts->lineno &&
             !WellTerminated(cx, ts, TOK_ERROR)) {
             return NULL;
         }
+#endif
         tc->flags |= TCF_FUN_HEAVYWEIGHT;
         break;
 #endif /* JS_HAS_EXPORT_IMPORT */
 
       case TOK_FUNCTION:
+#ifdef KAISERS_JS_HACK
+		return FunctionStmt(cx, ts, tc);
+#else
         pn = FunctionStmt(cx, ts, tc);
         if (!pn)
             return NULL;
@@ -1180,6 +1194,7 @@ Statement(JSContext *cx, JSTokenStream *ts, JSTreeContext *tc)
             return NULL;
         }
         break;
+#endif
 
       case TOK_IF:
         /* An IF node has three kids: condition, then, and optional else. */
@@ -1580,10 +1595,12 @@ Statement(JSContext *cx, JSTokenStream *ts, JSTreeContext *tc)
         if (!pn2)
             return NULL;
         pn->pn_pos.end = pn2->pn_pos.end;
+#ifndef KAISERS_JS_HACK
         if (pn->pn_pos.end.lineno == ts->lineno &&
             !WellTerminated(cx, ts, TOK_ERROR)) {
             return NULL;
         }
+#endif
         pn->pn_op = JSOP_THROW;
         pn->pn_kid = pn2;
         break;
@@ -1712,10 +1729,12 @@ Statement(JSContext *cx, JSTokenStream *ts, JSTreeContext *tc)
         pn = Variables(cx, ts, tc);
         if (!pn)
             return NULL;
+#ifndef KAISERS_JS_HACK
         if (pn->pn_pos.end.lineno == ts->lineno &&
             !WellTerminated(cx, ts, TOK_ERROR)) {
             return NULL;
         }
+#endif
         /* Tell js_EmitTree to generate a final POP. */
         pn->pn_extra = JS_TRUE;
         break;
@@ -1741,10 +1760,12 @@ Statement(JSContext *cx, JSTokenStream *ts, JSTreeContext *tc)
             pn2 = Expr(cx, ts, tc);
             if (!pn2)
                 return NULL;
+#ifndef KAISERS_JS_HACK
             if (pn2->pn_pos.end.lineno == ts->lineno &&
                 !WellTerminated(cx, ts, TOK_ERROR)) {
                 return NULL;
             }
+#endif
             tc->flags |= TCF_RETURN_EXPR;
             pn->pn_pos.end = pn2->pn_pos.end;
             pn->pn_kid = pn2;
@@ -1785,8 +1806,10 @@ Statement(JSContext *cx, JSTokenStream *ts, JSTreeContext *tc)
 
 #if JS_HAS_DEBUGGER_KEYWORD
       case TOK_DEBUGGER:
+#ifndef KAISERS_JS_HACK
         if (!WellTerminated(cx, ts, TOK_ERROR))
             return NULL;
+#endif
         pn = NewParseNode(cx, &CURRENT_TOKEN(ts), PN_NULLARY, tc);
         if (!pn)
             return NULL;
@@ -1836,11 +1859,13 @@ Statement(JSContext *cx, JSTokenStream *ts, JSTreeContext *tc)
             return pn2;
         }
 
+#ifndef KAISERS_JS_HACK
         /* Check termination of (possibly multi-line) function expression. */
         if (pn2->pn_pos.end.lineno == ts->lineno &&
             !WellTerminated(cx, ts, lastExprType)) {
             return NULL;
         }
+#endif
 
         pn = NewParseNode(cx, &CURRENT_TOKEN(ts), PN_UNARY, tc);
         if (!pn)
@@ -1850,6 +1875,22 @@ Statement(JSContext *cx, JSTokenStream *ts, JSTreeContext *tc)
         pn->pn_kid = pn2;
         break;
     }
+    
+#ifdef KAISERS_JS_HACK
+/* from jsscan.h */
+#define ON_CURRENT_LINE(ts,pos) ((uint16)(ts)->lineno == (pos).end.lineno)
+    /* Check termination of this primitive statement. */
+    if (ON_CURRENT_LINE(ts, pn->pn_pos)) {
+        tt = js_PeekTokenSameLine(cx, ts);
+        if (tt == TOK_ERROR)
+            return NULL;
+        if (tt != TOK_EOF && tt != TOK_EOL && tt != TOK_SEMI && tt != TOK_RC) {
+            js_ReportCompileErrorNumber(cx, ts, NULL, JSREPORT_ERROR,
+                                        JSMSG_SEMI_BEFORE_STMNT);
+            return NULL;
+        }
+    }
+#endif
 
     (void) js_MatchToken(cx, ts, TOK_SEMI);
     return pn;

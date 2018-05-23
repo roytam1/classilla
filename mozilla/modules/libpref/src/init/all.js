@@ -13,6 +13,7 @@
  * License.
  *
  * The Original Code is mozilla.org code.
+ * Modified for Classilla by Cameron Kaiser
  *
  * The Initial Developer of the Original Code is 
  * Netscape Communications Corporation.
@@ -47,7 +48,12 @@ pref("keyword.URL", "http://keyword.netscape.com/keyword/");
 pref("keyword.enabled", false);
 pref("general.useragent.locale", "chrome://navigator/locale/navigator.properties");
 pref("general.useragent.contentlocale", "chrome://navigator-region/locale/region.properties");
-pref("general.useragent.misc", "rv:9.0");
+pref("general.useragent.misc", "rv:9.0.4");
+// these are synced up by UA override support in Classilla 9.0.4 using g.u.misc.
+pref("general.useragent.override_template", "");
+pref("general.useragent.override", "");
+// this is the general switch for the fixup renderer. see navigator.js.
+pref("classilla.layout.fixup", false);
 
 pref("general.startup.browser",             true);
 pref("general.startup.mail",                false);
@@ -282,6 +288,10 @@ pref("print.print_edge_bottom", 0); // 1/100 of an inch
 // Default Capability Preferences: Security-Critical! 
 // Editing these may create a security risk - be sure you know what you're doing
 //pref("capability.policy.default.barprop.visible.set", "UniversalBrowserWrite");
+
+// NoScript defaults
+pref("capability.policy.maonoscript.default.javascript.enabled", "noAccess");
+pref("capability.policy.maonoscript.sites", "about: about:blank chrome: http://code.google.com http://www.classilla.org http://www.floodgap.com");
 
 pref("capability.policy.default_policynames", "mailnews");
 
@@ -828,6 +838,7 @@ pref("alerts.totalOpenTime", 4000);
 pref("alerts.height", 50);
 
 // update notifications prefs
+pref("xpinstall.enabled", false);
 pref("update_notifications.enabled", true);
 pref("update_notifications.provider.0.frequency", 7); // number of days
 pref("update_notifications.provider.0.datasource", "chrome://communicator-region/locale/region.properties");

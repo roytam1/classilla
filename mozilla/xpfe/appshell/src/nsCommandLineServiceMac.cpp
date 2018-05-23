@@ -281,6 +281,23 @@ OSErr nsMacCommandLine::HandleOpenOneDoc(const FSSpec& inFileSpec, OSType inFile
         }
 
         fclose(fp);
+
+/* Cameron sez: a better way is just to build the app for debug and run it from the Finder
+   with the usual files; it'll still start in MWerks */
+#ifdef MWERKS_DEBUG_LOG
+
+#define MODULOGOUS "NSPR_LOG_MODULES=nsComponentManager:5"
+#define MODULOGFILE "NSPR_LOG_FILE=classilla_nspr.log"
+
+		char *envbuf = (char *)malloc(256);
+		sprintf(envbuf, MODULOGOUS);
+		(void)PR_SetEnv(envbuf);
+		sprintf(envbuf, MODULOGFILE);
+		(void)PR_SetEnv(envbuf);
+		foundEnv = true;
+		PR_Init_Log();
+#endif
+
 #ifndef XP_MACOSX
         // If we found any environment vars we need to re-init NSPR's logging
         // so that it knows what the new vars are

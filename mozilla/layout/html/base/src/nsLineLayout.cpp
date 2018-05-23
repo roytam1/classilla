@@ -865,6 +865,7 @@ nsLineLayout::ReflowFrame(nsIFrame* aFrame,
       // Make up a width to use for reflowing into.  XXX what value to
       // use? for tables, we want to limit it; for other elements
       // (e.g. text) it can be unlimited...
+// delete?
       // especially we won't use the unlimited size for <hr> (bug 60992), 
       // the following code is a consequence of setting 
       // hr  display:inline in quirks.css (bug 18754)
@@ -939,19 +940,24 @@ nsLineLayout::ReflowFrame(nsIFrame* aFrame,
       reason = eReflowReason_Dirty;
   }
 
+// bug 97695
+#if(0)
   // Unless we're doing an unconstrained reflow, compute the
   // containing block's width.
   nscoord containingBlockWidth =
     (NS_UNCONSTRAINEDSIZE != psd->mRightEdge)
       ? (psd->mRightEdge - psd->mLeftEdge)
       : NS_UNCONSTRAINEDSIZE;
-
+#endif
   // Setup reflow state for reflowing the frame
   nsHTMLReflowState reflowState(mPresContext, *psd->mReflowState,
                                 aFrame, availSize,
+#if(0)
                                 containingBlockWidth,
                                 psd->mReflowState->availableHeight,
+#endif
                                 reason);
+// end bug
   reflowState.mLineLayout = this;
   reflowState.mFlags.mIsTopOfPage = GetFlag(LL_ISTOPOFPAGE);
   SetFlag(LL_UNDERSTANDSNWHITESPACE, PR_FALSE);
@@ -1224,6 +1230,8 @@ nsLineLayout::ReflowFrame(nsIFrame* aFrame,
 #endif
 
   aFrame->GetFrameState(&state);
+// bug 252771
+#if(0)
   if (NS_FRAME_OUTSIDE_CHILDREN & state) {
     pfd->mCombinedArea = metrics.mOverflowArea;
   }
@@ -1233,6 +1241,15 @@ nsLineLayout::ReflowFrame(nsIFrame* aFrame,
     pfd->mCombinedArea.width = metrics.width;
     pfd->mCombinedArea.height = metrics.height;
   }
+#endif
+  // Unlike with non-inline reflow, the overflow area here does *not*
+  // include the accumulation of the frame's bounds and its inline
+  // descendants' bounds. Nor does it include the outline area; it's
+  // just the union of the bounds of any absolute children. That is
+  // added in later by nsLineLayout::ReflowInlineFrames.
+  pfd->mCombinedArea = metrics.mOverflowArea;
+// end bug
+
   pfd->mBounds.width = metrics.width;
   pfd->mBounds.height = metrics.height;
   if (mComputeMaxElementWidth) {
@@ -1599,6 +1616,8 @@ nsLineLayout::CanPlaceFrame(PerFrameData* pfd,
     return PR_TRUE;
  }
 
+#if(0)
+// pulled by 1.7 SUSPICIOUS
   // Yet another special check. If the text happens to have started
   // with a non-breaking space, then we make it sticky on its left
   // edge...Which means that whatever piece of text we just formatted
@@ -1607,6 +1626,7 @@ nsLineLayout::CanPlaceFrame(PerFrameData* pfd,
   if (pfd->GetFlag(PFD_ISNONEMPTYTEXTFRAME) && GetFlag(LL_TEXTSTARTSWITHNBSP)) {
     return PR_TRUE;
   }
+#endif
 
 #ifdef NOISY_CAN_PLACE_FRAME
   printf("   ==> didn't fit\n");
@@ -1929,10 +1949,13 @@ nsLineLayout::VerticalAlignLine(nsLineBox* aLineBox,
 
           nscoord imgSizes = AccumulateImageSizes(*mPresContext, *pfd->mFrame);
           // per bug 79315 we should NOT use mCombinedArea here, so why are we?
+          // well, as of bug 252771 we're not ...
           PRBool curFrameAccumulates = (imgSizes > 0) || 
-                                       (pfd->mMaxElementWidth == pfd->mCombinedArea.width &&
+                                       //(pfd->mMaxElementWidth == pfd->mCombinedArea.width &&
+                                       (pfd->mMaxElementWidth == pfd->mBounds.width && // bug 252771
                                         pfd->GetFlag(PFD_ISNONWHITESPACETEXTFRAME));
             // NOTE: we check for the maxElementWidth == the CombinedAreaWidth to detect when
+            // NOTE: we check for the maxElementWidth == the boundsWidth to detect when
             //       a textframe has whitespace in it and thus should not be used as the basis
             //       for accumulating the image width
             // - this is to handle images in a text run
@@ -2327,11 +2350,13 @@ nsLineLayout::VerticalAlignFrames(PerSpanData* psd)
     frame->GetStyleData(eStyleStruct_TextReset, (const nsStyleStruct*&)textStyle);
     nsStyleUnit verticalAlignUnit = textStyle->mVerticalAlign.GetUnit();
 #ifdef DEBUG
+/* bug 205790
     if (eStyleUnit_Inherit == verticalAlignUnit) {
       printf("XXX: vertical-align: inherit not implemented for ");
       nsFrame::ListTag(stdout, frame);
       printf("\n");
     }
+*/
 #endif
 #ifdef NOISY_VERTICAL_ALIGN
     printf("  [frame]");
@@ -2818,7 +2843,8 @@ nsLineLayout::TrimTrailingWhiteSpaceIn(PerSpanData* psd,
         return PR_TRUE;
       }
     }
-    else if (!pfd->GetFlag(PFD_ISTEXTFRAME)) {
+    else if (!pfd->GetFlag(PFD_ISTEXTFRAME)
+             ) {
       // If we hit a frame on the end that's not text, then there is
       // no trailing whitespace to trim. Stop the search.
       *aDeltaWidth = 0;
@@ -2843,7 +2869,7 @@ nsLineLayout::TrimTrailingWhiteSpaceIn(PerSpanData* psd,
         }
 
         pfd->mBounds.width -= deltaWidth;
-        pfd->mCombinedArea.width -= deltaWidth;
+        //pfd->mCombinedArea.width -= deltaWidth; // bug 252771
         if (0 == pfd->mBounds.width) {
           pfd->mMaxElementWidth = 0;
         }
@@ -2969,6 +2995,7 @@ nsLineLayout::ApplyFrameJustification(PerSpanData* aPSD, FrameJustificationState
       }
       
       pfd->mBounds.width += dw;
+      // the code here that bug 252771 deletes was never in 1.3.1.
       deltaX += dw;
       pfd->mFrame->SetRect(mPresContext, pfd->mBounds);
     }
@@ -3220,6 +3247,8 @@ nsLineLayout::RelativePositionFrames(PerSpanData* psd, nsRect& aCombinedArea)
   nscoord minX, minY, maxX, maxY;
   nsRect combinedAreaResult; // bug 235778
   if (nsnull != psd->mFrame) {
+// bug 252711
+#if(0)
     // The minimum combined area for the frames in a span covers the
     // entire span frame.
     // 's overflow area. The span frame might have overflowing frames.
@@ -3232,6 +3261,18 @@ nsLineLayout::RelativePositionFrames(PerSpanData* psd, nsRect& aCombinedArea)
     maxY = pfd->mBounds.height;
 #endif
     combinedAreaResult = pfd->mCombinedArea;
+#endif
+    // The span's overflow area comes in three parts:
+    // -- this frame's width and height
+    // -- the pfd->mCombinedArea, which is the area of a bullet or the union
+    // of a relatively positioned frame's absolute children
+    // -- the bounds of all inline descendants
+    // The former two parts are computed right here, we gather the descendants
+    // below.
+    nsRect adjustedBounds(0, 0, psd->mFrame->mBounds.width,
+                          psd->mFrame->mBounds.height);
+    combinedAreaResult.UnionRect(psd->mFrame->mCombinedArea, adjustedBounds);
+// end bug
   }
   else {
     // The minimum combined area for the frames that are direct
@@ -3308,30 +3349,39 @@ nsLineLayout::RelativePositionFrames(PerSpanData* psd, nsRect& aCombinedArea)
     // system. We adjust the childs combined area into our coordinate
     // system before computing the aggregated value by adding in
     // <b>x</b> and <b>y</b> which were computed above.
-    nsRect* r = &pfd->mCombinedArea;
+    nsRect r; // *r = &pfd->mCombinedArea; // bug 252771
     if (pfd->mSpan) {
       // Compute a new combined area for the child span before
       // aggregating it into our combined area.
-      r = &spanCombinedArea;
-      RelativePositionFrames(pfd->mSpan, spanCombinedArea);
+      // r = &spanCombinedArea; // bug 252771
+      RelativePositionFrames(pfd->mSpan, r); // bug 252771 // spanCombinedArea);
     }
 // bug 214623
     else {
+// bug 252771
+      // For simple text frames we take the union of the combined area
+      // and the width/height. I think the combined area should always
+      // equal the bounds in this case, but this is safe.
+      nsRect adjustedBounds(0, 0, pfd->mBounds.width, pfd->mBounds.height);
+      r.UnionRect(pfd->mCombinedArea, adjustedBounds);
+// end bug 252771
       // If we have something that's not an inline but with
       // a complex frame hierarchy, they need to be positioned.
       nsContainerFrame::PositionChildViews(mPresContext, frame);
     }
-// end bug
+// end bug 214623
     
 // bug 213591 modified for 1.3 (replaces 79315 down at the bottom)
 // modified again by bug 214623 (optimized by me for 1.3)
 // this is here for a second time:
 // Do this here (rather than along with NS_F_O_CHILDREN) to get leaf frames
     if (view)
-      nsContainerFrame::SyncFrameViewAfterReflow(mPresContext, frame, view, r,
+      nsContainerFrame::SyncFrameViewAfterReflow(mPresContext, frame, view, &r, // & from bug 252771
         NS_FRAME_NO_MOVE_VIEW); // bug 214623
 // end if
 
+// this is all removed by backbugs from bug 252771
+#if(0)
 // bug 79315
 #if (0)
     // see bug 21415: we used to prevent empty inlines from impacting the
@@ -3390,11 +3440,16 @@ nsLineLayout::RelativePositionFrames(PerSpanData* psd, nsRect& aCombinedArea)
       maxY = yb;
     }
 #endif
+
+#endif
+// end of removal for bug 252771
+
     //combinedAreaResult.UnionRect(combinedAreaResult, *r + origin);
-    r->MoveBy(origin.x, origin.y);
+    //r->MoveBy(origin.x, origin.y);
+    r.MoveBy(origin.x, origin.y); // needed by bug 252771
     nsRect nucar;
     nucar.UnionRect(combinedAreaResult,
-    *r);
+    r); // remove * needed by bug 252771
     combinedAreaResult = nucar;
   }
 // end bug
@@ -3429,8 +3484,9 @@ nsLineLayout::RelativePositionFrames(PerSpanData* psd, nsRect& aCombinedArea)
   // If we just computed a spans combined area, we need to update its
   // NS_FRAME_OUTSIDE_CHILDREN bit..
   if (nsnull != psd->mFrame) {
-    pfd = psd->mFrame;
-    nsIFrame* frame = pfd->mFrame;
+    // we would really like FinishAndStoreOverflow() ...
+    PerFrameData *mypfd = psd->mFrame;
+    nsIFrame* frame = mypfd->mFrame;
     nsFrameState oldState;
     frame->GetFrameState(&oldState);
     nsFrameState newState = oldState & ~NS_FRAME_OUTSIDE_CHILDREN;
@@ -3441,8 +3497,8 @@ nsLineLayout::RelativePositionFrames(PerSpanData* psd, nsRect& aCombinedArea)
         (maxX > pfd->mBounds.width) || (maxY > pfd->mBounds.height)) {
 #endif
     if ((combinedAreaResult.x < 0) || (combinedAreaResult.y < 0) ||
-        (combinedAreaResult.XMost() > pfd->mBounds.width) ||
-        (combinedAreaResult.YMost() > pfd->mBounds.height)) {
+        (combinedAreaResult.XMost() > mypfd->mBounds.width) ||
+        (combinedAreaResult.YMost() > mypfd->mBounds.height)) {
 // end bug
 
       newState |= NS_FRAME_OUTSIDE_CHILDREN;

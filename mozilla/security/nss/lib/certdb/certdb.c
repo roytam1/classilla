@@ -595,6 +595,20 @@ CERT_GetCertType(CERTCertificate *cert)
 		cert->nsCertType |= NS_CERT_TYPE_SSL_SERVER;
 	    }
 	}
+// bug 231775 modified for 1.3
+	/* Verisign is beginning to crank these out without
+	 * SERVER_AUTH for web sites, treat them as SSL certs */
+	if (findOIDinOIDSeqByTagNum(extKeyUsage, 
+	            			    SEC_OID_NS_KEY_USAGE_GOVT_APPROVED) ==
+	    SECSuccess){
+	    if (basicConstraintPresent == PR_TRUE &&
+	    	(basicConstraint.isCA)) {
+	    	cert->nsCertType |= NS_CERT_TYPE_SSL_CA;
+	    } else {
+	    	cert->nsCertType |= NS_CERT_TYPE_SSL_SERVER;
+	    }
+	}
+// end bug
 	if (findOIDinOIDSeqByTagNum(extKeyUsage,
 				    SEC_OID_EXT_KEY_USAGE_CLIENT_AUTH) ==
 	    SECSuccess){

@@ -111,10 +111,14 @@ public:
   virtual nsresult GetRuleTree(nsRuleNode** aResult) = 0;
   virtual nsresult ClearCachedDataInRuleTree(nsIStyleRule* aRule) = 0;
   
+// bug 171830
+#if(0)  
   // This method is used to add a mapping from rule to rule node so that all the rule nodes
   // in use for a given rule can be accessed efficiently.  This is currently only used
   // for inline style rules in order to conserve footprint.
   virtual nsresult AddRuleNodeMapping(nsRuleNode* aRuleNode) = 0;
+#endif
+// end bug
 
   // The following two methods can be used to tear down and reconstruct a rule tree.  The idea
   // is to first call BeginRuleTreeReconstruct, which will set aside the old rule
@@ -137,11 +141,17 @@ public:
   // a hint as to which rule has changed, and all subtree data pruning will occur rooted
   // only on style contexts and rule nodes that use that rule.  If the rule is null, then
   // it is assumed that both trees are to be entirely wiped.
+// bug 171830
+#if(0)
   //
   // |aContext| provides an additional hint that a specific style context has changed, and
   // that the entire rule tree need not be searched for occurrences of |aRule|.  It is
   // only specified in the inline style case, i.e., when the inline style attribute changes.
   virtual nsresult ClearStyleData(nsIPresContext* aPresContext, nsIStyleRule* aRule, nsIStyleContext* aContext) = 0;
+#else
+  virtual nsresult ClearStyleData(nsIPresContext* aPresContext, nsIStyleRule* aRule) = 0;
+#endif
+// end bug
 
   // enable / disable the Quirk style sheet: 
   // returns NS_FAILURE if none is found, otherwise NS_OK
@@ -188,7 +198,15 @@ public:
                                                nsIAtom* aPseudoTag,
                                                nsIStyleContext* aParentContext) = 0;
 
-  NS_IMETHOD Shutdown()=0;
+// bug 117316 modified for 1.3.1
+//  NS_IMETHOD Shutdown()=0;
+  NS_IMETHOD BeginShutdown(nsIPresContext* aPresContext) = 0;
+
+  NS_IMETHOD Shutdown(nsIPresContext* aPresContext) = 0;
+
+  NS_IMETHOD NotifyStyleContextDestroyed(nsIPresContext* aPresContext,
+                                         nsIStyleContext* aStyleContext) = 0;//nsStyleContext* aStyleContext) = 0;
+// end bug
 
   // Get a new style context that lives in a different parent
   // The new context will be the same as the old if the new parent == the old parent

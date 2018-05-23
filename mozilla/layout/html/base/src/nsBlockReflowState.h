@@ -46,6 +46,21 @@
 #include "nsFrameList.h"
 
 class nsBlockFrame;
+  // block reflow state flags
+#define BRS_UNCONSTRAINEDWIDTH    0x00000001
+#define BRS_UNCONSTRAINEDHEIGHT   0x00000002
+#define BRS_SHRINKWRAPWIDTH       0x00000004
+#define BRS_NEEDRESIZEREFLOW      0x00000008
+#define BRS_NOWRAP                0x00000010
+#define BRS_ISTOPMARGINROOT       0x00000020  // Is this frame a root for top/bottom margin collapsing?
+#define BRS_ISBOTTOMMARGINROOT    0x00000040
+#define BRS_APPLYTOPMARGIN        0x00000080  // See ShouldApplyTopMargin
+#define BRS_COMPUTEMAXELEMENTWIDTH 0x00000100
+#define BRS_COMPUTEMAXWIDTH       0x00000200
+#define BRS_DAMAGECONSTRAINED     0x00000400  // is the target of an incremental reflow command inside a text control
+#define BRS_ISFIRSTINFLOW         0x00000800  // until we get rid of _DAMAGECONSTRAINED
+#define BRS_LASTFLAG              BRS_ISFIRSTINFLOW
+
 
 class nsBlockReflowState {
 public:
@@ -98,11 +113,22 @@ public:
 // end bug
 
   PRBool IsAdjacentWithTop() const {
-    return mY == mReflowState.mComputedBorderPadding.top;
+    return mY == // bug 174688
+    	((mFlags & BRS_ISFIRSTINFLOW) ? mReflowState.mComputedBorderPadding.top : 0);
   }
 
-  const nsMargin& BorderPadding() const {
-    return mReflowState.mComputedBorderPadding;
+  //const nsMargin& BorderPadding() const {
+    //return mReflowState.mComputedBorderPadding;
+  /**
+   * Adjusts the border/padding to return 0 for the top if
+   * we are no the first in flow.
+   */
+  nsMargin BorderPadding() const {
+    nsMargin result = mReflowState.mComputedBorderPadding;
+    if (!(mFlags & BRS_ISFIRSTINFLOW)) {
+      result.top = 0;
+   }
+   return result;
   }
 
   const nsMargin& Margin() const {
@@ -243,20 +269,6 @@ public:
   nscoord mMinLineHeight;
 
   PRInt32 mLineNumber;
-
-  // block reflow state flags
-#define BRS_UNCONSTRAINEDWIDTH    0x00000001
-#define BRS_UNCONSTRAINEDHEIGHT   0x00000002
-#define BRS_SHRINKWRAPWIDTH       0x00000004
-#define BRS_NEEDRESIZEREFLOW      0x00000008
-#define BRS_NOWRAP                0x00000010
-#define BRS_ISTOPMARGINROOT       0x00000020  // Is this frame a root for top/bottom margin collapsing?
-#define BRS_ISBOTTOMMARGINROOT    0x00000040
-#define BRS_APPLYTOPMARGIN        0x00000080  // See ShouldApplyTopMargin
-#define BRS_COMPUTEMAXELEMENTWIDTH 0x00000100
-#define BRS_COMPUTEMAXWIDTH       0x00000200
-#define BRS_DAMAGECONSTRAINED     0x00000400  // is the target of an incremental reflow command inside a text control
-#define BRS_LASTFLAG              BRS_DAMAGECONSTRAINED
 
   PRInt16 mFlags;
  

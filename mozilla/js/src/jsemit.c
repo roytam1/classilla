@@ -523,30 +523,82 @@ AddSpanDep(JSContext *cx, JSCodeGenerator *cg, jsbytecode *pc, jsbytecode *pc2,
     return JS_TRUE;
 }
 
+// bug 398085
+#ifndef GET_UINT16
+#define GET_UINT16(pc)          ((uintN)(((pc)[1] << 8) | (pc)[2]))
+#endif
+
+#if JS_HAS_SWITCH_STATEMENT
+static jsbytecode *
+AddSwitchSpanDeps(JSContext *cx, JSCodeGenerator *cg, jsbytecode *pc)
+{
+    JSOp op;
+    jsbytecode *pc2;
+    ptrdiff_t off;
+    jsint low, high;
+    uintN njumps, indexlen;
+
+    op = (JSOp) *pc;
+    JS_ASSERT(op == JSOP_TABLESWITCH || op == JSOP_LOOKUPSWITCH);
+    pc2 = pc;
+    off = GET_JUMP_OFFSET(pc2);
+    if (!AddSpanDep(cx, cg, pc, pc2, off))
+        return NULL;
+    pc2 += JUMP_OFFSET_LEN;
+    if (op == JSOP_TABLESWITCH) {
+        low = GET_JUMP_OFFSET(pc2);
+        pc2 += JUMP_OFFSET_LEN;
+        high = GET_JUMP_OFFSET(pc2);
+        pc2 += JUMP_OFFSET_LEN;
+        njumps = (uintN) (high - low + 1);
+        indexlen = 0;
+    } else {
+        njumps = GET_UINT16(pc2);
+        pc2 += JUMP_OFFSET_LEN;
+        indexlen = ATOM_INDEX_LEN;
+    }
+    while (njumps) {
+        --njumps;
+        pc2 += indexlen;
+        off = GET_JUMP_OFFSET(pc2);
+        if (!AddSpanDep(cx, cg, pc, pc2, off))
+            return NULL;
+        pc2 += JUMP_OFFSET_LEN;
+    }
+    return 1 + pc2;
+}
+#endif /* JS_HAS_SWITCH_STATEMENT */
+// end bug
+
 static JSBool
 BuildSpanDepTable(JSContext *cx, JSCodeGenerator *cg)
 {
     jsbytecode *pc, *end;
     JSOp op;
     JSCodeSpec *cs;
-    ptrdiff_t len, off;
+    ptrdiff_t off; // , len; // bug 398085
 
     pc = CG_BASE(cg);
     end = CG_NEXT(cg);
-    while (pc < end) {
+    while (pc != end) { // bug 398085 // (pc < end) {
+        JS_ASSERT(pc < end); // bug 398085
         op = (JSOp)*pc;
         cs = &js_CodeSpec[op];
-        len = (ptrdiff_t)cs->length;
+        // len = (ptrdiff_t)cs->length; // bug 398085
 
         switch (cs->format & JOF_TYPEMASK) {
+// bug 398085
+#if(0)
           case JOF_JUMP:
             off = GET_JUMP_OFFSET(pc);
             if (!AddSpanDep(cx, cg, pc, pc, off))
                 return JS_FALSE;
             break;
-
+#endif
 #if JS_HAS_SWITCH_STATEMENT
           case JOF_TABLESWITCH:
+// bug 398085
+#if(0)
           {
             jsbytecode *pc2;
             jsint i, low, high;
@@ -569,8 +621,11 @@ BuildSpanDepTable(JSContext *cx, JSCodeGenerator *cg)
             len = 1 + pc2 - pc;
             break;
           }
-
+#endif
+// end bug
           case JOF_LOOKUPSWITCH:
+// bug 398085
+#if(0)
           {
             jsbytecode *pc2;
             jsint npairs;
@@ -591,12 +646,26 @@ BuildSpanDepTable(JSContext *cx, JSCodeGenerator *cg)
                 npairs--;
             }
             len = 1 + pc2 - pc;
+#endif
+            pc = AddSwitchSpanDeps(cx, cg, pc);
+            if (!pc)
+              return JS_FALSE;
             break;
-          }
+          //}
 #endif /* JS_HAS_SWITCH_STATEMENT */
+// bug 398085
+          case JOF_JUMP:
+            off = GET_JUMP_OFFSET(pc);
+            if (!AddSpanDep(cx, cg, pc, pc, off))
+                return JS_FALSE;
+            /* FALL THROUGH */
+          default:
+            pc += cs->length;
+            break;
+// end bug
         }
 
-        pc += len;
+        // pc += len; // bug 398085
     }
 
     return JS_TRUE;
@@ -2513,6 +2582,21 @@ js_EmitTree(JSContext *cx, JSCodeGenerator *cg, JSParseNode *pn)
         } else if (switchop == JSOP_LOOKUPSWITCH) {
             /* Skip over the already-initialized number of cases. */
             pc += ATOM_INDEX_LEN;
+            
+            /* I think this should go here. -- Cameron */
+            // bug 398085
+#if(0)
+        if (cg->spanDeps) {
+            /*
+             * We have already generated at least one big jump so we must
+             * explicitly add span dependencies for the switch jumps. When
+             * called below, js_SetJumpOffset can only do it when patching
+             * the first big jump or when cg->spanDeps is null.
+             */
+            if (!AddSwitchSpanDeps(cx, cg, CG_CODE(cg, top)))
+                goto bad;
+        }
+#endif            
 
             for (pn3 = pn2->pn_head; pn3; pn3 = pn3->pn_next) {
                 if (pn3->pn_type == TOK_DEFAULT)
@@ -3689,6 +3773,22 @@ js_EmitTree(JSContext *cx, JSCodeGenerator *cg, JSParseNode *pn)
           default:
             JS_ASSERT(0);
         }
+        
+        // bug 317714
+        /*
+         * Allocate another stack slot for GC protection in case the initial
+         * value being post-incremented or -decremented is not a number, but
+         * converts to a jsdouble.  In the TOK_NAME cases, op has 0 operand
+         * uses and 1 definition, so we don't need an extra stack slot -- we
+         * can use the one allocated for the def.
+         */
+        if (pn2->pn_type != TOK_NAME &&
+            (js_CodeSpec[op].format & JOF_POST) &&
+            (uintN)cg->stackDepth == cg->maxStackDepth) {
+            ++cg->maxStackDepth;
+        }
+        // end bug
+        
         break;
 
       case TOK_DELETE:

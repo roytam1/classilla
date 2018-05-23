@@ -42,6 +42,7 @@ NS_IMPL_THREADSAFE_ISUPPORTS2(imgRequestProxy, imgIRequest, nsIRequest)
 
 imgRequestProxy::imgRequestProxy() :
   mOwner(nsnull),
+  mListener(nsnull), // bug 196797
   mLoadFlags(nsIRequest::LOAD_NORMAL),
   mCanceled(PR_FALSE),
   mIsInLoadGroup(PR_FALSE),
@@ -55,6 +56,8 @@ imgRequestProxy::imgRequestProxy() :
 imgRequestProxy::~imgRequestProxy()
 {
   /* destructor code */
+  NS_PRECONDITION(!mListener, "Someone forgot to properly cancel this request!");
+  // bug 196797
 
   if (mOwner) {
     if (!mCanceled) {
@@ -295,8 +298,12 @@ void imgRequestProxy::FrameChanged(imgIContainer *container, gfxIImageFrame *new
 {
   LOG_FUNC(gImgLog, "imgRequestProxy::FrameChanged");
 
-  if (mListener)
+  if (mListener) {
+    // Hold a ref to the listener while we call it, just in case.
+    // bug 196797
+    nsCOMPtr<imgIDecoderObserver> kungFuDeathGrip(mListener);
     mListener->FrameChanged(container, mContext, newframe, dirtyRect);
+  }
 }
 
 /** imgIDecoderObserver methods **/
@@ -305,56 +312,84 @@ void imgRequestProxy::OnStartDecode()
 {
   LOG_FUNC(gImgLog, "imgRequestProxy::OnStartDecode");
 
-  if (mListener)
+  if (mListener) {
+    // Hold a ref to the listener while we call it, just in case.
+    // bug 196797
+    nsCOMPtr<imgIDecoderObserver> kungFuDeathGrip(mListener);    
     mListener->OnStartDecode(this, mContext);
+  }
 }
 
 void imgRequestProxy::OnStartContainer(imgIContainer *image)
 {
   LOG_FUNC(gImgLog, "imgRequestProxy::OnStartContainer");
 
-  if (mListener)
+  if (mListener) {
+    // Hold a ref to the listener while we call it, just in case.
+    // bug 196797
+    nsCOMPtr<imgIDecoderObserver> kungFuDeathGrip(mListener);
     mListener->OnStartContainer(this, mContext, image);
+  }
 }
 
 void imgRequestProxy::OnStartFrame(gfxIImageFrame *frame)
 {
   LOG_FUNC(gImgLog, "imgRequestProxy::OnStartFrame");
 
-  if (mListener)
+  if (mListener) {
+    // Hold a ref to the listener while we call it, just in case.
+    // bug 196797
+    nsCOMPtr<imgIDecoderObserver> kungFuDeathGrip(mListener);
     mListener->OnStartFrame(this, mContext, frame);
+  }
 }
 
 void imgRequestProxy::OnDataAvailable(gfxIImageFrame *frame, const nsRect * rect)
 {
   LOG_FUNC(gImgLog, "imgRequestProxy::OnDataAvailable");
 
-  if (mListener)
+  if (mListener) {
+    // Hold a ref to the listener while we call it, just in case.
+    // bug 196797
+    nsCOMPtr<imgIDecoderObserver> kungFuDeathGrip(mListener);
     mListener->OnDataAvailable(this, mContext, frame, rect);
+  }
 }
 
 void imgRequestProxy::OnStopFrame(gfxIImageFrame *frame)
 {
   LOG_FUNC(gImgLog, "imgRequestProxy::OnStopFrame");
 
-  if (mListener)
+  if (mListener) {
+    // Hold a ref to the listener while we call it, just in case.
+    // bug 196797
+    nsCOMPtr<imgIDecoderObserver> kungFuDeathGrip(mListener);
     mListener->OnStopFrame(this, mContext, frame);
+  }
 }
 
 void imgRequestProxy::OnStopContainer(imgIContainer *image)
 {
   LOG_FUNC(gImgLog, "imgRequestProxy::OnStopContainer");
 
-  if (mListener)
+  if (mListener) {
+    // Hold a ref to the listener while we call it, just in case.
+    // bug 196797
+    nsCOMPtr<imgIDecoderObserver> kungFuDeathGrip(mListener);
     mListener->OnStopContainer(this, mContext, image);
+  }
 }
 
 void imgRequestProxy::OnStopDecode(nsresult status, const PRUnichar *statusArg)
 {
   LOG_FUNC(gImgLog, "imgRequestProxy::OnStopDecode");
 
-  if (mListener)
+  if (mListener) {
+    // Hold a ref to the listener while we call it, just in case.
+    // bug 196797
+    nsCOMPtr<imgIDecoderObserver> kungFuDeathGrip(mListener);
     mListener->OnStopDecode(this, mContext, status, statusArg);
+  }
 }
 
 

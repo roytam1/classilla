@@ -248,8 +248,14 @@ public:
             delete this;
     }
 
+// bug 217967
+    static void InvalidateAll() { sGeneration++; }
+    PRBool IsInvalid() { return mGeneration != sGeneration; }
+    
 private:
     PRUint32 mRefCount;
+    PRUint32 mGeneration; // bug 217967
+    static PRUint32 sGeneration; // bug 217967
 };
 
 /////////////////////////////

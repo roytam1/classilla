@@ -255,14 +255,15 @@ struct nsHTMLReflowState {
   struct ReflowStateFlags {
     PRUint16 mSpecialHeightReflow:1; // used by tables to communicate special reflow (in process) to handle
                                      // percent height frames inside cells which may not have computed heights
+/* bug 232754
     PRUint16 mTableDerivedComputedWidth:1; // Computed width is due to a table cell's final width, not style
-                                           // on the frame itself. Restrictions apply.
+                                           // on the frame itself. Restrictions apply. */
     PRUint16 mIsTopOfPage:1;         // is the current context at the top of a page?
     PRUint16 mBlinks:1;              // Keep track of text-decoration: blink
     PRUint16 mVisualBidiFormControl:1; // Keep track of descendants of form controls on Visual Bidi pages
 //    PRUint16 mUnused:11;             // for future use  
     PRUint16 mHasClearance:1; // bug 209694 block has clearance
-    PRUint16 mUnused:10; // bug 209694. this has to be :10 d/t mTableDerived etc.           
+    PRUint16 mUnused:11; // keep current with number of bits above!!           
   } mFlags;
 
 #ifdef IBMBIDI
@@ -453,8 +454,10 @@ protected:
   // - guarantees that the computed height/width will be non-negative
   //   If the value goes negative (because the padding or border is greater than
   //   the width/height and it is removed due to box sizing) then it is driven to 0
-  void AdjustComputedHeight(void);
-  void AdjustComputedWidth(void);
+  //void AdjustComputedHeight(void);
+  //void AdjustComputedWidth(void);
+  void AdjustComputedHeight(PRBool aAdjustForBoxSizing);
+  void AdjustComputedWidth(PRBool aAdjustForBoxSizing); // both bug 227819
 
 #ifdef IBMBIDI
   /**

@@ -138,9 +138,11 @@ public:
                                           PRBool* aMayNeedRetry);
 
 protected:
+// bug 205790
+#if(0)
   nsStyleUnit GetRealMarginLeftUnit();
   nsStyleUnit GetRealMarginRightUnit();
-
+#endif
   nsIPresContext* mPresContext;
   const nsHTMLReflowState& mOuterReflowState;
 

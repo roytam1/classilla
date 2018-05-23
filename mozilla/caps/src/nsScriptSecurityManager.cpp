@@ -100,6 +100,9 @@ JSValIDToString(JSContext *cx, const jsval idval) {
     return NS_REINTERPRET_CAST(PRUnichar*, JS_GetStringChars(str));
 }
 
+// bug 217967
+PRUint32 DomainPolicy::sGeneration = 0;
+
 // Helper class to get stuff from the ClassInfo and not waste extra time with
 // virtual method calls for things it has already gotten
 class ClassInfoData
@@ -457,8 +460,12 @@ nsScriptSecurityManager::CheckJSFunctionCallerAccess(JSContext *cx, JSObject *ob
     JSObject* target = JSVAL_TO_OBJECT(*vp);
 
     // Do the same-origin check - this sets a JS exception if the check fails
+    // Pass the parent object's class name, as we have no class-info for it.
     nsresult rv =
-        ssm->CheckPropertyAccess(cx, target, "Function", sCallerID,
+        ssm->CheckPropertyAccess(cx, target, 
+        						// "Function",  // bug 198660
+        						JS_GetClass(cx, obj)->name, // bug 198660
+        						sCallerID,
                                  nsIXPCSecurityManager::ACCESS_GET_PROPERTY);
 
     if (NS_FAILED(rv))
@@ -630,11 +637,16 @@ nsScriptSecurityManager::CheckPropertyAccessImpl(PRUint32 aAction,
     }
 
     //-- Look up the policy for this class
-    ClassPolicy* cpolicy = aCachedClassPolicy ? 
+// more Caps bugs! ARGH! Cameron Kaiser
+// for this version, we will fail safe and simply disable policy caching, since when
+// we invalidate it we really mess everything up.
+#if(0)
+    ClassPolicy* cpolicy = (aCachedClassPolicy) ? 
                            NS_REINTERPRET_CAST(ClassPolicy*, *aCachedClassPolicy) : nsnull;
+                	
     if (!cpolicy)
     {
-        //-- No cached policy for this class, need to look it up
+         //-- No cached policy for this class, need to look it up
 #ifdef DEBUG_mstoltz
         printf("Miss! ");
 #endif
@@ -644,12 +656,21 @@ nsScriptSecurityManager::CheckPropertyAccessImpl(PRUint32 aAction,
         if (aCachedClassPolicy)
             *aCachedClassPolicy = cpolicy;
     }
+    
+#else
+
+    ClassPolicy *cpolicy;
+	rv = GetClassPolicy(subjectPrincipal, className.get(), &cpolicy);
+	if (NS_FAILED(rv))
+		return rv;
+#endif
+// end kludge
 
     SecurityLevel securityLevel = GetPropertyPolicy(aProperty, cpolicy, aAction);
 
     // If the class policy we have is a wildcard policy, then we may
     // still need to try the default for this class
-    if (cpolicy != NO_POLICY_FOR_CLASS &&
+    if (cpolicy != NO_POLICY_FOR_CLASS && mDefaultPolicy &&
         cpolicy->key[0] == '*' && cpolicy->key[1] == '\0' &&
         securityLevel.level == SCRIPT_SECURITY_UNDEFINED_ACCESS)
     {
@@ -969,7 +990,15 @@ nsScriptSecurityManager::GetClassPolicy(nsIPrincipal* principal,
     }
 
     ClassPolicy* wildcardPolicy = nsnull;
-    if (dpolicy)
+    
+    // this patch from 217967 messes up NoScript in 1.3, so it is commented out
+    // for testing purposes until I can bang on it more. -- Cameron
+#if(0)    
+    if (dpolicy && dpolicy->IsInvalid())
+    	dpolicy = nsnull; // DIE YOU BASTARD. added along with bug 217967
+#endif	
+
+    if (dpolicy) // added along with bug 217967
     {
         //-- Now get the class policy
         *result = 
@@ -987,7 +1016,10 @@ nsScriptSecurityManager::GetClassPolicy(nsIPrincipal* principal,
     }
 
     //-- and the default policy for this class
-    ClassPolicy* defaultClassPolicy = 
+    // fixed along with bug 217967
+    ClassPolicy* defaultClassPolicy = nsnull;
+    if (mDefaultPolicy)
+    	defaultClassPolicy = 
           NS_REINTERPRET_CAST(ClassPolicy*,
             PL_DHashTableOperate(mDefaultPolicy,
                                  aClassName,
@@ -1004,7 +1036,7 @@ nsScriptSecurityManager::GetClassPolicy(nsIPrincipal* principal,
     {
         if (wildcardPolicy && PL_DHASH_ENTRY_IS_LIVE(wildcardPolicy))
             *result = wildcardPolicy;
-        else if (PL_DHASH_ENTRY_IS_LIVE(defaultClassPolicy))
+        else if (defaultClassPolicy && PL_DHASH_ENTRY_IS_LIVE(defaultClassPolicy))
             *result = defaultClassPolicy;
         else
             *result = NO_POLICY_FOR_CLASS;
@@ -1019,13 +1051,13 @@ nsScriptSecurityManager::GetPropertyPolicy(jsval aProperty, ClassPolicy* aClassP
 {
     //-- Look up the policy for this property/method
     PropertyPolicy* ppolicy = nsnull;
-    if (aClassPolicy && aClassPolicy != NO_POLICY_FOR_CLASS)
+    if (aClassPolicy && aClassPolicy != NO_POLICY_FOR_CLASS && aClassPolicy->mPolicy) // crash?
     {
         ppolicy = 
           (PropertyPolicy*) PL_DHashTableOperate(aClassPolicy->mPolicy,
                                                  NS_REINTERPRET_CAST(void*, aProperty),
                                                  PL_DHASH_LOOKUP);
-        if (!PL_DHASH_ENTRY_IS_LIVE(ppolicy))
+        if (!ppolicy || !PL_DHASH_ENTRY_IS_LIVE(ppolicy))
         {   // No domain policy for this property, look for a wildcard policy
             if (aClassPolicy->mWildcard)
             {
@@ -1042,7 +1074,7 @@ nsScriptSecurityManager::GetPropertyPolicy(jsval aProperty, ClassPolicy* aClassP
                                        PL_DHASH_LOOKUP));
             }
         }
-        if (PL_DHASH_ENTRY_IS_LIVE(ppolicy))
+        if (ppolicy && PL_DHASH_ENTRY_IS_LIVE(ppolicy))
         {
             // Get the correct security level from the property policy
             if (aAction == nsIXPCSecurityManager::ACCESS_SET_PROPERTY)
@@ -2613,7 +2645,13 @@ jsval nsScriptSecurityManager::sEnabledID   = JSVAL_VOID;
 nsScriptSecurityManager::~nsScriptSecurityManager(void)
 {
     delete mOriginToPolicyMap;
-    delete mDefaultPolicy;
+    // bug 300853
+//    delete mDefaultPolicy;
+	if (mDefaultPolicy) {
+		mDefaultPolicy->Drop();
+		mDefaultPolicy = nsnull;
+	}
+	// end bug
     NS_IF_RELEASE(mSystemPrincipal);
     delete mPrincipals;
     delete mCapabilities;
@@ -2688,8 +2726,9 @@ nsScriptSecurityManager::InitPolicies()
 {
     nsresult rv;
 
+
     // Reset the "dirty" flag
-    mPolicyPrefsChanged = PR_FALSE;
+//    mPolicyPrefsChanged = PR_FALSE; // bug 217967
 
     // Clear any policies cached on XPConnect wrappers
     nsCOMPtr<nsIXPConnect> xpc(do_GetService(nsIXPConnect::GetCID(), &rv));
@@ -2699,16 +2738,34 @@ nsScriptSecurityManager::InitPolicies()
 
     //-- Reset mOriginToPolicyMap
     delete mOriginToPolicyMap;
+    
+    // bug 217967
+    DomainPolicy::InvalidateAll();
+    if(mDefaultPolicy) {
+    	mDefaultPolicy->Drop();
+    	mDefaultPolicy = nsnull; // sheesh, Giorgio ... bug 300853
+    }
+    // end bug
+    
     mOriginToPolicyMap =
       new nsObjectHashtable(nsnull, nsnull, DeleteDomainEntry, nsnull);
+    if (!mOriginToPolicyMap)
+      return NS_ERROR_OUT_OF_MEMORY;
 
     //-- Reset and initialize the default policy
-    delete mDefaultPolicy;
+    //delete mDefaultPolicy;
     mDefaultPolicy =
       new DomainPolicy();
-    if (!mOriginToPolicyMap || !mDefaultPolicy)
+    if (!mDefaultPolicy)
         return NS_ERROR_OUT_OF_MEMORY;
 
+	// bug 217967 plus backbugs
+	mDefaultPolicy->Hold();
+	/*
+	if (!mDefaultPolicy->Init())
+	  return NS_ERROR_UNEXPECTED;
+	*/
+	  
     //-- Initialize the table of security levels
     if (!mCapabilities)
     {
@@ -2825,6 +2882,7 @@ nsScriptSecurityManager::InitPolicies()
         NS_ENSURE_SUCCESS(rv, rv);
     }
 
+	mPolicyPrefsChanged = PR_FALSE; // bug 217967
 #ifdef DEBUG_mstoltz
     PrintPolicyDB();
 #endif

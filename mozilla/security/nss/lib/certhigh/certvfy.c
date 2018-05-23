@@ -657,7 +657,8 @@ cert_VerifyCertChain(CERTCertDBHandle *handle, CERTCertificate *cert,
     SECStatus rv;
     SECStatus rvFinal = SECSuccess;
     int count;
-    int currentPathLen = -1;
+    int currentPathLen = 0; // -1; // bug 221644
+    int pathLengthLimit = CERT_UNLIMITED_PATH_CONSTRAINT; // bug 221644
     int flags;
     unsigned int caCertType;
     unsigned int requiredCAKeyUsage;
@@ -825,8 +826,9 @@ cert_VerifyCertChain(CERTCertDBHandle *handle, CERTCertificate *cert,
 	if ( rv != SECSuccess ) {
 	    if (PORT_GetError() != SEC_ERROR_EXTENSION_NOT_FOUND) {
 		LOG_ERROR_OR_EXIT(log,issuerCert,count+1,0);
-	    } else {
-		currentPathLen = CERT_UNLIMITED_PATH_CONSTRAINT;
+//	    } else {
+//		currentPathLen = CERT_UNLIMITED_PATH_CONSTRAINT; // bug 221644
+        pathLengthLimit = CERT_UNLIMITED_PATH_CONSTRAINT; // bug 221644
 	    }
 	    /* no basic constraints found, if we're fortezza, CA bit is already
 	     * verified (isca = PR_TRUE). otherwise, we aren't (yet) a ca
@@ -837,7 +839,8 @@ cert_VerifyCertChain(CERTCertDBHandle *handle, CERTCertificate *cert,
 		PORT_SetError (SEC_ERROR_CA_CERT_INVALID);
 		LOG_ERROR_OR_EXIT(log,issuerCert,count+1,0);
 	    }
-	    
+// bug 221644
+#if(0)	    
 	    /* make sure that the path len constraint is properly set.
 	     */
 	    if ( basicConstraint.pathLenConstraint ==
@@ -857,7 +860,15 @@ cert_VerifyCertChain(CERTCertDBHandle *handle, CERTCertificate *cert,
 	    }
 
 	    isca = PR_TRUE;
+#endif    
 	}
+	/* make sure that the path len constraint is properly set.*/
+	if (pathLengthLimit >= 0 && currentPathLen > pathLengthLimit) {
+	    PORT_SetError (SEC_ERROR_PATH_LEN_CONSTRAINT_INVALID);
+	    LOG_ERROR_OR_EXIT(log, issuerCert, count+1, pathLengthLimit);
+	}
+// end bug
+
 	
 	/* XXX - the error logging may need to go down into CRL stuff at some
 	 * point
@@ -964,7 +975,15 @@ cert_VerifyCertChain(CERTCertDBHandle *handle, CERTCertificate *cert,
 	    LOG_ERROR(log, issuerCert, count+1, 0);
 	    goto loser;
 	}
-
+// bug 221644
+    if (issuerCert->derIssuer.len == 0 ||
+        !SECITEM_ItemsAreEqual(&issuerCert->derIssuer, 
+                               &issuerCert->derSubject)) {
+        /* RFC 3280 says only non-self-issued intermediate CA certs 
+           count in path length. */
+        ++currentPathLen;
+    }
+    
 	CERT_DestroyCertificate(subjectCert);
 	subjectCert = issuerCert;
     }
@@ -1003,6 +1022,7 @@ CERT_VerifyCertChain(CERTCertDBHandle *handle, CERTCertificate *cert,
 
 /*
  * verify that a CA can sign a certificate with the requested usage.
+ * XXX This function completely ignores cert path length constraints!
  */
 SECStatus
 CERT_VerifyCACertForUsage(CERTCertDBHandle *handle, CERTCertificate *cert,

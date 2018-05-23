@@ -198,6 +198,10 @@ nsProgressDialog.prototype = {
 
         // Update elapsed time.
         this.elapsed = now - this.startTime;
+        
+        if (this.elapsed < 0)
+        	return; // Classilla issue 36: we probably ought not do anything
+        			// if someone monkeyed with our clock, say.
 
         // Calculate percentage.
         if ( aMaxTotalProgress > 0) {
@@ -243,7 +247,9 @@ nsProgressDialog.prototype = {
         // Update time remaining.
         if ( this.rate && ( aMaxTotalProgress > 0 ) ) {
             // Calculate how much time to download remaining at this rate.
-            var rem = Math.round( ( aMaxTotalProgress - aCurTotalProgress ) / this.rate );
+            //var rem = Math.round( ( aMaxTotalProgress - aCurTotalProgress ) / this.rate );
+            // it's a bit smoother if we use our own smoothed value. -- Classilla issue 36
+            var rem = Math.round( ( aMaxTotalProgress - aCurTotalProgress ) / this.mRate );
             this.setValue( "timeLeft", this.formatSeconds( rem ) );
         } else {
             // We don't know how much time remains.
@@ -688,13 +694,24 @@ nsProgressDialog.prototype = {
     },
 
     // Format number of seconds in hh:mm:ss form.
+    // Classilla issue 36: this function barfs badly. use Math.floor instead of parseInt
     formatSeconds: function( secs ) {
+    
+    	//DEBUG
+    	//origsecs = secs;
+    	
         // Round the number of seconds to remove fractions.
-        secs = parseInt( secs + .5 );
-        var hours = parseInt( secs/3600 );
+        secs = Math.floor(secs);
+        var hours = Math.floor( secs/3600 );
+        if (hours < 0)
+        	hours = 0; // wtf?
         secs -= hours*3600;
-        var mins = parseInt( secs/60 );
+        var mins = Math.floor( secs/60 );
+        //if (mins < 0 || mins > 59)
+        //	mins = 0;
         secs -= mins*60;
+        //if (secs < 0 || secs > 59)
+        //	secs = 0;
         var result;
         if ( hours )
             result = this.getString( "longTimeFormat" );
@@ -707,6 +724,9 @@ nsProgressDialog.prototype = {
             mins = "0" + mins;
         if ( secs < 10 )
             secs = "0" + secs;
+            
+            //DEBUG
+            //secs += " << " + origsecs;
     
         // Insert hours, minutes, and seconds into result string.
         result = this.replaceInsert( result, 1, hours );

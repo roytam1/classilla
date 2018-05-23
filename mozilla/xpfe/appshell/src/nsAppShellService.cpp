@@ -174,6 +174,8 @@ nsAppShellService::Initialize( nsICmdLineService *aCmdLineService,
   NS_TIMELINE_LEAVE("nsComponentManager::CreateInstance");
   if (NS_FAILED(rv))
     goto done;
+    
+
 
   rv = mAppShell->Create(0, nsnull);
   if (NS_FAILED(rv))
@@ -283,6 +285,37 @@ nsAppShellService::DoProfileStartup(nsICmdLineService *aCmdLineService, PRBool c
         rv = NS_OK;
     }
 
+    
+  /* This seemed like a good place to put the check for overridden UA at
+     start up, since the user may need to be warned it's not ready for prime time. 
+     -- Cameron */
+    nsresult rrv;    
+    nsCOMPtr<nsIPrefBranch> prefBranch;
+    nsCOMPtr<nsIPrefService> prefs = do_GetService(NS_PREFSERVICE_CONTRACTID, &rrv);
+    nsCOMPtr<nsIPromptService> prompter(do_GetService("@mozilla.org/embedcomp/prompt-service;1"));
+    NS_ENSURE_SUCCESS(rrv,rrv);
+    rrv = prefs->GetBranch(nsnull, getter_AddRefs(prefBranch));
+    NS_ENSURE_SUCCESS(rrv,rrv);
+
+    nsXPIDLCString weirdUA;
+    rrv = prefBranch->GetCharPref("general.useragent.override", getter_Copies(weirdUA));
+    if (NS_SUCCEEDED(rrv) && weirdUA.Length()) {
+      /* L10n FAIL, I'll fix this later when I get a round tuit or a lottadoh */
+      if (prompter)
+        // it focuses right here, for some reason (probably the lastwindowclosing logic).
+        prompter->Alert(nsnull, NS_LITERAL_STRING("Classilla").get(),
+        						NS_LITERAL_STRING("You are using an altered browser user-agent. This may cause sites to enable features Classilla does not yet handle. To change the user-agent, go to Preferences > Navigator > User Agent.").get());
+    }
+    
+    // Also warn if the fixup renderer is on.
+    PRBool fixupson;
+    rrv = prefBranch->GetBoolPref("classilla.layout.fixup", &fixupson);
+    if (NS_SUCCEEDED(rrv) && fixupson) {
+  		if (prompter)
+  			prompter->Alert(nsnull, NS_LITERAL_STRING("Classilla").get(),
+  									NS_LITERAL_STRING("Classilla's experimental rendering mode is currently enabled. This enables rendering fix-ups that may cause sites to display in an unexpected fashion. To toggle these fix-ups, go to View > Use Experimental Renderer.").get());
+    }
+    
     ExitLastWindowClosingSurvivalArea();
 
     // if Quit() was called while we were starting up we have a failure situation...
@@ -469,6 +502,7 @@ nsAppShellService::CreateHiddenWindow()
     }
   }
   NS_ASSERTION(NS_SUCCEEDED(rv), "HiddenWindow not created");
+
   return(rv);
 }
 
@@ -1072,7 +1106,7 @@ nsAppShellService::CreateStartupState(PRInt32 aWindowWidth, PRInt32 aWindowHeigh
   prefService->GetBranch(PREF_STARTUP_PREFIX, getter_AddRefs(startupBranch));
   if (!startupBranch)
     return NS_ERROR_FAILURE;
-  
+
   PRUint32 childCount;
   char **childArray = nsnull;
   rv = startupBranch->GetChildList("", &childCount, &childArray);
@@ -1235,6 +1269,7 @@ nsAppShellService::Ensure1Window(nsICmdLineService *aCmdLineService)
       rv = OpenBrowserWindow(height, width);
     }
   }
+  
   return rv;
 }
 

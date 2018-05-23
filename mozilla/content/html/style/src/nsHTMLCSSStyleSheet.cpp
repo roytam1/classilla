@@ -301,7 +301,7 @@ HTMLCSSStyleSheetImpl::RulesMatching(ElementRuleProcessorData* aData,
     nsCOMPtr<nsIStyleRule> rule;
     styledContent->GetInlineStyleRule(getter_AddRefs(rule));
     if (rule)
-      aData->mRuleWalker->Forward(rule, PR_TRUE);
+      aData->mRuleWalker->Forward(rule); // bug 171830 // , PR_TRUE);
   }
 
   return NS_OK;

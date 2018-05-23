@@ -66,6 +66,9 @@ static NS_DEFINE_CID(kAppShellServiceCID,   NS_APPSHELL_SERVICE_CID);
 
 #define rSplashDialog 512
 
+/* undefine for release */
+//#define CLASSILLA_PRERELEASE
+
 static Boolean VersGreaterThan4(const FSSpec *fSpec);
 
 const OSType kNSCreator = 'MOSS';
@@ -194,6 +197,12 @@ NS_IMETHODIMP nsNativeAppSupportMac::Start(PRBool *_retval)
     }
   }
 #endif
+
+#ifdef CLASSILLA_PRERELEASE
+  /* when we make Classilla test versions, we should use this custom alert, but
+     not terminate and just fall through to the *_retval at the end. */
+  ::StopAlert(8888, NULL); 
+#endif   
 
   *_retval = PR_TRUE;
   return NS_OK;

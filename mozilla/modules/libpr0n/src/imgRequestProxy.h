@@ -82,7 +82,9 @@ private:
 
   imgRequest *mOwner;
 
-  nsCOMPtr<imgIDecoderObserver> mListener;
+// bug 196797 no good? going back to strong ref here
+nsCOMPtr<imgIDecoderObserver> mListener;
+  //imgIDecoderObserver* mListener;  // Weak ref; see imgILoader.idl
   nsCOMPtr<nsISupports> mContext;
   nsCOMPtr<nsILoadGroup> mLoadGroup;
 

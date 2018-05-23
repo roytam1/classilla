@@ -781,7 +781,7 @@ PRInt32 CCDATASectionToken::GetTokenType(void) {
  */
 nsresult CCDATASectionToken::Consume(PRUnichar aChar, nsScanner& aScanner,PRInt32 aFlag) {
   static const PRUnichar theTerminalsChars[] = 
-  { PRUnichar('\r'), PRUnichar(']'), PRUnichar(0) };
+  { PRUnichar('\r'), PRUnichar('\n'), PRUnichar(']'), PRUnichar(0) }; // \n from bug 137315
   static const nsReadEndCondition theEndCondition(theTerminalsChars);
   nsresult  result=NS_OK;
   PRBool    done=PR_FALSE;
@@ -798,6 +798,7 @@ nsresult CCDATASectionToken::Consume(PRUnichar aChar, nsScanner& aScanner,PRInt3
             case kCR:
               result=aScanner.GetChar(aChar); //strip off the \r
               mTextValue.Append(NS_LITERAL_STRING("\n\n"));
+              mNewlineCount += 2; // bug 137315
               break;
             case kNewLine:
                //which means we saw \r\n, which becomes \n
@@ -805,10 +806,18 @@ nsresult CCDATASectionToken::Consume(PRUnichar aChar, nsScanner& aScanner,PRInt3
                   //now fall through on purpose...
             default:
               mTextValue.Append(NS_LITERAL_STRING("\n"));
+              mNewlineCount++; // bug 137315
               break;
           } //switch
         } //if
       }
+      // bug 137315
+      else if (kNewLine == aChar) {
+        result = aScanner.GetChar(aChar);
+        mTextValue.Append(aChar);
+        ++mNewlineCount;
+      }
+      // end bug
       else if (']'==aChar) {        
         result=aScanner.GetChar(aChar); //strip off the ]
         mTextValue.Append(aChar);
@@ -1625,8 +1634,10 @@ nsresult ConsumeAttributeEntity(nsString& aString,
  */
 static
 nsresult ConsumeAttributeValueText(nsString& aString,
+                                   PRInt32& aNewlineCount, // bug 137315
                                    nsScanner& aScanner,
                                    const nsReadEndCondition& aEndCondition,
+                                   PRBool aAllowNewlines, // bug 235171
                                    PRInt32 aFlag)
 {
   nsresult result = NS_OK;
@@ -1640,6 +1651,31 @@ nsresult ConsumeAttributeValueText(nsString& aString,
       if(ch == kAmpersand) {
         result = ConsumeAttributeEntity(aString,aScanner,aFlag);
       }
+// bug 137315
+      else if(
+        aAllowNewlines // bug 235171
+        && ch == kCR) {
+        aScanner.GetChar(ch);
+        result = aScanner.Peek(ch);
+        if (NS_SUCCEEDED(result)) {
+          if(ch == kNewLine) {
+            aString.Append(NS_LITERAL_STRING("\r\n"));
+            aScanner.GetChar(ch);
+          }
+          else {
+            aString.Append(PRUnichar('\r'));
+          }
+          ++aNewlineCount;
+        }
+      }
+      else if(
+        aAllowNewlines && // bug 235171
+      ch == kNewLine) {
+        aScanner.GetChar(ch);
+        aString.Append(PRUnichar('\n'));
+        ++aNewlineCount;
+      }
+// end bug
       else {
         done = PR_TRUE;
       }
@@ -1661,15 +1697,22 @@ nsresult ConsumeAttributeValueText(nsString& aString,
 static
 nsresult ConsumeQuotedString(PRUnichar aChar,
                               nsString& aString,
+                              PRInt32& aNewlineCount, // bug 137315
                               nsScanner& aScanner,
                               PRInt32 aFlag)
 {
   NS_ASSERTION(aChar==kQuote || aChar==kApostrophe,"char is neither quote nor apostrophe");
+  // hold onto this in case this is an unterminated string literal bug 43267
+  PRUint32 origLen = aString.Length();
 
   static const PRUnichar theTerminalCharsQuote[] = { 
-    PRUnichar(kQuote), PRUnichar('&'),  PRUnichar(0) };
+    PRUnichar(kQuote), PRUnichar('&'),
+    PRUnichar(kCR), PRUnichar(kNewLine), // bug 137315  
+    PRUnichar(0) };
   static const PRUnichar theTerminalCharsApostrophe[] = { 
-    PRUnichar(kApostrophe), PRUnichar('&'), PRUnichar(0) };
+    PRUnichar(kApostrophe), PRUnichar('&'), 
+    PRUnichar(kCR), PRUnichar(kNewLine), // bug 137315  
+    PRUnichar(0) };
   static const nsReadEndCondition
     theTerminateConditionQuote(theTerminalCharsQuote);
   static const nsReadEndCondition
@@ -1684,10 +1727,14 @@ nsresult ConsumeQuotedString(PRUnichar aChar,
   nsReadingIterator<PRUnichar> theOffset;
   aScanner.CurrentPosition(theOffset);
 
-  result=ConsumeAttributeValueText(aString,aScanner,*terminateCondition,aFlag);
+  result=ConsumeAttributeValueText(aString,
+    aNewlineCount, // bug 137315
+  aScanner,*terminateCondition,
+    PR_TRUE, // bug 235171
+  aFlag);
 
   if(NS_SUCCEEDED(result)) {
-    result = aScanner.SkipOver(aChar); // aChar should be " or '
+    result = aScanner.GetChar(aChar); // bug 43267 SkipOver(aChar); // aChar should be " or '
   }
 
   // Ref: Bug 35806
@@ -1697,9 +1744,19 @@ nsresult ConsumeQuotedString(PRUnichar aChar,
      !aScanner.IsIncremental() && result==kEOF) {
     static const nsReadEndCondition
       theAttributeTerminator(kAttributeTerminalChars);
-    aString.Truncate();
+    aString.Truncate(origLen); // origLen added 43267
     aScanner.SetPosition(theOffset, PR_FALSE, PR_TRUE);
-    result=ConsumeAttributeValueText(aString,aScanner,theAttributeTerminator,aFlag);
+    result=ConsumeAttributeValueText(aString,
+      aNewlineCount, // bug 137315
+    aScanner,theAttributeTerminator,
+      PR_FALSE, // bug 235171
+    aFlag);
+    // bug 43267
+    if (NS_SUCCEEDED(result) && (aFlag & NS_IPARSER_FLAG_VIEW_SOURCE)) {
+      // Remember that this string literal was unterminated.
+      result = NS_ERROR_HTMLPARSER_UNTERMINATEDSTRINGLITERAL;
+    }
+    // end bug
   }
   return result;
 }
@@ -1773,11 +1830,23 @@ nsresult CAttributeToken::Consume(PRUnichar aChar, nsScanner& aScanner,PRInt32 a
                 if (NS_OK==result) {
                   if ((kQuote==aChar) || (kApostrophe==aChar)) {
                     aScanner.GetChar(aChar);
-                    result=ConsumeQuotedString(aChar,mTextValue,aScanner,aFlag);
+// bug 43267 (quotehere was never present in 1.3.1) (also see bug 154120)
+                    if (aFlag & NS_IPARSER_FLAG_VIEW_SOURCE) {
+                       mTextValue.Append(aChar);
+                    }
+// end bug
+                    result=ConsumeQuotedString(aChar,mTextValue,
+                       mNewlineCount, // bug 137315
+                    aScanner,aFlag);
                     if (NS_SUCCEEDED(result) && (aFlag & NS_IPARSER_FLAG_VIEW_SOURCE)) {
-                      mTextValue.Insert(aChar,0);
+                      // mTextValue.Insert(aChar,0); // bug 43267 (quotehere not in 1.3.1)
                       mTextValue.Append(aChar);
                     }
+// bug 43267
+                    else if (result == NS_ERROR_HTMLPARSER_UNTERMINATEDSTRINGLITERAL) {
+                      result = NS_OK;
+                    }
+// end bug
                     // According to spec. we ( who? ) should ignore linefeeds. But look,
                     // even the carriage return was getting stripped ( wonder why! ) -
                     // Ref. to bug 15204.  Okay, so the spec. told us to ignore linefeeds,
@@ -1794,8 +1863,10 @@ nsresult CAttributeToken::Consume(PRUnichar aChar, nsScanner& aScanner,PRInt32 a
                     static const nsReadEndCondition
                       theAttributeTerminator(kAttributeTerminalChars);
                     result=ConsumeAttributeValueText(mTextValue,
+                                                     mNewlineCount, // bug 137315
                                                      aScanner,
                                                      theAttributeTerminator,
+                                                     PR_FALSE, // bug 235171
                                                      aFlag);
                   } 
                 }//if
@@ -1820,7 +1891,16 @@ nsresult CAttributeToken::Consume(PRUnichar aChar, nsScanner& aScanner,PRInt32 a
             //so let's see what it is. If it's a '"', then assume we're reading
             //from the middle of the value. Try stripping the quote and continuing...
             if (kQuote==aChar){
-              result=aScanner.SkipOver(aChar); //strip quote.
+              //result=aScanner.SkipOver(aChar); //strip quote. // bug 43267
+// bug 43267
+              if (!(aFlag & NS_IPARSER_FLAG_VIEW_SOURCE)) {
+                result=aScanner.SkipOver(aChar); //strip quote.
+              } else {
+                aScanner.BindSubstring(mTextKey, wsstart, ++wsend);
+                // I've just incremented wsend.
+                aScanner.SetPosition(wsend);
+              }
+// end bug
             }
           }
         }//if

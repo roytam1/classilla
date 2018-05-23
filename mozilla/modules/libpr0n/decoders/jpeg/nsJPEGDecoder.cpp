@@ -195,9 +195,22 @@ NS_IMETHODIMP nsJPEGDecoder::WriteFrom(nsIInputStream *inStr, PRUint32 count, PR
   if (inStr) {
     if (!mBuffer) {
       mBuffer = (JOCTET *)PR_Malloc(count);
+      // bug 293986
+      if (!mBuffer) {
+      	mState = JPEG_ERROR;
+      	return NS_ERROR_OUT_OF_MEMORY;
+      }
       mBufferSize = count;
     } else if (count > mBufferSize) {
-      mBuffer = (JOCTET *)PR_Realloc(mBuffer, count);
+      //mBuffer = (JOCTET *)PR_Realloc(mBuffer, count);
+      // bug 293986
+      JOCTET *buf = (JOCTET *)PR_Realloc(mBuffer, count);
+      if (!buf) {
+      	mState = JPEG_ERROR;
+      	return NS_ERROR_OUT_OF_MEMORY;
+      }
+      mBuffer = buf;
+      // end bug
       mBufferSize = count;
     }
 
@@ -761,7 +774,8 @@ fill_input_buffer (j_decompress_ptr jd)
       /* Make sure backtrack buffer is big enough to hold new data. */
       if (src->decoder->mBackBufferSize < new_backtrack_buflen) {
 
-        /* Round up to multiple of 16 bytes. */
+        /* Round up to multiple of 256 bytes. */ // backbug from bug 293986 and modified for 1.3
+#if(0)
         PRUint32 roundup_buflen = ((new_backtrack_buflen + 15) >> 4) << 4;
         if (src->decoder->mBackBufferSize) {
             src->decoder->mBackBuffer =
@@ -778,7 +792,25 @@ fill_input_buffer (j_decompress_ptr jd)
           my_error_exit(cinfo);
 #endif
         }
-          
+#endif
+	const PRUint32 roundup_buflen = ((new_backtrack_buflen + 255) >> 8) << 8;
+    if (src->decoder->mBackBuffer) {
+      JOCTET *buf = (JOCTET *)PR_REALLOC(src->decoder->mBackBuffer, roundup_buflen);
+      /* Check for OOM */
+      if (!buf) {
+        src->decoder->mInfo.err->msg_code = JERR_OUT_OF_MEMORY;
+        my_error_exit((j_common_ptr)(&src->decoder->mInfo));
+      }
+      src->decoder->mBackBuffer = buf;
+    } else {
+      src->decoder->mBackBuffer = (JOCTET*)PR_MALLOC(roundup_buflen);
+      /* Check for OOM */
+      if (!src->decoder->mBackBuffer) {
+        src->decoder->mInfo.err->msg_code = JERR_OUT_OF_MEMORY;
+        my_error_exit((j_common_ptr)(&src->decoder->mInfo));
+      }
+    }
+// end bug          
         src->decoder->mBackBufferSize = (size_t)roundup_buflen;
 
         /* Check for malformed MARKER segment lengths. */

@@ -1243,6 +1243,8 @@ HTMLStyleSheetImpl::GetVisitedLinkColor(nscolor& aColor)
 NS_IMETHODIMP
 HTMLStyleSheetImpl::SetLinkColor(nscolor aColor)
 {
+// bug 99850
+#if(0)
   if (!mLinkRule) {
     mLinkRule = new HTMLColorRule(this);
     if (!mLinkRule) {
@@ -1250,6 +1252,20 @@ HTMLStyleSheetImpl::SetLinkColor(nscolor aColor)
     }
     NS_ADDREF(mLinkRule);
   }
+#else
+  if (mLinkRule) {
+    if (mLinkRule->mColor == aColor)
+      return NS_OK;
+    mLinkRule->mSheet = nsnull;
+    NS_RELEASE(mLinkRule);
+  }
+
+  mLinkRule = new HTMLColorRule(this);
+  if (!mLinkRule)
+    return NS_ERROR_OUT_OF_MEMORY;
+  NS_ADDREF(mLinkRule);
+#endif
+// end bug
   mLinkRule->mColor = aColor;
   return NS_OK;
 }
@@ -1258,6 +1274,8 @@ HTMLStyleSheetImpl::SetLinkColor(nscolor aColor)
 NS_IMETHODIMP
 HTMLStyleSheetImpl::SetActiveLinkColor(nscolor aColor)
 {
+// bug 99850
+#if(0)
   if (!mActiveRule) {
     mActiveRule = new HTMLColorRule(this);
     if (!mActiveRule) {
@@ -1265,6 +1283,20 @@ HTMLStyleSheetImpl::SetActiveLinkColor(nscolor aColor)
     }
     NS_ADDREF(mActiveRule);
   }
+#else
+  if (mActiveRule) {
+    if (mActiveRule->mColor == aColor)
+      return NS_OK;
+    mActiveRule->mSheet = nsnull;
+    NS_RELEASE(mActiveRule);
+  }
+
+  mActiveRule = new HTMLColorRule(this);
+  if (!mActiveRule)
+    return NS_ERROR_OUT_OF_MEMORY;
+  NS_ADDREF(mActiveRule);
+#endif
+// end bug
   mActiveRule->mColor = aColor;
   return NS_OK;
 }
@@ -1272,6 +1304,8 @@ HTMLStyleSheetImpl::SetActiveLinkColor(nscolor aColor)
 NS_IMETHODIMP
 HTMLStyleSheetImpl::SetVisitedLinkColor(nscolor aColor)
 {
+// bug 99850
+#if(0)
   if (!mVisitedRule) {
     mVisitedRule = new HTMLColorRule(this);
     if (!mVisitedRule) {
@@ -1279,6 +1313,20 @@ HTMLStyleSheetImpl::SetVisitedLinkColor(nscolor aColor)
     }
     NS_ADDREF(mVisitedRule);
   }
+#else
+  if (mVisitedRule) {
+    if (mVisitedRule->mColor == aColor)
+      return NS_OK;
+    mVisitedRule->mSheet = nsnull;
+    NS_RELEASE(mVisitedRule);
+  }
+
+  mVisitedRule = new HTMLColorRule(this);
+  if (!mVisitedRule)
+    return NS_ERROR_OUT_OF_MEMORY;
+  NS_ADDREF(mVisitedRule);
+#endif
+// end bug
   mVisitedRule->mColor = aColor;
   return NS_OK;
 }

@@ -40,17 +40,48 @@
 
 #include "domstubs.idl"
 
+/* our implementation of DOM Level 3 in Classilla is missing a few things on purpose;
+   read on for why. This is essentially to add textContent and a few other easy layups. */
+
+//interface nsIVariant; // added by bug 210451. we don't need this yet either.
+
 [scriptable, uuid(29fb2a18-1dd2-11b2-8dd9-a6fd5d5ad12f)]
 interface nsIDOM3Node : nsISupports
 {
   // Introduced in DOM Level 3:
   readonly attribute DOMString        baseURI;
   // Introduced in DOM Level 3:
-  unsigned short     compareDocumentPosition(in nsIDOMNode other);
+  unsigned short     compareDocumentPosition(in nsIDOMNode other)
+  					 raises(DOMException); // bug 210451
   // Introduced in DOM Level 3:
   boolean            isSameNode(in nsIDOMNode other);
   // Introduced in DOM Level 3:
-  DOMString          lookupNamespacePrefix(in DOMString namespaceURI);
+  DOMString          lookupNamespacePrefix(in DOMString namespaceURI); // left for backup
+  DOMString          lookupPrefix(in DOMString namespaceURI); // bug 210451
   // Introduced in DOM Level 3:
   DOMString          lookupNamespaceURI(in DOMString prefix);
+  
+  // the below functions are new in bug 210451
+  // Introduced in DOM Level 3:
+  boolean            isDefaultNamespace(in DOMString namespaceURI);
+  // Introduced in DOM Level 3:
+  boolean            isEqualNode(in nsIDOMNode arg);
+  // Introduced in DOM Level 3:
+  nsISupports        getFeature(in DOMString feature, 
+                                in DOMString version);
+  // THE BIG ONE!
+  // Introduced in DOM Level 3:
+  attribute DOMString       textContent; // raises(DOMException) on setting
+                                         // raises(DOMException) on retrieval                              
+
+/* declining to implement setUserData / getUserData for this version until
+   we also implement nsIDOMUserDataHandler, which is also part of 210451.
+  // Introduced in DOM Level 3:
+  nsIVariant         setUserData(in DOMString key, 
+                                 in nsIVariant data, 
+                                 in nsIDOMUserDataHandler handler);
+  // Introduced in DOM Level 3:
+  nsIVariant         getUserData(in DOMString key);
+*/
+   
 };

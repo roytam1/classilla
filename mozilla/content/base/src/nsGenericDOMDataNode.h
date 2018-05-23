@@ -152,6 +152,11 @@ public:
   nsresult GetBaseURI(nsAString& aURI);
   nsresult LookupNamespacePrefix(const nsAString& aNamespaceURI,
                                  nsAString& aPrefix);
+  // bug 210451 removed LookupNamespacePrefix in favour of LookupPrefix; we're
+  // keeping both.
+  nsresult LookupPrefix(const nsAString& aNamespaceURI,
+                                 nsAString& aPrefix);
+  
   nsresult LookupNamespaceURI(const nsAString& aNamespacePrefix,
                               nsAString& aNamespaceURI);
 
@@ -243,6 +248,7 @@ public:
   NS_IMETHOD SetText(const char* aBuffer, PRInt32 aLength, PRBool aNotify);
   NS_IMETHOD IsOnlyWhitespace(PRBool* aResult);
   NS_IMETHOD CloneContent(PRBool aCloneText, nsITextContent** aClone);
+  NS_IMETHOD AppendTextTo(nsAString &aResult); 
 
   //----------------------------------------
 

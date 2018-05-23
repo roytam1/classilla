@@ -36,6 +36,9 @@
  * the terms of any one of the NPL, the GPL or the LGPL.
  *
  * ***** END LICENSE BLOCK ***** */
+ 
+ /* THIS FILE IS A FREAKING WASTELAND. Around 9.2 I need to rip the crap out of
+    it and rewrite it from the ground up. -- Cameron Kaiser */
 
 #include "nsCSSFrameConstructor.h"
 #include "nsIArena.h"
@@ -199,7 +202,8 @@ static PRBool gNoisyInlineConstruction = PR_FALSE;
 static PRBool gVerifyFastFindFrame = PR_FALSE;
 
 struct FrameCtorDebugFlags {
-  char*   name;
+  //char*   name;
+  const char *name; // bug 244454
   PRBool* on;
 };
 
@@ -592,6 +596,10 @@ struct nsFrameItems {
 
   // Appends the frame to the end of the list
   void AddChild(nsIFrame* aChild);
+  // bug 307277
+  // Remove the frame from the list, return PR_FALSE if not found.
+  PRBool RemoveChild(nsIFrame* aChild);
+
 };
 
 nsFrameItems::nsFrameItems(nsIFrame* aFrame)
@@ -616,6 +624,38 @@ nsFrameItems::AddChild(nsIFrame* aChild)
     lastChild = sib;
   }
 }
+
+// bug 307277 modified for 1.3
+PRBool
+nsFrameItems::RemoveChild(nsIFrame* aFrame)
+{
+  NS_PRECONDITION(aFrame, "null ptr");
+  nsIFrame* prev = nsnull;
+  nsIFrame* sib = childList;
+  //for (; sib && sib != aFrame; sib = sib->GetNextSibling()) {
+  for (; sib && sib != aFrame; sib->GetNextSibling(&sib)) {
+    prev = sib;
+  }
+  if (!sib) {
+    return PR_FALSE;
+  }
+  if (sib == childList) {
+    //childList = sib->GetNextSibling();
+    sib->GetNextSibling(&childList);
+  } else {
+    //prev->SetNextSibling(sib->GetNextSibling());
+    nsIFrame *sibchild;
+    sib->GetNextSibling(&sibchild);
+    prev->SetNextSibling(sibchild);
+  }
+  if (sib == lastChild) {
+    lastChild = prev;
+  }
+  sib->SetNextSibling(nsnull);
+  return PR_TRUE;
+}
+// end bug
+
 
 // -----------------------------------------------------------
 
@@ -829,12 +869,14 @@ nsFrameConstructorState::nsFrameConstructorState(nsIPresContext*        aPresCon
 }
 
 // Use the first-in-flow of a positioned inline frame in galley mode as the 
-// containing block. We don't need to do this for a block, since blocks aren't 
+// containing block. (always a/o bug 288357)
+// We don't need to do this for a block, since blocks aren't 
 // continued in galley mode.
 static nsIFrame*
 AdjustAbsoluteContainingBlock(nsIPresContext* aPresContext,
                               nsIFrame*       aContainingBlockIn)
 {
+#if(0)
   nsIFrame* containingBlock = aContainingBlockIn;
   PRBool paginated;
   aPresContext->IsPaginated(&paginated);
@@ -846,6 +888,10 @@ AdjustAbsoluteContainingBlock(nsIPresContext* aPresContext,
     }
   }
   return containingBlock;
+#endif
+  // Always use the container's first in flow.
+  return aContainingBlockIn->GetFirstInFlow();
+// end bug
 }
 
 void
@@ -942,12 +988,18 @@ GetRealFrame(nsIFrame* aFrame)
  * changes that could occur as the result of the reparenting done in
  * MoveChildrenTo().
  */
+// in later patches this was renamed to ::AdjustFlowParentPtrs()
+// this is the 1.3 equivalent.
 static void
 AdjustOutOfFlowFrameParentPtrs(nsIPresContext*          aPresContext,
                                nsIFrame*                aFrame,
-                               nsFrameConstructorState* aState)
+                               nsFrameConstructorState& aState,      // backbug from 307277
+                               nsFrameConstructorState& aOuterState) // bug 307277
 {
-  nsIFrame *outOfFlowFrame = GetRealFrame(aFrame);
+  NS_PRECONDITION(aFrame, "must have frame to work with");
+  // bug 307277 modified for 1.3. it uses nsPlaceholderFrame, but ours lacks this method.
+  //nsIFrame *outOfFlowFrame = nsPlaceholderFrame::GetRealFrameFor(aFrame);
+  nsIFrame *outOfFlowFrame = GetRealFrame(aFrame); // so we use the old code.
 
   if (outOfFlowFrame && outOfFlowFrame != aFrame) {
 
@@ -965,10 +1017,13 @@ AdjustOutOfFlowFrameParentPtrs(nsIPresContext*          aPresContext,
 
     // Update the parent pointer for outOfFlowFrame if it's
     // containing block has changed as the result of reparenting,
+    // and move it from the outer state to the inner, bug 307277.
     //
     // XXX_kin: I don't think we have to worry about
     // XXX_kin: NS_STYLE_POSITION_FIXED or NS_STYLE_POSITION_RELATIVE.
 
+// removed per 307277
+#if(0)
     if (NS_STYLE_POSITION_ABSOLUTE == display->mPosition) {
       // XXX_kin: I think we'll need to add code here to handle the
       // XXX_kin: reparenting that can happen in ConstructInline()?
@@ -984,15 +1039,30 @@ AdjustOutOfFlowFrameParentPtrs(nsIPresContext*          aPresContext,
       // XXX_kin: outOfFlowFrame is in the original inline frame's absolute list,
       // XXX_kin: and is also parented to it.
     }
-    else if (NS_STYLE_FLOAT_NONE != display->mFloats) {
+    else 
+#endif
+	//if (outOfFlowFrame->GetStyleDisplay()->IsFloating()) {
+    if (NS_STYLE_FLOAT_NONE != display->mFloats) {
 
 // bug 213781, modified for 1.3
       //outOfFlowFrame->SetParent(aState->mFloatedItems.containingBlock);
-      nsIFrame *parent = aState->mFloatedItems.containingBlock;
+      nsIFrame *parent = aState.mFloatedItems.containingBlock;
+      // backbugs from bug 307277
+      NS_ASSERTION(parent, "Should have float containing block here!");
+      //NS_ASSERTION(outOfFlowFrame->GetParent() == aOuterState.mFloatedItems.containingBlock,
+      //             "expected the float to be a child of the outer CB");
+      // bug 307277 modified for 1.3
+      if (aOuterState.mFloatedItems.RemoveChild(outOfFlowFrame)) {
+      	aState.mFloatedItems.AddChild(outOfFlowFrame);
+      } else {
+      	NS_NOTREACHED("float wasn't in the outer state float list");
+      }
       nsFrameState state;
       outOfFlowFrame->SetParent(parent);
       outOfFlowFrame->GetFrameState(&state);
       if (state & (NS_FRAME_HAS_VIEW | NS_FRAME_HAS_CHILD_WITH_VIEW)) {
+      	// We don't need to walk up the tree, since each level of
+      	// recursion of the SplitToContainingBlock will propagate the bit.
         parent->SetFrameState(state | NS_FRAME_HAS_CHILD_WITH_VIEW);
       }
 // end bug
@@ -1010,12 +1080,18 @@ AdjustOutOfFlowFrameParentPtrs(nsIPresContext*          aPresContext,
     // XXX_kin:     because any absolutely positioned frames below that frame
     // XXX_kin:     would be properly parented.
 
+    // per bug 307277,
+    // All out-of-flows are automatically float containing blocks, so we're
+    // done here.
     return;
   }
 
   // XXX_kin: Since we're only handling floaters at the moment,
   // XXX_kin: we don't need to cross block boundaries.
 
+  // if (aFrame->IsFloatContainingBlock()) {
+  // No need to recurse further; floats whose placeholders are
+  // inside a block already have the right parent.
   if (IsBlockFrame(aPresContext, aFrame))
     return;
 
@@ -1034,7 +1110,7 @@ AdjustOutOfFlowFrameParentPtrs(nsIPresContext*          aPresContext,
     // XXX_kin:
     // XXX_kin: Do we need to prevent descent into anonymous content here?
 
-    AdjustOutOfFlowFrameParentPtrs(aPresContext, childFrame, aState);
+    AdjustOutOfFlowFrameParentPtrs(aPresContext, childFrame, aState, aOuterState);
     childFrame->GetNextSibling(&childFrame);
   }
 }
@@ -1051,7 +1127,8 @@ MoveChildrenTo(nsIPresContext*          aPresContext,
                nsIStyleContext*         aNewParentSC,
                nsIFrame*                aNewParent,
                nsIFrame*                aFrameList,
-               nsFrameConstructorState* aState)
+               nsFrameConstructorState* aState,
+               nsFrameConstructorState* aOuterState) // bug 307277
 {
   PRBool setHasChildWithView = PR_FALSE;
 
@@ -1068,8 +1145,11 @@ MoveChildrenTo(nsIPresContext*          aPresContext,
     // If aState is not null, the caller expects us to make adjustments
     // so that placeholder out of flow frames point to the correct parent.
 
-    if (aState)
-      AdjustOutOfFlowFrameParentPtrs(aPresContext, aFrameList, aState);
+// aOuterState from 307277
+    if (aState) {
+      NS_ASSERTION(aOuterState, "need an outer state too");
+      AdjustOutOfFlowFrameParentPtrs(aPresContext, aFrameList, *aState, *aOuterState);
+    }
 
 #if 0
     // XXX When this is used with {ib} frame hierarchies, it seems
@@ -3502,6 +3582,13 @@ nsCSSFrameConstructor::ConstructDocElementFrame(nsIPresShell*        aPresShell,
 */    
 
   aNewFrame = nsnull;
+  
+  // bug 502447 modified for 1.3 "PropagateScrollToViewport()"
+  nsIContent *propagatedScrollFrom = PropagateScrollToViewport(aPresContext, aPresShell);
+  
+  // SetUpDocElementContainingBlock(aDocElement);
+  // this sounds awful nice to have ... and actually when analyzing 78070 we actually
+  // have it already, sort of.
 
   if (!mTempFrameTreeState)
     aPresShell->CaptureHistoryState(getter_AddRefs(mTempFrameTreeState));
@@ -3566,7 +3653,8 @@ nsCSSFrameConstructor::ConstructDocElementFrame(nsIPresShell*        aPresShell,
     }
   }
 
-  PRBool docElemIsTable = IsTableRelated(display->mDisplay, PR_FALSE);
+  // bug 233480 attachment 140919 modified for 1.3
+  //PRBool docElemIsTable = IsTableRelated(display->mDisplay, PR_FALSE);
  
 
   // --------- IF SCROLLABLE WRAP IN SCROLLFRAME --------
@@ -3581,7 +3669,7 @@ nsCSSFrameConstructor::ConstructDocElementFrame(nsIPresShell*        aPresShell,
   PRBool isPaginated = PR_FALSE;
   aPresContext->IsPaginated(&isPaginated);
   PRBool propagatedScrollToViewport =
-         (PropagateScrollToViewport(aPresContext, aPresShell) == aDocElement);
+         (propagatedScrollFrom == aDocElement); // bug 502447 modified for 1.3
   PRBool isScrollable = IsScrollable(aPresContext, display)
                         && isPaginated
                         && !propagatedScrollToViewport;
@@ -3615,6 +3703,30 @@ nsCSSFrameConstructor::ConstructDocElementFrame(nsIPresShell*        aPresShell,
   nsIFrame* contentFrame = nsnull;
   PRBool isBlockFrame = PR_FALSE;
   nsresult rv;
+  
+// bug 233480
+  // CSS2.1 section 9.2.4 specifies fixups for the 'display' property
+  // of the root element.  We can't implement them in nsRuleNode because
+  // it doesn't (and shouldn't, for nodes that can have siblings) know
+  // the content node.  So do them here if needed, by changing the style
+  // data, so that other code doesn't get confused by looking at the style
+  // data.
+  if (1 &&
+      display->mDisplay != NS_STYLE_DISPLAY_NONE &&
+      display->mDisplay != NS_STYLE_DISPLAY_BLOCK &&
+      display->mDisplay != NS_STYLE_DISPLAY_TABLE &&
+      1) {
+    nsStyleDisplay *mutable_display = NS_STATIC_CAST(nsStyleDisplay*,
+        styleContext->GetUniqueStyleData(aPresContext, eStyleStruct_Display));
+    display = mutable_display;
+    
+    if (mutable_display->mDisplay == NS_STYLE_DISPLAY_INLINE_TABLE)
+      mutable_display->mDisplay = NS_STYLE_DISPLAY_TABLE;
+    else
+      mutable_display->mDisplay = NS_STYLE_DISPLAY_BLOCK;
+  }
+  PRBool docElemIsTable = display->mDisplay == NS_STYLE_DISPLAY_TABLE;
+// end bug  
 
   if (docElemIsTable) {
       // if the document is a table then just populate it.
@@ -6717,7 +6829,9 @@ nsCSSFrameConstructor::ConstructFrameByDisplayType(nsIPresShell*            aPre
       aState.PushAbsoluteContainingBlock(aPresContext, scrolledFrame, absoluteSaveState);
     }
      
-    ProcessChildren(aPresShell, aPresContext, aState, aContent, scrolledFrame, PR_FALSE,
+    ProcessChildren(aPresShell, aPresContext, aState, aContent, scrolledFrame, 
+    				// PR_FALSE, // bug 212145
+    				PR_TRUE,
                     childItems, PR_TRUE);
 
     nsCOMPtr<nsIAtom> tag;
@@ -7861,6 +7975,14 @@ nsCSSFrameConstructor::ReconstructDocElementHierarchy(nsIPresContext* aPresConte
       // Get the frame that corresponds to the document element
       state.mFrameManager->GetPrimaryFrameFor(rootContent, &docElementFrame);
 
+      // bug 256108
+      // Remove any existing fixed items: they are always on the
+      // FixedContainingBlock.  Note that this has to be done before we call
+      // ClearPlaceholderFrameMap(), since RemoveFixedItems uses the
+      // placeholder frame map.
+      rv = RemoveFixedItems(aPresContext, shell, state.mFrameManager);
+      
+      if (NS_SUCCEEDED(rv)) {
       // Clear the hash tables that map from content to frame and out-of-flow
       // frame to placeholder frame
       state.mFrameManager->ClearPrimaryFrameMap();
@@ -7915,9 +8037,10 @@ nsCSSFrameConstructor::ReconstructDocElementHierarchy(nsIPresContext* aPresConte
                                                 docParentFrame, nsnull, 
                                                 docElementFrame);
           if (NS_SUCCEEDED(rv)) {
+            // bug 256108. this was moved up above.
             // Remove any existing fixed items: they are always on the FixedContainingBlock
-            rv = RemoveFixedItems(aPresContext, shell, state.mFrameManager);
-            if (NS_SUCCEEDED(rv)) {
+//            rv = RemoveFixedItems(aPresContext, shell, state.mFrameManager);
+//            if (NS_SUCCEEDED(rv)) {
               // Create the new document element hierarchy
               nsIFrame*                 newChild;
               nsCOMPtr<nsIStyleContext> rootPseudoStyle;
@@ -8024,7 +8147,8 @@ nsCSSFrameConstructor::GetAbsoluteContainingBlock(nsIPresContext* aPresContext,
   // Starting with aFrame, look for a frame that is absolutely positioned or
   // relatively positioned
   nsIFrame* containingBlock = nsnull;
-  for (nsIFrame* frame = aFrame; frame; frame->GetParent(&frame)) {
+  for (nsIFrame* frame = aFrame; frame && !containingBlock; // bug 282754
+  		frame->GetParent(&frame)) {
     // Is it positioned?
     // If it's a table then ignore it, because for the time being tables
     // are not containers for absolutely positioned child frames
@@ -8032,6 +8156,8 @@ nsCSSFrameConstructor::GetAbsoluteContainingBlock(nsIPresContext* aPresContext,
     frame->GetStyleData(eStyleStruct_Display, (const nsStyleStruct*&)disp);
 
     if (disp->IsPositioned() && disp->mDisplay != NS_STYLE_DISPLAY_TABLE) {
+// bug 282754 modified for 1.3.1. won't work yet, did some prelim stuff, no go.
+#if(1)    
       nsCOMPtr<nsIAtom> frameType;
       frame->GetFrameType(getter_AddRefs(frameType));
 
@@ -8041,14 +8167,16 @@ nsCSSFrameConstructor::GetAbsoluteContainingBlock(nsIPresContext* aPresContext,
         frame->FirstChild(aPresContext, nsnull, &scrolledFrame);
         if (scrolledFrame) {
           scrolledFrame->GetFrameType(getter_AddRefs(frameType));
-          if (nsLayoutAtoms::areaFrame == frameType) {
+          if (nsLayoutAtoms::areaFrame == frameType ||
+              nsLayoutAtoms::blockFrame == frameType) { // from bug 282754 as stop gap.
             containingBlock = scrolledFrame;
             break;
           } else if (nsLayoutAtoms::scrollFrame == frameType) {
             scrolledFrame->FirstChild(aPresContext, nsnull, &scrolledFrame);
             if (scrolledFrame) {
               scrolledFrame->GetFrameType(getter_AddRefs(frameType));
-              if (nsLayoutAtoms::areaFrame == frameType) {
+              if (nsLayoutAtoms::areaFrame == frameType ||
+                  nsLayoutAtoms::blockFrame == frameType) { // from bug 282754 as stop gap.
                 containingBlock = scrolledFrame;
                 break;
               }
@@ -8057,10 +8185,40 @@ nsCSSFrameConstructor::GetAbsoluteContainingBlock(nsIPresContext* aPresContext,
         }
 
       } else if ((nsLayoutAtoms::areaFrame == frameType) ||
+                 (nsLayoutAtoms::blockFrame == frameType) || // from bug 282754 as stop gap.
                  (nsLayoutAtoms::positionedInlineFrame == frameType)) {
         containingBlock = frame;
         break;
       }
+#else
+#error this does not work yet
+      // Find the outermost wrapped block under this frame
+      // We don't have GetContentInsertionFrame, but we can guess by figuring out
+      // what our scrolled frame is (see mozilla 1.8's nsGfxScrollFrame.h)
+      /*
+      for (nsIFrame* wrappedFrame = frame->GetContentInsertionFrame();
+           wrappedFrame != frame->GetParent();
+           wrappedFrame = wrappedFrame->GetParent()) {
+      */
+      nsIFrame *wrappedFrame;
+      frame->FirstChild(aPresContext, nsnull, &wrappedFrame);
+      nsIFrame *nextFrame = nsnull;
+	  while(wrappedFrame != nextFrame) {
+        //nsIAtom* frameType = wrappedFrame->GetType();
+        nsCOMPtr<nsIAtom> frameType;
+        wrappedFrame->GetFrameType(getter_AddRefs(frameType));
+        if (nsLayoutAtoms::areaFrame == frameType ||
+            nsLayoutAtoms::blockFrame == frameType) ||
+            nsLayoutAtoms::positionedInlineFrame == frameType) {
+          containingBlock = frame;
+        } else if (nsLayoutAtoms::fieldSetFrame == frameType) {
+          // If the positioned frame is a fieldset, use the area frame inside it.
+          // We don't use GetContentInsertionFrame for fieldsets yet.
+          containingBlock = frame->GetFirstChild(nsnull);
+        }
+      }
+// end bug
+#endif
     }
   }
 
@@ -8992,8 +9150,10 @@ nsCSSFrameConstructor::ContentAppended(nsIPresContext* aPresContext,
     //
     nsCOMPtr<nsIDOMHTMLSelectElement> selectContent(do_QueryInterface(aContainer));
     if (!selectContent) {
-      if (WipeContainingBlock(aPresContext, state, blockContent, parentFrame,
-                              frameItems.childList)) {
+      if (WipeContainingBlock(aPresContext, state,
+      						  // blockContent, 
+      						  containingBlock, // bug 244454
+      						  parentFrame, frameItems.childList)) {
         return NS_OK;
       }
     }
@@ -9586,6 +9746,7 @@ nsCSSFrameConstructor::ContentInserted(nsIPresContext*        aPresContext,
         if (parentContainer) {
           PRInt32 ix;
           parentContainer->IndexOf(blockContent, ix);
+          // bug 237566 alters this function. I have chosen not to.
           ContentReplaced(aPresContext, parentContainer, blockContent, blockContent, ix);
         }
         else {
@@ -9619,7 +9780,10 @@ nsCSSFrameConstructor::ContentInserted(nsIPresContext*        aPresContext,
   if (!selectContent) {
     // Perform special check for diddling around with the frames in
     // a special inline frame.
-    if (WipeContainingBlock(aPresContext, state, blockContent, parentFrame, frameItems.childList))
+    if (WipeContainingBlock(aPresContext, state,
+    						//blockContent,
+    						containingBlock, // bug 244454
+    						parentFrame, frameItems.childList))
       return NS_OK;
   }
 
@@ -9733,6 +9897,8 @@ nsCSSFrameConstructor::ContentInserted(nsIPresContext*        aPresContext,
   return NS_OK;
 }
 
+// post bug 237566 this is ::ReinsertContent(). we are not doing that, since
+// frankly I fail to see the semantic worth. -- Cameron
 NS_IMETHODIMP
 nsCSSFrameConstructor::ContentReplaced(nsIPresContext* aPresContext,
                                        nsIContent*     aContainer,
@@ -9740,13 +9906,25 @@ nsCSSFrameConstructor::ContentReplaced(nsIPresContext* aPresContext,
                                        nsIContent*     aNewChild,
                                        PRInt32         aIndexInContainer)
 {
+  // essentially we ignore aIndexInContainer. eventually I will go and pull
+  // all this out when I do the cleanup for 237566. -- Cameron
+  //PRInt32 ix = aContainer->IndexOf(aChild);
+  PRInt32 ix;
+  aContainer->IndexOf(aOldChild, ix); // not &ix
+  
   // XXX For now, do a brute force remove and insert.
+  // bug 237566 also causes aOldChild and aNewChild to be the same, so
+  // I have treated them as such.
   nsresult res = ContentRemoved(aPresContext, aContainer, 
-                                aOldChild, aIndexInContainer, PR_TRUE);
+                                aOldChild, 
+                                ix, // aIndexInContainer, 
+                                PR_TRUE);
 
   if (NS_SUCCEEDED(res)) {
     res = ContentInserted(aPresContext, aContainer, 
-                          aNewChild, aIndexInContainer, nsnull, PR_TRUE);
+                          aOldChild, // should == aNewChild, 
+                          ix, // aIndexInContainer,
+                          nsnull, PR_TRUE);
   }
 
   return res;
@@ -10648,6 +10826,7 @@ nsCSSFrameConstructor::ContentChanged(nsIPresContext* aPresContext,
             PRInt32 ix;
             container->IndexOf(aContent, ix);
             doContentChanged = PR_FALSE;
+            // see changes for bug 237566
             rv = ContentReplaced(aPresContext, container,
                                  aContent, aContent, ix);
           }
@@ -11011,6 +11190,8 @@ nsCSSFrameConstructor::AttributeChanged(nsIPresContext* aPresContext,
 
 #endif // INCLUDE_XUL
 
+// bug 171830
+#if(0)
   // check for inline style.  we need to clear the data at the style
   // context's rule node whenever the inline style property changes.
 
@@ -11063,6 +11244,8 @@ nsCSSFrameConstructor::AttributeChanged(nsIPresContext* aPresContext,
     // in something to tell it that this change is for inline style?
     set->ClearStyleData(aPresContext, rule, styleContext);
   }
+#endif
+// end bug
 
   // See if we have appearance information for a theme.
   if (primaryFrame) {
@@ -11088,7 +11271,7 @@ nsCSSFrameConstructor::AttributeChanged(nsIPresContext* aPresContext,
     result = ReconstructDocElementHierarchy(aPresContext);
   }
   else if (reframe) {
-    result = RecreateFramesForContent(aPresContext, aContent, inlineStyle, rule, styleContext);
+    result = RecreateFramesForContent(aPresContext, aContent); // bug 171830 // , inlineStyle, rule, styleContext);
   }
   else if (restyle) {
     // If there is no frame then there is no point in re-styling it,
@@ -11140,7 +11323,7 @@ nsCSSFrameConstructor::AttributeChanged(nsIPresContext* aPresContext,
       ProcessRestyledFrames(changeList, aPresContext);
     }
     else {  // no frame now, possibly genetate one with new style data
-      result = RecreateFramesForContent(aPresContext, aContent, inlineStyle, rule, styleContext);
+      result = RecreateFramesForContent(aPresContext, aContent); // bug 171830 // , inlineStyle, rule, styleContext);
     }
   }
 
@@ -11172,7 +11355,7 @@ nsCSSFrameConstructor::StyleRuleChanged(nsIPresContext* aPresContext,
   if (restyle) {
     nsCOMPtr<nsIStyleSet> set;
     shell->GetStyleSet(getter_AddRefs(set));
-    set->ClearStyleData(aPresContext, aStyleRule, nsnull);
+    set->ClearStyleData(aPresContext, aStyleRule); // bug 171830 // , nsnull);
   }
 
   if (reframe) {
@@ -12406,9 +12589,11 @@ nsCSSFrameConstructor::CaptureStateFor(nsIPresContext* aPresContext,
 
 nsresult
 nsCSSFrameConstructor::RecreateFramesForContent(nsIPresContext* aPresContext,
-                                                nsIContent* aContent, PRBool aInlineStyle,
+                                                nsIContent* aContent) 
+                                                /* , PRBool aInlineStyle,
                                                 nsIStyleRule* aInlineStyleRule,
-                                                nsIStyleContext* aStyleContext)                                   
+                                                nsIStyleContext* aStyleContext) */
+                                                // bug 171830                                  
 {
   // If there is no document, we don't want to recreate frames for it.
   nsCOMPtr<nsIDocument> doc;
@@ -12470,6 +12655,8 @@ nsCSSFrameConstructor::RecreateFramesForContent(nsIPresContext* aPresContext,
       // attribute change occurred.
       rv = ContentRemoved(aPresContext, container, aContent, indexInContainer, PR_FALSE);
 
+// bug 171830
+#if(0)
       // Now that the old frame is gone (and has stopped depending on obsolete style
       // data), we need to blow away our style information if this reframe happened as
       // a result of an inline style attribute changing.
@@ -12480,6 +12667,8 @@ nsCSSFrameConstructor::RecreateFramesForContent(nsIPresContext* aPresContext,
         // in something to tell it that this change is for inline style?
         set->ClearStyleData(aPresContext, aInlineStyleRule, aStyleContext);
       }
+#endif
+// end bug
     
       if (NS_SUCCEEDED(rv)) {
         // Now, recreate the frames associated with this content object.
@@ -13999,8 +14188,11 @@ nsCSSFrameConstructor::ConstructInline(nsIPresShell*            aPresShell,
   // Any inline frame could have a view (e.g., opacity)
   nsHTMLContainerFrame::CreateViewForFrame(aPresContext, blockFrame,
                                            aStyleContext, nsnull, PR_FALSE);
-
-  if (aIsPositioned) {
+  // bug 192469
+  //if (aIsPositioned) {
+  nsIView *view;
+  blockFrame->GetView(aPresContext, &view);
+  if (view) {
     // Move list2's frames into the new view
     nsIFrame* oldParent;
     list2->GetParent(&oldParent);
@@ -14013,7 +14205,7 @@ nsCSSFrameConstructor::ConstructInline(nsIPresShell*            aPresShell,
                                 GetAbsoluteContainingBlock(aPresContext, blockFrame),
                                 GetFloaterContainingBlock(aPresContext, blockFrame));
 
-  MoveChildrenTo(aPresContext, blockSC, blockFrame, list2, &state);
+  MoveChildrenTo(aPresContext, blockSC, blockFrame, list2, &state, &aState);
 
   // list3's frames belong to another inline frame
   nsIFrame* inlineFrame = nsnull;
@@ -14033,7 +14225,11 @@ nsCSSFrameConstructor::ConstructInline(nsIPresShell*            aPresShell,
     nsHTMLContainerFrame::CreateViewForFrame(aPresContext, inlineFrame,
                                              aStyleContext, nsnull, PR_FALSE);
 
-    if (aIsPositioned) {
+    // bug 192469
+    //if (aIsPositioned) {
+    nsIView *inlineView;
+    inlineFrame->GetView(aPresContext, &inlineView);
+    if (inlineView) {
       // Move list3's frames into the new view
       nsIFrame* oldParent;
       list3->GetParent(&oldParent);
@@ -14043,7 +14239,7 @@ nsCSSFrameConstructor::ConstructInline(nsIPresShell*            aPresShell,
     // Reparent (cheaply) the frames in list3 - we don't have to futz
     // with their style context because they already have the right one.
     inlineFrame->SetInitialChildList(aPresContext, nsnull, list3);
-    MoveChildrenTo(aPresContext, nsnull, inlineFrame, list3, nsnull);
+    MoveChildrenTo(aPresContext, nsnull, inlineFrame, list3, nsnull, nsnull);
   }
 
   // Mark the 3 frames as special. That way if any of the
@@ -14180,6 +14376,9 @@ DoCleanupFrameReferences(nsIPresContext*  aPresContext,
                          nsIFrameManager* aFrameManager,
                          nsIFrame*        aFrameIn)
 {
+//  if (!aPresContext || !aFrameManager || !aFrameIn)
+//  	return; // paranoia?
+  	
   nsCOMPtr<nsIContent> content;
   aFrameIn->GetContent(getter_AddRefs(content));
 
@@ -14226,16 +14425,21 @@ CleanupFrameReferences(nsIPresContext*  aPresContext,
 PRBool
 nsCSSFrameConstructor::WipeContainingBlock(nsIPresContext* aPresContext,
                                            nsFrameConstructorState& aState,
-                                           nsIContent* aBlockContent,
+                                           //nsIContent* aBlockContent,
+                                           nsIFrame *aContainingBlock, // bug 244454
                                            nsIFrame* aFrame,
                                            nsIFrame* aFrameList)
 {
+
+// this initial code was really slimmed down by bug 244454. I don't trust it to
+// work right in 1.3, so I'm leaving the belt-and-suspenders stuff here. -- Cameron
+
   // Before we go and append the frames, check for a special
   // situation: an inline frame that will now contain block
   // frames. This is a no-no and the frame construction logic knows
   // how to fix this.
-  if (!aBlockContent)
-    return PR_FALSE;
+  //if (!aBlockContent)
+  //  return PR_FALSE;
 
   const nsStyleDisplay* parentDisplay;
   aFrame->GetStyleData(eStyleStruct_Display, (const nsStyleStruct *&) parentDisplay);
@@ -14243,8 +14447,8 @@ nsCSSFrameConstructor::WipeContainingBlock(nsIPresContext* aPresContext,
     if (!AreAllKidsInline(aFrameList)) {
       // XXXwaterson temporary code until we figure out why bug 102931
       // is really happening.
-      NS_ASSERTION(aBlockContent != nsnull, "ack, inline without a containing block");
-      if (! aBlockContent)
+      //NS_ASSERTION(aBlockContent != nsnull, "ack, inline without a containing block");
+      //if (! aBlockContent)
         return PR_FALSE;
 
       // Ok, reverse tracks: wipe out the frames we just created
@@ -14260,6 +14464,10 @@ nsCSSFrameConstructor::WipeContainingBlock(nsIPresContext* aPresContext,
       aFrame->GetContent(getter_AddRefs(parentContent));
       frameManager->ClearAllUndisplayedContentIn(parentContent);
 
+      // issue 51: port the logic from Mozilla 1.7 here just in case
+      // we have frames in common and we kill someone else's frames too soon
+
+#if(0)      
       CleanupFrameReferences(aPresContext, frameManager, aFrameList);
       nsFrameList tmp(aFrameList);
       tmp.DestroyFrames(aPresContext);
@@ -14278,25 +14486,80 @@ nsCSSFrameConstructor::WipeContainingBlock(nsIPresContext* aPresContext,
         tmp.SetFrames(aState.mFloatedItems.childList);
         tmp.DestroyFrames(aPresContext);
       }
+#endif
+      CleanupFrameReferences(aPresContext, frameManager, aFrameList);
+      if (aState.mAbsoluteItems.childList) {
+        CleanupFrameReferences(aPresContext, frameManager, aState.mAbsoluteItems.childList);
+      }
+      if (aState.mFixedItems.childList) {
+        CleanupFrameReferences(aPresContext, frameManager, aState.mFixedItems.childList);
+      }
+      if (aState.mFloatedItems.childList) {
+        CleanupFrameReferences(aPresContext, frameManager, aState.mFloatedItems.childList);
+      }
+      nsFrameList tmp(aFrameList);
+      tmp.DestroyFrames(aPresContext);
+      tmp.SetFrames(aState.mAbsoluteItems.childList);
+      tmp.DestroyFrames(aPresContext);
+      tmp.SetFrames(aState.mFixedItems.childList);
+      tmp.DestroyFrames(aPresContext);
+      tmp.SetFrames(aState.mFloatedItems.childList);
+      tmp.DestroyFrames(aPresContext);
+      aState.mAbsoluteItems.childList = nsnull;
+      aState.mFixedItems.childList = nsnull;
+      aState.mFloatedItems.childList = nsnull;
+      // end issue
+          
       // Tell parent of the containing block to reformulate the
       // entire block. This is painful and definitely not optimal
       // but it will *always* get the right answer.
+      // bug 244454
+      // First, if the containing block is really a block wrapper for something
+      // that's really an inline, walk up the parent chain until we hit something
+      // that's not.
+      //nsCOMPtr<nsIContent> parentContainer;
+      //aBlockContent->GetParent(*getter_AddRefs(parentContainer));
+      while (IsFrameSpecial(aContainingBlock)) {
+        // aContainingBlock = aContainingBlock->GetParent();
+      	aContainingBlock->GetParent(&aContainingBlock);
+      }
+      //nsIContent *blockContent = aContainingBlock->GetContent();
+      nsIContent *blockContent;
+      aContainingBlock->GetContent(&blockContent);
+      //nsCOMPtr<nsIContent> parentContainer = blockContent->GetParent();
       nsCOMPtr<nsIContent> parentContainer;
-      aBlockContent->GetParent(*getter_AddRefs(parentContainer));
+      blockContent->GetParent(*getter_AddRefs(parentContainer));
+      
 #ifdef DEBUG
       if (gNoisyContentUpdates) {
         printf("nsCSSFrameConstructor::WipeContainingBlock: aBlockContent=%p parentContainer=%p\n",
                NS_STATIC_CAST(void*, aBlockContent),
                NS_STATIC_CAST(void*, parentContainer));
+/* fix this eventually
++    printf("nsCSSFrameConstructor::WipeContainingBlock: blockContent=%p parentContainer=%p\n",
++           NS_STATIC_CAST(void*, blockContent),
+                NS_STATIC_CAST(void*, parentContainer));
+*/
       }
 #endif
       if (parentContainer) {
         PRInt32 ix;
-        parentContainer->IndexOf(aBlockContent, ix);
-        ContentReplaced(aPresContext, parentContainer, aBlockContent, aBlockContent, ix);
+        parentContainer->IndexOf(blockContent, //aBlockContent, 
+        							ix);
+        // bug 244454
+        // also see bug 237566
+//        ContentReplaced(aPresContext, parentContainer, aBlockContent, aBlockContent, ix);
+		  ContentReplaced(aPresContext, parentContainer, blockContent, blockContent, ix);
       }
       else {
         // XXX uh oh. the block we need to reframe has no parent!
+        // modified from bug 291902
+        // else if (blockContent->GetCurrentDoc() == mDocument) {
+        	nsCOMPtr<nsIDocument> this_document; 
+        	blockContent->GetDocument(*getter_AddRefs(this_document));
+        	if (this_document == mDocument) {
+        		ReconstructDocElementHierarchy(aPresContext);
+        	}
       }
       return PR_TRUE;
     }
@@ -14483,7 +14746,7 @@ nsCSSFrameConstructor::SplitToContainingBlock(nsIPresContext* aPresContext,
                       nsnull, blockSC, nsnull, blockFrame);
 
   blockFrame->SetInitialChildList(aPresContext, nsnull, aBlockChildFrame);
-  MoveChildrenTo(aPresContext, blockSC, blockFrame, aBlockChildFrame, nsnull);
+  MoveChildrenTo(aPresContext, blockSC, blockFrame, aBlockChildFrame, nsnull, nsnull);
 
   // Create an anonymous inline frame that will parent
   // aRightInlineChildFrame. The new frame won't have a parent yet:
@@ -14498,7 +14761,8 @@ nsCSSFrameConstructor::SplitToContainingBlock(nsIPresContext* aPresContext,
                       nsnull, styleContext, nsnull, inlineFrame);
 
   inlineFrame->SetInitialChildList(aPresContext, nsnull, aRightInlineChildFrame);
-  MoveChildrenTo(aPresContext, nsnull, inlineFrame, aRightInlineChildFrame, nsnull);
+  MoveChildrenTo(aPresContext, nsnull, inlineFrame, aRightInlineChildFrame, nsnull,
+  					nsnull);
 
   // Make the "special" inline-block linkage between aFrame and the
   // newly created anonymous frames. We need to create the linkage
@@ -14635,6 +14899,8 @@ nsCSSFrameConstructor::ReframeContainingBlock(nsIPresContext* aPresContext, nsIF
                  NS_STATIC_CAST(void*, parentContainer));
         }
 #endif
+		// this may be safely removed after bug 237566 when I clean it up,
+		// since ContentReplaced/ReinsertContent is doing that for us.
         PRInt32 ix;
         parentContainer->IndexOf(blockContent, ix);
         return ContentReplaced(aPresContext, parentContainer, blockContent, blockContent, ix);
@@ -14659,6 +14925,27 @@ nsresult nsCSSFrameConstructor::RemoveFixedItems(nsIPresContext*  aPresContext,
                                         nsLayoutAtoms::fixedList,
                                         &fixedChild);
       if (fixedChild) {
+        // bug 256108 modified for 1.3
+        // Remove the placeholder so it doesn't end up sitting about pointing
+        // to the removed fixed frame.
+        nsIFrame *placeholderFrame;
+        aPresShell->GetPlaceholderFrameFor(fixedChild, &placeholderFrame);
+        NS_ASSERTION(placeholderFrame, "no placeholder for fixed-pos frame");
+        //nsIFrame* placeholderParent = placeholderFrame->GetParent();
+        nsIFrame *placeholderParent;
+        placeholderFrame->GetParent(&placeholderParent);
+        DeletingFrameSubtree(aPresContext, aPresShell, aFrameManager,
+                             placeholderFrame);
+        rv = aFrameManager->RemoveFrame(aPresContext, *aPresShell, // needed for 1.3
+        								placeholderParent,
+        								nsnull,
+                                        placeholderFrame);
+        if (NS_FAILED(rv)) {
+          NS_WARNING("Error removing placeholder for fixed frame in RemoveFixedItems");
+          break;
+        }
+        // end bug
+
         DeletingFrameSubtree(aPresContext, aPresShell, aFrameManager,
                              fixedChild);
         rv = aFrameManager->RemoveFrame(aPresContext, *aPresShell,

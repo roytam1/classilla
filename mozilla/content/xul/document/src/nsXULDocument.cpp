@@ -581,6 +581,23 @@ NS_INTERFACE_MAP_BEGIN(nsXULDocument)
     NS_INTERFACE_MAP_ENTRY_CONTENT_CLASSINFO(XULDocument)
 NS_INTERFACE_MAP_END
 
+// these are stubs for the (non-existent) extra DOM3 features. incomplete on purpose;
+// see nsIDOM3Node.idl for why. added to bug 214051
+
+#define CLASSILLA_STUB_XUL_DOM3(x, ...) \
+	NS_IMETHODIMP \
+	nsXULDocument::x(__VA_ARGS__) { \
+		NS_NOTREACHED("x"); \
+		return NS_ERROR_NOT_IMPLEMENTED; \
+	}
+
+CLASSILLA_STUB_XUL_DOM3(SetTextContent, const nsAString& foo)
+CLASSILLA_STUB_XUL_DOM3(GetTextContent, nsAString& foo)
+CLASSILLA_STUB_XUL_DOM3(GetFeature, const nsAString& foo, const nsAString& bar, nsISupports **state)
+CLASSILLA_STUB_XUL_DOM3(IsEqualNode, nsIDOMNode *foo, int *bar)
+CLASSILLA_STUB_XUL_DOM3(IsDefaultNamespace, const nsAString& foo, int *bar)
+CLASSILLA_STUB_XUL_DOM3(LookupPrefix, const nsAString& foo, nsAString& bar)
+// no GetUserData, no SetUserData. yet.
 
 //----------------------------------------------------------------------
 //

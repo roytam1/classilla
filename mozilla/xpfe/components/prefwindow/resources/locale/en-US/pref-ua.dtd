@@ -1,0 +1,5 @@
+
+<!ENTITY  boxHeader             "User Agent">
+<!ENTITY  rHeader "Custom user agent">
+<!ENTITY textUserAgent "Certain websites may only allow certain browsers to access them, even if &brandShortName; is capable of access. You can select one of these browsers to impersonate below. However, this may cause the website to improperly enable features that may not be properly supported. If you don't know what to do, select the default option.">
+<!ENTITY uaDefault "Default: Mozilla/5.0 (...) Clecko/... Classilla/CFM">

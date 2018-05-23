@@ -748,7 +748,7 @@ nsTableRowFrame::CalculateCellActualSize(nsIFrame* aCellFrame,
       // pct heights are handled when all of the cells are finished, so don't set specifiedHeight 
       break;
     }
-    case eStyleUnit_Inherit:
+    // case eStyleUnit_Inherit: // bug 205790
     case eStyleUnit_Auto:
     default:
       break;
@@ -1301,6 +1301,10 @@ nsTableRowFrame::IR_TargetIsChild(nsIPresContext*          aPresContext,
     // which will bias the balancing. Leave the avail width alone, since it is a best guess.
     // After the table balances, the cell will get reflowed with the correct computed width.
     PRBool resetComputedWidth = aTableFrame.NeedStrategyInit() || aTableFrame.NeedStrategyBalance();
+// bug 237366
+	if (resetComputedWidth)
+		cellFrame->SetNeedPass2Reflow(PR_TRUE);
+// end bug
     InitChildReflowState(*aPresContext, cellAvailSize, aTableFrame.IsBorderCollapse(), 
                          p2t, kidRS, resetComputedWidth); 
 

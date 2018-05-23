@@ -61,7 +61,7 @@ public:
   virtual void DropReference();
   virtual nsresult GetCSSDeclaration(nsCSSDeclaration **aDecl,
                                      PRBool aAllocate);
-  virtual nsresult SetCSSDeclaration(nsCSSDeclaration *aDecl);
+  // virtual nsresult SetCSSDeclaration(nsCSSDeclaration *aDecl); // bug 171830
   virtual nsresult GetCSSParsingEnvironment(nsIContent* aContent,
                                             nsIURI** aBaseURI,
                                             nsICSSLoader** aCSSLoader,
@@ -74,6 +74,9 @@ public:
   virtual nsresult GetParent(nsISupports **aParent);
 
 protected:
+// bug 171830
+  nsresult SetCSSDeclaration(nsCSSDeclaration* aDecl, PRBool aNotify);
+
   nsIHTMLContent *mContent;
 };
 

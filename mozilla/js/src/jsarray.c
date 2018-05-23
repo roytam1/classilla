@@ -793,6 +793,7 @@ static JSBool
 array_sort(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
 {
     jsval fval;
+    jsval *pivotroot; // bug 312069
     CompareArgs ca;
     jsuint len, newlen, i;
     jsval *vec;
@@ -829,14 +830,19 @@ array_sort(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
      * Test for size_t overflow, which could lead to indexing beyond the end
      * of the malloc'd vector.
      */
-    nbytes = len * sizeof(jsval);
-    if (nbytes != (double) len * sizeof(jsval)) {
+    // bug 312069
+    //nbytes = len * sizeof(jsval);
+    //if (nbytes != (double) len * sizeof(jsval)) {
+    if (len > ((size_t) -1) / sizeof(jsval)) {
+    // end bug
         JS_ReportOutOfMemory(cx);
         return JS_FALSE;
     }
+    nbytes = ((size_t) len) * sizeof(jsval); // bug 312069
+    
     vec = (jsval *) JS_malloc(cx, nbytes);
     if (!vec)
-	return JS_FALSE;
+		return JS_FALSE;
 
 #if JS_HAS_SPARSE_ARRAYS
     newlen = 0;

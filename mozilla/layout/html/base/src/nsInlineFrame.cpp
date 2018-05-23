@@ -671,10 +671,15 @@ nsInlineFrame::ReflowFrames(nsIPresContext* aPresContext,
 
   // For now our overflow area is zero. The real value will be
   // computed during vertical alignment of the line we are on.
+// bug 252771
+#if(0)
   aMetrics.mOverflowArea.x = 0;
   aMetrics.mOverflowArea.y = 0;
   aMetrics.mOverflowArea.width = aMetrics.width;
   aMetrics.mOverflowArea.height = aMetrics.height;
+#endif
+  aMetrics.mOverflowArea.SetRect(0,0,0,0);
+// end bug
 
 #ifdef NOISY_FINAL_SIZE
   ListTag(stdout);
@@ -1116,7 +1121,7 @@ nsFirstLineFrame::Reflow(nsIPresContext* aPresContext,
   rv = ReflowFrames(aPresContext, aReflowState, irs, aMetrics, aStatus);
 
   // Note: the line layout code will properly compute our
-  // NS_FRAME_OUTSIDE_CHILDREN state for us.
+  // NS_FRAME_OUTSIDE_CHILDREN state for us. (and overflow state, bug 252771)
 
   return rv;
 }
@@ -1278,6 +1283,10 @@ nsPositionedInlineFrame::Reflow(nsIPresContext*          aPresContext,
 
   nsRect oldRect(mRect);
 
+// optimized by 1.8.1
+// Don't bother optimizing for fast incremental reflow of absolute
+// children of an inline
+#if(0)
   // See if it's an incremental reflow command
   if (mAbsoluteContainer.HasAbsoluteFrames() &&
       eReflowReason_Incremental == aReflowState.reason) {
@@ -1301,6 +1310,8 @@ nsPositionedInlineFrame::Reflow(nsIPresContext*          aPresContext,
       reflowState.path = nsnull;
       rv = nsInlineFrame::Reflow(aPresContext, aDesiredSize, reflowState, aStatus);
 
+// bug 252771
+#if(0)
       // XXX Although this seems like the correct thing to do the line layout
       // code seems to reset the NS_FRAME_OUTSIDE_CHILDREN and so it is ignored
       // ... until bug 235778
@@ -1320,9 +1331,18 @@ nsPositionedInlineFrame::Reflow(nsIPresContext*          aPresContext,
         mState &= ~NS_FRAME_OUTSIDE_CHILDREN;
       }
 #endif
+#endif
+      // Factor the absolutely positioned child bounds into the overflow area
+      // Don't include this frame's bounds, nor its inline descendants' bounds,
+      // and don't store the overflow property.
+      // That will all be done by nsLineLayout::RelativePositionFrames.
+      mAbsoluteContainer.CalculateChildBounds(aPresContext, aDesiredSize.mOverflowArea);
+// end bug
       return rv;
     }
   }
+#endif
+// end dropped code
 
   // Let the inline frame do its reflow first
   rv = nsInlineFrame::Reflow(aPresContext, aDesiredSize, aReflowState, aStatus);
@@ -1337,18 +1357,49 @@ nsPositionedInlineFrame::Reflow(nsIPresContext*          aPresContext,
   // changed, the reflow would have been targeted at us so we'd satisfy
   // condition 1.
   if (NS_SUCCEEDED(rv) &&
-      mAbsoluteContainer.HasAbsoluteFrames() &&
+      mAbsoluteContainer.HasAbsoluteFrames()
+      /* &&
       (eReflowReason_Incremental != aReflowState.reason ||
        aReflowState.path->mReflowCommand ||
-       mRect != oldRect)) {
+       mRect != oldRect) */
+       ) {
+// backbugs from bug 252771
+#if(0)
     nscoord containingBlockWidth = -1;
     nscoord containingBlockHeight = -1;
     nsRect  childBounds;
+#endif
+    // The containing block for the abs pos kids is formed by our padding edge.
+    nscoord containingBlockWidth = aDesiredSize.width -
+      (aReflowState.mComputedBorderPadding.left +
+       aReflowState.mComputedBorderPadding.right);
+    nscoord containingBlockHeight = aDesiredSize.height -
+      (aReflowState.mComputedBorderPadding.top +
+       aReflowState.mComputedBorderPadding.bottom);
+// end backbugs
 
+// pull up from 1.8.1
+    // Do any incremental reflows ... would be nice to merge with
+    // the reflows below but that would be more work, and more risky
+    if (eReflowReason_Incremental == aReflowState.reason) {
+        PRBool  handled; // this just gets thrown away right now.
+        mAbsoluteContainer.IncrementalReflow(this, aPresContext, aReflowState,
+                                         containingBlockWidth, containingBlockHeight,
+                                         handled);
+    }
+// end pull up
+   
+    // Factor the absolutely positioned child bounds into the overflow area
+    // Don't include this frame's bounds, nor its inline descendants' bounds,
+    // and don't store the overflow property.
+    // That will all be done by nsLineLayout::RelativePositionFrames.
     rv = mAbsoluteContainer.Reflow(this, aPresContext, aReflowState,
                                    containingBlockWidth, containingBlockHeight,
-                                   &childBounds);
-    
+                                   //&childBounds);
+                                   &aDesiredSize.mOverflowArea); // bug 252771
+   
+// bug 252771
+#if(0)
     // XXX Although this seems like the correct thing to do the line layout
     // code seems to reset the NS_FRAME_OUTSIDE_CHILDREN and so it is ignored
     // ... until bug 235778
@@ -1366,6 +1417,8 @@ nsPositionedInlineFrame::Reflow(nsIPresContext*          aPresContext,
       mState &= ~NS_FRAME_OUTSIDE_CHILDREN;
     }
 #endif
+#endif
+
   }
 
   return rv;

@@ -53,6 +53,10 @@
 #include "nsITheme.h"
 #include "pldhash.h"
 
+// for fixup prefs
+#include "nsIPrefBranch.h"
+#include "nsIPrefService.h"
+
 /*
  * For storage of an |nsRuleNode|'s children in a linked list.
  */
@@ -309,6 +313,8 @@ static PRBool SetCoord(const nsCSSValue& aValue, nsStyleCoord& aCoord,
   } 
   else if (((aMask & SETCOORD_INHERIT) != 0) && 
            (aValue.GetUnit() == eCSSUnit_Inherit)) {
+// bug 205790
+#if(0)
     nsStyleUnit unit = aParentCoord.GetUnit();
     if ((eStyleUnit_Null == unit) ||  // parent has explicit computed value
         (eStyleUnit_Factor == unit) ||
@@ -317,8 +323,10 @@ static PRBool SetCoord(const nsCSSValue& aValue, nsStyleCoord& aCoord,
         (eStyleUnit_Enumerated == unit) ||
         (eStyleUnit_Normal == unit) ||
         (eStyleUnit_Chars == unit)) {
+#endif
       aCoord = aParentCoord;  // just inherit value from parent
       aInherited = PR_TRUE;
+#if(0)
     }
     else {
       aCoord.SetInheritValue(); // needs to be computed by client
@@ -326,6 +334,8 @@ static PRBool SetCoord(const nsCSSValue& aValue, nsStyleCoord& aCoord,
                                 // specified and not inherited, that's
                                 // how it's treated.
     }
+#endif
+// end bug
   }
   else if (((aMask & SETCOORD_NORMAL) != 0) && 
            (aValue.GetUnit() == eCSSUnit_Normal)) {
@@ -476,7 +486,8 @@ nsRuleNode::GetBits(PRInt32 aType, PRUint32* aResult)
 }
 
 nsresult 
-nsRuleNode::Transition(nsIStyleRule* aRule, PRBool aIsInlineStyle, nsRuleNode** aResult)
+//nsRuleNode::Transition(nsIStyleRule* aRule, PRBool aIsInlineStyle, nsRuleNode** aResult)
+nsRuleNode::Transition(nsIStyleRule* aRule, nsRuleNode** aResult) // bug 171830
 {
   nsRuleNode* next = nsnull;
 
@@ -519,7 +530,9 @@ nsRuleNode::Transition(nsIStyleRule* aRule, PRBool aIsInlineStyle, nsRuleNode** 
     SetChildrenList(new (mPresContext) nsRuleList(next, ChildrenList()));
     createdNode = PR_TRUE;
   }
-    
+
+// bug 171830
+#if(0)    
   if (aIsInlineStyle && createdNode) {
     // We just made a new rule node for an inline style rule (e.g., for
     // the style attribute on an HTML, SVG, or XUL element).  In order to
@@ -533,6 +546,8 @@ nsRuleNode::Transition(nsIStyleRule* aRule, PRBool aIsInlineStyle, nsRuleNode** 
     shell->GetStyleSet(getter_AddRefs(styleSet));
     styleSet->AddRuleNodeMapping(next);
   }
+#endif
+// end bug
 
   *aResult = next;
   return NS_OK;
@@ -706,11 +721,17 @@ nsRuleNode::PropagateDependentBit(PRUint32 aBit, nsRuleNode* aHighestNode)
 struct PropertyCheckData {
   size_t offset;
   PRUint16 type;
-  PRPackedBool mayHaveExplicitInherit;
+  // PRPackedBool mayHaveExplicitInherit; // bug 205790
 };
 
+// bug 205790 modified for 1.3.1
+#if(0)
 #define CHECKDATA_PROP(_datastruct, _member, _type, _iscoord) \
   { offsetof(_datastruct, _member), _type, _iscoord }
+#else
+#define CHECKDATA_PROP(_datastruct, _member, _type, _iscoord) \
+  { offsetof(_datastruct, _member), _type }
+#endif
 
 /* the information for all the properties in a style struct */
 
@@ -755,6 +776,8 @@ ExamineRectProperties(const nsCSSRect* aRect,
   }
 }
 
+// bug 205790
+#if(0)
 static void
 ExamineRectCoordProperties(const nsCSSRect* aRect,
                            PRUint32& aSpecifiedCount,
@@ -796,6 +819,7 @@ ExamineRectCoordProperties(const nsCSSRect* aRect,
     }
   }
 }
+#endif
 
 PR_STATIC_CALLBACK(nsRuleNode::RuleDetail)
 CheckFontCallback(const nsRuleDataStruct& aData)
@@ -1091,8 +1115,10 @@ nsRuleNode::CheckSpecifiedProperties(const nsStyleStructID aSID,
             ++specified;
             if (eCSSUnit_Inherit == value.GetUnit()) {
               ++inherited;
+              /* bug 205790
               if (prop->mayHaveExplicitInherit)
                 canHaveExplicitInherit = PR_TRUE;
+              */
             }
           }
         }
@@ -1100,11 +1126,13 @@ nsRuleNode::CheckSpecifiedProperties(const nsStyleStructID aSID,
 
       case CHECKDATA_RECT:
         total += 4;
+        /* bug 205790
         if (prop->mayHaveExplicitInherit)
           ExamineRectCoordProperties(RectAtOffset(aRuleDataStruct, prop->offset),
                                      specified, inherited,
                                      canHaveExplicitInherit);
         else
+        */
           ExamineRectProperties(RectAtOffset(aRuleDataStruct, prop->offset),
                                 specified, inherited);
         break;
@@ -1118,8 +1146,10 @@ nsRuleNode::CheckSpecifiedProperties(const nsStyleStructID aSID,
             ++specified;
             if (eCSSUnit_Inherit == valueList->mValue.GetUnit()) {
               ++inherited;
+              /* bug 205790
               if (prop->mayHaveExplicitInherit)
                 canHaveExplicitInherit = PR_TRUE;
+              */
             }
           }
         }
@@ -1128,8 +1158,10 @@ nsRuleNode::CheckSpecifiedProperties(const nsStyleStructID aSID,
       case CHECKDATA_COUNTERDATA:
         {
           ++total;
+          /* bug 205790
           NS_ASSERTION(!prop->mayHaveExplicitInherit,
                        "counters can't be coordinates");
+          */
           const nsCSSCounterData* counterData =
               CounterDataAtOffset(aRuleDataStruct, prop->offset);
           if (counterData) {
@@ -1144,8 +1176,10 @@ nsRuleNode::CheckSpecifiedProperties(const nsStyleStructID aSID,
       case CHECKDATA_QUOTES:
         {
           ++total;
+          /* bug 205790
           NS_ASSERTION(!prop->mayHaveExplicitInherit,
                        "quotes can't be coordinates");
+          */
           const nsCSSQuotes* quotes =
               QuotesAtOffset(aRuleDataStruct, prop->offset);
           if (quotes) {
@@ -2865,7 +2899,21 @@ nsRuleNode::ComputeDisplayData(nsStyleStruct* aStartStruct,
     inherited = PR_TRUE;
     display->mOverflow = parentDisplay->mOverflow;
   }
-
+  // FIX-UP!
+#if(1)
+  if (display->mOverflow == NS_STYLE_OVERFLOW_HIDDEN
+    	//|| display->mOverflow == NS_STYLE_OVERFLOW_AUTO // do not uncomment. You'll wreck XUL.
+    	) {
+    	nsCOMPtr<nsIPrefBranch> prefBranch(do_GetService(NS_PREFSERVICE_CONTRACTID));
+    	if (prefBranch) {
+     	  PRBool dofixup;
+      	  if (NS_SUCCEEDED(prefBranch->GetBoolPref("classilla.layout.fixup",
+                                               &dofixup))) {
+			if (dofixup) display->mOverflow = NS_STYLE_OVERFLOW_VISIBLE;
+      	  }
+        }
+   }
+#endif
   // clip property: length, auto, inherit
   if (nsnull != displayData.mClip) {
     if (eCSSUnit_Inherit == displayData.mClip->mTop.GetUnit()) { // if one is inherit, they all are
@@ -2922,19 +2970,8 @@ nsRuleNode::ComputeDisplayData(nsStyleStruct* aStartStruct,
     }
   }
 
-  if (inherited)
-    // We inherited, and therefore can't be cached in the rule node.  We have to be put right on the
-    // style context.
-    aContext->SetStyle(eStyleStruct_Display, display);
-  else {
-    // We were fully specified and can therefore be cached right on the rule node.
-    if (!aHighestNode->mStyleData.mResetData)
-      aHighestNode->mStyleData.mResetData = new (mPresContext) nsResetStyleData;
-    aHighestNode->mStyleData.mResetData->mDisplayData = display;
-    // Propagate the bit down.
-    PropagateDependentBit(NS_STYLE_INHERIT_BIT(Display), aHighestNode);
-  }
-
+  //  if(inherited) section moved below (pull up to 1.7)
+  
   // CSS2 specified fixups:
   if (generatedContent) {
     // According to CSS2 section 12.1, :before and :after
@@ -2979,12 +3016,22 @@ nsRuleNode::ComputeDisplayData(nsStyleStruct* aStartStruct,
     //          to make sure that floated elements are some kind of
     //          block, not strictly 'block' - see EnsureBlockDisplay
     //          method
-    if (display->mFloats != NS_STYLE_FLOAT_NONE)
+    // changed by bug 245715 
+    if (display->mFloats != NS_STYLE_FLOAT_NONE) {
       EnsureBlockDisplay(display->mDisplay);
-    else if (nsCSSPseudoElements::firstLetter == pseudoTag) 
+      // bug 245715
+      // We can't cache the data in the rule tree since if a more specific
+      // rule has 'float: none' we'll end up with the wrong 'display'
+      // property.
+      inherited = PR_TRUE;
+    } // end bug
+    else if (nsCSSPseudoElements::firstLetter == pseudoTag) {
       // a non-floating first-letter must be inline
       // XXX this fix can go away once bug 103189 is fixed correctly
       display->mDisplay = NS_STYLE_DISPLAY_INLINE;
+      // same thing: We can't cache the data ...
+      inherited = PR_TRUE;
+    } // end bug
     
     // 2) if position is 'absolute' or 'fixed' then display must be
     // 'block and float must be 'none'
@@ -2996,9 +3043,25 @@ nsRuleNode::ComputeDisplayData(nsStyleStruct* aStartStruct,
       display->mOriginalDisplay = display->mDisplay;
       EnsureBlockDisplay(display->mDisplay);
       display->mFloats = NS_STYLE_FLOAT_NONE;
+      // again, we can't cache
+      inherited = PR_TRUE; // bug 245715
     }
   }
-
+  
+  // moved here in 1.7
+  if (inherited)
+    // We inherited, and therefore can't be cached in the rule node.  We have to be put right on the
+    // style context.
+    aContext->SetStyle(eStyleStruct_Display, display);
+  else {
+    // We were fully specified and can therefore be cached right on the rule node.
+    if (!aHighestNode->mStyleData.mResetData)
+      aHighestNode->mStyleData.mResetData = new (mPresContext) nsResetStyleData;
+    aHighestNode->mStyleData.mResetData->mDisplayData = display;
+    // Propagate the bit down.
+    PropagateDependentBit(NS_STYLE_INHERIT_BIT(Display), aHighestNode);
+  }
+  
   return display;
 }
 
@@ -4673,8 +4736,11 @@ nsRuleNode::ComputeSVGData(nsStyleStruct* aStartStruct,
 inline const nsStyleStruct* 
 nsRuleNode::GetParentData(const nsStyleStructID aSID)
 {
+// bug 237042
+#if(0)
   nsRuleNode* ruleNode = mParent;
   nsStyleStruct* currStruct = nsnull;
+  
   while (ruleNode) {
     currStruct = ruleNode->mStyleData.GetStyleData(aSID);
     if (currStruct)
@@ -4685,6 +4751,19 @@ nsRuleNode::GetParentData(const nsStyleStructID aSID)
   }  
 
   return currStruct; // Just return whatever we found.
+#endif
+  NS_PRECONDITION(mDependentBits & nsCachedStyleData::GetBitForSID(aSID),
+                  "should be called when node depends on parent data");
+  NS_ASSERTION(mStyleData.GetStyleData(aSID) == nsnull,
+               "both struct and dependent bits present");
+  PRUint32 bit = nsCachedStyleData::GetBitForSID(aSID);
+  nsRuleNode *ruleNode = mParent;
+  while (ruleNode->mDependentBits & bit) {
+    NS_ASSERTION(ruleNode->mStyleData.GetStyleData(aSID) == nsnull,
+                 "both struct and dependent bits present");
+    ruleNode = ruleNode->mParent;
+  }
+  return ruleNode->mStyleData.GetStyleData(aSID);
 }
 
 nsRuleNode::GetStyleDataFn
@@ -4702,6 +4781,10 @@ nsRuleNode::GetStyleData(nsStyleStructID aSID,
                          nsIStyleContext* aContext,
                          PRBool aComputeData)
 {
+// bug 237042 + backbugs modified for 1.3.1
+// we don't have NS_[UN]LIKELY in Metrowerks form, so this patch is not
+// nearly as effective as it could be. -- Cameron
+#if(0)
   const nsStyleStruct* cachedData = mStyleData.GetStyleData(aSID);
   if (cachedData)
     return cachedData; // We have a fully specified struct. Just return it.
@@ -4713,8 +4796,82 @@ nsRuleNode::GetStyleData(nsStyleStructID aSID,
                                 // node.  Just go up the rule tree and
                                 // return the first cached struct we
                                 // find.
+#endif
+  const nsStyleStruct *data;
+  if (mDependentBits & nsCachedStyleData::GetBitForSID(aSID)) {
+    // We depend on an ancestor for this struct since the cached struct
+    // it has is also appropriate for this rule node.  Just go up the
+    // rule tree and return the first cached struct we find.
+    data = GetParentData(aSID);
+    NS_ASSERTION(data, "dependent bits set but no cached struct present");
+    return data;
+  }
+  data = mStyleData.GetStyleData(aSID);
+  if (data != nsnull) // not NS_LIKELY
+    return data; // We have a fully specified struct. Just return it.
+  if (!aComputeData)
+    return nsnull; 
+// end bug
 
   // Nothing is cached.  We'll have to delve further and examine our rules.
   GetStyleDataFn fn = gGetStyleDataFn[aSID];
   return fn ? (this->*fn)(aContext, aComputeData) : nsnull;
 }
+
+// bug 117316 modified for 1.3 ... well, actually, modified for MWerks really.
+void
+nsRuleNode::Mark()
+{
+  for (nsRuleNode *node = this;
+       node && !(node->mDependentBits & NS_RULE_NODE_GC_MARK);
+       node = node->mParent)
+    node->mDependentBits |= NS_RULE_NODE_GC_MARK;
+}
+
+PR_STATIC_CALLBACK(PLDHashOperator)
+SweepRuleNodeChildren(PLDHashTable *table, PLDHashEntryHdr *hdr,
+                      PRUint32 number, void *arg)
+{
+  ChildrenHashEntry *entry = NS_STATIC_CAST(ChildrenHashEntry*, hdr);
+  if (entry->mRuleNode->Sweep())
+    //return PL_DHASH_REMOVE | PL_DHASH_NEXT;
+    // I'm a little concerned about this, because PL_DHASH_NEXT is zero in 1.3.
+    return (PLDHashOperator) ((int)PL_DHASH_REMOVE | (int)PL_DHASH_NEXT);
+  return PL_DHASH_NEXT;
+}
+
+PRBool
+nsRuleNode::Sweep()
+{
+  // If we're not marked, then we have to delete ourself.
+  if (!(mDependentBits & NS_RULE_NODE_GC_MARK)) {
+    Destroy();
+    return PR_TRUE;
+  }
+
+  // Clear our mark, for the next time around.
+  mDependentBits &= ~NS_RULE_NODE_GC_MARK;
+
+  // Call sweep on the children, since some may not be marked, and
+  // remove any deleted children from the child lists.
+  if (HaveChildren()) {
+    if (ChildrenAreHashed()) {
+      PLDHashTable *children = ChildrenHash();
+      PL_DHashTableEnumerate(children, SweepRuleNodeChildren, nsnull);
+    } else {
+      for (nsRuleList **children = ChildrenListPtr(); *children; ) {
+        if ((*children)->mRuleNode->Sweep()) {
+          // This rule node was destroyed, so remove this entry, and
+          // implicitly advance by making *children point to the next
+          // entry.
+          *children = (*children)->DestroySelf(mPresContext);
+        } else {
+          // Advance.
+          children = &(*children)->mNext;
+        }
+      }
+    }
+  }
+  return PR_FALSE;
+}
+// end bug

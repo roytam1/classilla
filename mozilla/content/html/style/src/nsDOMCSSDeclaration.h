@@ -79,7 +79,7 @@ public:
   virtual nsresult GetCSSDeclaration(nsCSSDeclaration **aDecl,
                                      PRBool aAllocate) = 0;
   // Note! This will only set the declaration if a style rule already exists
-  virtual nsresult SetCSSDeclaration(nsCSSDeclaration *aDecl) = 0;
+  // virtual nsresult SetCSSDeclaration(nsCSSDeclaration *aDecl) = 0; // bug 171830
 
   virtual nsresult ParsePropertyValue(const nsAString& aPropName,
                                       const nsAString& aPropValue) = 0;

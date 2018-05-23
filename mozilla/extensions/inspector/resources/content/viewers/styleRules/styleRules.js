@@ -369,9 +369,11 @@ function(aRow, aColId)
     return rule.parentStyleSheet ? rule.parentStyleSheet.href : "";
   }
 
+/* bug 98765
   if (aColId == "olcWeight") {
     return rule.type == CSSRule.STYLE_RULE ? this.mDOMUtils.getRuleWeight(rule) : "";
   }
+*/
 
   if (aColId == "olcLine") {
     return rule.type == CSSRule.STYLE_RULE ? this.mDOMUtils.getRuleLine(rule) : "";

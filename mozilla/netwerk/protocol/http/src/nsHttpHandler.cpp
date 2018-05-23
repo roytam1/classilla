@@ -562,7 +562,7 @@ nsHttpHandler::OnExamineResponse(nsIHttpChannel *chan)
 const nsAFlatCString &
 nsHttpHandler::UserAgent()
 {
-    if (mUserAgentOverride) {
+    if (mUserAgentOverride && mUserAgentOverride.Length()) { // modified for Classilla UA support
         LOG(("using general.useragent.override : %s\n", mUserAgentOverride.get()));
         return mUserAgentOverride;
     }
@@ -837,8 +837,7 @@ nsHttpHandler::PrefsChanged(nsIPrefBranch *prefs, const char *pref)
 
     // general.useragent.override
     if (PREF_CHANGED(UA_PREF("override"))) {
-        prefs->GetCharPref(UA_PREF("override"),
-                            getter_Copies(mUserAgentOverride));
+        prefs->GetCharPref(UA_PREF("override"), getter_Copies(mUserAgentOverride));
         mUserAgentIsDirty = PR_TRUE;
     }
 

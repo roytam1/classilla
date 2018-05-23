@@ -301,7 +301,8 @@ LocationImpl::GetWritableURI(nsIURI** aURI)
 }
 
 nsresult
-LocationImpl::SetURI(nsIURI* aURI)
+LocationImpl::SetURI(nsIURI* aURI,
+					 PRBool aReplace) // bug 277224
 {
   if (mDocShell) {
     nsCOMPtr<nsIDocShellLoadInfo> loadInfo;
@@ -310,7 +311,14 @@ LocationImpl::SetURI(nsIURI* aURI)
     if(NS_FAILED(CheckURL(aURI, getter_AddRefs(loadInfo))))
       return NS_ERROR_FAILURE;
 
-    webNav->Stop(nsIWebNavigation::STOP_CONTENT);
+// bug 277224
+//    webNav->Stop(nsIWebNavigation::STOP_CONTENT);
+    if (aReplace) {
+      loadInfo->SetLoadType(nsIDocShellLoadInfo::loadStopContentAndReplace);
+    } else {
+      loadInfo->SetLoadType(nsIDocShellLoadInfo::loadStopContent);
+    }
+// end bug
     return mDocShell->LoadURI(aURI, loadInfo,
                               nsIWebNavigation::LOAD_FLAGS_NONE, PR_TRUE);
   }
@@ -356,8 +364,22 @@ LocationImpl::SetHash(const nsAString& aHash)
   nsCOMPtr<nsIURL> url(do_QueryInterface(uri));
 
   if (url) {
-    url->SetRef(NS_ConvertUCS2toUTF8(aHash));
-
+// bug 465263
+//    url->SetRef(NS_ConvertUCS2toUTF8(aHash));
+	NS_ConvertUCS2toUTF8 hash(aHash); // we don't have NS_ConvertUTF16toUTF8
+	if(hash.IsEmpty() || hash.First() != '#') { // PRUnichar('#')) {
+		// hash.Insert(PRUnichar('#'), 0);
+		hash.Insert('#', 0);
+		//nsCAutoString newhash;
+		//newhash.Assign('#');
+		//newhash.Append(hash);
+		//result = url->SetRef(newhash);
+	} //else
+		result = url->SetRef(hash);
+	if (NS_SUCCEEDED(result))
+// end bug
+// bug 277224
+#if(0)
     if (mDocShell) {
       nsCOMPtr<nsIDocShellLoadInfo> loadInfo;
 
@@ -368,6 +390,9 @@ LocationImpl::SetHash(const nsAString& aHash)
         mDocShell->LoadURI(url, loadInfo,
                            nsIWebNavigation::LOAD_FLAGS_NONE, PR_TRUE);
     }
+#endif
+    SetURI(url);
+// end bug
   }
 
   return result;
@@ -477,6 +502,7 @@ LocationImpl::GetHref(nsAString& aHref)
 NS_IMETHODIMP
 LocationImpl::SetHref(const nsAString& aHref)
 {
+
   nsAutoString oldHref;
   nsresult rv = NS_OK;
 
@@ -545,6 +571,8 @@ LocationImpl::SetHrefWithBase(const nsAString& aHref,
   else
     result = NS_NewURI(getter_AddRefs(newUri), aHref, nsnull, baseURI);
 
+// bug 277224
+#if (0)
   if (newUri && mDocShell) {
     nsCOMPtr<nsIDocShellLoadInfo> loadInfo;
     nsCOMPtr<nsIWebNavigation> webNav(do_QueryInterface(mDocShell));
@@ -553,7 +581,9 @@ LocationImpl::SetHrefWithBase(const nsAString& aHref,
 
     if(NS_FAILED(rv))
       return rv;
-     
+#endif
+  if (newUri) {     
+// end bug
     /* Check with the scriptContext if it is currently processing a script tag.
      * If so, this must be a <script> tag with a location.href in it.
      * we want to do a replace load, in such a situation. 
@@ -577,10 +607,23 @@ LocationImpl::SetHrefWithBase(const nsAString& aHref,
        
         if (scriptCX) {
           scriptCX->GetProcessingScriptTag(&inScriptTag);
+          // Now check to make sure that the script is running in our window,
+          // since we only want to replace if the location is set by a
+          // <script> tag in the same window.  See bug 178729. modified for 1.3
+          if (inScriptTag) {
+          	nsCOMPtr<nsIScriptGlobalObject> ourGlobal(do_GetInterface(mDocShell)); //docShell));
+          	//inScriptTag = (ourGlobal == scriptContext->GetGlobalObject());
+          	nsCOMPtr<nsIScriptGlobalObject> scriptCXGlobal;
+          	scriptCX->GetGlobalObject(getter_AddRefs(scriptCXGlobal));
+          	inScriptTag = (ourGlobal == scriptCXGlobal);
+          }
+          // end bug
         }  
       } //cx
     }  // stack
 
+// bug 277224
+#if (0)
     if (aReplace ||  inScriptTag) {
       loadInfo->SetLoadType(nsIDocShellLoadInfo::loadNormalReplace);
     }
@@ -588,6 +631,9 @@ LocationImpl::SetHrefWithBase(const nsAString& aHref,
     webNav->Stop(nsIWebNavigation::STOP_CONTENT);
     return mDocShell->LoadURI(newUri, loadInfo,
                               nsIWebNavigation::LOAD_FLAGS_NONE, PR_TRUE);
+#endif
+    return SetURI(newUri, aReplace || inScriptTag);
+// end bug
   }
 
   return result;

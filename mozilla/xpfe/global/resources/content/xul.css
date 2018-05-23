@@ -17,17 +17,16 @@
   display: -moz-box;
 }
 
-/* hide the content and destroy the frame */
-*[hidden="true"] {
-  display: none;
-}
-
 /* hide the content, but don't destroy the frames */
 *[collapsed="true"], 
 *[moz-collapsed="true"] {
   visibility: collapse;
 }
 
+/* hide the content and destroy the frame */
+*[hidden="true"] {
+  display: none;
+}
 
 /* ::::::::::
    :: Rules for 'hiding' portions of the chrome for special
@@ -59,7 +58,7 @@ menulist.uri-element
 
 /****** elements that have no visual representation ******/
 
-data,
+script, data,
 xbl|children,
 commands, commandset, command,
 broadcasterset, broadcaster, observes,
@@ -99,6 +98,7 @@ radio {
 window, 
 page {
   overflow: hidden;
+  //overflow: -moz-hidden-unscrollable;
   -moz-box-orient: vertical;
 }
 
@@ -107,6 +107,10 @@ page {
 vbox {
   -moz-box-orient: vertical;
 }
+bbox {
+  -moz-box-align: baseline;
+}
+
 
 /********** button **********/
 

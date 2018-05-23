@@ -1717,6 +1717,7 @@ PRBool nsMacEventHandler::HandleMouseMoveEvent( EventRecord& aOSEvent )
 	else
 	{
 		nsWindow* widgetPointed = (nsWindow*)mouseEvent.widget;
+		nsCOMPtr<nsIWidget> kungFuDeathGrip(widgetPointed);     // Protect during processing
 		if (widgetPointed != lastWidgetPointed)
 		{
 			if (lastWidgetPointed)

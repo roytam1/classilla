@@ -1892,6 +1892,8 @@ nsHTMLDocument::GetBaseURI(nsAString &aURI)
   return NS_OK;
 }
 
+// these functions are all obsoleted by bug 210451.
+#if(0)
 NS_IMETHODIMP
 nsHTMLDocument::CompareDocumentPosition(nsIDOMNode* aOther,
                                         PRUint16* aReturn)
@@ -1922,13 +1924,10 @@ nsHTMLDocument::LookupNamespaceURI(const nsAString& aNamespacePrefix,
   aNamespaceURI.Truncate();
   return NS_OK;
 }
-
+#endif
 
 //
 // nsIDOMHTMLDocument interface implementation
-//
-// see http://www.w3.org/TR/1998/REC-DOM-Level-1-19981001/level-one-html.html#ID-1006298752
-// for full specification.
 //
 NS_IMETHODIMP
 nsHTMLDocument::GetTitle(nsAString& aTitle)

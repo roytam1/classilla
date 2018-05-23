@@ -110,8 +110,8 @@ public:
 
 ////////////////////////////////////////////////////////////////////////
 
-class nsXULAttribute : public nsIDOMAttr,
-                       public nsIDOM3Node
+class nsXULAttribute : public nsIDOMAttr //,
+                       // public nsIDOM3Node // bug 210451
 {
 protected:
     nsXULAttribute(nsIContent* aContent,
@@ -134,7 +134,7 @@ public:
     NS_DECL_NSIDOMNODE
 
     // nsIDOM3Node interface
-    NS_DECL_NSIDOM3NODE
+    // obsoleted by bug 210451  NS_DECL_NSIDOM3NODE
 
     // nsIDOMAttr interface
     NS_DECL_NSIDOMATTR

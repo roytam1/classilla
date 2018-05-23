@@ -13,6 +13,7 @@
  * License.
  *
  * The Original Code is mozilla.org code.
+ * Modified for Classilla 9.0.4 by Cameron Kaiser
  *
  * The Initial Developer of the Original Code is 
  * Netscape Communications Corporation.
@@ -44,6 +45,8 @@ function nsBrowserStatusHandler()
 
 nsBrowserStatusHandler.prototype =
 {
+// bug 104778
+/* 
   userTyped :
   {
     _value : false,
@@ -65,13 +68,14 @@ nsBrowserStatusHandler.prototype =
       return aValue;
     }
   },
-
+*/
   // Stored Status, Link and Loading values
   status : "",
   defaultStatus : "",
   jsStatus : "",
   jsDefaultStatus : "",
   overLink : "",
+  pref : null, // added for prefwatcher.
 
   hideAboutBlank : true,
 
@@ -100,6 +104,11 @@ nsBrowserStatusHandler.prototype =
     // Initialize the security button's state and tooltip text
     const nsIWebProgressListener = Components.interfaces.nsIWebProgressListener;
     this.onSecurityChange(null, null, nsIWebProgressListener.STATE_IS_INSECURE);
+    
+    // Get a reference to the preferences service (mostly for the fixup renderer state)
+    var prefService = Components.classes["@mozilla.org/preferences-service;1"]
+                                .getService(Components.interfaces.nsIPrefService);
+    pref = prefService.getBranch(null);
   },
 
   destroy : function()
@@ -114,7 +123,7 @@ nsBrowserStatusHandler.prototype =
     this.statusTextField = null;
     this.isImage         = null;
     this.securityButton  = null;
-    this.userTyped       = null;
+    // this.userTyped       = null; // bug 104778
   },
 
   setJSStatus : function(status)
@@ -167,15 +176,18 @@ nsBrowserStatusHandler.prototype =
   },
 
   onLinkIconAvailable : function(aHref) {
+  	var browser = getBrowser(); // bug 104778
     if (gProxyFavIcon && pref.getBoolPref("browser.chrome.site_icons"))
     {
+    	if (browser.userTypedValue === null) // pull up to 1.8
       gProxyFavIcon.setAttribute("src", aHref);
 
       // update any bookmarks with new icon reference
       if (!gBookmarksService)
         gBookmarksService = Components.classes["@mozilla.org/browser/bookmarks-service;1"]
                                       .getService(Components.interfaces.nsIBookmarksService);
-      gBookmarksService.updateBookmarkIcon(this.urlBar.value, aHref);
+      //gBookmarksService.updateBookmarkIcon(this.urlBar.value, aHref);
+      gBookmarksService.updateBookmarkIcon(browser.currentURI.spec, aHref); // bug 104778
     }
   },
 
@@ -238,8 +250,8 @@ nsBrowserStatusHandler.prototype =
         if (channel) {
           var location = channel.URI.spec;
           if (location != "about:blank") {
-            const kErrorBindingAborted = 2152398850;
-            const kErrorNetTimeout = 2152398862;
+            const kErrorBindingAborted = 0x804B0002; // 2152398850;
+            const kErrorNetTimeout = 0x804B000E; // 2152398862;
             switch (aStatus) {
               case kErrorBindingAborted:
                 msg = gNavigatorBundle.getString("nv_stopped");
@@ -254,6 +266,15 @@ nsBrowserStatusHandler.prototype =
         // been null, in the case of a stray image load).
         if (!msg) {
           msg = gNavigatorBundle.getString("nv_done");
+          // figure out if Classilla rendered with fixups, as a reminder to the user.
+          // we don't care if this fails, but we don't want failure to wreck the browser.
+          try {
+          	var isfixup = pref.getBoolPref("classilla.layout.fixup") ? "nv_done_didfix" :
+          				"nv_done_didntfix";
+          	msg += " " + gNavigatorBundle.getString(isfixup);
+          } catch(e) {
+          	// damn
+          }
         }
         this.status = "";
         this.setDefaultStatus(msg);
@@ -318,7 +339,10 @@ nsBrowserStatusHandler.prototype =
     // Update urlbar only if a new page was loaded on the primary content area
     // Do not update urlbar if there was a subframe navigation
 
+    var browser = getBrowser().selectedBrowser; // bug 104778
     if (aWebProgress.DOMWindow == content) {
+    // bug 104778
+    /*
       if (!this.userTyped.value) {
         this.urlBar.value = location;
         // the above causes userTyped.value to become true, reset it
@@ -326,11 +350,35 @@ nsBrowserStatusHandler.prototype =
       }
 
       SetPageProxyState("valid", aLocation);
+    */
+      
+      // pull up from 1.7
+      // The document loaded correctly, clear the value if we should
+      if (browser.userTypedClear > 0)
+        browser.userTypedValue = null;
+        
+      var userTypedValue = browser.userTypedValue;
+        
+      if (userTypedValue === null) {
+    	this.urlBar.value = location;
+    	if (this.urlBar.value != location) { // weird! but see bug 249322
+    	  this.urlBar.value = ""; // hack for bug 249322
+    	  this.urlBar.value = location;
+    	} // end bug
+    	SetPageProxyState("valid", aLocation);
+    	// Setting the urlBar value in some cases causes userTypedValue to
+    	// become set because of oninput, so reset it to its old value
+    	browser.userTypedValue = null;
+      } else {
+    	this.urlBar.value = userTypedValue;
+    	SetPageProxyState("invalid", null);
+      }
+    // end bug
     }
     UpdateBackForwardButtons();
 
     var blank = (location == "about:blank") || (location == "");
-    var browser = getBrowser().mCurrentBrowser;
+    //var browser = getBrowser().mCurrentBrowser; // bug 104778
 
     //clear popupDomain accordingly so that icon will go away when visiting
     //an unblocked site after a blocked site. note: if a popup is blocked 
@@ -389,9 +437,11 @@ nsBrowserStatusHandler.prototype =
 
   startDocumentLoad : function(aRequest)
   {
-    // Reset so we can see if the user typed after the document load
+    // Reset so we can see if the user typed after^Wbetween (bug 104778) the document load
     // starting and the location changing.
-    this.userTyped.value = false;
+    //this.userTyped.value = false;
+    //getBrowser().userTypedValue = null;
+    getBrowser().userTypedClear++; // pull up from 1.8.1
 
     const nsIChannel = Components.interfaces.nsIChannel;
     var urlStr = aRequest.QueryInterface(nsIChannel).URI.spec;
@@ -405,6 +455,12 @@ nsBrowserStatusHandler.prototype =
 
   endDocumentLoad : function(aRequest, aStatus)
   {
+    // pull up from 1.8.1
+    // The document is done loading, it's okay to clear
+    // the value again.
+    if (getBrowser().userTypedClear > 0)
+      getBrowser().userTypedClear--;
+      
     const nsIChannel = Components.interfaces.nsIChannel;
     var urlStr = aRequest.QueryInterface(nsIChannel).originalURI.spec;
 

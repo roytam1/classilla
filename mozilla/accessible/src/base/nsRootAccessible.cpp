@@ -857,6 +857,14 @@ NS_IMETHODIMP nsRootAccessible::OnProgressChange(nsIWebProgress *aWebProgress,
 NS_IMETHODIMP nsRootAccessible::OnLocationChange(nsIWebProgress *aWebProgress,
   nsIRequest *aRequest, nsIURI *location)
 {
+  // this is the equivalent of nsDocAccessible:: in Moz 1.3
+  // bug 244776
+  PRBool isLoadingDocument;
+  aWebProgress->GetIsLoadingDocument(&isLoadingDocument);
+  if (!isLoadingDocument) {
+    return NS_OK;  // Staying on the same page, perhaps jumping to a named anchor
+  }
+
   // Load has been verified, it will occur, about to commence
 
   // We won't fire a "doc finished loading" event on this nsRootAccessible 

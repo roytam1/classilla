@@ -438,7 +438,7 @@
           </hbox>
         </vbox>
         <splitter id="attachmentbucket-sizer" collapse="after"/>
-        <vbox id="attachments-box">
+        <vbox id="attachments-box" flex="1">
           <label id="attachmentBucketText" value="&attachments.label;" crop="right"
                  accesskey="&attachments.accesskey;" control="attachmentBucket"/>
           <listbox seltype="multiple" id="attachmentBucket" flex="1" rows="4"

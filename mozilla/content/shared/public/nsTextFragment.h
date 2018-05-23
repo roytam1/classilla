@@ -211,6 +211,9 @@ public:
    */
   void AppendTo(nsCString& aCString) const;
 
+  /* Backported from Mozilla 1.8 to assist in DOM porting. */
+  void AppendTo(nsAString& aString) const;
+  
   /**
    * Make a copy of the fragments contents starting at offset for
    * count characters. The offset and count will be adjusted to

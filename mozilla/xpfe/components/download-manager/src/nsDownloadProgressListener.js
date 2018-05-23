@@ -96,7 +96,7 @@ nsDownloadProgressListener.prototype = {
       // Update download rate.
       this.elapsed = now - (aDownload.startTime / 1000);
       var rate; // aCurTotalProgress/sec
-      if ( this.elapsed )
+      if ( this.elapsed > 0 ) // Classilla issue 36: fail safe if time gets monkeyed with
         rate = ( aCurTotalProgress * 1000 ) / this.elapsed;
       else
         rate = 0;
@@ -195,8 +195,11 @@ nsDownloadProgressListener.prototype = {
           progressText.setAttribute("label", percentMsg);
         }
       }
+      return;
+      
       // Update time remaining.
-      if ( rate && (aMaxTotalProgress > 0) )
+      // Classilla issue 36: fail safe if this computation goes bonkers.
+      if ( rate && (aMaxTotalProgress > 0) && (aMaxTotalProgress > aCurTotalProgress))
       {
         var rem = ( aMaxTotalProgress - aCurTotalProgress ) / rate;
         rem = parseInt( rem + .5 );
@@ -293,14 +296,20 @@ function getString( stringId, doc ) {
    return gStrings[ stringId ];
 }
 
+// Classilla issue 36. fixed the glitchy #-## this can sometimes generate.
+// see nsProgresDialog.js
 function formatSeconds( secs, doc )
 {
   // Round the number of seconds to remove fractions.
-  secs = parseInt( secs + .5 );
-  var hours = parseInt( secs/3600 );
+  secs = Math.floor( secs );
+  var hours = Math.floor( secs/3600 );
   secs -= hours*3600;
-  var mins = parseInt( secs/60 );
+  if (secs < 0)
+  	secs = 0;
+  var mins = Math.floor( secs/60 );
   secs -= mins*60;
+  if (secs < 0)
+    secs = 0;
   var result;
   if ( hours )
     result = getString( "longTimeFormat", doc );

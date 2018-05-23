@@ -710,7 +710,7 @@ nsContainerFrame::SyncFrameViewAfterReflow(nsIPresContext* aPresContext,
     // area, then size the view large enough to include those child
     // frames
     if ((kidState & NS_FRAME_OUTSIDE_CHILDREN) && aCombinedArea) {
-      vm->ResizeView(aView, *aCombinedArea);
+      vm->ResizeView(aView, *aCombinedArea); // , PR_TRUE);
     } else {
       // If the width is unchanged and the height is not decreased
       // then repaint only the newly exposed or contracted area,
@@ -725,7 +725,7 @@ nsContainerFrame::SyncFrameViewAfterReflow(nsIPresContext* aPresContext,
       nsSize frameSize;
       aFrame->GetSize(frameSize);
       nsRect newSize(0, 0, frameSize.width, frameSize.height);
-      vm->ResizeView(aView, newSize, 
+      vm->ResizeView(aView, newSize, //PR_TRUE);
                      (frameSize.width == oldBounds.width && frameSize.height >= oldBounds.height));
     }
 

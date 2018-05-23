@@ -109,11 +109,18 @@ nsStyleCoord nsTableColFrame::GetStyleWidth() const
 {
   nsStylePosition* position = nsnull;
   position = (nsStylePosition*)mStyleContext->GetStyleData(eStyleStruct_Position);
+  if (position == nsnull)
+  	return 0; // just in case
   nsStyleCoord styleWidth = position->mWidth;
+// bug 205790 modified for 1.3.1
+#if(0)
   // the following should not be necessary since html.css defines table-col and
   // :table-col to inherit. However, :table-col is not inheriting properly
   if (eStyleUnit_Auto == styleWidth.GetUnit() ||
       eStyleUnit_Inherit == styleWidth.GetUnit()) {
+#endif
+  if (eStyleUnit_Auto == styleWidth.GetUnit()) {
+// end bug  
     nsIFrame* parent;
     GetParent(&parent);
     nsCOMPtr<nsIStyleContext> styleContext;

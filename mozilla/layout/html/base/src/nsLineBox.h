@@ -418,6 +418,9 @@ public:
     return mBounds.height;
   }
 
+  // pull up to 1.8.1
+  //PRBool CachedIsEmpty();
+
   static void DeleteLineList(nsIPresContext* aPresContext, nsLineList& aLines);
 
   // search from beginning to end

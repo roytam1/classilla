@@ -76,6 +76,7 @@
     <key key="&reloadCmd.commandkey;" oncommand="BrowserReloadSkipCache();" modifiers="accel,shift"/>
     <key id="key_viewSource" key="&pageSourceCmd.commandkey;" command="View:PageSource" modifiers="accel"/>
     <key id="key_viewInfo"   key="&pageInfoCmd.commandkey;"   command="View:PageInfo"   modifiers="accel"/>
+    <key id="key_viewFixups" key="&viewFixups.commandkey;" command="View:Fixups" modifiers="accel,shift"/>
     <key id="key_viewNextSidebarPanel" keycode="VK_PAGE_DOWN"  oncommand="SidebarGetRelativePanel(1);"  modifiers="alt" />
     <key id="key_viewPrevSidebarPanel" keycode="VK_PAGE_UP"  oncommand="SidebarGetRelativePanel(-1);"  modifiers="alt" />
 
@@ -147,6 +148,7 @@
     <command id="View:PageSource" oncommand="BrowserViewSourceOfDocument(content.document);" observes="isImage"/>
     <command id="View:PageInfo"   oncommand="BrowserPageInfo();"/>
     <command id="View:FullScreen" oncommand="BrowserFullScreen();"/>
+    <command id="View:Fixups" oncommand="BrowserToggleFixups();"/>
   
     <!-- Search Menu -->
     <command id="Browser:Find" oncommand="BrowserFind();" observes="isImage"/>
@@ -182,6 +184,7 @@
   <broadcasterset id="navBroadcasters">
     <broadcaster id="canGoBack"    disabled="true"/>
     <broadcaster id="canGoForward" disabled="true"/>
+    <broadcaster id="isFixupRender"/>
     <broadcaster id="Communicator:WorkMode"/>
     <broadcaster id="cmd_viewnavbar" oncommand="goToggleToolbar( 'nav-bar','cmd_viewnavbar');" checked="true"/>
     <broadcaster id="cmd_viewpersonaltoolbar" oncommand="goToggleToolbar('PersonalToolbar','cmd_viewpersonaltoolbar');" checked="true"/>
@@ -248,7 +251,7 @@
     </menu>
 
     <menu id="menu_View" accesskey="&viewMenu.accesskey;" label="&viewMenu.label;">
-      <menupopup id="menu_View_Popup">
+      <menupopup id="menu_View_Popup" onpopupshowing="updateViewStates(this);">
         <menu label="&toolbarsCmd.label;" accesskey="&toolbarsCmd.accesskey;" id="menu_Toolbars">
           <menupopup id="view_toolbars_popup" onpopupshowing="updateToolbarStates(this);"> 
             <menuitem label="&navbarCmd.label;" accesskey="&navbarCmd.accesskey;" class="menuitem-iconic" type="checkbox" observes="cmd_viewnavbar"  />
@@ -277,6 +280,7 @@
             <menuitem label="&useStyleSheetPersistentOnly.label;" accesskey="&useStyleSheetPersistentOnly.accesskey;" type="radio"/>
           </menupopup>
         </menu>
+        <menuitem accesskey="&viewFixups.commandkey;"   label="&viewFixups.label;"   key="key_viewFixups"   command="View:Fixups"  type="checkbox"  observes="isFixupRender" />
         <menu id="charsetMenu" observes="isImage"/>
         <menuseparator />
         <menuitem accesskey="&pageSourceCmd.accesskey;" label="&pageSourceCmd.label;" key="key_viewSource" command="View:PageSource"/>

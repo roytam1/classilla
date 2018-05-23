@@ -37,6 +37,7 @@
  *
  * ***** END LICENSE BLOCK ***** */
 #include "nsCOMPtr.h"
+/* #include "nsAutoPtr.h"  // bug 130265 */
 #include "jsapi.h"
 #include "nsCRT.h"
 #include "nsDOMError.h"
@@ -67,6 +68,7 @@
 #include "prprf.h"
 #include "nsEscape.h"
 #include "nsIJSContextStack.h"
+#include "nsIWebNavigation.h" // bug 130265
 
 static NS_DEFINE_CID(kSimpleURICID, NS_SIMPLEURI_CID);
 static NS_DEFINE_CID(kWindowMediatorCID, NS_WINDOWMEDIATOR_CID);
@@ -376,28 +378,52 @@ public:
 
 protected:
     virtual ~nsJSChannel();
+    nsresult StopAll(); // bug 130265
+    nsresult InternalOpen(PRBool aIsAsync, nsIStreamListener *aListener,
+                          nsISupports *aContext, nsIInputStream **aResult); // bug 205989
 
 protected:
     nsCOMPtr<nsIChannel>    mStreamChannel;
 
-    nsLoadFlags             mLoadFlags;
+    nsLoadFlags             mLoadFlags; // bug 130265 removed them; restored by bug 205989
 
     nsJSThunk *             mIOThunk;
-    PRBool                  mIsActive;
+// bug 130265 wants to make this an nsRefPtr<nsJSThunk> but we don't have one of those.
+    PRPackedBool                  mIsActive; // Packed from bug 205989
+    PRPackedBool mWasCanceled; // bug 205989
 };
 
 nsJSChannel::nsJSChannel() :
-    mLoadFlags(LOAD_NORMAL),
-    mIOThunk(nsnull),
-    mIsActive(PR_FALSE)
+//    mLoadFlags(LOAD_NORMAL), // bug 130265. was NOT restored by bug 205989.
+    mIOThunk(nsnull), // left in since we have no AutoPtr for bug 130265
+    mIsActive(PR_FALSE),
+    mWasCanceled(PR_FALSE) // bug 205989
 {
 }
 
 nsJSChannel::~nsJSChannel()
 {
-    NS_IF_RELEASE(mIOThunk);
+    NS_IF_RELEASE(mIOThunk); // left in since we have no AutoPtr for bug 130265
 }
 
+// bug 130265
+nsresult nsJSChannel::StopAll()
+{
+    nsCOMPtr<nsIInterfaceRequestor> callbacks;
+    mStreamChannel->GetNotificationCallbacks(getter_AddRefs(callbacks));
+
+    nsresult rv = NS_ERROR_UNEXPECTED;
+    nsCOMPtr<nsIWebNavigation> webNav(do_GetInterface(callbacks));
+
+    NS_ASSERTION(webNav, "Can't get nsIWebNavigation from callbacks!");
+
+    if (webNav) {
+        rv = webNav->Stop(nsIWebNavigation::STOP_ALL);
+    }
+
+    return rv;
+}
+// end bug
 
 nsresult nsJSChannel::Init(nsIURI *aURI)
 {
@@ -405,9 +431,9 @@ nsresult nsJSChannel::Init(nsIURI *aURI)
     
     // Create the nsIStreamIO layer used by the nsIStreamIOChannel.
     mIOThunk= new nsJSThunk();
-    if (mIOThunk == nsnull)
+    if (mIOThunk == nsnull || !mIOThunk)
         return NS_ERROR_OUT_OF_MEMORY;
-    NS_ADDREF(mIOThunk);
+    NS_ADDREF(mIOThunk); // left in since we have no AutoPtr for bug 130265
 
     // Create a stock input stream channel...
     // Remember, until AsyncOpen is called, the script will not be evaluated
@@ -455,35 +481,68 @@ nsJSChannel::GetName(nsACString &aResult)
 NS_IMETHODIMP
 nsJSChannel::IsPending(PRBool *aResult)
 {
+// bug 205989
+#if(0)
     if (mIsActive) {
-        *aResult = mIsActive;
+       *aResult = mIsActive;
         return NS_OK;
     }
     return mStreamChannel->IsPending(aResult);
+#endif
+	*aResult = mIsActive;
+	return NS_OK;
+// end bug
 }
 
 NS_IMETHODIMP
 nsJSChannel::GetStatus(nsresult *aResult)
 {
-    return mStreamChannel->GetStatus(aResult);
+// bug 205989
+//    return mStreamChannel->GetStatus(aResult);
+    // We're always ok. Our status is independent of our underlying
+    // stream's status.
+    *aResult = NS_OK;
+    return NS_OK;
 }
 
 NS_IMETHODIMP
 nsJSChannel::Cancel(nsresult aStatus)
 {
+// bug 205989
+#if(0)
+// bug 130265
+    if (mIsActive && aStatus == NS_BINDING_ABORTED) {
+        // We're aborted while active, this means we're canceled from
+        // the call to StopAll() in Open() or AsyncOpen(), ignore the
+        // cancel call, since we're not done with mStreamChannel yet.
+        return NS_OK;
+    }
+// end bug
     return mStreamChannel->Cancel(aStatus);
+#endif
+// end bug 205989
+	// If we're canceled just record the fact that we were canceled,
+	// the underlying stream will be canceled later, if needed. And we
+	// don't care about the reason for the canceling, i.e. ignore
+	// aStatus.
+	mWasCanceled = PR_TRUE;
+	return NS_OK;
 }
 
 NS_IMETHODIMP
 nsJSChannel::Suspend(void)
 {
-    return mStreamChannel->Suspend();
+// bug 205989
+//    return mStreamChannel->Suspend();
+	return NS_OK;
 }
 
 NS_IMETHODIMP
 nsJSChannel::Resume(void)
 {
-    return mStreamChannel->Resume();
+// bug 205989
+//    return mStreamChannel->Resume();
+	return NS_OK;
 }
 
 //
@@ -511,6 +570,8 @@ nsJSChannel::GetURI(nsIURI * *aURI)
 NS_IMETHODIMP
 nsJSChannel::Open(nsIInputStream **aResult)
 {
+// bug 205989 turns all this into a stub for InternalOpen.
+#if(0)
     nsresult rv;
 
     // Synchronously execute the script...
@@ -521,68 +582,152 @@ nsJSChannel::Open(nsIInputStream **aResult)
     rv = mIOThunk->EvaluateScript(mStreamChannel);
 
     if (NS_SUCCEEDED(rv)) {
-        rv = mStreamChannel->Open(aResult);
+        // bug 130265
+        // EvaluateScript() succeeded, that means there's data to
+        // parse as a result of evaluating the script. Stop all
+        // pending network loads.
+        rv = StopAll();
+        if (NS_SUCCEEDED(rv))
+        // end bug
+        	rv = mStreamChannel->Open(aResult);
     } else {
         // Propagate the failure down to the underlying channel...
         (void) mStreamChannel->Cancel(rv);
     }
     mIsActive = PR_FALSE;
     return rv;
-
+#endif
+	return InternalOpen(PR_FALSE, nsnull, nsnull, aResult);
+// end bug
 }
 
+// bug 205989 takes InternalOpen from AsyncOpen, and turns AsyncOpen into a
+// stub to call its former code.
 NS_IMETHODIMP
 nsJSChannel::AsyncOpen(nsIStreamListener *aListener, nsISupports *aContext)
 {
-    nsresult rv;
+    //nsresult rv;  // to match patch
+	return InternalOpen(PR_TRUE, aListener, aContext, nsnull); // bug 205989
+}
 
+nsresult
+nsJSChannel::InternalOpen(PRBool aIsAsync, nsIStreamListener *aListener,
+                          nsISupports *aContext, nsIInputStream **aResult) {
+                         
     nsCOMPtr<nsILoadGroup> loadGroup;
 
+// bug 205989. essentially this restores the following code which was
+// removed by bug 130265.
+	// Add the javascript channel to its loadgroup so that we know if
+	// network loads were canceled or not...
+	mStreamChannel->GetLoadGroup(getter_AddRefs(loadGroup));
+	if (loadGroup)
+		(void) loadGroup->AddRequest(this, aContext);
+// end bug
+// bug 130265 (this is the original code for reference.)
+#if(0)
     // Add the javascript channel to its loadgroup...
     mStreamChannel->GetLoadGroup(getter_AddRefs(loadGroup));
     if (loadGroup) {
         (void) loadGroup->AddRequest(this, aContext);
     }
+#endif
+// end bug
 
     // Synchronously execute the script...
     // mIsActive is used to indicate the the request is 'busy' during the
     // the script evaluation phase.  This means that IsPending() will 
     // indicate the the request is busy while the script is executing...
     mIsActive = PR_TRUE;
+    nsresult // bug 205989
     rv = mIOThunk->EvaluateScript(mStreamChannel);
 
-    if (NS_SUCCEEDED(rv)) {
-        rv = mStreamChannel->AsyncOpen(aListener, aContext);
+	// bug 205989
+    // Remove the javascript channel from its loadgroup...
+    if (loadGroup) {
+        (void) loadGroup->RemoveRequest(this, aContext, rv);
+    }
+
+    // We're no longer active, it's now up to the stream channel to do
+    // the loading, if needed.
+    mIsActive = PR_FALSE;
+    // end bug
+
+    if (NS_SUCCEEDED(rv)
+    	&& !mWasCanceled // bug 205989
+    ) {
+        // bug 130265
+        // EvaluateScript() succeeded, that means there's data to
+        // parse as a result of evaluating the script. Stop all
+        // pending network loads. (NO! bug 205817)
+        //rv = StopAll();
+        // Get the stream channels load flags (!= mLoadFlags).
+        nsLoadFlags loadFlags;
+        mStreamChannel->GetLoadFlags(&loadFlags);
+        if (loadFlags & LOAD_DOCUMENT_URI) {
+        	// We're loaded as the document channel. Stop all pending
+        	// network loads. (If we're not, keep going.)
+        	rv = StopAll();
+        }
+        // end bug 205817
+        if (NS_SUCCEEDED(rv))
+        // end bug 130265
+        	// rv = mStreamChannel->AsyncOpen(aListener, aContext);
+        // bug 205989
+        {
+        	if (aIsAsync) {
+        		rv = mStreamChannel->AsyncOpen(aListener, aContext);
+        		// This will add mStreamChannel to the load group.
+           	} else {
+        		rv = mStreamChannel->Open(aResult);
+        	}
+        }
+        // end bug
+
     } else {
         // Propagate the failure down to the underlying channel...
         (void) mStreamChannel->Cancel(rv);
     }
 
+// bug 130265
+#if (0)
     // Remove the javascript channel from its loadgroup...
     if (loadGroup) {
         (void) loadGroup->RemoveRequest(this, aContext, rv);
     }
-    mIsActive = PR_FALSE;
+#endif
+    // mIsActive = PR_FALSE; // bug 205989
     return rv;
 }
 
 NS_IMETHODIMP
 nsJSChannel::GetLoadFlags(nsLoadFlags *aLoadFlags)
 {
+	// restored by bug 205989
     *aLoadFlags = mLoadFlags;
     return NS_OK;
+    //return mStreamChannel->GetLoadFlags(aLoadFlags); // bug 130265 used this instead.
 }
 
 NS_IMETHODIMP
 nsJSChannel::SetLoadFlags(nsLoadFlags aLoadFlags)
 {
-    mLoadFlags = aLoadFlags;
+    // mLoadFlags = aLoadFlags; // bug 130265
     //
     // Since the javascript channel is considered the 'document channel'
     // clear this bit before passing it down...  Otherwise, there will be
     // two document channels!!
     //
-    return mStreamChannel->SetLoadFlags(aLoadFlags & ~(LOAD_DOCUMENT_URI));
+    // Since the javascript channel is never the actual channel that
+    // any data is loaded through, don't ever set the
+    // LOAD_DOCUMENT_URI flag on it, since that could lead to two
+    // 'document channels' in the loadgroup if a javascript: URL is
+    // loaded while a document is being loaded in the same window.
+    mLoadFlags = aLoadFlags & ~LOAD_DOCUMENT_URI; // bug 205989
+    // ... but the underlying stream channel should get this bit, if
+    // set, since that'll be the real document channel if the
+    // javascript: URL generated data.
+    return mStreamChannel->SetLoadFlags(aLoadFlags); // bug 130265 // & ~(LOAD_DOCUMENT_URI));
 }
 
 NS_IMETHODIMP

@@ -475,7 +475,7 @@ PL_DHashTableOperate(PLDHashTable *table, const void *key, PLDHashOperator op)
     PLDHashEntryHdr *entry;
     PRUint32 size;
     int deltaLog2;
-
+	
     keyHash = table->ops->hashKey(table, key);
     keyHash *= PL_DHASH_GOLDEN_RATIO;
 

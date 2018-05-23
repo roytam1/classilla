@@ -1048,7 +1048,7 @@ nsHTMLSelectElement::Add(nsIDOMHTMLElement* aElement,
   }
 
   nsCOMPtr<nsIDOMNode> ancestor(parent);
-  while (ancestor != NS_STATIC_CAST(nsIDOMNode*, this)) {
+  while (ancestor != NS_STATIC_CAST(nsIDOMNode*, this) && ancestor) {
     ancestor->GetParentNode(getter_AddRefs(ancestor));
     if (!ancestor) {
       // NOT_FOUND_ERR: Raised if before is not a descendant of the SELECT

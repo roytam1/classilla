@@ -954,6 +954,10 @@ js_InternalGetOrSet(JSContext *cx, JSObject *obj, jsid id, jsval fval,
 {
   JS_ASSERT(mode == JSACC_READ || mode == JSACC_WRITE);
   if (cx->runtime->checkObjectAccess &&
+  // bug 198660
+  	  JSVAL_IS_FUNCTION(cx, fval) &&
+  	  ((JSFunction *) JS_GetPrivate(cx, JSVAL_TO_OBJECT(fval)))->script &&
+  // end bug
       !cx->runtime->checkObjectAccess(cx, obj, ID_TO_VALUE(id), mode,
                                       &fval)) {
       return JS_FALSE;
@@ -1744,6 +1748,14 @@ js_Interpret(JSContext *cx, jsval *result)
              */
             vp = &sp[i - 1];
             rval = *vp;
+            
+            // bug 267797
+            /*
+             * Save sp in fp now, before any OBJ_* call-outs that might nest
+             * an interpreter or GC activation on this context.
+             */
+            SAVE_SP(fp);
+            // end bug
 
             /* Is this the first iteration ? */
             if (JSVAL_IS_VOID(rval)) {
@@ -1987,6 +1999,7 @@ js_Interpret(JSContext *cx, jsval *result)
             obj = fp->varobj;
             atom = GET_ATOM(cx, script, pc);
             rval = FETCH_OPND(-1);
+            SAVE_SP(fp); // bug 267797
             ok = OBJ_DEFINE_PROPERTY(cx, obj, (jsid)atom, rval, NULL, NULL,
                                      JSPROP_ENUMERATE | JSPROP_PERMANENT |
                                      JSPROP_READONLY,
@@ -2264,13 +2277,14 @@ js_Interpret(JSContext *cx, jsval *result)
             VALUE_TO_PRIMITIVE(cx, lval, JSTYPE_VOID, &ltmp);
             VALUE_TO_PRIMITIVE(cx, rval, JSTYPE_VOID, &rtmp);
             if ((cond = JSVAL_IS_STRING(ltmp)) || JSVAL_IS_STRING(rtmp)) {
+                SAVE_SP(fp); // bug 261321
                 if (cond) {
                     str = JSVAL_TO_STRING(ltmp);
-                    SAVE_SP(fp);
+                    //SAVE_SP(fp); // bug 261321
                     ok = (str2 = js_ValueToString(cx, rtmp)) != NULL;
                 } else {
                     str2 = JSVAL_TO_STRING(rtmp);
-                    SAVE_SP(fp);
+                    //SAVE_SP(fp); // bug 261321
                     ok = (str = js_ValueToString(cx, ltmp)) != NULL;
                 }
                 if (!ok)
@@ -2386,6 +2400,7 @@ js_Interpret(JSContext *cx, jsval *result)
 #if JS_HAS_INITIALIZERS
           do_new:
 #endif
+            SAVE_SP(fp); // bug 267797
             vp = sp - (2 + argc);
             JS_ASSERT(vp >= fp->spbase);
 
@@ -2398,7 +2413,7 @@ js_Interpret(JSContext *cx, jsval *result)
                 OBJ_GET_CLASS(cx, obj2) == &js_FunctionClass ||
                 !obj2->map->ops->construct)
             {
-                SAVE_SP(fp);
+                // SAVE_SP(fp); // moved above by bug 267797
                 fun = js_ValueToFunction(cx, vp, JS_TRUE);
                 if (!fun) {
                     ok = JS_FALSE;
@@ -2434,7 +2449,7 @@ js_Interpret(JSContext *cx, jsval *result)
 
             /* Now we have an object with a constructor method; call it. */
             vp[1] = OBJECT_TO_JSVAL(obj);
-            SAVE_SP(fp);
+            // SAVE_SP(fp); // moved above by bug 267797
             ok = js_Invoke(cx, argc, JSINVOKE_CONSTRUCT);
             RESTORE_SP(fp);
             LOAD_INTERRUPT_HANDLER(rt);
@@ -2595,6 +2610,18 @@ js_Interpret(JSContext *cx, jsval *result)
             goto out;                                                         \
     JS_END_MACRO
 
+// backbugs from bug 317714
+                if (cs->format & JOF_POST) {
+                   /*
+                    * We must push early to protect the postfix increment
+                    * or decrement result, if converted to a jsdouble from
+                    * a non-number value, from GC nesting in the setter.
+                    */
+                   vp = sp++;
+                   SAVE_SP(fp);
+                   --i;
+                }
+// end backbugs
                 NONINT_INCREMENT_OP();
             }
 
@@ -3255,6 +3282,7 @@ js_Interpret(JSContext *cx, jsval *result)
 
 #if JS_HAS_EXPORT_IMPORT
           case JSOP_EXPORTALL:
+            SAVE_SP(fp); // bug 267797
             obj = fp->varobj;
             ida = JS_Enumerate(cx, obj);
             if (!ida) {
@@ -3284,6 +3312,7 @@ js_Interpret(JSContext *cx, jsval *result)
             atom = GET_ATOM(cx, script, pc);
             id   = (jsid)atom;
             obj  = fp->varobj;
+            SAVE_SP(fp); // bug 267797
             ok = OBJ_LOOKUP_PROPERTY(cx, obj, id, &obj2, &prop);
             if (!ok)
                 goto out;
@@ -3668,6 +3697,7 @@ js_Interpret(JSContext *cx, jsval *result)
              * have seen the right parent already and created a sufficiently
              * well-scoped function object.
              */
+            SAVE_SP(fp); // bug 267797
             parent = fp->scopeChain;
             if (OBJ_GET_PARENT(cx, obj) != parent) {
                 obj = js_CloneFunctionObject(cx, obj, parent);
@@ -3767,6 +3797,7 @@ js_Interpret(JSContext *cx, jsval *result)
              * Getters and setters are just like watchpoints from an access
              * control point of view.
              */
+            SAVE_SP(fp); // bug 267797
             ok = OBJ_CHECK_ACCESS(cx, obj, id, JSACC_WATCH, &rtmp, &attrs);
             if (!ok)
                 goto out;
@@ -3842,6 +3873,7 @@ js_Interpret(JSContext *cx, jsval *result)
             obj = JSVAL_TO_OBJECT(lval);
 
             /* Set the property named by obj[id] to rval. */
+            SAVE_SP(fp); // bug 267797
             ok = OBJ_SET_PROPERTY(cx, obj, id, &rval);
             if (!ok)
                 goto out;
@@ -3850,6 +3882,7 @@ js_Interpret(JSContext *cx, jsval *result)
 
 #if JS_HAS_SHARP_VARS
           case JSOP_DEFSHARP:
+            SAVE_SP(fp); // bug 267797
             obj = fp->sharpArray;
             if (!obj) {
                 obj = js_NewArrayObject(cx, 0, NULL);
@@ -3882,6 +3915,7 @@ js_Interpret(JSContext *cx, jsval *result)
             if (!obj) {
                 rval = JSVAL_VOID;
             } else {
+                SAVE_SP(fp); // bug 267797
                 ok = OBJ_GET_PROPERTY(cx, obj, id, &rval);
                 if (!ok)
                     goto out;
@@ -3958,6 +3992,7 @@ js_Interpret(JSContext *cx, jsval *result)
             obj = JSVAL_TO_OBJECT(lval);
 
             /* Define obj[id] to contain rval and to be permanent. */
+            SAVE_SP(fp); // bug 267797
             ok = OBJ_DEFINE_PROPERTY(cx, obj, id, rval, NULL, NULL,
                                      JSPROP_PERMANENT, NULL);
             if (!ok)

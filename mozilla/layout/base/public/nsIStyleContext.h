@@ -98,6 +98,7 @@ public:
   NS_IMETHOD AddStyleBit(const PRUint32& aBit)=0;
   NS_IMETHOD GetStyleBits(PRUint32* aBits)=0;
 
+  virtual void Mark() = 0; // this is needed for 1.3.1. see nsStyleContext.cpp.
 #ifdef DEBUG
   // debugging
   virtual void List(FILE* out, PRInt32 aIndent) = 0;
