@@ -711,6 +711,9 @@ nsTreeSelection::FireOnSelectHandler()
     return NS_OK;
 
   nsCOMPtr<nsIBoxObject> boxObject = do_QueryInterface(mTree);
+  NS_ASSERTION(boxObject, "no box object!");
+  if (!boxObject)
+     return NS_ERROR_UNEXPECTED;
   nsCOMPtr<nsIDOMElement> elt;
   boxObject->GetElement(getter_AddRefs(elt));
 

@@ -30,7 +30,7 @@
 # may use your version of this file under either the MPL or the
 # GPL.
 #
-CVS_ID "@(#) $RCSfile: certdata.txt,v $ $Revision: 1.26 $ $Date: 2002/10/30 17:09:28 $ $Name: MOZILLA_1_3_1_RELEASE $"
+CVS_ID "@(#) $RCSfile: certdata.txt,v $ $Revision: 1.26 $ $Date: 2002/10/30 17:09:28 $ $Name:  $"
 
 #
 # certdata.txt

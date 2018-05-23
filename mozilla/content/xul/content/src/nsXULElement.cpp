@@ -3286,7 +3286,7 @@ nsXULElement::HandleDOMEvent(nsIPresContext* aPresContext,
         parent = mParent;
     }
 
-    if (!retarget || (parent != mParent)) {
+    if (retarget || (parent != mParent)) {
       if (!*aDOMEvent) {
         // We haven't made a DOMEvent yet.  Force making one now.
         nsCOMPtr<nsIEventListenerManager> listenerManager;
@@ -4316,6 +4316,11 @@ nsXULElement::Blur()
 NS_IMETHODIMP
 nsXULElement::Click()
 {
+  nsAutoString disabled;
+  GetAttribute(NS_LITERAL_STRING("disabled"), disabled);
+  if (disabled == NS_LITERAL_STRING("true"))
+    return NS_OK;
+
   nsCOMPtr<nsIDocument> doc; // Strong
   GetDocument(*getter_AddRefs(doc));
   if (doc) {
@@ -5046,7 +5051,7 @@ nsXULPrototypeScript::Deserialize(nsIObjectInputStream* aStream,
     if (NS_FAILED(rv)) return rv;
 
     char* data;
-    rv = aStream->ReadBytes(&data, size);
+    rv = aStream->ReadBytes(size, &data);
     if (NS_SUCCEEDED(rv)) {
         JSContext* cx = NS_REINTERPRET_CAST(JSContext*,
                                             aContext->GetNativeContext());

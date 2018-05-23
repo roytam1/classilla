@@ -208,6 +208,7 @@ pref("mailnews.language_sensitive_font",    true);
 
 pref("offline.news.download.unread_only",   true);
 pref("offline.news.download.by_date",       true);
+pref("offline.news.download.use_days",      false);
 pref("offline.news.download.days",          30);    // days
 pref("offline.news.download.increments",    3); // 0-yesterday, 1-1 wk ago, 2-2 wk ago,
                                                 // 3-1 month ago, 4-6 month ago, 5-1 year ago
@@ -282,16 +283,18 @@ pref("mailnews.confirm.moveFoldersToTrash", true);
 
 pref("mailnews.reuse_message_window", true);
 
-pref("mailnews.start_page.url", "");
-pref("mailnews.start_page.enabled", false);
+pref("mailnews.start_page.url", "chrome://messenger-region/locale/region.properties");
+pref("mailnews.start_page.enabled", true);
 
 pref("mailnews.remember_selected_message", true);
 
-pref("mail.toolbars.showbutton.file", true);
+/* file, print, and stop hidden by default.  
+   see http://bugzilla.mozilla.org/show_bug.cgi?id=197729#c3 */
+pref("mail.toolbars.showbutton.file", false);
 pref("mail.toolbars.showbutton.next", true);
 pref("mail.toolbars.showbutton.junk", true);
-pref("mail.toolbars.showbutton.print", true);
-pref("mail.toolbars.showbutton.stop", true);
+pref("mail.toolbars.showbutton.print",false);
+pref("mail.toolbars.showbutton.stop", false);
 
 pref("mailnews.account_central_page.url", "chrome://messenger/locale/messenger.properties");
 
@@ -368,6 +371,8 @@ pref("mail.server.default.whiteListAbURI","moz-abmdbdirectory://abook.mab");  //
 pref("mail.server.default.purgeSpam",false);
 pref("mail.server.default.purgeSpamInterval",14); // 14 days
 pref("mail.server.default.spamLoggingEnabled",false);
+pref("mail.server.default.manualMark",false);
+pref("mail.server.default.manualMarkMode",0); // 0 == "move to junk folder", 1 == "delete"
 
 pref("mail.smtpserver.default.auth_method", 1); // auth any
 pref("mail.smtpserver.default.try_ssl", 0);
@@ -504,9 +509,10 @@ pref("mailnews.fakeaccount.show", false);
 pref("mailnews.fakeaccount.server", "");
 
 // message display properties
-pref("mailnews.message_display.disable_remote_image", true);
-pref("mailnews.message_display.allow.plugins", false);
+pref("mailnews.message_display.disable_remote_image", false);
+pref("mailnews.message_display.allow.plugins", true);
 
 // When there is no disclosed recipients (only bcc), we should address the message to empty group
 // to prevent some mail server to disclose the bcc recipients
 pref("mail.compose.add_undisclosed_recipients", true);
+

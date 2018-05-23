@@ -488,7 +488,7 @@ nsMsgComposeAndSend::Clear()
         m_attachments[i].mFileSpec = nsnull;
       }
 
-#ifdef XP_MAC
+#if defined(XP_MAC) || defined(XP_MACOSX)
       //
       // remove the appledoubled intermediate file after we done all.
       //
@@ -2331,7 +2331,7 @@ nsMsgComposeAndSend::AddCompFieldLocalAttachments()
         else
           element->GetContentTypeParam(&m_attachments[newLoc].m_type_param);
 
-#ifdef XP_MAC
+#if defined(XP_MAC) || defined(XP_MACOSX)
         //We always need to snarf the file to figure out how to send it, maybe we need to use apple double...
         m_attachments[newLoc].m_done = PR_FALSE;
         m_attachments[newLoc].SetMimeDeliveryState(this);

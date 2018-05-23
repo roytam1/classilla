@@ -35,7 +35,7 @@
 #define BASET_H
 
 #ifdef DEBUG
-static const char BASET_CVS_ID[] = "@(#) $RCSfile: baset.h,v $ $Revision: 1.6 $ $Date: 2001/10/15 16:50:01 $ $Name: MOZILLA_1_3_1_RELEASE $";
+static const char BASET_CVS_ID[] = "@(#) $RCSfile: baset.h,v $ $Revision: 1.6 $ $Date: 2001/10/15 16:50:01 $ $Name:  $";
 #endif /* DEBUG */
 
 /*

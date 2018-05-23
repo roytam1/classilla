@@ -35,7 +35,7 @@
 #define PKISTORE_H
 
 #ifdef DEBUG
-static const char PKISTORE_CVS_ID[] = "@(#) $RCSfile: pkistore.h,v $ $Revision: 1.4.2.1 $ $Date: 2003/01/09 02:05:10 $ $Name: MOZILLA_1_3_1_RELEASE $";
+static const char PKISTORE_CVS_ID[] = "@(#) $RCSfile: pkistore.h,v $ $Revision: 1.4.2.1 $ $Date: 2003/01/09 02:05:10 $ $Name:  $";
 #endif /* DEBUG */
 
 #ifndef NSSPKIT_H

@@ -3384,6 +3384,7 @@ nsTreeBodyFrame::EnsureColumns()
 {
   if (!mColumns || mColumnsDirty) {
     delete mColumns;
+    mColumns = nsnull;
     mColumnsDirty = PR_FALSE;
 
     nsCOMPtr<nsIContent> parent;

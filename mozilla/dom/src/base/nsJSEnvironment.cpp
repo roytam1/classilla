@@ -501,7 +501,10 @@ nsJSContext::EvaluateStringWithValue(const nsAString& aScript,
   // Beware that the result is not rooted! Be very careful not to run
   // the GC before rooting the result somehow!
   if (!mScriptsEnabled) {
-    *aIsUndefined = PR_TRUE;
+    if (aIsUndefined) {
+      *aIsUndefined = PR_TRUE;
+    }
+
     return NS_OK;
   }
 
@@ -592,11 +595,16 @@ nsJSContext::EvaluateStringWithValue(const nsAString& aScript,
 
   // If all went well, convert val to a string (XXXbe unless undefined?).
   if (ok) {
-    if (aIsUndefined) *aIsUndefined = JSVAL_IS_VOID(val);
+    if (aIsUndefined) {
+      *aIsUndefined = JSVAL_IS_VOID(val);
+    }
+
     *NS_STATIC_CAST(jsval*, aRetValue) = val;
   }
   else {
-    if (aIsUndefined) *aIsUndefined = PR_TRUE;
+    if (aIsUndefined) {
+      *aIsUndefined = PR_TRUE;
+    }
   }
 
   // Pop here, after JS_ValueToString and any other possible evaluation.
@@ -710,7 +718,10 @@ nsJSContext::EvaluateString(const nsAString& aScript,
 
   // If all went well, convert val to a string (XXXbe unless undefined?).
   if (ok) {
-    if (aIsUndefined) *aIsUndefined = JSVAL_IS_VOID(val);
+    if (aIsUndefined) {
+      *aIsUndefined = JSVAL_IS_VOID(val);
+    }
+
     JSString* jsstring = ::JS_ValueToString(mContext, val);
     if (jsstring) {
       aRetValue.Assign(NS_REINTERPRET_CAST(const PRUnichar*,
@@ -721,7 +732,10 @@ nsJSContext::EvaluateString(const nsAString& aScript,
     }
   }
   else {
-    if (aIsUndefined) *aIsUndefined = PR_TRUE;
+    if (aIsUndefined) {
+      *aIsUndefined = PR_TRUE;
+    }
+
     aRetValue.Truncate();
   }
 
@@ -812,10 +826,14 @@ nsJSContext::ExecuteScript(void* aScriptObject,
                            PRBool* aIsUndefined)
 {
   if (!mScriptsEnabled) {
-    if (aIsUndefined)
+    if (aIsUndefined) {
       *aIsUndefined = PR_TRUE;
-    if (aRetValue)
+    }
+
+    if (aRetValue) {
       aRetValue->Truncate();
+    }
+
     return NS_OK;
   }
 
@@ -849,8 +867,10 @@ nsJSContext::ExecuteScript(void* aScriptObject,
 
   if (ok) {
     // If all went well, convert val to a string (XXXbe unless undefined?).
-    if (aIsUndefined)
+    if (aIsUndefined) {
       *aIsUndefined = JSVAL_IS_VOID(val);
+    }
+
     if (aRetValue) {
       JSString* jsstring = ::JS_ValueToString(mContext, val);
       if (jsstring) {
@@ -862,10 +882,13 @@ nsJSContext::ExecuteScript(void* aScriptObject,
       }
     }
   } else {
-    if (aIsUndefined)
+    if (aIsUndefined) {
       *aIsUndefined = PR_TRUE;
-    if (aRetValue)
+    }
+
+    if (aRetValue) {
       aRetValue->Truncate();
+    }
   }
 
   ScriptEvaluated(PR_TRUE);
@@ -1664,9 +1687,7 @@ nsresult nsJSEnvironment::Init()
     return NS_OK;
   }
 
-  nsresult rv = nsServiceManager::GetService(kJSRuntimeServiceContractID,
-                                             NS_GET_IID(nsIJSRuntimeService),
-                                             (nsISupports**)&sRuntimeService);
+  nsresult rv = CallGetService(kJSRuntimeServiceContractID, &sRuntimeService);
   // get the JSRuntime from the runtime svc, if possible
   NS_ENSURE_SUCCESS(rv, rv);
 
@@ -1715,9 +1736,7 @@ nsresult nsJSEnvironment::Init()
     rv = manager->StartupLiveConnect(sRuntime, started);
   }
 
-  rv = nsServiceManager::GetService(kScriptSecurityManagerContractID,
-                                    NS_GET_IID(nsIScriptSecurityManager),
-                                    (nsISupports**)&sSecurityManager);
+  rv = CallGetService(kScriptSecurityManagerContractID, &sSecurityManager);
 
   isInitialized = NS_SUCCEEDED(rv);
 

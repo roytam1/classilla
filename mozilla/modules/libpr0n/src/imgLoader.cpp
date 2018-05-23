@@ -39,6 +39,7 @@
 #include "imgRequest.h"
 #include "imgRequestProxy.h"
 
+#include "ImageErrors.h"
 #include "ImageLogging.h"
 
 #include "nsIComponentRegistrar.h"
@@ -529,7 +530,7 @@ NS_IMETHODIMP imgLoader::LoadImageWithChannel(nsIChannel *channel, imgIDecoderOb
   imgRequest *request = nsnull;
 
   nsCOMPtr<nsIURI> uri;
-  channel->GetOriginalURI(getter_AddRefs(uri));
+  channel->GetURI(getter_AddRefs(uri));
 
   nsCOMPtr<nsICacheEntryDescriptor> entry;
   PRBool bHasExpired;
@@ -549,10 +550,10 @@ NS_IMETHODIMP imgLoader::LoadImageWithChannel(nsIChannel *channel, imgIDecoderOb
     }
     else if (RevalidateEntry(entry, requestFlags, bHasExpired)) {
       nsCOMPtr<nsICachingChannel> cacheChan(do_QueryInterface(channel));
-
-      NS_ASSERTION(cacheChan, "Cache entry without a caching channel!");
       if (cacheChan) {
         cacheChan->IsFromCache(&bUseCacheCopy);
+      } else {
+        bUseCacheCopy = PR_FALSE;
       }
     }
 
@@ -572,7 +573,7 @@ NS_IMETHODIMP imgLoader::LoadImageWithChannel(nsIChannel *channel, imgIDecoderOb
     /* XXX If |*listener| is null when we return here, the caller should 
        probably cancel the channel instead of us doing it here.
     */
-    channel->Cancel(NS_BINDING_ABORTED); // this should fire an OnStopRequest
+    channel->Cancel(NS_IMAGELIB_ERROR_LOAD_ABORTED); // this should fire an OnStopRequest
 
     *listener = nsnull; // give them back a null nsIStreamListener
   } else {
@@ -893,7 +894,10 @@ imgCacheValidator::imgCacheValidator(imgRequest *request, void *aContext) :
 imgCacheValidator::~imgCacheValidator()
 {
   /* destructor code */
-  NS_IF_RELEASE(mRequest);
+  if (mRequest) {
+    mRequest->mValidator = nsnull;
+    NS_RELEASE(mRequest);
+  }
 }
 
 void imgCacheValidator::AddProxy(imgRequestProxy *aProxy)
@@ -923,8 +927,7 @@ NS_IMETHODIMP imgCacheValidator::OnStartRequest(nsIRequest *aRequest, nsISupport
       mRequest->SetLoadId(mContext);
       mRequest->mValidator = nsnull;
 
-      NS_RELEASE(mRequest);
-      mRequest = nsnull;
+      NS_RELEASE(mRequest); // assigns null
 
       return NS_OK;
     }
@@ -941,8 +944,7 @@ NS_IMETHODIMP imgCacheValidator::OnStartRequest(nsIRequest *aRequest, nsISupport
   mRequest->GetURI(getter_AddRefs(uri));
 
   mRequest->mValidator = nsnull;
-  NS_RELEASE(mRequest);
-  mRequest = nsnull;
+  NS_RELEASE(mRequest); // assigns null
 
   nsresult rv;
   nsCOMPtr<nsIEventQueueService> eventQService = do_GetService(NS_EVENTQUEUESERVICE_CONTRACTID, &rv);

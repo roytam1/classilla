@@ -30,7 +30,7 @@
 # GPL.
 #
 
-MAKEFILE_IN_CVS_ID = "@(#) $RCSfile: Makefile.in,v $ $Revision: 1.1 $ $Date: 2000/05/08 23:19:43 $ $Name: MOZILLA_1_3_1_RELEASE $"
+MAKEFILE_IN_CVS_ID = "@(#) $RCSfile: Makefile.in,v $ $Revision: 1.1 $ $Date: 2000/05/08 23:19:43 $ $Name:  $"
 
 SHELL = /bin/sh
 .SUFFIXES:

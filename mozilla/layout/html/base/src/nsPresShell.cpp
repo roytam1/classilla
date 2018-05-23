@@ -150,8 +150,6 @@
 #include "nsIDOMHTMLAreaElement.h"
 #include "nsIDOMHTMLLinkElement.h"
 #include "nsIDOMHTMLImageElement.h"
-#include "nsIDOMHTMLInputElement.h"
-#include "nsIFormControl.h"
 #include "nsITimer.h"
 #include "nsITimerInternal.h"
 
@@ -185,18 +183,21 @@ static NS_DEFINE_CID(kPrintPreviewContextCID,  NS_PRINT_PREVIEW_CONTEXT_CID);
 // *  - initially created for bugs 31816, 20760, 22963
 static void ColorToString(nscolor aColor, nsAutoString &aString);
 
-
+#ifdef MOZ_PERF_METRICS
 // local management of the style watch:
 //  aCtlValue should be set to all actions desired (bitwise OR'd together)
 //  aStyleSet cannot be null
 // NOTE: implementation is noop unless MOZ_PERF_METRICS is defined
-static nsresult CtlStyleWatch(PRUint32 aCtlValue, nsIStyleSet *aStyleSet);
+static void CtlStyleWatch(PRUint32 aCtlValue, nsIStyleSet *aStyleSet);
 #define kStyleWatchEnable  1
 #define kStyleWatchDisable 2
 #define kStyleWatchPrint   4
 #define kStyleWatchStart   8
 #define kStyleWatchStop    16
 #define kStyleWatchReset   32
+#else /* !defined(MOZ_PERF_METRICS */
+#define CtlStyleWatch(ctlvalue_,styleset_) /* nothing */
+#endif /* !defined(MOZ_PERF_METRICS */
 
 // Class ID's
 static NS_DEFINE_CID(kFrameSelectionCID, NS_FRAMESELECTION_CID);
@@ -673,6 +674,13 @@ FrameArena::FreeFrame(size_t aSize, void* aPtr)
     mRecyclers[index] = aPtr;
     *((void**)aPtr) = currentTop;
   }
+#ifdef DEBUG_dbaron
+  else {
+    fprintf(stderr,
+            "WARNING: FrameArena::FreeFrame leaking chunk of %d bytes.\n",
+            aSize);
+  }
+#endif
 #endif
   return NS_OK;
 }
@@ -4044,6 +4052,9 @@ PresShell::GoToAnchor(const nsAString& aAnchorName, PRBool aScroll)
   }
 
   if (content) {
+    // Flush notifications so we scroll to the right place
+    FlushPendingNotifications(PR_FALSE);
+    
     // Get the primary frame
     nsIFrame* frame = nsnull;
     if (aScroll &&
@@ -4178,9 +4189,9 @@ static void ScrollViewToShowRect(nsIScrollableView* aScrollingView,
   } else {
     // Align the frame edge according to the specified percentage
     nscoord frameAlignY =
-      NSToCoordRound(aRect.y + aRect.height * (aVPercent / 100.0f));
+      NSToCoordRound(aRect.y + aRect.height * (aVPercent / 100.0));
     scrollOffsetY =
-      NSToCoordRound(frameAlignY - visibleRect.height * (aVPercent / 100.0f));
+      NSToCoordRound(frameAlignY - visibleRect.height * (aVPercent / 100.0));
   }
 
   // See how the frame should be positioned horizontally
@@ -4216,9 +4227,9 @@ static void ScrollViewToShowRect(nsIScrollableView* aScrollingView,
   } else {
     // Align the frame edge according to the specified percentage
     nscoord frameAlignX =
-      NSToCoordRound(aRect.x + (aRect.width) * (aHPercent / 100.0f));
+      NSToCoordRound(aRect.x + aRect.width * (aHPercent / 100.0));
     scrollOffsetX =
-      NSToCoordRound(frameAlignX - visibleRect.width * (aHPercent / 100.0f));
+      NSToCoordRound(frameAlignX - visibleRect.width * (aHPercent / 100.0));
   }
 
   aScrollingView->ScrollTo(scrollOffsetX, scrollOffsetY,
@@ -4436,37 +4447,19 @@ NS_IMETHODIMP PresShell::GetLinkLocation(nsIDOMNode* aNode, nsAString& aLocation
 }
 
 // GetImageLocation: copy image location to clipboard
-NS_IMETHODIMP
-PresShell::GetImageLocation(nsIDOMNode* aNode, nsAString& aLocationString)
+NS_IMETHODIMP PresShell::GetImageLocation(nsIDOMNode* aNode, nsAString& aLocationString)
 {
+#ifdef DEBUG_dr
+  printf("dr :: PresShell::GetImageLocation\n");
+#endif
+
   NS_ENSURE_ARG_POINTER(aNode);
-  aLocationString.Truncate();
+  nsresult rv;
 
-  // Is aNode an image?
-  nsCOMPtr<nsIDOMHTMLImageElement> img(do_QueryInterface(aNode));
-
-  if (img) {
-    // aNode is an image, return its source.
-
-    return img->GetSrc(aLocationString);
-  }
-
-  // aNode is not an image, check if it's an <input type=image>...
-  nsCOMPtr<nsIFormControl> form_control(do_QueryInterface(aNode));
-
-  if (form_control && form_control->GetType() == NS_FORM_INPUT_IMAGE) {
-    // aNode is an <input type=image>, return its source.
-
-    nsCOMPtr<nsIDOMHTMLInputElement> input(do_QueryInterface(aNode));
-    NS_ASSERTION(input, "Whaaa, image form control is not an "
-                        "nsIDOMHTMLInputElement!");
-
-    return input->GetSrc(aLocationString);
-  }
-
-  // aNode is not an image, return an empty location.
-
-  return NS_OK;
+  // are we an image?
+  nsCOMPtr<nsIDOMHTMLImageElement> img(do_QueryInterface(aNode, &rv));
+  NS_ENSURE_SUCCESS(rv, rv);
+  return img->GetSrc(aLocationString);
 }
 
 // DoCopyImageContents: copy image contents to clipboard
@@ -5091,7 +5084,7 @@ PresShell::FlushPendingNotifications(PRBool aUpdateViews)
     ProcessReflowCommands(PR_FALSE);
 
     if (aUpdateViews && mViewManager) {
-      mViewManager->EndUpdateViewBatch(NS_VMREFRESH_IMMEDIATE);
+      mViewManager->EndUpdateViewBatch(NS_VMREFRESH_NO_SYNC);
     }
   }
 
@@ -7420,13 +7413,13 @@ PresShellViewEventListener::DidRefreshRect(nsIViewManager *aViewManager,
   return RestoreCaretVisibility();
 }
 
+#ifdef MOZ_PERF_METRICS
 // Enable, Disable and Print, Start, Stop and/or Reset the StyleSet watch
 /*static*/
-nsresult CtlStyleWatch(PRUint32 aCtlValue, nsIStyleSet *aStyleSet)
+void CtlStyleWatch(PRUint32 aCtlValue, nsIStyleSet *aStyleSet)
 {
   NS_ASSERTION(aStyleSet!=nsnull,"aStyleSet cannot be null in CtlStyleWatch");
   nsresult rv = NS_OK;
-#ifdef MOZ_PERF_METRICS
   if (aStyleSet != nsnull){
     nsCOMPtr<nsITimeRecorder> watch = do_QueryInterface(aStyleSet, &rv);
     if (NS_SUCCEEDED(rv) && watch) {
@@ -7450,9 +7443,8 @@ nsresult CtlStyleWatch(PRUint32 aCtlValue, nsIStyleSet *aStyleSet)
       }
     }
   }
-#endif
-  return rv;  
 }
+#endif
 
 
 //=============================================================

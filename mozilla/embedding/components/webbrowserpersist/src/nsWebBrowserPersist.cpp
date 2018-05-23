@@ -614,7 +614,7 @@ NS_IMETHODIMP nsWebBrowserPersist::OnStartRequest(
 
     if (data && data->mFile)
     {
-        if (data->mCalcFileExt)
+        if (data->mCalcFileExt && !(mPersistFlags & PERSIST_FLAGS_DONT_CHANGE_FILENAMES))
         {
             // this is the first point at which the server can tell us the mimetype
             CalculateAndAppendFileExt(data->mFile, channel, data->mOriginalLocation);
@@ -668,15 +668,14 @@ NS_IMETHODIMP nsWebBrowserPersist::OnStopRequest(
     // 1) aren't canceling
     // 2) we haven't triggered the save (which we only want to trigger once)
     // 3) we aren't serializing (which will call it inside SerializeNextFile)
-    if (mOutputMap.Count() == 0 && !mCancel && !mStartSaving 
-    && !mSerializingOutput)
+    if (mOutputMap.Count() == 0 && !mCancel && !mStartSaving && !mSerializingOutput)
     {
         nsresult rv = SaveDocuments();
         NS_ENSURE_SUCCESS(rv, NS_ERROR_FAILURE);
     }
 
     PRBool completed = PR_FALSE;
-    if (mOutputMap.Count() == 0 && mUploadList.Count() == 0)
+    if (mOutputMap.Count() == 0 && mUploadList.Count() == 0 && !mCancel)
     {
         // if no documents left in mDocList, --> done
         // if we have no files left to serialize and no error result, --> done
@@ -711,6 +710,17 @@ NS_IMETHODIMP nsWebBrowserPersist::OnStopRequest(
 // nsWebBrowserPersist::nsIStreamListener
 //*****************************************************************************
 
+static NS_METHOD DiscardSegments(nsIInputStream *input,
+                                 void *closure,
+                                 const char *buf,
+                                 PRUint32 offset,
+                                 PRUint32 count,
+                                 PRUint32 *countRead)
+{
+    *countRead = count;
+    return NS_OK;
+}
+
 NS_IMETHODIMP nsWebBrowserPersist::OnDataAvailable(
     nsIRequest* request, nsISupports *aContext, nsIInputStream *aIStream,
     PRUint32 aOffset, PRUint32 aLength)
@@ -727,8 +737,11 @@ NS_IMETHODIMP nsWebBrowserPersist::OnDataAvailable(
         nsCOMPtr<nsISupports> keyPtr = do_QueryInterface(request);
         nsISupportsKey key(keyPtr);
         OutputData *data = (OutputData *) mOutputMap.Get(&key);
-        if (!data)
-            return NS_OK;  // might be uploadData
+        if (!data) {
+            // might be uploadData; consume necko's buffer and bail...
+            PRUint32 n;
+            return aIStream->ReadSegments(DiscardSegments, nsnull, aLength, &n);
+        }
 
         PRBool readError = PR_TRUE;
 
@@ -1813,6 +1826,11 @@ nsWebBrowserPersist::MakeFilenameFromURI(nsIURI *aURI, nsString &aFilename)
     {
         nsCAutoString nameFromURL;
         url->GetFileName(nameFromURL);
+        if (mPersistFlags & PERSIST_FLAGS_DONT_CHANGE_FILENAMES)
+        {
+            fileName.AssignWithConversion(NS_UnescapeURL(nameFromURL).get());
+            goto end;
+        }
         if (!nameFromURL.IsEmpty())
         {
             // Unescape the file name (GetFileName escapes it)
@@ -1844,7 +1862,7 @@ nsWebBrowserPersist::MakeFilenameFromURI(nsIURI *aURI, nsString &aFilename)
 
     // Note: Filename could be empty at this point, but we'll deal with that
     //       problem later.
-
+end:
     aFilename = fileName;
     return NS_OK;
 }
@@ -2249,6 +2267,13 @@ nsWebBrowserPersist::EnumCleanupURIMap(nsHashKey *aKey, void *aData, void* closu
 PRBool PR_CALLBACK
 nsWebBrowserPersist::EnumCleanupUploadList(nsHashKey *aKey, void *aData, void* closure)
 {
+    nsCOMPtr<nsISupports> keyPtr;
+    ((nsMyISupportsKey *) aKey)->GetISupports(getter_AddRefs(keyPtr));
+    nsCOMPtr<nsIChannel> channel = do_QueryInterface(keyPtr);
+    if (channel)
+    {
+        channel->Cancel(NS_BINDING_ABORTED);
+    }
     UploadData *data = (UploadData *) aData;
     if (data)
     {

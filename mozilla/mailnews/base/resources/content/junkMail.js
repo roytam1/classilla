@@ -69,10 +69,8 @@ function setupForAccountFromFolder(aURI)
     var msgFolder = GetMsgFolderFromUri(aURI, false);
     gCurrentServer = msgFolder.server;
 
-    var protocolInfo = Components.classes["@mozilla.org/messenger/protocol/info;1?type=" + gCurrentServer.type];
-    protocolInfo = protocolInfo.getService(Components.interfaces.nsIMsgProtocolInfo);
-    if (!protocolInfo.canGetIncomingMessages)
-      throw "this can happen if the selected folder (or account) doesn't have junk controls (like news or local folder)"
+    if (gCurrentServer.type == "nntp")
+      throw "this can happen if the selected folder (or account) doesn't have junk controls (news)"
   }
   catch (ex) {
     // get server for default account
@@ -131,6 +129,10 @@ function setupForAccountFromFolder(aURI)
   menuitems = abList.getElementsByAttribute("id", obj.settings.whiteListAbURI);
   abList.selectedItem = menuitems[0];
 
+  // set up the manual mark UI
+  document.getElementById("manualMark").checked = obj.settings.manualMark;
+  document.getElementById("manualMarkMode").selectedItem = document.getElementById("manualMarkMode" + obj.settings.manualMarkMode);
+
   conditionallyEnableUI(null);
 }
 
@@ -168,6 +170,9 @@ function storeSettings(aSettings, aLoggingEnabled)
   aSettings.useWhiteList = document.getElementById("useWhiteList").checked;
   aSettings.whiteListAbURI = document.getElementById("whiteListAbURI").selectedItem.getAttribute("id");
   aSettings.loggingEnabled = aLoggingEnabled;
+
+  aSettings.manualMark = document.getElementById("manualMark").checked;
+  aSettings.manualMarkMode = document.getElementById("manualMarkMode").value;
 }
 
 function conditionallyEnableUI(id)
@@ -184,13 +189,24 @@ function conditionallyEnableUI(id)
     document.getElementById("purge").disabled = true;
     document.getElementById("purgeInterval").disabled = true;
     document.getElementById("purgeLabel").disabled = true;
+
+    document.getElementById("manualMark").disabled = true;
+    document.getElementById("manualMarkMode").disabled = true;
     return;
   }
 
   document.getElementById("useWhiteList").disabled = false;
   document.getElementById("moveOnSpam").disabled = false;
-  
+  document.getElementById("manualMark").disabled = false;
+
   var enabled;
+  
+  if (!id || id == "manualMark") {
+    enabled = document.getElementById("manualMark").checked;
+    // need to enable manualMarkMode before we enable manualMarkMode0
+    document.getElementById("manualMarkMode").disabled = !enabled;
+  }
+ 
   if (!id || id == "moveOnSpam") {
     enabled = document.getElementById("moveOnSpam").checked;
     var choice = document.getElementById("moveTargetMode").value;
@@ -209,6 +225,9 @@ function conditionallyEnableUI(id)
     enabled = document.getElementById("purge").checked;
     document.getElementById("purgeInterval").disabled = !enabled;
     document.getElementById("purgeLabel").disabled = !enabled;
+    
+    if (!document.getElementById("manualMarkMode").disabled)
+      document.getElementById("manualMarkMode0").disabled = !enabled;
   }
 
   if (!id || id == "useWhiteList") {

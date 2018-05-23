@@ -247,6 +247,8 @@ textarea[disabled],
 option[disabled],
 optgroup[disabled],
 select[disabled] {
+  -moz-user-input: disabled;
+  -moz-user-focus: ignore;
   color: GrayText;
   background-color: ThreeDFace;
   cursor: default;
@@ -457,7 +459,7 @@ input[type="submit"][disabled]:active,
 input[type="submit"][disabled] {
   /* The sum of border-top, border-bottom, padding-top, padding-bottom
      must be the same here and for text inputs */
-  padding: 1px 6px 1px 6px;
+  padding: 1px 7px 1px 7px;
   border: 1px outset ButtonShadow;
   color: GrayText;
 }

@@ -54,7 +54,6 @@
 #include "nsFileStreams.h"
 #include "nsBufferedStreams.h"
 #include "nsMIMEInputStream.h"
-#include "nsProtocolProxyService.h"
 #include "nsSOCKSSocketProvider.h"
 #include "nsSOCKS4SocketProvider.h"
 #include "nsCacheService.h"
@@ -73,6 +72,9 @@
 
 #include "nsIOService.h"
 NS_GENERIC_FACTORY_CONSTRUCTOR_INIT(nsIOService, Init)
+  
+#include "nsProtocolProxyService.h"
+NS_GENERIC_FACTORY_CONSTRUCTOR_INIT(nsProtocolProxyService, Init)
 
 #include "nsStreamTransportService.h"
 NS_GENERIC_FACTORY_CONSTRUCTOR_INIT(nsStreamTransportService, Init)
@@ -127,10 +129,12 @@ NS_GENERIC_FACTORY_CONSTRUCTOR(nsStreamListenerTee)
 #include "nsHttpHandler.h"
 #include "nsHttpBasicAuth.h"
 #include "nsHttpDigestAuth.h"
+#include "nsHttpAuthManager.h"
 #undef LOG
 
 NS_GENERIC_FACTORY_CONSTRUCTOR_INIT(nsHttpHandler, Init)
 NS_GENERIC_FACTORY_CONSTRUCTOR_INIT(nsHttpsHandler, Init)
+NS_GENERIC_FACTORY_CONSTRUCTOR_INIT(nsHttpAuthManager, Init)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsHttpBasicAuth)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsHttpDigestAuth)
 
@@ -648,10 +652,10 @@ static const nsModuleComponentInfo gNetModuleInfo[] = {
       NS_MIMEINPUTSTREAM_CID,
       NS_MIMEINPUTSTREAM_CONTRACTID,
       nsMIMEInputStreamConstructor },
-    { "Protocol Proxy Service",
+    { NS_PROTOCOLPROXYSERVICE_CLASSNAME,
       NS_PROTOCOLPROXYSERVICE_CID,
-      "@mozilla.org/network/protocol-proxy-service;1",
-      nsProtocolProxyService::Create },
+      NS_PROTOCOLPROXYSERVICE_CONTRACTID,
+      nsProtocolProxyServiceConstructor },
 
     // from netwerk/streamconv:
 
@@ -811,8 +815,13 @@ static const nsModuleComponentInfo gNetModuleInfo[] = {
       NS_HTTP_AUTHENTICATOR_CONTRACTID_PREFIX "digest",
       nsHttpDigestAuthConstructor },
 
+    { NS_HTTPAUTHMANAGER_CLASSNAME,
+      NS_HTTPAUTHMANAGER_CID,
+      NS_HTTPAUTHMANAGER_CONTRACTID,
+      nsHttpAuthManagerConstructor },
+      
     // from netwerk/protocol/ftp:
-    { "The FTP Protocol Handler", 
+    { NS_FTPPROTOCOLHANDLER_CLASSNAME,
       NS_FTPPROTOCOLHANDLER_CID,
       NS_NETWORK_PROTOCOL_CONTRACTID_PREFIX "ftp",
       nsFtpProtocolHandlerConstructor
@@ -871,6 +880,11 @@ static const nsModuleComponentInfo gNetModuleInfo[] = {
     { "about:logo",
       NS_ABOUT_REDIRECTOR_MODULE_CID,
       NS_ABOUT_MODULE_CONTRACTID_PREFIX "logo",
+      nsAboutRedirector::Create
+    },
+    { "about:buildconfig",
+      NS_ABOUT_REDIRECTOR_MODULE_CID,
+      NS_ABOUT_MODULE_CONTRACTID_PREFIX "buildconfig",
       nsAboutRedirector::Create
     },
 

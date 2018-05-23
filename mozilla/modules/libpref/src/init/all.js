@@ -62,13 +62,12 @@ pref("general.open_location.last_window_choice", 0);
 pref("backups.number_of_prefs_copies", 1);
 
 // 0 = blank, 1 = home (browser.startup.homepage), 2 = last
-pref("browser.startup.page", 0);
-pref("browser.startup.homepage", "http://dmoz.org/");
-pref("browser.startup.homepage.count", 0);
+pref("browser.startup.page",                1);
+pref("browser.startup.homepage",	   "chrome://navigator-region/locale/region.properties");
+pref("browser.startup.homepage.count", 1);
 // "browser.startup.homepage_override" was for 4.x
 pref("browser.startup.homepage_override.1", true);
 pref("browser.startup.autoload_homepage",   true);
-pref("browser.startup.homepage_override.mstone", "rv:1.3");
 
 pref("browser.cache.enable",                true); // see also network.http.use-cache
 pref("browser.cache.disk.enable",           true);
@@ -104,7 +103,7 @@ pref("browser.display.focus_ring_on_anything", false);
 
 pref("browser.urlbar.autoFill", false);
 pref("browser.urlbar.showPopup", true);
-pref("browser.urlbar.showSearch", false);
+pref("browser.urlbar.showSearch", true);
 pref("browser.urlbar.matchOnlyTyped", false);
 
 pref("browser.chrome.site_icons", true);
@@ -164,6 +163,8 @@ pref("browser.search.powermode", 0);
 pref("browser.search.basic.min_ver", "0.0");
 pref("browser.urlbar.autocomplete.enabled", true);
 pref("browser.urlbar.clickSelectsAll", true);
+// when clickSelectsAll=true, does it also apply when the click is past end of text?
+pref("browser.urlbar.clickAtEndSelects", true);
 
 pref("browser.history_expire_days", 9);
 pref("browser.history.grouping", "day");
@@ -191,7 +192,7 @@ pref("browser.forms.submit.backwards_compatible", true);
 pref("browser.tabs.autoHide", true);
 pref("browser.tabs.forceHide", false);
 pref("browser.tabs.loadInBackground", false);
-pref("browser.tabs.opentabfor.middleclick", true);
+pref("browser.tabs.opentabfor.middleclick", false);
 pref("browser.tabs.opentabfor.urlbar", false);
 pref("browser.tabs.opentabfor.windowopen", false);
 pref("browser.tabs.opentabfor.bookmarks", false);
@@ -281,8 +282,7 @@ pref("print.print_edge_bottom", 0); // 1/100 of an inch
 // Editing these may create a security risk - be sure you know what you're doing
 //pref("capability.policy.default.barprop.visible.set", "UniversalBrowserWrite");
 
-pref("capability.policy.default_policynames", "mailnews allowclipboard");
-pref("capability.policy.policynames", "");
+pref("capability.policy.default_policynames", "mailnews");
 
 pref("capability.policy.default.DOMException.code", "allAccess");
 pref("capability.policy.default.DOMException.message", "allAccess");
@@ -334,7 +334,9 @@ pref("capability.policy.mailnews.*.attributes.get", "noAccess");
 pref("capability.policy.mailnews.*.baseURI.get", "noAccess");
 pref("capability.policy.mailnews.*.data.get", "noAccess");
 pref("capability.policy.mailnews.*.getAttribute", "noAccess");
+pref("capability.policy.mailnews.*.getAttributeNS", "noAccess");
 pref("capability.policy.mailnews.*.getNamedItem", "noAccess");
+pref("capability.policy.mailnews.*.getNamedItemNS", "noAccess");
 pref("capability.policy.mailnews.*.host.get", "noAccess");
 pref("capability.policy.mailnews.*.hostname.get", "noAccess");
 pref("capability.policy.mailnews.*.href.get", "noAccess");
@@ -433,18 +435,15 @@ pref("capability.policy.default.DOMParser.parseFromStream", "noAccess");
 // Clipboard
 pref("capability.policy.default.Clipboard.cutcopy", "noAccess");
 pref("capability.policy.default.Clipboard.paste", "noAccess");
-pref("capability.policy.allowclipboard.sites", "http://www.mozilla.org");
-pref("capability.policy.allowclipboard.Clipboard.cutcopy", "allAccess");
-pref("capability.policy.allowclipboard.Clipboard.paste", "allAccess");
 
 // Scripts & Windows prefs
 pref("browser.block.target_new_window",     false);
 pref("dom.disable_cookie_get",              false);
 pref("dom.disable_cookie_set",              false);
 pref("dom.disable_image_src_set",           false);
-pref("dom.disable_open_during_load", true);
-pref("dom.disable_window_flip", true);
-pref("dom.disable_window_move_resize", true);
+pref("dom.disable_open_during_load",        false);
+pref("dom.disable_window_flip",             false);
+pref("dom.disable_window_move_resize",      false);
 pref("dom.disable_window_status_change",    false);
 
 pref("dom.disable_window_open_feature.titlebar",    false);
@@ -457,7 +456,7 @@ pref("dom.disable_window_open_feature.menubar",     false);
 pref("dom.disable_window_open_feature.scrollbars",  false);
 pref("dom.disable_window_open_feature.resizable",   false);
 pref("dom.disable_window_open_feature.minimizable", false);
-pref("dom.disable_window_open_feature.status", true);
+pref("dom.disable_window_open_feature.status",      false);
 
 pref("dom.allow_scripts_to_close_windows",          false);
 
@@ -476,6 +475,7 @@ pref("offline.startup_state",            0);
 pref("offline.send.unsent_messages",            0);
 pref("offline.download.download_messages",  0);
 pref("offline.prompt_synch_on_exit",            true);
+pref("offline.news.download.use_days",          0);
 
 // If there is ever a security firedrill that requires
 // us to block certian ports global, this is the pref 
@@ -559,7 +559,8 @@ pref("network.http.sendSecureXSiteReferrer", true);
 pref("network.http.redirection-limit", 20);
 
 // Enable http compression: comment this out in case of problems with 1.1
-pref("network.http.accept-encoding" ,"gzip,deflate,compress;q=0.9");
+// NOTE: support for "compress" has been disabled per bug 196406.
+pref("network.http.accept-encoding" ,"gzip,deflate");
 
 pref("network.http.pipelining"      , false);
 pref("network.http.proxy.pipelining", false);
@@ -627,9 +628,9 @@ pref("network.online",                      true); //online/offline
 pref("network.cookie.cookieBehavior",       3); // 0-Accept, 1-dontAcceptForeign, 2-dontUse, 3-p3p
 pref("network.cookie.disableCookieForMailNews", true); // disable all cookies for mail
 pref("network.cookie.warnAboutCookies",     false);
-pref("network.cookie.lifetime.enabled", true);
+pref("network.cookie.lifetime.enabled",     false);
 pref("network.cookie.lifetime.behavior",    0);
-pref("network.cookie.lifetime.days", 0);
+pref("network.cookie.lifetime.days",        90);
 
 // The following default value is for p3p medium mode.
 // See extensions/cookie/resources/content/p3p.xul for the definitions of low/medium/hi
@@ -649,7 +650,7 @@ pref("wallet.Server",                       "chrome://navigator/locale/navigator
 pref("wallet.Samples",                      "chrome://navigator/locale/navigator.properties");
 pref("wallet.version",                      "1");
 pref("wallet.enabled",                      true);
-pref("wallet.crypto", true);
+pref("wallet.crypto",                       false);
 pref("wallet.crypto.autocompleteoverride",  false); // Ignore 'autocomplete=off' - available only when wallet.crypto is enabled. 
 pref("wallet.namePanel.hide",               false);
 pref("wallet.addressPanel.hide",            false);
@@ -826,7 +827,7 @@ pref("alerts.totalOpenTime", 4000);
 pref("alerts.height", 50);
 
 // update notifications prefs
-pref("update_notifications.enabled", false);
+pref("update_notifications.enabled", true);
 pref("update_notifications.provider.0.frequency", 7); // number of days
 pref("update_notifications.provider.0.datasource", "chrome://communicator-region/locale/region.properties");
 
@@ -850,18 +851,3 @@ pref("viewmanager.do_doublebuffering", true);
 pref("privacy.popups.sound_enabled",              false);
 pref("privacy.popups.sound_url",                  "");
 pref("privacy.popups.statusbar_icon_enabled",     true);
-
-pref("browser.turbo.showDialog", true);
-pref("network.ftp.anonymous_password", "");
-
-// turn off debugging
-pref("browser.dom.window.dump.enabled", false);
-pref("layout.reflow.dumpframebyframecounts", false);
-pref("layout.reflow.dumpframecounts", false);
-pref("layout.reflow.showframecounts", false);
-pref("nglayout.debug.disable_xul_cache", false);
-pref("nglayout.debug.invalidate_dumping", false);
-pref("nglayout.debug.motion_event_dumping", false);
-pref("nglayout.debug.paint_dumping", false);
-pref("nglayout.debug.paint_flashing", false);
-pref("xul.debug.box", false);

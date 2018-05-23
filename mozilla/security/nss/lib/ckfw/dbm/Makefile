@@ -30,7 +30,7 @@
 # may use your version of this file under either the MPL or the
 # GPL.
 #
-MAKEFILE_CVS_ID = "@(#) $RCSfile: Makefile,v $ $Revision: 1.1 $ $Date: 2000/05/15 20:39:53 $ $Name: MOZILLA_1_3_1_RELEASE $"
+MAKEFILE_CVS_ID = "@(#) $RCSfile: Makefile,v $ $Revision: 1.1 $ $Date: 2000/05/15 20:39:53 $ $Name:  $"
 
 include manifest.mn
 include config.mk

@@ -93,6 +93,7 @@ Contributor(s):
   </stringbundleset>
 
   <commandset id="commands">    
+    <commandset id="findTypeMenuItems"/>
     <commandset id="globalEditMenuItems"/>
     <commandset id="selectEditMenuItems"/>
     <commandset id="undoEditMenuItems"/>
@@ -159,6 +160,7 @@ Contributor(s):
       </hbox>
  
       <hbox id="nav-bar-inner" flex="1">
+        <observes element="nav-bar" attribute="buttonstyle"/>
         <textbox id="urlbar" class="chromeclass-location uri-element" flex="1"
                  type="autocomplete" searchSessions="history" 
                  timeout="50" maxrows="6" alwaysopenpopup="true"
@@ -401,6 +403,7 @@ Contributor(s):
                     flex="1" contenttooltip="aHTMLTooltip"
                     contentcontextmenu="contentAreaContextMenu"
                     onnewtab="BrowserOpenTab();"
+                    onbookmarkgroup="addGroupmarkAs();"
                     onclick="return contentAreaClick(event);"/>
       </hbox>
     </vbox>  
@@ -413,7 +416,7 @@ Contributor(s):
     <statusbarpanel class="statusbarpanel-progress">
       <progressmeter class="progressmeter-statusbar" id="statusbar-icon" mode="normal" value="0"/>
     </statusbarpanel>
-    <statusbarpanel id="popupIcon" class="statusbarpanel-iconic" hidden="true" oncommand="StatusbarViewPopupManager()" tooltiptext="&popupIcon.tooltiptext;"/>
+    <statusbarpanel id="popupIcon" class="statusbarpanel-iconic" hidden="true" oncommand="StatusbarViewPopupManager()"/>
     <statusbarpanel class="statusbarpanel-iconic" id="offline-status"/>
     <statusbarpanel class="statusbarpanel-iconic" id="security-button"
                     onclick="BrowserPageInfo(null, 'securityTab')"/>

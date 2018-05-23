@@ -53,6 +53,7 @@ var gLastValidURLStr = "";
 var gLastValidURL = null;
 var gHaveUpdatedToolbarState = false;
 var gClickSelectsAll = false;
+var gClickAtEndSelects = false;
 var gIgnoreFocus = false;
 var gIgnoreClick = false;
 var gURIFixup = null;
@@ -602,6 +603,7 @@ function Startup()
 
   // does clicking on the urlbar select its contents?
   gClickSelectsAll = pref.getBoolPref("browser.urlbar.clickSelectsAll");
+  gClickAtEndSelects = pref.getBoolPref("browser.urlbar.clickAtEndSelects");
 
   // now load bookmarks after a delay
   setTimeout(LoadBookmarksCallback, 0);
@@ -1807,8 +1809,9 @@ function URLBarMouseDownHandler(aEvent)
 
 function URLBarClickHandler(aEvent)
 {
-  if (!gIgnoreClick && gClickSelectsAll && gURLBar.selectionStart == gURLBar.selectionEnd && gURLBar.selectionStart < gURLBar.value.length)
-    gURLBar.select();
+  if (!gIgnoreClick && gClickSelectsAll && gURLBar.selectionStart == gURLBar.selectionEnd)
+    if (gClickAtEndSelects || gURLBar.selectionStart < gURLBar.value.length)
+      gURLBar.select();
 }
 
 // This function gets the "windows hooks" service and has it check its setting
@@ -2181,15 +2184,23 @@ function maybeInitPopupContext()
 
 function WindowIsClosing() {
   var browser = getBrowser();
-  if (browser
-      && browser.localName == 'tabbrowser'
-      && browser.mTabContainer.childNodes.length > 1) {
+  if (browser && browser.localName == 'tabbrowser') {
     var numtabs = browser.mTabContainer.childNodes.length;
-    // give the user a chance to not lose all tabs if appropriate
-    var confmessage = "Warning: you are about to close a window with "
-                    + numtabs + " Navigator\n Tabs open. Are you"
-                    + " sure you want to continue?";
-    return window.confirm( confmessage );
+    if (numtabs > 1) {
+      var promptService = Components.classes["@mozilla.org/embedcomp/prompt-service;1"].
+                          getService(Components.interfaces.nsIPromptService);
+      if (promptService) {
+        var checkValue = {value:false};
+        var buttonPressed = promptService.confirmEx(window, 
+              gNavigatorBundle.getString('tabs.closeWarningTitle'), 
+              gNavigatorBundle.getFormattedString("tabs.closeWarning", [numtabs]),
+              (promptService.BUTTON_TITLE_IS_STRING * promptService.BUTTON_POS_0) +
+              (promptService.BUTTON_TITLE_CANCEL * promptService.BUTTON_POS_1),
+              gNavigatorBundle.getString('tabs.closeButton'),
+              null, null, null, checkValue);
+        return (0 == buttonPressed);
+      }
+    }
   }
   return true;
 }

@@ -57,6 +57,19 @@
     {0x93, 0x37, 0x00, 0x10, 0x4b, 0xa0, 0xfd, 0x40} \
 }
 
+// service implementing nsIProtocolProxyService.
+#define NS_PROTOCOLPROXYSERVICE_CLASSNAME \
+    "nsProtocolProxyService"
+#define NS_PROTOCOLPROXYSERVICE_CONTRACTID \
+    "@mozilla.org/network/protocol-proxy-service;1"
+#define NS_PROTOCOLPROXYSERVICE_CID                  \
+{ /* E9B301C0-E0E4-11d3-A1A8-0050041CAF44 */         \
+    0xe9b301c0,                                      \
+    0xe0e4,                                          \
+    0x11d3,                                          \
+    {0xa1, 0xa8, 0x0, 0x50, 0x4, 0x1c, 0xaf, 0x44}   \
+}
+
 // component implementing nsILoadGroup.
 #define NS_LOADGROUP_CLASSNAME \
     "nsLoadGroup"
@@ -434,6 +447,32 @@
     0x1dd2,                                          \
     0x11b2,                                          \
     {0xaa, 0xe3, 0xde, 0x6b, 0x92, 0xda, 0xb6, 0x20} \
+}
+
+#define NS_HTTPAUTHMANAGER_CLASSNAME \
+    "nsHttpAuthManager"
+#define NS_HTTPAUTHMANAGER_CONTRACTID \
+    "@mozilla.org/network/http-auth-manager;1"
+#define NS_HTTPAUTHMANAGER_CID \
+{ /* 36b63ef3-e0fa-4c49-9fd4-e065e85568f4 */         \
+    0x36b63ef3,                                      \
+    0xe0fa,                                          \
+    0x4c49,                                          \
+    {0x9f, 0xd4, 0xe0, 0x65, 0xe8, 0x55, 0x68, 0xf4} \
+}
+
+/******************************************************************************
+ * netwerk/protocol/ftp/ classes
+ */
+
+#define NS_FTPPROTOCOLHANDLER_CLASSNAME \
+    "nsFtpProtocolHandler"
+#define NS_FTPPROTOCOLHANDLER_CID \
+{ /* 25029490-F132-11d2-9588-00805F369F95 */         \
+    0x25029490,                                      \
+    0xf132,                                          \
+    0x11d2,                                          \
+    {0x95, 0x88, 0x0, 0x80, 0x5f, 0x36, 0x9f, 0x95}  \
 }
 
 /******************************************************************************

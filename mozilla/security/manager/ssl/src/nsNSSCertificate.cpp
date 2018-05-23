@@ -243,14 +243,21 @@ nsNSSCertificate::FormatUIStrings(const nsAutoString &nickname, nsAutoString &ni
 
     if (NS_SUCCEEDED(nssComponent->GetPIPNSSBundleString(NS_LITERAL_STRING("CertInfoIssuedFor").get(), info))) {
       details.Append(info);
-      details.Append(NS_LITERAL_STRING(" "));
-      if (NS_SUCCEEDED(x509Proxy->GetSubjectName(temp1)) && !temp1.IsEmpty()) {
-        details.Append(temp1);
+      details.Append(NS_LITERAL_STRING("\n"));
+    }
+
+    if (NS_SUCCEEDED(x509Proxy->GetSubjectName(temp1)) && !temp1.IsEmpty()) {
+      details.Append(NS_LITERAL_STRING("  "));
+      if (NS_SUCCEEDED(nssComponent->GetPIPNSSBundleString(NS_LITERAL_STRING("CertDumpSubject").get(), info))) {
+        details.Append(info);
+        details.Append(NS_LITERAL_STRING(": "));
       }
+      details.Append(temp1);
+      details.Append(NS_LITERAL_STRING("\n"));
     }
 
     if (NS_SUCCEEDED(x509Proxy->GetSerialNumber(temp1)) && !temp1.IsEmpty()) {
-      details.Append(NS_LITERAL_STRING("\n  "));
+      details.Append(NS_LITERAL_STRING("  "));
       if (NS_SUCCEEDED(nssComponent->GetPIPNSSBundleString(NS_LITERAL_STRING("CertDumpSerialNo").get(), info))) {
         details.Append(info);
         details.Append(NS_LITERAL_STRING(": "));
@@ -260,6 +267,8 @@ nsNSSCertificate::FormatUIStrings(const nsAutoString &nickname, nsAutoString &ni
       nickWithSerial.Append(NS_LITERAL_STRING(" ["));
       nickWithSerial.Append(temp1);
       nickWithSerial.Append(NS_LITERAL_STRING("]"));
+
+      details.Append(NS_LITERAL_STRING("\n"));
     }
 
 
@@ -276,7 +285,7 @@ nsNSSCertificate::FormatUIStrings(const nsAutoString &nickname, nsAutoString &ni
       }
 
       if (validity) {
-        details.Append(NS_LITERAL_STRING("\n  "));
+        details.Append(NS_LITERAL_STRING("  "));
         if (NS_SUCCEEDED(nssComponent->GetPIPNSSBundleString(NS_LITERAL_STRING("CertInfoValid").get(), info))) {
           details.Append(info);
         }
@@ -298,49 +307,47 @@ nsNSSCertificate::FormatUIStrings(const nsAutoString &nickname, nsAutoString &ni
           details.Append(NS_LITERAL_STRING(" "));
           details.Append(temp1);
         }
+
+        details.Append(NS_LITERAL_STRING("\n"));
       }
     }
 
     PRUint32 tempInt = 0;
     if (NS_SUCCEEDED(x509Proxy->GetUsagesString(PR_FALSE, &tempInt, temp1)) && !temp1.IsEmpty()) {
-      details.Append(NS_LITERAL_STRING("\n  "));
+      details.Append(NS_LITERAL_STRING("  "));
       if (NS_SUCCEEDED(nssComponent->GetPIPNSSBundleString(NS_LITERAL_STRING("CertInfoPurposes").get(), info))) {
         details.Append(info);
       }
       details.Append(NS_LITERAL_STRING(": "));
       details.Append(temp1);
+      details.Append(NS_LITERAL_STRING("\n"));
     }
 
     if (NS_SUCCEEDED(nssComponent->GetPIPNSSBundleString(NS_LITERAL_STRING("CertInfoIssuedBy").get(), info))) {
-      details.Append(NS_LITERAL_STRING("\n"));
       details.Append(info);
-      details.Append(NS_LITERAL_STRING(" "));
-
-      if (NS_SUCCEEDED(x509Proxy->GetIssuerName(temp1)) && !temp1.IsEmpty()) {
-        details.Append(temp1);
-      }
+      details.Append(NS_LITERAL_STRING("\n"));
     }
 
-    if (NS_SUCCEEDED(nssComponent->GetPIPNSSBundleString(NS_LITERAL_STRING("CertInfoStoredIn").get(), info))) {
-      details.Append(NS_LITERAL_STRING("\n"));
-      details.Append(info);
-      details.Append(NS_LITERAL_STRING(" "));
-
-      if (NS_SUCCEEDED(x509Proxy->GetTokenName(temp1)) && !temp1.IsEmpty()) {
-        details.Append(temp1);
+    if (NS_SUCCEEDED(x509Proxy->GetIssuerName(temp1)) && !temp1.IsEmpty()) {
+      details.Append(NS_LITERAL_STRING("  "));
+      if (NS_SUCCEEDED(nssComponent->GetPIPNSSBundleString(NS_LITERAL_STRING("CertDumpSubject").get(), info))) {
+        details.Append(info);
+        details.Append(NS_LITERAL_STRING(": "));
       }
+      details.Append(temp1);
+      details.Append(NS_LITERAL_STRING("\n"));
     }
-
 
     /*
       the above produces output the following output:
 
-      Issued to: $subjectName
+      Issued to: 
+        Subject: $subjectName
         Serial number: $serialNumber
         Valid from: $starting_date to $expriation_date
         Purposes: $purposes
-      Issued by: $issuerName
-      Stored in: $token
+      Issued by:
+        Subject: $issuerName
     */
   }
   

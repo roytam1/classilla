@@ -329,7 +329,6 @@ class DocumentViewerImpl : public nsIDocumentViewer,
   friend class nsPrintEngine;
 
 public:
-  DocumentViewerImpl();
   DocumentViewerImpl(nsIPresContext* aPresContext);
 
   NS_DECL_AND_IMPL_ZEROING_OPERATOR_NEW
@@ -425,9 +424,9 @@ protected:
 
   nsCOMPtr<nsIContentViewer> mPreviousViewer;
 
-  PRBool  mEnableRendering;
-  PRBool  mStopped;
-  PRBool  mLoaded;
+  PRPackedBool  mEnableRendering;
+  PRPackedBool  mStopped;
+  PRPackedBool  mLoaded;
   PRInt16 mNumURLStarts;
   PRInt16 mDestroyRefCount;     // a second "refcount" for the document viewer's "destroy"
 
@@ -476,7 +475,7 @@ static NS_DEFINE_CID(kViewCID,              NS_VIEW_CID);
 nsresult
 NS_NewDocumentViewer(nsIDocumentViewer** aResult)
 {
-  *aResult = new DocumentViewerImpl();
+  *aResult = new DocumentViewerImpl(nsnull);
   if (!*aResult) {
     return NS_ERROR_OUT_OF_MEMORY;
   }
@@ -484,15 +483,6 @@ NS_NewDocumentViewer(nsIDocumentViewer** aResult)
   NS_ADDREF(*aResult);
 
   return NS_OK;
-}
-
-// Note: operator new zeros our memory
-DocumentViewerImpl::DocumentViewerImpl()
-  : mIsSticky(PR_TRUE)
-{
-  PrepareToStartLoad();
-
-  mParentWidget = nsnull;
 }
 
 void DocumentViewerImpl::PrepareToStartLoad()
@@ -523,10 +513,13 @@ void DocumentViewerImpl::PrepareToStartLoad()
 #endif // NS_PRINTING
 }
 
+// Note: operator new zeros our memory, so no need to init things to null.
 DocumentViewerImpl::DocumentViewerImpl(nsIPresContext* aPresContext)
-  : mPresContext(aPresContext), mAllowPlugins(PR_TRUE), mIsSticky(PR_TRUE)
+  : mPresContext(aPresContext),
+    mAllowPlugins(PR_TRUE),
+    mIsSticky(PR_TRUE),
+    mHintCharsetSource(kCharsetUninitialized)
 {
-  mHintCharsetSource = kCharsetUninitialized;
   PrepareToStartLoad();
 }
 
@@ -1815,6 +1808,7 @@ DocumentViewerImpl::MakeWindow(nsIWidget* aParentWidget,
   nsCOMPtr<nsIDeviceContext> dx;
   mPresContext->GetDeviceContext(getter_AddRefs(dx));
 
+
   nsRect tbounds = aBounds;
   float p2t;
   mPresContext->GetPixelsToTwips(&p2t);
@@ -2051,12 +2045,13 @@ NS_IMETHODIMP DocumentViewerImpl::CopyLinkLocation()
 {
   NS_ENSURE_TRUE(mPresShell, NS_ERROR_NOT_INITIALIZED);
   nsCOMPtr<nsIDOMNode> node;
-  GetPopupLinkNode(getter_AddRefs(node));
+  nsresult rv = GetPopupLinkNode(getter_AddRefs(node));
   // make noise if we're not in a link
+  NS_ENSURE_SUCCESS(rv, rv);
   NS_ENSURE_TRUE(node, NS_ERROR_FAILURE);
 
   nsAutoString locationText;
-  nsresult rv = mPresShell->GetLinkLocation(node, locationText);
+  rv = mPresShell->GetLinkLocation(node, locationText);
   NS_ENSURE_SUCCESS(rv, rv);
 
   nsCOMPtr<nsIClipboardHelper> clipboard(do_GetService("@mozilla.org/widget/clipboardhelper;1", &rv));
@@ -2070,16 +2065,16 @@ NS_IMETHODIMP DocumentViewerImpl::CopyImageLocation()
 {
   NS_ENSURE_TRUE(mPresShell, NS_ERROR_NOT_INITIALIZED);
   nsCOMPtr<nsIDOMNode> node;
-  GetPopupImageNode(getter_AddRefs(node));
+  nsresult rv = GetPopupImageNode(getter_AddRefs(node));
   // make noise if we're not in an image
+  NS_ENSURE_SUCCESS(rv, rv);
   NS_ENSURE_TRUE(node, NS_ERROR_FAILURE);
 
   nsAutoString locationText;
-  nsresult rv = mPresShell->GetImageLocation(node, locationText);
+  rv = mPresShell->GetImageLocation(node, locationText);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  nsCOMPtr<nsIClipboardHelper> clipboard =
-    do_GetService("@mozilla.org/widget/clipboardhelper;1", &rv);
+  nsCOMPtr<nsIClipboardHelper> clipboard(do_GetService("@mozilla.org/widget/clipboardhelper;1", &rv));
   NS_ENSURE_SUCCESS(rv, rv);
 
   // copy the href onto the clipboard
@@ -2090,10 +2085,10 @@ NS_IMETHODIMP DocumentViewerImpl::CopyImageContents()
 {
   NS_ENSURE_TRUE(mPresShell, NS_ERROR_NOT_INITIALIZED);
   nsCOMPtr<nsIDOMNode> node;
-  GetPopupImageNode(getter_AddRefs(node));
+  nsresult rv = GetPopupImageNode(getter_AddRefs(node));
   // make noise if we're not in an image
+  NS_ENSURE_SUCCESS(rv, rv);
   NS_ENSURE_TRUE(node, NS_ERROR_FAILURE);
-
   return mPresShell->DoCopyImageContents(node);
 }
 
@@ -2854,23 +2849,13 @@ DocumentViewerImpl::GetPopupImageNode(nsIDOMNode** aNode)
 
   // XXX find out if we're an image. this really ought to look for objects
   // XXX with type "image/...", but this is good enough for now.
-  nsCOMPtr<nsIDOMHTMLImageElement> img(do_QueryInterface(node));
+  nsCOMPtr<nsIDOMHTMLImageElement> img(do_QueryInterface(node, &rv));
+  if (NS_FAILED(rv)) return rv;
+  NS_ENSURE_TRUE(img, NS_ERROR_FAILURE);
 
-  if (!img) {
-    nsCOMPtr<nsIFormControl> form_control(do_QueryInterface(node));
-
-    if (!form_control || form_control->GetType() != NS_FORM_INPUT_IMAGE) {
-      // We're neither an <img> nor an <input type=image> element,
-      // nothing to return.
-
-      return NS_OK;
-    }
-  }
-
-  // if we made it here, we're an <img> or an <input type=image>.
+  // if we made it here, we're an image.
   *aNode = node;
-  NS_ADDREF(*aNode);
-
+  NS_IF_ADDREF(*aNode); // addref
   return NS_OK;
 }
 

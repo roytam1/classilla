@@ -54,6 +54,10 @@
 #include "nsISupportsObsolete.h"
 #if defined(XP_MAC) || defined(XP_MACOSX)
 #include "nsIAppleFileDecoder.h"
+#if defined(XP_MACOSX)
+#include "nsILocalFileMac.h"
+#include "MoreFilesX.h"
+#endif
 #endif
 
 // necko
@@ -208,7 +212,7 @@ nsresult ConvertAndSanitizeFileName(const char * displayName, PRUnichar ** unico
   NS_ConvertUTF8toUCS2 ucs2Str(unescapedName);
 
   nsresult rv = NS_OK;
-#if defined(XP_MAC)
+#if defined(XP_MAC)  /* reviewed for 1.4, XP_MACOSX not needed */
   /* We need to truncate the name to 31 characters, this even on MacOS X until the file API
      correctly support long file name. Using a nsILocalFile will do the trick...
   */
@@ -545,76 +549,73 @@ nsMessenger::PromptIfFileExists(nsFileSpec &fileSpec)
 }
 
 NS_IMETHODIMP
-nsMessenger::OpenURL(const char * url, PRBool useMessageService)
+nsMessenger::OpenURL(const char *aURL)
 {
-  if (url)
+  NS_ENSURE_ARG_POINTER(aURL);
+
+  // This is to setup the display DocShell as UTF-8 capable...
+  SetDisplayCharset(NS_LITERAL_STRING("UTF-8").get());
+  
+  char *unescapedUrl = PL_strdup(aURL);
+  if (!unescapedUrl)
+    return NS_ERROR_OUT_OF_MEMORY;
+  
+  // I don't know why we're unescaping this url - I'll leave it unescaped
+  // for the web shell, but the message service doesn't need it unescaped.
+  nsUnescape(unescapedUrl);
+  
+  nsCOMPtr <nsIMsgMessageService> messageService;
+  nsresult rv = GetMessageServiceFromURI(aURL, getter_AddRefs(messageService));
+  
+  if (NS_SUCCEEDED(rv) && messageService)
   {
-#ifdef DEBUG_MESSENGER
-    printf("nsMessenger::OpenURL(%s)\n",url);
-#endif    
-
-    // This is to setup the display DocShell as UTF-8 capable...
-    SetDisplayCharset(NS_LITERAL_STRING("UTF-8").get());
-    
-    char* unescapedUrl = PL_strdup(url);
-    if (unescapedUrl)
-    {
-      // I don't know why we're unescaping this url - I'll leave it unescaped
-      // for the web shell, but the message service doesn't need it unescaped.
-      nsUnescape(unescapedUrl);
-      
-      nsresult rv = NS_OK;
-      nsCOMPtr <nsIMsgMessageService> messageService;
-      if (useMessageService)
-        rv = GetMessageServiceFromURI(url, getter_AddRefs(messageService));
-      
-      if (useMessageService && NS_SUCCEEDED(rv) && messageService)
-      {
-        nsCOMPtr<nsIWebShell> webShell(do_QueryInterface(mDocShell));
-        messageService->DisplayMessage(url, webShell, mMsgWindow, nsnull, nsnull, nsnull);
-        mLastDisplayURI = url; // remember the last uri we displayed....
-      }
-      //If it's not something we know about, then just load the url.
-      else if (!useMessageService)
-      {
-        nsCOMPtr<nsIURI> uri;
-        nsAutoString uriString(NS_ConvertASCIItoUCS2(unescapedUrl).get());
-        // Cleanup the empty spaces that might be on each end.
-        uriString.Trim(" ");
-        // Eliminate embedded newlines, which single-line text fields now allow:
-        uriString.StripChars("\r\n");
-        NS_ENSURE_TRUE(!uriString.IsEmpty(), NS_ERROR_FAILURE);
-
-        rv = NS_NewURI(getter_AddRefs(uri), uriString);
-        if (NS_FAILED(rv) || !uri)
-          return NS_ERROR_FAILURE;
-        nsCOMPtr<nsIMsgMailNewsUrl> msgurl = do_QueryInterface(uri);
-        if (msgurl)
-          msgurl->SetMsgWindow(mMsgWindow);
-        if (mDocShell) {
-          nsCOMPtr<nsIDocShellLoadInfo> loadInfo;
-          rv = mDocShell->CreateLoadInfo(getter_AddRefs(loadInfo));
-          if (NS_FAILED(rv)) return rv;
-            loadInfo->SetLoadType(nsIDocShellLoadInfo::loadNormal);
-            mDocShell->LoadURI(uri, loadInfo, 0, PR_TRUE);
-        }
-      } else {
-        nsCOMPtr<nsIWebNavigation> webNav(do_QueryInterface(mDocShell));
-        if(webNav)
-          webNav->LoadURI(NS_ConvertASCIItoUCS2(unescapedUrl).get(), // URI string
-                          nsIWebNavigation::LOAD_FLAGS_NONE,  // Load flags
-                          nsnull,                             // Refering URI
-                          nsnull,                             // Post stream
-                          nsnull);                            // Extra headers
-      }
-      PL_strfree(unescapedUrl);
-    }
-    else
-    {
-      return NS_ERROR_OUT_OF_MEMORY;
-    }
+    nsCOMPtr<nsIWebShell> webShell(do_QueryInterface(mDocShell));
+    messageService->DisplayMessage(aURL, webShell, mMsgWindow, nsnull, nsnull, nsnull);
+    mLastDisplayURI = aURL; // remember the last uri we displayed....
   }
-  return NS_OK;
+  //If it's not something we know about, then just load the url.
+  else
+  {
+    nsCOMPtr<nsIWebNavigation> webNav(do_QueryInterface(mDocShell));
+    if(webNav)
+      rv = webNav->LoadURI(NS_ConvertASCIItoUCS2(unescapedUrl).get(), // URI string
+      nsIWebNavigation::LOAD_FLAGS_NONE,  // Load flags
+      nsnull,                             // Refering URI
+      nsnull,                             // Post stream
+      nsnull);                            // Extra headers
+  }
+  PL_strfree(unescapedUrl);
+  return rv;
+}
+
+NS_IMETHODIMP
+nsMessenger::LoadURL(const char *aURL)
+{
+  NS_ENSURE_ARG_POINTER(aURL);
+  NS_ENSURE_TRUE(mDocShell, NS_ERROR_FAILURE);
+  
+  SetDisplayCharset(NS_LITERAL_STRING("UTF-8").get());
+  
+  nsAutoString uriString(NS_ConvertASCIItoUCS2(aURL).get());
+  // Cleanup the empty spaces that might be on each end.
+  uriString.Trim(" ");
+  // Eliminate embedded newlines, which single-line text fields now allow:
+  uriString.StripChars("\r\n");
+  NS_ENSURE_TRUE(!uriString.IsEmpty(), NS_ERROR_FAILURE);
+  
+  nsCOMPtr<nsIURI> uri;
+  nsresult rv = NS_NewURI(getter_AddRefs(uri), uriString);
+  NS_ENSURE_SUCCESS(rv, rv);
+  
+  nsCOMPtr<nsIMsgMailNewsUrl> msgurl = do_QueryInterface(uri);
+  if (msgurl)
+    msgurl->SetMsgWindow(mMsgWindow);
+  
+  nsCOMPtr<nsIDocShellLoadInfo> loadInfo;
+  rv = mDocShell->CreateLoadInfo(getter_AddRefs(loadInfo));
+  NS_ENSURE_SUCCESS(rv, rv);
+  loadInfo->SetLoadType(nsIDocShellLoadInfo::loadNormal);
+  return mDocShell->LoadURI(uri, loadInfo, 0, PR_TRUE);
 }
 
 nsresult
@@ -1724,19 +1725,20 @@ nsSaveMsgListener::OnStartRequest(nsIRequest* request, nsISupports* aSupport)
         m_dataBuffer = (char*) PR_CALLOC(FOUR_K+1);
     }
     
-#ifdef XP_MAC
+#if defined(XP_MAC) || defined(XP_MACOSX)
   if (!m_contentType.IsEmpty())
   {
     nsFileSpec realSpec;
     m_fileSpec->GetFileSpec(&realSpec);
 
+    // Create nsILocalFile from a nsFileSpec.
+    nsCOMPtr<nsILocalFile> outputFile;
+    NS_FileSpecToIFile(&realSpec, getter_AddRefs(outputFile));
+
   	/* if we are saving an appledouble or applesingle attachment, we need to use an Apple File Decoder */
     if ((nsCRT::strcasecmp(m_contentType.get(), APPLICATION_APPLEFILE) == 0) ||
         (nsCRT::strcasecmp(m_contentType.get(), MULTIPART_APPLEDOUBLE) == 0))
     {        
-      /* ggrrrrr, I have a nsFileSpec but I need a nsILocalFile... */
-      nsCOMPtr<nsILocalFile> outputFile;
-      NS_FileSpecToIFile(&realSpec, getter_AddRefs(outputFile));
       
       nsCOMPtr<nsIAppleFileDecoder> appleFileDecoder = do_CreateInstance(NS_IAPPLEFILEDECODER_CONTRACTID, &rv);
       if (NS_SUCCEEDED(rv) && appleFileDecoder)
@@ -1758,7 +1760,14 @@ nsSaveMsgListener::OnStartRequest(nsIRequest* request, nsISupports* aSupport)
           PRUint32 aMacType;
           PRUint32 aMacCreator;
           if (NS_SUCCEEDED(mimeinfo->GetMacType(&aMacType)) && NS_SUCCEEDED(mimeinfo->GetMacCreator(&aMacCreator)))
-            realSpec.SetFileTypeAndCreator((OSType)aMacType, (OSType)aMacCreator);
+          {
+            nsCOMPtr<nsILocalFileMac> macFile =  do_QueryInterface(outputFile, &rv);
+            if (NS_SUCCEEDED(rv) && macFile)
+            {
+              macFile->SetFileCreator((OSType)aMacCreator);
+              macFile->SetFileType((OSType)aMacType);
+            }
+          }
         }
       }
       
@@ -1980,10 +1989,10 @@ nsSaveAllAttachmentsState::~nsSaveAllAttachmentsState()
         nsCRT::free(m_displayNameArray[i]);
         nsCRT::free(m_messageUriArray[i]);
     }
-    delete m_contentTypeArray;
-    delete m_urlArray;
-    delete m_displayNameArray;
-    delete m_messageUriArray;
+    delete[] m_contentTypeArray;
+    delete[] m_urlArray;
+    delete[] m_displayNameArray;
+    delete[] m_messageUriArray;
     nsCRT::free(m_directoryName);
 }
 

@@ -201,12 +201,13 @@ nsHTMLContentSerializer::IsJavaScript(nsIAtom* aAttrNameAtom, const nsAString& a
 {
   if (aAttrNameAtom == nsHTMLAtoms::href
   || aAttrNameAtom == nsHTMLAtoms::src) {
-    // note that there is a problem in that if this value starts with leading spaces we won't do the right thing
-    // this is covered in bug #59604
     static const char kJavaScript[] = "javascript";
     PRInt32 pos = aValueString.FindChar(':');
-    const nsAutoString scheme(Substring(aValueString, 0, pos));
-    if ((pos == (PRInt32)(sizeof kJavaScript - 1)) &&
+    if ( pos < (PRInt32)(sizeof kJavaScript - 1) )
+        return PR_FALSE;
+    nsAutoString scheme(Substring(aValueString, 0, pos));
+    scheme.StripWhitespace();
+    if ((scheme.Length() == (sizeof kJavaScript - 1)) &&
         scheme.EqualsIgnoreCase(kJavaScript))
       return PR_TRUE;
     else
@@ -394,7 +395,10 @@ nsHTMLContentSerializer::SerializeAttributes(nsIContent* aContent,
     * then start the attribute from a new line.
     */
 
-    if (mDoFormat && (mColPos >= mMaxColumn || ((mColPos + nameStr.Length() + valueStr.Length() + 4) > mMaxColumn))) {
+    if (mDoFormat
+        && (mColPos >= mMaxColumn
+            || ((PRInt32)(mColPos + nameStr.Length() +
+                          valueStr.Length() + 4) > mMaxColumn))) {
         aStr.Append(mLineBreak);
         mColPos = 0;
     }
@@ -659,6 +663,7 @@ nsHTMLContentSerializer::AppendToStringWrapped(const nsASingleFragmentString& aS
       if (pos == end) {
         return;
       }
+      lastSpace = pos;
     }
     segStart = pos;
     lastChar = pos;

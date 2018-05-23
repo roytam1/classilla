@@ -48,6 +48,7 @@
 #include "nsIPresShell.h"
 #include "nsDOMEvent.h"
 #include "nsHTMLAtoms.h"
+#include "nsIEditorDocShell.h"
 #include "nsIFormControl.h"
 #include "nsIDOMHTMLAnchorElement.h"
 #include "nsIDOMHTMLInputElement.h"
@@ -1778,7 +1779,7 @@ nsEventStateManager::PostHandleEvent(nsIPresContext* aPresContext,
         if (mCurrentTarget) {
           mCurrentTarget->GetContentForEvent(mPresContext, aEvent, getter_AddRefs(newFocus));
           const nsStyleUserInterface* ui;
-          mCurrentTarget->GetStyleData(eStyleStruct_UserInterface, ((const nsStyleStruct*&)ui));
+          ::GetStyleData(mCurrentTarget, &ui);
           suppressBlur = (ui->mUserFocus == NS_STYLE_USER_FOCUS_IGNORE);
         }
 
@@ -1789,8 +1790,17 @@ nsEventStateManager::PostHandleEvent(nsIPresContext* aPresContext,
 
         // Look for the nearest enclosing focusable frame.
         while (currFrame) {
+          // If the mousedown happened inside a popup, don't
+          // try to set focus on one of its containing elements
+          const nsStyleDisplay* display;
+          ::GetStyleData(currFrame, &display);
+          if (display->mDisplay == NS_STYLE_DISPLAY_POPUP) {
+            newFocus = nsnull;
+            break;
+          }
+
           const nsStyleUserInterface* ui;
-          currFrame->GetStyleData(eStyleStruct_UserInterface, ((const nsStyleStruct*&)ui));
+          ::GetStyleData(currFrame, &ui);
           if ((ui->mUserFocus != NS_STYLE_USER_FOCUS_IGNORE) &&
               (ui->mUserFocus != NS_STYLE_USER_FOCUS_NONE)) {
             currFrame->GetContent(getter_AddRefs(newFocus));
@@ -4627,9 +4637,8 @@ void nsEventStateManager::FocusElementButNotDocument(nsIContent *aContent)
 {
   // Focus an element in the current document, but don't switch document/window focus!
 
-  if (gLastFocusedDocument == mDocument || !gLastFocusedContent) {
+  if (gLastFocusedDocument == mDocument) {
     // If we're already focused in this document, 
-    // or if there was no last focus
     // use normal focus method
     if (mCurrentFocus != aContent) {
       if (aContent) 
@@ -4637,6 +4646,10 @@ void nsEventStateManager::FocusElementButNotDocument(nsIContent *aContent)
       else
         SetContentState(nsnull, NS_EVENT_STATE_FOCUS);
     }
+    return;
+  }
+
+  if (!gLastFocusedContent) {
     return;
   }
 
@@ -4837,6 +4850,14 @@ NS_IMETHODIMP nsEventStateManager::MoveCaretToFocus()
     nsCOMPtr<nsIDocShellTreeItem> treeItem(do_QueryInterface(pcContainer));
     if (treeItem) 
       treeItem->GetItemType(&itemType);
+    nsCOMPtr<nsIEditorDocShell> editorDocShell(do_QueryInterface(treeItem));
+    if (editorDocShell) {
+      PRBool isEditable;
+      editorDocShell->GetEditable(&isEditable);
+      if (isEditable) {
+        return NS_OK;  // Move focus to caret only if browsing, not editing
+      }
+    }
   }
 
   if (itemType != nsIDocShellTreeItem::typeChrome) {
@@ -4863,7 +4884,7 @@ NS_IMETHODIMP nsEventStateManager::MoveCaretToFocus()
       nsCOMPtr<nsIFrameSelection> frameSelection;
       shell->GetFrameSelection(getter_AddRefs(frameSelection));
 
-      if (frameSelection && rangeDoc) {
+      if (currentFocusNode && frameSelection && rangeDoc) {
         nsCOMPtr<nsISelection> domSelection;
         frameSelection->GetSelection(nsISelectionController::SELECTION_NORMAL, 
           getter_AddRefs(domSelection));
@@ -4874,9 +4895,18 @@ NS_IMETHODIMP nsEventStateManager::MoveCaretToFocus()
           if (currentFocusNode) {
             nsresult rv = rangeDoc->CreateRange(getter_AddRefs(newRange));
             if (NS_SUCCEEDED(rv)) {
-              // If we could create a new range, then set it to the current focus node
-              // And then collapse the selection
+              // Set the range to the start of the currently focused node
+              // Make sure it's collapsed
               newRange->SelectNodeContents(currentFocusNode);
+              nsCOMPtr<nsIDOMNode> firstChild;
+              currentFocusNode->GetFirstChild(getter_AddRefs(firstChild));
+              if (!firstChild ) {
+                // If current focus node is a leaf, set range to before the
+                // node by using the parent as a container.
+                // This prevents it from appearing as selected.
+                newRange->SetStartBefore(currentFocusNode);
+                newRange->SetEndBefore(currentFocusNode);
+              }
               domSelection->AddRange(newRange);
               domSelection->CollapseToStart();
             }

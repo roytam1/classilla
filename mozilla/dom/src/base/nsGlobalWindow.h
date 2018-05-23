@@ -260,6 +260,8 @@ protected:
 
   nsresult ConvertCharset(const nsAString& aStr, char** aDest);
 
+  PRBool   GetBlurSuppression();
+
 protected:
   // When adding new member variables, be careful not to create cycles
   // through JavaScript.  If there is any chance that a member variable
@@ -484,6 +486,7 @@ protected:
   nsresult GetSourceDocument(JSContext* cx, nsIDocument** aDocument);
 
   nsresult CheckURL(nsIURI *url, nsIDocShellLoadInfo** aLoadInfo);
+  nsresult FindUsableBaseURI(nsIURI * aBaseURI, nsIDocShell * aParent, nsIURI ** aUsableURI);
 
   nsIDocShell *mDocShell; // Weak Reference
 };

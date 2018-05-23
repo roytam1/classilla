@@ -32,7 +32,7 @@
  * GPL.
  */
 #ifdef DEBUG
-static const char CVS_ID[] = "@(#) $RCSfile: certdata.c,v $ $Revision: 1.25 $ $Date: 2002/10/30 17:20:59 $ $Name: MOZILLA_1_3_1_RELEASE $""; @(#) $RCSfile: certdata.c,v $ $Revision: 1.25 $ $Date: 2002/10/30 17:20:59 $ $Name: MOZILLA_1_3_1_RELEASE $";
+static const char CVS_ID[] = "@(#) $RCSfile: certdata.c,v $ $Revision: 1.25 $ $Date: 2002/10/30 17:20:59 $ $Name:  $""; @(#) $RCSfile: certdata.c,v $ $Revision: 1.25 $ $Date: 2002/10/30 17:20:59 $ $Name:  $";
 #endif /* DEBUG */
 
 #ifndef BUILTINS_H
@@ -466,7 +466,7 @@ static const NSSItem nss_builtins_items_0 [] = {
   { (void *)&ck_false, (PRUint32)sizeof(CK_BBOOL) },
   { (void *)"CVS ID", (PRUint32)7 },
   { (void *)"NSS", (PRUint32)4 },
-  { (void *)"@(#) $RCSfile: certdata.c,v $ $Revision: 1.25 $ $Date: 2002/10/30 17:20:59 $ $Name: MOZILLA_1_3_1_RELEASE $""; @(#) $RCSfile: certdata.c,v $ $Revision: 1.25 $ $Date: 2002/10/30 17:20:59 $ $Name: MOZILLA_1_3_1_RELEASE $", (PRUint32)179 }
+  { (void *)"@(#) $RCSfile: certdata.c,v $ $Revision: 1.25 $ $Date: 2002/10/30 17:20:59 $ $Name:  $""; @(#) $RCSfile: certdata.c,v $ $Revision: 1.25 $ $Date: 2002/10/30 17:20:59 $ $Name:  $", (PRUint32)179 }
 };
 #endif /* DEBUG */
 static const NSSItem nss_builtins_items_1 [] = {

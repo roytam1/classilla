@@ -1288,10 +1288,10 @@ nsresult nsMsgAsyncWriteProtocol::SetupTransportState()
 nsresult nsMsgAsyncWriteProtocol::CloseSocket()
 {
 	nsresult rv = NS_OK;
-  nsMsgProtocol::CloseSocket(); 
-
   if (mAsyncOutStream)
     mAsyncOutStream->CloseEx(NS_BINDING_ABORTED);
+
+  nsMsgProtocol::CloseSocket(); 
 
   if (mFilePostHelper)
   {

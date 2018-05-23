@@ -296,7 +296,6 @@ protected:
   nsresult MarkThreadRead(nsIMsgThread *threadHdr, nsMsgViewIndex threadIndex, nsMsgKeyArray &idsMarkedRead, PRBool bRead);
   PRBool IsValidIndex(nsMsgViewIndex index);
   nsresult ToggleIgnored(nsMsgViewIndex * indices, PRInt32 numIndices, PRBool *resultToggleState);
-  nsresult GetKeyForFirstSelectedMessage(nsMsgKey *key);
   PRBool OfflineMsgSelected(nsMsgViewIndex * indices, PRInt32 numIndices);
   PRUnichar * GetString(const PRUnichar *aStringName);
   nsresult AddLabelPrefObservers();
@@ -366,7 +365,6 @@ protected:
 
   // used to know to finish out the junk mail classification batch when the 
   // last classification callback happens
-  //
   nsCString mLastJunkUriInBatch;
   PRUint8 mOutstandingJunkBatches;
 
@@ -377,6 +375,13 @@ private:
   static nsDateFormatSelector  m_dateFormatDefault;
   static nsDateFormatSelector  m_dateFormatThisWeek;
   static nsDateFormatSelector  m_dateFormatToday;
+
+   nsMsgKeyArray	mJunkKeys;
+   nsCOMPtr <nsIMsgFolder> mJunkTargetFolder;
+   nsresult PerformActionOnJunkMsgs();
+   nsresult SaveJunkMsgForAction(nsIMsgIncomingServer *aServer, const char *aMsgURI, nsMsgJunkStatus aClassification);
+
+   nsUInt32Array mIndicesToNoteChange;
 };
 
 #endif

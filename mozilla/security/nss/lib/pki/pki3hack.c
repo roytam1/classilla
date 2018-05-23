@@ -32,7 +32,7 @@
  */
 
 #ifdef DEBUG
-static const char CVS_ID[] = "@(#) $RCSfile: pki3hack.c,v $ $Revision: 1.71.2.2 $ $Date: 2003/01/09 02:05:07 $ $Name: MOZILLA_1_3_1_RELEASE $";
+static const char CVS_ID[] = "@(#) $RCSfile: pki3hack.c,v $ $Revision: 1.71.2.2 $ $Date: 2003/01/09 02:05:07 $ $Name:  $";
 #endif /* DEBUG */
 
 /*

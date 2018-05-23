@@ -35,7 +35,7 @@
 #define PKIX_H
 
 #ifdef DEBUG
-static const char PKIX_CVS_ID[] = "@(#) $Source: /cvsroot/mozilla/security/nss/lib/pkix/include/pkix.h,v $ $Revision: 1.1 $ $Date: 2000/03/31 19:02:56 $ $Name: MOZILLA_1_3_1_RELEASE $";
+static const char PKIX_CVS_ID[] = "@(#) $Source: /home/kai/cvsmo/data/mozilla/security/nss/lib/pkix/include/pkix.h,v $ $Revision: 1.1 $ $Date: 2000/03/31 19:02:56 $ $Name:  $";
 #endif /* DEBUG */
 
 /*

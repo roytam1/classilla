@@ -76,11 +76,6 @@ function StartUp()
   Registry = Registry.QueryInterface(Components.interfaces.nsIRegistry);
   Registry.open(regFile);
 
-  // get new profile registry & users location and dump it to console
-  // to let users know about it.
-  var regFolder = dirServ.get("AppRegD", Components.interfaces.nsIFile);
-  dump("New location for profile registry and user profile directories is -> " + regFolder.path + "\n");
-
   loadElements();
   highlightCurrentProfile();
 
@@ -234,6 +229,7 @@ function onStart()
   catch (ex) {
 	  var brandName = gBrandBundle.getString("brandShortName");    
     var message;
+    var fatalError = false;
     switch (ex.result) {
       case Components.results.NS_ERROR_FILE_ACCESS_DENIED:
         message = gProfileManagerBundle.getFormattedString("profDirLocked", [brandName, profilename]);
@@ -243,11 +239,24 @@ function onStart()
         message = gProfileManagerBundle.getFormattedString("profDirMissing", [brandName, profilename]);
         message = message.replace(/\s*<html:br\/>/g,"\n");
         break;
+      case Components.results.NS_ERROR_ABORT:
+        message = gProfileManagerBundle.getFormattedString("profileSwitchFailed", [brandName, profilename, brandName, brandName]);
+        message = message.replace(/\s*<html:br\/>/g,"\n");
+        fatalError = true;
+        break;
       default:
         message = ex.message;
         break;
   }
       promptService.alert(window, null, message);
+
+      if (fatalError)
+      {
+        var appShellService = Components.classes["@mozilla.org/appshell/appShellService;1"]
+                              .getService(Components.interfaces.nsIAppShellService);
+        appShellService.quit(Components.interfaces.nsIAppShellService.eForceQuit);
+      }
+
       return false;
   }
   

@@ -250,6 +250,9 @@ nsProfile::nsProfile()
     mIsContentLocaleSpecified = PR_FALSE;
     
     mShutdownProfileToreDownNetwork = PR_FALSE;
+    
+    mProfileChangeVetoed = PR_FALSE;
+    mProfileChangeFailed = PR_FALSE;
 }
 
 nsProfile::~nsProfile() 
@@ -1221,6 +1224,8 @@ nsProfile::SetCurrentProfile(const PRUnichar * aCurrentProfile)
         
         // Phase 3: Notify observers of a profile change
         observerService->NotifyObservers(subject, "profile-before-change", context.get());        
+        if (mProfileChangeFailed)
+          return NS_ERROR_ABORT;
         
         UpdateCurrentProfileModTime(PR_FALSE);        
     }
@@ -1249,21 +1254,29 @@ nsProfile::SetCurrentProfile(const PRUnichar * aCurrentProfile)
         // Bring network back online
         observerService->NotifyObservers(subject, "profile-change-net-restore", context.get());
         mShutdownProfileToreDownNetwork = PR_FALSE;
+        if (mProfileChangeFailed)
+          return NS_ERROR_ABORT;
     }
 
     // Phase 4: Notify observers that the profile has changed - Here they respond to new profile
     observerService->NotifyObservers(subject, "profile-do-change", context.get());
+    if (mProfileChangeFailed)
+      return NS_ERROR_ABORT;
 
     // Phase 5: Now observers can respond to something another observer did in phase 4
     observerService->NotifyObservers(subject, "profile-after-change", context.get());
-      
+    if (mProfileChangeFailed)
+      return NS_ERROR_ABORT;
+
     // Now that a profile is established, set the profile defaults dir for the locale of this profile
     rv = DefineLocaleDefaultsDir();
     NS_ASSERTION(NS_SUCCEEDED(rv), "nsProfile::DefineLocaleDefaultsDir failed");
 
     // Phase 6: One last notification after the new profile is established
     observerService->NotifyObservers(subject, "profile-initial-state", context.get());
-      
+    if (mProfileChangeFailed)
+      return NS_ERROR_ABORT;
+
     return NS_OK;
 }
 
@@ -2475,6 +2488,12 @@ nsProfile::IsRegStringSet(const PRUnichar *profileName, char **regString)
 NS_IMETHODIMP nsProfile::VetoChange()
 {
     mProfileChangeVetoed = PR_TRUE;
+    return NS_OK;
+}
+
+NS_IMETHODIMP nsProfile::ChangeFailed()
+{
+    mProfileChangeFailed = PR_TRUE;
     return NS_OK;
 }
 

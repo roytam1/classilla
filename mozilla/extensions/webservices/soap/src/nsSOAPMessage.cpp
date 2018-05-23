@@ -717,12 +717,12 @@ NS_IMETHODIMP
       break;
     nsSOAPUtils::GetNextSiblingElement(element, getter_AddRefs(next));
   }
-  if (!NS_FAILED(rv)) {
+  if (NS_SUCCEEDED(rv)) {
     if (count) {
       parameters =
           (nsISOAPParameter * *)nsMemory::Realloc(parameters,
-                                                    count *
-                                                    sizeof(*parameters));
+                                                  count *
+                                                  sizeof(*parameters));
     }
   }
   else {
@@ -735,12 +735,6 @@ NS_IMETHODIMP
   }
   *aCount = count;
   *aParameters = parameters;
-  if (count) {
-    parameters =
-        (nsISOAPParameter * *)nsMemory::Realloc(parameters,
-                                              count *
-                                              sizeof(*parameters));
-  }
   return rv;
 }
 

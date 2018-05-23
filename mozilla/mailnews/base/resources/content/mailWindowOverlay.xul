@@ -175,6 +175,8 @@ Rights Reserved.
   <command id="cmd_find" oncommand="goDoCommand('cmd_find')" disabled="true"/>
   <command id="cmd_findAgain" oncommand="goDoCommand('cmd_findAgain')" disabled="true"/>
   <command id="cmd_findPrev"  oncommand="goDoCommand('cmd_findPrev')"  disabled="true"/>
+  <command id="cmd_findTypeText"/>
+  <command id="cmd_findTypeLinks"/>
   <command id="cmd_stop" oncommand="MsgStop();"/>
 </commandset>
 
@@ -322,6 +324,8 @@ Rights Reserved.
   <key id="key_findPrev"  key="&findPrevCmd.key;"    oncommand="goDoCommand('cmd_findPrev')"  modifiers="accel, shift"/>
   <key keycode="&findAgainCmd.key2;"   oncommand="goDoCommand('cmd_findAgain')"/>
   <key keycode="&findPrevCmd.key2;"    oncommand="goDoCommand('cmd_findPrev')"  modifiers="shift"/>
+  <key id="key_findTypeText"/>
+  <key id="key_findTypeLinks"/>
   <key id="key_stop" keycode="VK_ESCAPE" command="cmd_stop"/>
   <keyset id="viewZoomKeys"/>
 
@@ -565,13 +569,13 @@ Rights Reserved.
         label="&contextSaveAs.label;"
         accesskey="&contextSaveAs.accesskey;"
         oncommand="MsgSaveAsFile();"/>
+    <menuitem id="threadPaneContext-printpreview"
+        label="&contextPrintPreview.label;"
+        oncommand="PrintEnginePrintPreview();"/>
     <menuitem id="threadPaneContext-print"
         label="&contextPrint.label;"
         accesskey="&contextPrint.accesskey;"
         oncommand="PrintEnginePrint();"/>
-    <menuitem id="threadPaneContext-printpreview"
-        label="&contextPrintPreview.label;"
-        oncommand="PrintEnginePrintPreview();"/>
     <menuitem id="threadPaneContext-delete"
         command="cmd_delete"/>
   </popup>
@@ -868,6 +872,9 @@ Rights Reserved.
         label="&contextSaveAs.label;"
         accesskey="&contextSaveAs.accesskey;"
         oncommand="MsgSaveAsFile();"/>
+    <menuitem id="messagePaneContext-printpreview"
+        label="&contextPrintPreview.label;"
+        oncommand="PrintEnginePrintPreview();"/>
     <menuitem id="messagePaneContext-print"
         label="&contextPrint.label;"
         accesskey="&contextPrint.accesskey;"
@@ -1011,8 +1018,8 @@ Rights Reserved.
 
       <menuseparator/>
       <menuitem id="printSetupMenuItem" label="&printSetupCmd.label;" accesskey="&printSetupCmd.accesskey;" command="cmd_printSetup"/>
-      <menuitem id="printMenuItem" key="key_print" label="&printCmd.label;" accesskey="&printCmd.accesskey;" command="cmd_print"/>
       <menuitem id="printPreviewMenuItem" label="&printPreviewCmd.label;" accesskey="&printPreviewCmd.accesskey;" command="cmd_printpreview"/>
+      <menuitem id="printMenuItem" key="key_print" label="&printCmd.label;" accesskey="&printCmd.accesskey;" command="cmd_print"/>
     </menupopup>
   </menu>
 
@@ -1041,6 +1048,9 @@ Rights Reserved.
       <menuitem label="&findCmd.label;" key="key_find" accesskey="&findCmd.accesskey;" observes="cmd_find"/>
       <menuitem label="&findAgainCmd.label;" key="key_findAgain" accesskey="&findAgainCmd.accesskey;" observes="cmd_findAgain"/>
       <menuitem label="&findPrevCmd.label;"  key="key_findPrev"  accesskey="&findPrevCmd.accesskey;"  observes="cmd_findPrev"/>
+      <menuseparator/> 
+      <menuitem id="menu_findTypeLinks"/>
+      <menuitem id="menu_findTypeText"/>
       <menuseparator/>
       <menuitem id="menu_properties" label="&folderPropsCmd.label;"
                 accesskey="&folderPropsCmd.accesskey;"
@@ -1564,8 +1574,8 @@ Rights Reserved.
         <menupopup/>
       </toolbarbutton>
       <toolbarbutton class="toolbarbutton-1" id="button-next" label="&nextButton.label;" oncommand="goDoCommand('button_next')" tooltiptext="&nextButton.tooltip;" observes="button_next"/>
-      <toolbarbutton class="toolbarbutton-1" id="button-delete" label="&deleteButton.label;" tooltiptext="&deleteButton.tooltip;" observes="button_delete" oncommand="goDoCommand('button_delete')"/>
       <toolbarbutton class="toolbarbutton-1" id="button-junk" label="&junkButton.label;" tooltiptext="&junkButton.tooltip;" observes="button_junk" oncommand="goDoCommand('button_junk')"/>
+      <toolbarbutton class="toolbarbutton-1" id="button-delete" label="&deleteButton.label;" tooltiptext="&deleteButton.tooltip;" observes="button_delete" oncommand="goDoCommand('button_delete')"/> 
       <toolbarbutton type="menu-button" id="button-mark" class="toolbarbutton-1" label="&markButton.label;" hidden="true" oncommand="goDoCommand('button_mark')"
                   observes="button_mark" tooltiptext="&markButton.tooltip;">  
             <menupopup onpopupshowing="InitMessageMark()">

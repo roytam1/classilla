@@ -73,19 +73,6 @@
 #include "nsIPrefService.h"
 
 #include "nsISSLSocketControl.h"
-/* sigh, cmtcmn.h, included from nsIPSMSocketInfo.h, includes windows.h, which includes winuser.h,
-   which defines PostMessage to be either PostMessageA or PostMessageW... of course it does this
-   without using parameters, so any use of PostMessage now becomes PostMessageA...
-   since this file is XP and doesn't need windows.h, i'm going to just undef this out for now
-
-   when someone comes up with a better solution, please let me know.
-
-   Stuart Parmenter <pavlov@netscape.com>
-*/
-#ifdef PostMessage
-#undef PostMessage
-#endif
-
 
 #ifndef XP_UNIX
 #include <stdarg.h>
@@ -247,6 +234,7 @@ nsSmtpProtocol::~nsSmtpProtocol()
 	PR_FREEIF(m_addressCopy);
 	PR_FREEIF(m_verifyAddress);
 	PR_FREEIF(m_dataBuf);
+	delete m_lineStreamBuffer;
 }
 
 void nsSmtpProtocol::Initialize(nsIURI * aURL)
@@ -297,6 +285,7 @@ void nsSmtpProtocol::Initialize(nsIURI * aURL)
     m_originalContentLength = 0;
     m_totalAmountRead = 0;
 
+    m_lineStreamBuffer = new nsMsgLineStreamBuffer(OUTPUT_BUFFER_SIZE, PR_TRUE);
     // ** may want to consider caching the server capability to save lots of
     // round trip communication between the client and server
     nsCOMPtr<nsISmtpServer> smtpServer;
@@ -368,61 +357,31 @@ const char * nsSmtpProtocol::GetUserDomainName()
 // we suppport the nsIStreamListener interface 
 ////////////////////////////////////////////////////////////////////////////////////////////
 
-// stop binding is a "notification" informing us that the stream associated with aURL is going away. 
-NS_IMETHODIMP nsSmtpProtocol::OnStopRequest(nsIRequest *request, nsISupports *ctxt, nsresult aStatus)
+// stop binding is a "notification" informing us that the stream
+// associated with aURL is going away. 
+NS_IMETHODIMP nsSmtpProtocol::OnStopRequest(nsIRequest *request, nsISupports *ctxt,
+nsresult aStatus)
 {
-  if (aStatus == NS_OK && m_totalAmountRead == 0) {
+  if (aStatus == NS_OK && m_nextState != SMTP_FREE) {
     // if we are getting OnStopRequest() with NS_OK, 
-    // but we haven't read any bytes, that's spells trouble.
-    // it means that the server has dropped us before we could read anything
-    // for example, see bug #158059
-    PR_LOG(SMTPLogModule, PR_LOG_ALWAYS, ("SMTP connection closed, but no data read, so report error"));
-    nsMsgAsyncWriteProtocol::OnStopRequest(nsnull, ctxt, NS_ERROR_CONNECTION_REFUSED);
+    // but we haven't finished clean, that's spells trouble.
+    // it means that the server has dropped us before we could send the whole mail
+    // for example, see bug #200647
+    PR_LOG(SMTPLogModule, PR_LOG_ALWAYS,
+ ("SMTP connection dropped after %ld total bytes read", m_totalAmountRead));
+    nsMsgAsyncWriteProtocol::OnStopRequest(nsnull, ctxt, NS_ERROR_NET_INTERRUPT);
   }
-	else
+  else
     nsMsgAsyncWriteProtocol::OnStopRequest(nsnull, ctxt, aStatus);
 
-	// okay, we've been told that the send is done and the connection is going away. So 
-	// we need to release all of our state
+  // okay, we've been told that the send is done and the connection is going away. So 
+  // we need to release all of our state
   return nsMsgAsyncWriteProtocol::CloseSocket();
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 // End of nsIStreamListenerSupport
 //////////////////////////////////////////////////////////////////////////////////////////////
-
-PRInt32 nsSmtpProtocol::ReadLine(nsIInputStream * inputStream, PRUint32 length, char ** line)
-{
-  nsCOMPtr<nsISearchableInputStream> bufferInputStr = do_QueryInterface(inputStream);
-  PRUint32 numBytesLastRead = 0;  // total number of bytes read into the current line
-
-  if (bufferInputStr)
-  {
-    // only try to read out an entire line...if we don't have a full line yet then wait for
-    // more data....
-    PRBool found = PR_FALSE;
-    PRUint32 offset = 0;
-    bufferInputStr->Search("\n", PR_TRUE,  &found, &offset); 
-    if (found && offset < OUTPUT_BUFFER_SIZE - 1)
-    {
-	    m_dataBuf[0] = '\0';
-      inputStream->Read(m_dataBuf, offset + 1 /* + 1 to read past the \n */, &numBytesLastRead);
-      m_dataBuf[numBytesLastRead] = '\0';
-
-      *line = m_dataBuf;
-    }
-	else
-      return -1; // inform caller to block
-
-  }
-	else
-  {
-    NS_ASSERTION(0, "uhoh.....our input stream is no longer searchable");
-    return 0; 
-  }
-
-  return numBytesLastRead;
-}
 
 void nsSmtpProtocol::UpdateStatus(PRInt32 aStatusID)
 {
@@ -452,20 +411,24 @@ void nsSmtpProtocol::UpdateStatusWithString(const PRUnichar * aStatusString)
  */
 PRInt32 nsSmtpProtocol::SmtpResponse(nsIInputStream * inputStream, PRUint32 length)
 {
-	char * line = nsnull;
-	char cont_char;
-	PRInt32 bytesRead = 0;
+  char * line = nsnull;
+  char cont_char;
+  PRUint32 ln = 0;
+  PRBool pauseForMoreData = PR_FALSE;
 
-  bytesRead = ReadLine(inputStream, length, &line);
+	if (!m_lineStreamBuffer)
+		return -1; // this will force an error and at least we won't crash
 
-  if (bytesRead < 0) // we are blocked waiting for more data...
+	line = m_lineStreamBuffer->ReadNextLine(inputStream, ln, pauseForMoreData);
+
+  if(pauseForMoreData || !line)
   {
-     m_nextState = SMTP_RESPONSE;
-     SetFlag(SMTP_PAUSE_FOR_READ);
-     return 0; 
-	}
-	
-  m_totalAmountRead += bytesRead;
+      SetFlag(SMTP_PAUSE_FOR_READ); /* pause */
+      PR_Free(line);
+      return(ln);
+  }
+
+  m_totalAmountRead += ln;
 
   PR_LOG(SMTPLogModule, PR_LOG_ALWAYS, ("SMTP Response: %s", line));
 	cont_char = ' '; /* default */
@@ -500,13 +463,8 @@ PRInt32 nsSmtpProtocol::SmtpResponse(nsIInputStream * inputStream, PRUint32 leng
 		m_nextState = m_nextStateAfterResponse;
 		ClearFlag(SMTP_PAUSE_FOR_READ); /* don't pause */
 	}
-  else
-  {
-    inputStream->Available(&length); // refresh the length as it has changed...
-    if (!length)
-       SetFlag(SMTP_PAUSE_FOR_READ);
-  }
 
+  PR_Free(line);
   return(0);  /* everything ok */
 }
 
@@ -666,19 +624,34 @@ PRInt32 nsSmtpProtocol::SendEhloResponse(nsIInputStream * inputStream, PRUint32 
 
     if (m_responseCode != 250)
     {
-      /* EHLO must not be implemented by the server so fall back to the HELO case */
-
-        if (m_prefTrySSL == PREF_SMTPSECURE_ALWAYS_STARTTLS)
+        /* EHLO must not be implemented by the server so fall back to the HELO case */
+        if (m_responseCode >= 500 && m_responseCode < 550)
         {
-            m_nextState = SMTP_ERROR_DONE;
-            m_urlErrorState = NS_ERROR_COULD_NOT_LOGIN_TO_SMTP_SERVER;
+            if (m_prefTrySSL == PREF_SMTPSECURE_ALWAYS_STARTTLS)
+            {
+                m_nextState = SMTP_ERROR_DONE;
+                m_urlErrorState = NS_ERROR_COULD_NOT_LOGIN_TO_SMTP_SERVER;
+                return(NS_ERROR_COULD_NOT_LOGIN_TO_SMTP_SERVER);
+            }
+
+            buffer = "HELO ";
+            buffer += GetUserDomainName();
+            buffer += CRLF;
+            status = SendData(url, buffer.get());
+        }
+        // e.g. getting 421 "Server says unauthorized, bye"
+        else
+        {
+#ifdef DEBUG
+            nsresult rv = 
+#endif
+            nsExplainErrorDetails(m_runningURL,
+                          NS_ERROR_SMTP_SERVER_ERROR, m_responseText.get());
+            NS_ASSERTION(NS_SUCCEEDED(rv), "failed to explain SMTP error");
+
+            m_urlErrorState = NS_ERROR_BUT_DONT_SHOW_ALERT;
             return(NS_ERROR_COULD_NOT_LOGIN_TO_SMTP_SERVER);
         }
-        buffer = "HELO ";
-        buffer += GetUserDomainName();
-        buffer += CRLF;
-
-        status = SendData(url, buffer.get());
 
         m_nextState = SMTP_RESPONSE;
         m_nextStateAfterResponse = SMTP_SEND_HELO_RESPONSE;
@@ -1085,11 +1058,13 @@ PRInt32 nsSmtpProtocol::SendRecipientResponse()
 	{
 		/* more senders to RCPT to 
 		 */
+        // fake to 250 because SendMailResponse() can't handle 251
+        m_responseCode = 250;
         m_nextState = SMTP_SEND_MAIL_RESPONSE; 
 		return(0);
 	}
 
-    /* else send the RCPT TO: command */
+    /* else send the DATA command */
 	buffer = "DATA";
 	buffer += CRLF;
     nsCOMPtr<nsIURI> url = do_QueryInterface(m_runningURL);  
@@ -1201,7 +1176,9 @@ PRInt32 nsSmtpProtocol::SendMessageInFile()
   nsCOMPtr<nsIURI> url = do_QueryInterface(m_runningURL);
 	m_runningURL->GetPostMessageFile(getter_AddRefs(fileSpec));
 	if (url && fileSpec)
-        PostMessage(url, fileSpec);
+        // need to fully qualify to avoid getting overwritten by a #define
+        // in some windows header file
+        nsMsgAsyncWriteProtocol::PostMessage(url, fileSpec);
 
 	SetFlag(SMTP_PAUSE_FOR_READ);
 

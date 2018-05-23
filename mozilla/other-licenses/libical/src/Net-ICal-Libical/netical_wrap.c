@@ -62,7 +62,7 @@ extern "C" {
 
 
 /*****************************************************************************
- * $Header: /cvsroot/mozilla/other-licenses/libical/src/Net-ICal-Libical/netical_wrap.c,v 1.1 2001/12/21 19:21:13 mikep%oeone.com Exp $
+ * $Header: /home/kai/cvsmo/data/mozilla/other-licenses/libical/src/Net-ICal-Libical/netical_wrap.c,v 1.1 2001/12/21 19:21:13 mikep%oeone.com Exp $
  *
  * perl5ptr.swg
  *

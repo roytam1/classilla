@@ -132,6 +132,19 @@ ensure_entry_widget()
   if (!gEntryWidget) {
     gEntryWidget = gtk_entry_new();
     setup_widget_prototype(gEntryWidget);
+#ifdef _AIX
+    /* On AIX, calling gdk_widget_realize on a gtk entry with an
+     * input context style of type GDK_IM_STATUS_NOTHING causes a 
+     * root status window to come up. It remains up until the widget 
+     * is destroyed (which is never in this case). To work around 
+     * this problem, we destroy its XIC here to prevent the root 
+     * status window from remaining on the screen. */
+    if (GTK_EDITABLE(gEntryWidget)->ic &&
+        GTK_EDITABLE(gEntryWidget)->ic_attr->style & GDK_IM_STATUS_NOTHING) {
+      gdk_ic_destroy(GTK_EDITABLE(gEntryWidget)->ic);
+      GTK_EDITABLE(gEntryWidget)->ic = NULL;
+    }
+#endif
   }
   return MOZ_GTK_SUCCESS;
 }
@@ -277,9 +290,9 @@ moz_gtk_button_paint(GdkDrawable* drawable, GdkRectangle* rect,
     width -= 2;
     height -= 2;
   }
-	
-  shadow_type = (state->active && state->inHover) ? GTK_SHADOW_IN : GTK_SHADOW_OUT;
-  
+
+  shadow_type = (state->active && state->inHover && !state->disabled) ? GTK_SHADOW_IN : GTK_SHADOW_OUT;
+
   if (relief != GTK_RELIEF_NONE || (button_state != GTK_STATE_NORMAL &&
                                     button_state != GTK_STATE_INSENSITIVE)) {
     TSOffsetStyleGCs(style, x, y);
@@ -421,7 +434,7 @@ moz_gtk_scrollbar_button_paint(GdkDrawable* drawable, GdkRectangle* rect,
                                GtkArrowType type)
 {
   GtkStateType state_type = ConvertGtkState(state);
-  GtkShadowType shadow_type = (state->active) ? GTK_SHADOW_IN : GTK_SHADOW_OUT;
+  GtkShadowType shadow_type = (state->active && !state->disabled) ? GTK_SHADOW_IN : GTK_SHADOW_OUT;
   GdkRectangle arrow_rect;
   GtkStyle* style;
 
@@ -556,7 +569,7 @@ moz_gtk_dropdown_arrow_paint(GdkDrawable* drawable, GdkRectangle* rect,
 {
   GdkRectangle arrow_rect, real_arrow_rect;
   GtkStateType state_type = ConvertGtkState(state);
-  GtkShadowType shadow_type = state->active ? GTK_SHADOW_IN : GTK_SHADOW_OUT;
+  GtkShadowType shadow_type = (state->active && !state->disabled) ? GTK_SHADOW_IN : GTK_SHADOW_OUT;
   GtkStyle* style;
 
   ensure_arrow_widget();

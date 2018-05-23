@@ -46,7 +46,6 @@
 #include "nsIGenericFactory.h"
 #include "nsXPIDLString.h"
 #include "nsIScriptGlobalObject.h"
-#include "nsReadableUtils.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -78,8 +77,8 @@ class nsCookieEnumerator : public nsISimpleEnumerator
           nsCookieStatus status;
           nsCookiePolicy policy;
           nsresult rv = COOKIE_Enumerate
-            (mCookieCount++, name, value, isDomain, host, path, isSecure, expires,
-              status, policy);
+            (mCookieCount++, name, value, &isDomain, host, path, &isSecure, &expires,
+              &status, &policy);
           if (NS_SUCCEEDED(rv)) {
             nsICookie *cookie =
               new nsCookie(name, value, isDomain, host, path, isSecure, expires,
@@ -147,13 +146,24 @@ NS_IMETHODIMP nsCookieManager::Add(const nsACString &aDomain,
                                    PRBool aSecure,
                                    PRInt32 aExpires)
 {
-  // nice COOKIE method doesn't require caller to hand off ownership of strings.
+  // nasty COOKIE method requires caller to hand off ownership of strings.
   /* nulls aren't allowed (cookie code is full of checks as if they were
      but see COOKIE_Write) */
+  char *domainCopy = PL_strdup(PromiseFlatCString(aDomain).get()),
+       *pathCopy = PL_strdup(PromiseFlatCString(aPath).get()),
+       *nameCopy = PL_strdup(PromiseFlatCString(aName).get()),
+       *valueCopy = PL_strdup(PromiseFlatCString(aValue).get());
 
-  return ::COOKIE_AddCookie(aDomain, aPath, aName, aValue,
-                            aSecure, PR_TRUE, aExpires,
-                            nsICookie::STATUS_UNKNOWN, nsICookie::POLICY_UNKNOWN);
+  if (domainCopy && pathCopy && nameCopy && valueCopy)
+    return ::COOKIE_AddCookie(domainCopy, pathCopy, nameCopy, valueCopy,
+                aSecure, PR_TRUE, aExpires,
+                nsICookie::STATUS_UNKNOWN, nsICookie::POLICY_UNKNOWN);
+
+  if (domainCopy) PL_strfree(domainCopy);
+  if (pathCopy) PL_strfree(pathCopy);
+  if (nameCopy) PL_strfree(nameCopy);
+  if (valueCopy) PL_strfree(valueCopy);
+  return NS_ERROR_OUT_OF_MEMORY;
 }
 
 NS_IMETHODIMP nsCookieManager::Remove
@@ -161,6 +171,8 @@ NS_IMETHODIMP nsCookieManager::Remove
 //  (const nsAUTF8String& host, const nsACString& name, const nsAUTF8String& path, PRBool blocked) {
 // using nsACString above instead of nsAUTF8String because the latter doesn't exist yet
 
-  ::COOKIE_Remove(host, name, path, blocked);
+  ::COOKIE_Remove(PromiseFlatCString(host).get(),
+                  PromiseFlatCString(name).get(),
+                  PromiseFlatCString(path).get(), blocked);
   return NS_OK;
 }

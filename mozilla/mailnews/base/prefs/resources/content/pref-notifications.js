@@ -2,10 +2,15 @@ function Startup()
 {
   PlaySoundCheck();
 
-  // if we don't have the alert service, hide the pref UI for using alerts to notify on new mail
+  // if we can't get the alert service, hide the pref UI for using alerts to notify on new mail
   // see bug #158711
-  var newMailNotificationAlertUI = document.getElementById("newMailNotificationAlert");
-  newMailNotificationAlertUI.hidden = !("@mozilla.org/alerts-service;1" in Components.classes);
+  try {
+    var alertService = Components.classes["@mozilla.org/alerts-service;1"].getService(Components.interfaces.nsIAlertsService);
+  }
+  catch(ex) {
+    var newMailNotificationAlertUI = document.getElementById("newMailNotificationAlert");
+    newMailNotificationAlertUI.setAttribute("hidden","true");
+  }
 }
 
 function PlaySoundCheck()
@@ -63,8 +68,9 @@ function PreviewSound()
     gSound.playSystemSound(soundURL);
   }
   else {
-    var url = Components.classes["@mozilla.org/network/standard-url;1"].createInstance(Components.interfaces.nsIURL);
-    url.spec = soundURL;
+    var ioService = Components.classes["@mozilla.org/network/io-service;1"]
+                     .getService(Components.interfaces.nsIIOService);
+    var url = ioService.newURI(soundURL, null, null);
     gSound.play(url)
   }
 }

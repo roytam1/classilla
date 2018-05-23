@@ -35,7 +35,7 @@
 #define NSSPKIXT_H
 
 #ifdef DEBUG
-static const char NSSPKIXT_CVS_ID[] = "@(#) $Source: /cvsroot/mozilla/security/nss/lib/pkix/include/nsspkixt.h,v $ $Revision: 1.1 $ $Date: 2000/03/31 19:02:44 $ $Name: MOZILLA_1_3_1_RELEASE $";
+static const char NSSPKIXT_CVS_ID[] = "@(#) $Source: /home/kai/cvsmo/data/mozilla/security/nss/lib/pkix/include/nsspkixt.h,v $ $Revision: 1.1 $ $Date: 2000/03/31 19:02:44 $ $Name:  $";
 #endif /* DEBUG */
 
 /*

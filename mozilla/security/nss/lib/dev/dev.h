@@ -41,7 +41,7 @@
  */
 
 #ifdef DEBUG
-static const char DEV_CVS_ID[] = "@(#) $RCSfile: dev.h,v $ $Revision: 1.31 $ $Date: 2002/08/30 22:56:58 $ $Name: MOZILLA_1_3_1_RELEASE $";
+static const char DEV_CVS_ID[] = "@(#) $RCSfile: dev.h,v $ $Revision: 1.31.10.1 $ $Date: 2003/05/14 00:12:14 $ $Name:  $";
 #endif /* DEBUG */
 
 #ifndef NSSCKT_H
@@ -321,6 +321,18 @@ nssSlot_Logout
 (
   NSSSlot *slot,
   nssSession *sessionOpt
+);
+
+NSS_EXTERN void
+nssSlot_EnterMonitor
+(
+  NSSSlot *slot
+);
+
+NSS_EXTERN void
+nssSlot_ExitMonitor
+(
+  NSSSlot *slot
 );
 
 #define NSSSLOT_ASK_PASSWORD_FIRST_TIME -1

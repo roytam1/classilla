@@ -131,16 +131,16 @@ function GetListValue(mailList, doAdd)
       cardproperty = cardproperty.QueryInterface(Components.interfaces.nsIAbCard);
       if (cardproperty)
       {
-        var beginpos = fieldValue.search('<');
-        var endpos = fieldValue.search('>');
-        if (beginpos != -1)
-        {
-          beginpos++;
-          var newValue = fieldValue.slice(beginpos, endpos);
-          cardproperty.primaryEmail = newValue;
-        }
-        else
-          cardproperty.primaryEmail = fieldValue;
+        var msgHeaderParser = Components.classes["@mozilla.org/messenger/headerparser;1"]
+                                        .getService(Components.interfaces.nsIMsgHeaderParser);
+        var addresses = {};
+        var names = {};
+        var fullNames = {};
+        var numAddresses = msgHeaderParser.parseHeadersWithArray(fieldValue, addresses, names, fullNames);
+
+        cardproperty.primaryEmail = addresses.value[0];
+        cardproperty.displayName = names.value[0];
+
         if (doAdd || (doAdd == false && pos >= oldTotal))
           mailList.addressLists.AppendElement(cardproperty);
         pos++;
@@ -318,6 +318,8 @@ function OnLoadEditList()
 
   document.addEventListener("keypress", awDocumentKeyPress, true);
 
+  moveToAlertPosition();
+
   // workaround for bug 118337 - for mailing lists that have more rows than fits inside
   // the display, the value of the textbox inside the new row isn't inherited into the input -
   // the first row then appears to be duplicated at the end although it is actually empty.
@@ -334,8 +336,6 @@ function AppendLastRow()
   var listName = document.getElementById('ListName');
   if ( listName )
     listName.focus();
-
-  moveToAlertPosition();
 }
 
 function AppendNewRowAndSetFocus()

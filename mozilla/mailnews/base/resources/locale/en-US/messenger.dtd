@@ -187,7 +187,7 @@ Rights Reserved.
 <!ENTITY expandAllThreadsCmd.key "*">
 <!ENTITY collapseAllThreadsCmd.label "Collapse All Threads">
 <!ENTITY collapseAllThreadsCmd.accesskey "C">
-<!ENTITY collapseAllThreadsCmd.key "/">
+<!ENTITY collapseAllThreadsCmd.key "\">
 <!ENTITY unreadMsgsCmd.label "Unread">
 <!ENTITY unreadMsgsCmd.accesskey "U">
 <!ENTITY threadsWithUnreadCmd.label "Threads With Unread">
@@ -519,7 +519,7 @@ Rights Reserved.
 <!ENTITY junkMailCmd.label "Junk Mail Controls...">
 <!ENTITY junkMailCmd.accesskey "J">
 
-<!ENTITY runJunkControls.label "Run Junk Mail Controls on Selected Messages...">
+<!ENTITY runJunkControls.label "Analyze Selected Messages for Junk...">
 <!ENTITY runJunkControls.accesskey "u">
 
 <!ENTITY markSelectedAsJunk.label "Mark Selected Messages As Junk">

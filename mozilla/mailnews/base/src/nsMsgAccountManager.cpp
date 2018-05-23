@@ -1005,6 +1005,9 @@ PRBool PR_CALLBACK nsMsgAccountManager::cleanupOnExit(nsHashKey *aKey, void *aDa
   PRBool cleanupInboxOnExit = PR_FALSE;
   nsresult rv;
     
+  if (WeAreOffline())
+    return PR_TRUE;
+
   server->GetEmptyTrashOnExit(&emptyTrashOnExit);
   nsCOMPtr <nsIImapIncomingServer> imapserver = do_QueryInterface(server);
   if (imapserver)
@@ -1308,7 +1311,7 @@ nsMsgAccountManager::LoadAccounts()
   if (m_accountsLoaded)
     return NS_OK;
 
-  kDefaultServerAtom = NS_NewAtom("DefaultServer");
+  kDefaultServerAtom = do_GetAtom("DefaultServer");
   
   //Ensure biff service has started
   nsCOMPtr<nsIMsgBiffManager> biffService = 

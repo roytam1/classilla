@@ -45,6 +45,7 @@
 #include "nsIMsgStatusFeedback.h"
 #include "nsIMsgLogonRedirector.h"
 #include "nsIMsgStringService.h"
+#include "nsMsgLineBuffer.h"
 
 #include "nsCOMPtr.h"
 
@@ -162,6 +163,7 @@ private:
 	PRInt32 	m_previousResponseCode; 
 	PRInt32		m_continuationResponse;
   nsCString m_responseText;   /* text returned from Smtp server */
+  nsMsgLineStreamBuffer   *m_lineStreamBuffer; // used to efficiently extract lines from the incoming data stream
 
 	char	   *m_addressCopy;
 	char	   *m_addresses;
@@ -199,8 +201,6 @@ private:
 	// Communication methods --> Reading and writing protocol
 	////////////////////////////////////////////////////////////////////////////////////////
 
-	PRInt32 ReadLine(nsIInputStream * inputStream, PRUint32 length, char ** line);
-  
   nsCOMPtr<nsIMsgStringService> mSmtpBundle;
   void UpdateStatus(PRInt32 aStatusID);
   void UpdateStatusWithString(const PRUnichar * aStatusString);

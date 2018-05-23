@@ -45,6 +45,7 @@
 #include "nsIRequest.h"
 #include "nsISocketTransport.h"
 #include "nsIOutputStream.h"
+#include "nsIInputStream.h"
 #include "nsAutoLock.h"
 #include "nsString.h"
 
@@ -86,7 +87,6 @@ private:
 
     nsCOMPtr<nsIRequest>         mReadRequest;
     nsCOMPtr<nsISocketTransport> mCPipe;
-    nsCOMPtr<nsIInputStream>     mInStream;
     nsCOMPtr<nsIOutputStream>    mOutStream;
     nsCOMPtr<nsIStreamListener>  mListener;
 };

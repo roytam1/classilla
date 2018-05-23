@@ -3771,13 +3771,14 @@ nsHTMLEditRules::CreateStyleForInsertText(nsISelection *aSelection, nsIDOMDocume
     if (rightNode)
     {
       secondSplitParent = mHTMLEditor->GetLeftmostChild(rightNode);
-      // don't try to split br's...
-      // note: probably should only split containers, but being more conservative in changes for now.
+      // don't try to split non-containers (br's, images, hr's, etc)
       if (!secondSplitParent) secondSplitParent = rightNode;
-      if (nsTextEditUtils::IsBreak(secondSplitParent))
+      if (!mHTMLEditor->IsContainer(secondSplitParent))
       {
-        savedBR = secondSplitParent;
-        savedBR->GetParentNode(getter_AddRefs(tmp));
+        if (nsTextEditUtils::IsBreak(secondSplitParent))
+          savedBR = secondSplitParent;
+
+        secondSplitParent->GetParentNode(getter_AddRefs(tmp));
         secondSplitParent = tmp;
       }
       offset = 0;
@@ -4305,23 +4306,51 @@ nsHTMLEditRules::CheckForInvisibleBR(nsIDOMNode *aBlock,
                                      nsCOMPtr<nsIDOMNode> *outBRNode,
                                      PRInt32 aOffset)
 {
-  // for now I'm relying on fact that user has scrubbed any invisible whitespace
-  // in the vicinity, so we don't need more complicated code here to check for that.
   if (!aBlock || !outBRNode) return NS_ERROR_NULL_POINTER;
   *outBRNode = nsnull;
+
+  nsCOMPtr<nsIDOMNode> testNode;
+  PRInt32 testOffset = 0;
+  PRBool runTest = PR_FALSE;
+
   if (aWhere == kBlockEnd)
   {
-    nsCOMPtr<nsIDOMNode> node = mHTMLEditor->GetRightmostChild(aBlock, PR_TRUE);
-    if (nsTextEditUtils::IsBreak(node))
-      *outBRNode = node;
+    nsCOMPtr<nsIDOMNode> rightmostNode;
+    rightmostNode = mHTMLEditor->GetRightmostChild(aBlock, PR_TRUE); // no block crossing
+
+    if (rightmostNode)
+    {
+      nsCOMPtr<nsIDOMNode> nodeParent;
+      PRInt32 nodeOffset;
+
+      if (NS_SUCCEEDED(nsEditor::GetNodeLocation(rightmostNode,
+                                                 address_of(nodeParent), 
+                                                 &nodeOffset)))
+      {
+        runTest = PR_TRUE;
+        testNode = nodeParent;
+        // use offset + 1, because we want the last node included in our evaluation
+        testOffset = nodeOffset + 1;
+      }
+    }
   }
   else if (aOffset)
   {
-    nsCOMPtr<nsIDOMNode> prevItem;
-    mHTMLEditor->GetPriorHTMLNode(aBlock, aOffset, address_of(prevItem), PR_TRUE);
-    if (nsTextEditUtils::IsBreak(prevItem))
-      *outBRNode = prevItem;
+    runTest = PR_TRUE;
+    testNode = aBlock;
+    // we'll check everything to the left of the input position
+    testOffset = aOffset;
   }
+
+  if (runTest)
+  {
+    nsWSRunObject wsTester(mHTMLEditor, testNode, testOffset);
+    if (nsWSRunObject::eBreak == wsTester.mStartReason)
+    {
+      *outBRNode = wsTester.mStartReasonNode;
+    }
+  }
+
   return NS_OK;
 }
 

@@ -31,7 +31,7 @@
 # may use your version of this file under either the MPL or the
 # GPL.
 #
-$cvs_id = '@(#) $RCSfile: ckapi.perl,v $ $Revision: 1.5 $ $Date: 2002/05/20 14:38:48 $ $Name: MOZILLA_1_3_1_RELEASE $';
+$cvs_id = '@(#) $RCSfile: ckapi.perl,v $ $Revision: 1.5 $ $Date: 2002/05/20 14:38:48 $ $Name:  $';
 
 $copyright = '/* THIS IS A GENERATED FILE */
 /* 

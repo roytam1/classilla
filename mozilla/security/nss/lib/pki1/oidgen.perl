@@ -31,7 +31,7 @@
 # may use your version of this file under either the MPL or the
 # GPL.
 #
-$cvs_id = '@(#) $RCSfile: oidgen.perl,v $ $Revision: 1.2 $ $Date: 2001/11/08 00:15:25 $ $Name: MOZILLA_1_3_1_RELEASE $';
+$cvs_id = '@(#) $RCSfile: oidgen.perl,v $ $Revision: 1.2 $ $Date: 2001/11/08 00:15:25 $ $Name:  $';
 $cfile = shift;
 $hfile = shift;
 $count = -1;

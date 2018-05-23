@@ -710,7 +710,7 @@ RRT_HEADER:
 
   if (pOtherHdr && *pOtherHdr) {
     /* Assume they already have the right newlines and continuations
-     and so on. */
+     and so on.  for these headers, the PUSH_NEWLINE() happens in addressingWidgetOverlay.js */
     PUSH_STRING (pOtherHdr);
   }
 
@@ -1138,9 +1138,13 @@ msg_generate_message_id (nsIMsgIdentity *identity)
   {
     nsresult rv = identity->GetEmail(getter_Copies(from));
     if (NS_SUCCEEDED(rv) && from)
-      host = PL_strchr (from, '@');
+      host = strchr(from,'@');
+
+    // No '@'? Munged address, anti-spam?
+    // see bug #197203
+    if (host)
       ++host;
- }
+  }
 
   if (!isValidHost(host))
   /* If we couldn't find a valid host name to use, we can't generate a
@@ -1906,24 +1910,20 @@ mime_gen_content_id(PRUint32 aPartNum, const char *aEmailAddress)
 }
 
 char *
-GetFolderURIFromUserPrefs(nsMsgDeliverMode   aMode,
-                          nsIMsgIdentity* identity)
+GetFolderURIFromUserPrefs(nsMsgDeliverMode aMode, nsIMsgIdentity* identity)
 {
-  nsresult      rv = NS_OK;
-  char          *uri = nsnull;
-
-  if (!identity) return nsnull;
-
+  nsresult rv;
+  char *uri = nsnull;
+  
   if (aMode == nsIMsgSend::nsMsgQueueForLater)       // QueueForLater (Outbox)
   {
     nsCOMPtr<nsIPref> prefs(do_GetService(kPrefCID, &rv)); 
     if (NS_FAILED(rv) || !prefs) 
       return nsnull;
-    rv = prefs->CopyCharPref("mail.default_sendlater_uri", &uri);
-   
-    if (NS_FAILED(rv) || !uri) {
-  uri = PR_smprintf("%s", ANY_SERVER);
-  rv = NS_OK;
+    rv = prefs->CopyCharPref("mail.default_sendlater_uri", &uri);   
+    if (NS_FAILED(rv) || !uri) 
+    {
+      uri = PR_smprintf("%s", ANY_SERVER);
     }
     else
     {
@@ -1937,8 +1937,13 @@ GetFolderURIFromUserPrefs(nsMsgDeliverMode   aMode,
         prefs->SetCharPref("mail.default_sendlater_uri", uriStr.get());
       }
     }
+    return uri;
   }
-  else if (aMode == nsIMsgSend::nsMsgSaveAsDraft)    // SaveAsDraft (Drafts)
+
+  if (!identity)
+    return nsnull;
+
+  if (aMode == nsIMsgSend::nsMsgSaveAsDraft)    // SaveAsDraft (Drafts)
   {
     rv = identity->GetDraftFolder(&uri);
   }
@@ -1955,7 +1960,6 @@ GetFolderURIFromUserPrefs(nsMsgDeliverMode   aMode,
     else
       uri = PL_strdup("");
   }
-
   return uri;
 }
 

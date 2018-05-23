@@ -1774,7 +1774,7 @@ nsScriptSecurityManager::GetPrincipalFromContext(JSContext *cx,
     NS_ENSURE_TRUE(::JS_GetOptions(cx) & JSOPTION_PRIVATE_IS_NSISUPPORTS,
                    NS_ERROR_FAILURE);
     nsISupports* scriptContextSupports =
-        NS_REINTERPRET_CAST(nsISupports*, JS_GetContextPrivate(cx));
+        NS_STATIC_CAST(nsISupports*, JS_GetContextPrivate(cx));
     nsCOMPtr<nsIScriptContext> scriptContext(do_QueryInterface(scriptContextSupports));
 
     if (scriptContext)
@@ -1827,7 +1827,7 @@ nsScriptSecurityManager::GetFunctionObjectPrincipal(JSContext *cx,
         {
             // Function is a clone, its prototype was precompiled from
             // brutally shared chrome. For this case only, get the
-            // principals from the object's scope since there's no
+            // principals from the clone's scope since there's no
             // reliable principals compiled into the function.
             return doGetObjectPrincipal(cx, obj, result);
         }

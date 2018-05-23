@@ -216,6 +216,11 @@ static nsFontCharSetInfo Special = { nsnull };
 static nsFontCharSetInfo CP1251 =
   { "windows-1251", SingleByteConvert, 0,
     TT_OS2_CPR1_CYRILLIC, TT_OS2_CPR2_RUSSIAN };
+static nsFontCharSetInfo USASCII =
+  { "us-ascii", SingleByteConvert, 0,
+    TT_OS2_CPR1_LATIN1 | TT_OS2_CPR1_MAC_ROMAN,
+    TT_OS2_CPR2_CA_FRENCH |  TT_OS2_CPR2_PORTUGESE
+    | TT_OS2_CPR2_WE_LATIN1 |  TT_OS2_CPR2_US };
 static nsFontCharSetInfo ISO88591 =
   { "ISO-8859-1", SingleByteConvert, 0,
     TT_OS2_CPR1_LATIN1 | TT_OS2_CPR1_MAC_ROMAN,
@@ -468,7 +473,7 @@ static nsFontCharSetMap gCharSetMap[] =
   { "gb18030.2000-0",     &FLG_ZHCN,    &GB18030_0     },
   { "gb18030.2000-1",     &FLG_ZHCN,    &GB18030_1     },
   { "gbk-0",              &FLG_ZHCN,    &GBK           },
-  { "gbk1988.1989-0",     &FLG_ZHCN,    &GBK           },
+  { "gbk1988.1989-0",     &FLG_ZHCN,    &USASCII       },
   { "hkscs-1",            &FLG_ZHTW,    &HKSCS         },
   { "hp-japanese15",      &FLG_NONE,    &Unknown       },
   { "hp-japaneseeuc",     &FLG_NONE,    &Unknown       },
@@ -1618,7 +1623,7 @@ void nsFontMetricsGTK::RealizeFont()
   mAveCharWidth = NSToCoordRound(rawAverage * f);
 
   unsigned long pr = 0;
-  if (xFont->GetXFontProperty(XA_X_HEIGHT, &pr) &&
+  if (xFont->GetXFontProperty(XA_X_HEIGHT, &pr) && pr != 0 &&
       pr < 0x00ffffff)  // Bug 43214: arbitrary to exclude garbage values
   {
     mXHeight = nscoord(pr * f);
@@ -4143,7 +4148,8 @@ do_BreakGetTextDimensions(const nsFontSwitchGTK *aFontSwitch,
       // Find the nearest place to break that is less than or equal to
       // the estimated break offset
       breakIndex = data->mPrevBreakState_BreakIndex;
-      while (data->mBreaks[breakIndex + 1] <= estimatedBreakOffset) {
+      while (breakIndex + 1 < data->mNumBreaks &&
+             data->mBreaks[breakIndex + 1] <= estimatedBreakOffset) {
         ++breakIndex;
       }
 
@@ -5743,6 +5749,7 @@ nsFontMetricsGTK::FindUserDefinedFont(PRUnichar aChar)
   if (mIsUserDefined) {
     FIND_FONT_PRINTF(("        FindUserDefinedFont"));
     nsFontGTK* font = TryNode(&mUserDefined, aChar);
+    mIsUserDefined = PR_FALSE;
     if (font) {
       NS_ASSERTION(font->SupportsChar(aChar), "font supposed to support this char");
       return font;
@@ -5791,11 +5798,6 @@ nsFontMetricsGTK::FindStyleSheetSpecificFont(PRUnichar aChar)
     nsFontGTK* font;
     if (hyphens == 3) {
       font = TryNode(familyName, aChar);
-      if (font) {
-        NS_ASSERTION(font->SupportsChar(aChar), "font supposed to support this char");
-        return font;
-      }
-      font = TryLangGroup(mLangGroup, familyName, aChar);
       if (font) {
         NS_ASSERTION(font->SupportsChar(aChar), "font supposed to support this char");
         return font;

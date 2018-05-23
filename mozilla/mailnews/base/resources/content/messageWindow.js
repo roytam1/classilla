@@ -30,7 +30,6 @@ var compositeDataSourceContractID        = datasourceContractIDPrefix + "composi
 
 var gCompositeDataSource;
 var gCurrentMessageUri;
-var gLoadCustomMessage = false;       //set to true when either loading a message/rfc822 attachment or a .eml file
 var gCurrentFolderUri;
 var gThreadPaneCommandUpdater = null;
 var gCurrentMessageIsDeleted = false;
@@ -176,6 +175,11 @@ nsMsgDBViewCommandUpdater.prototype =
     SetKeywords(aKeywords);
   },
 
+  updateNextMessageAfterDelete : function()
+  {
+    SetNextMessageAfterDelete();
+  },
+
   QueryInterface : function(iid)
   {
     if (iid.equals(Components.interfaces.nsIMsgDBViewCommandUpdater) ||
@@ -254,26 +258,29 @@ function OnLoadMessageWindow()
 
   var originalView = null;
   var folder = null;
-  var mailUrl = null;
-  
+  var messageUri;
+  var loadCustomMessage = false;       //set to true when either loading a message/rfc822 attachment or a .eml file
   if (window.arguments)
   {
     if (window.arguments[0])
     {
       try
       {
-        gCurrentMessageUri = window.arguments[0].QueryInterface(Components.interfaces.nsIURI);
-        if (gCurrentMessageUri)
+        messageUri = window.arguments[0];
+        if (messageUri instanceof Components.interfaces.nsIURI)
         {
-          gLoadCustomMessage = (gCurrentMessageUri.spec.indexOf("type=x-message-display") != -1);
-          if (!gLoadCustomMessage)
-            gCurrentMessageUri = gCurrentMessageUri.spec;
-          mailUrl = gCurrentMessageUri.QueryInterface(Components.interfaces.nsIMsgMailNewsUrl);
-          if (mailUrl)
-            folder = mailUrl.folder;
+          loadCustomMessage = /type=x-message-display/.test(messageUri.spec);
+          gCurrentMessageUri = messageUri.spec;
+          if (messageUri instanceof Components.interfaces.nsIMsgMailNewsUrl)
+            folder = messageUri.folder;
         }
-      } catch(ex) {folder = null;dump("## ex=" + ex + "\n");}
- 
+      } 
+      catch(ex) 
+      {
+        folder = null;
+        dump("## ex=" + ex + "\n");
+      }
+
       if (!gCurrentMessageUri)
         gCurrentMessageUri = window.arguments[0];
     }
@@ -283,28 +290,24 @@ function OnLoadMessageWindow()
     if (window.arguments[1])
       gCurrentFolderUri = window.arguments[1];
     else
-    {
-      if (folder)
-        gCurrentFolderUri = folder.folderURL;
-      else
-        gCurrentFolderUri = null;
-    }
+      gCurrentFolderUri = folder ? folder.folderURL : null;
 
     if (window.arguments[2])
-      originalView = window.arguments[2];      
+      originalView = window.arguments[2];
+
   }
-      
+
   CreateView(originalView);
- 
-  setTimeout(OnLoadMessageWindowDelayed, 0);
-  
+
+  setTimeout(OnLoadMessageWindowDelayed, 0, loadCustomMessage);
+
   SetupCommandUpdateHandlers();
 }
 
-function OnLoadMessageWindowDelayed()
+function OnLoadMessageWindowDelayed(loadCustomMessage)
 {
-  if (gLoadCustomMessage)
-    gDBView.loadMessageByUrl(gCurrentMessageUri.spec);
+  if (loadCustomMessage)
+    gDBView.loadMessageByUrl(gCurrentMessageUri);
   else
   {
     var msgKey = extractMsgKeyFromURI(gCurrentMessageUri);
@@ -522,8 +525,6 @@ function GetLoadedMsgFolder()
 
 function GetLoadedMessage()
 {
-  if (gLoadCustomMessage)
-    return gCurrentMessageUri.spec;
   return gCurrentMessageUri;
 }
 
@@ -650,85 +651,89 @@ function MsgDeleteMessageFromMessageWindow(reallyDelete, fromToolbar)
 // MessageWindowController object (handles commands when one of the trees does not have focus)
 var MessageWindowController =
 {
-   supportsCommand: function(command)
-	{
-
-		switch ( command )
-                {
-                        case "cmd_reply":
-                        case "button_reply":
-                        case "cmd_replySender":
-                        case "cmd_replyGroup":
-                        case "cmd_replyall":
-                        case "button_replyall":
-                        case "cmd_forward":
-                        case "button_forward":
-                        case "cmd_forwardInline":
-                        case "cmd_forwardAttachment":
-                        case "cmd_editAsNew":
-                        case "cmd_createFilterFromPopup":
-                        case "cmd_createFilterFromMenu":
-                        case "cmd_delete":
-                        case "cmd_undo":
-                        case "cmd_redo":
-                        case "cmd_killThread":
-                        case "cmd_watchThread":
-                        case "button_delete":
-                        case "button_junk":
-                        case "cmd_shiftDelete":
-                        case "cmd_saveAsFile":
-                        case "cmd_saveAsTemplate":
-                        case "cmd_viewPageSource":
-                        case "cmd_getMsgsForAuthAccounts":
-                        case "button_mark":
-                        case "cmd_markAsRead":
-                        case "cmd_markAllRead":
-                        case "cmd_markThreadAsRead":
-                        case "cmd_markAsFlagged":
-                        case "cmd_label0":
-                        case "cmd_label1":
-                        case "cmd_label2":
-                        case "cmd_label3":
-                        case "cmd_label4":
-                        case "cmd_label5":
-                        case "button_file":
-                        case "cmd_file":
-                          return !gLoadCustomMessage;
-                        case "cmd_getNextNMessages":
-                        case "cmd_find":
-                        case "cmd_findAgain":
-                        case "cmd_findPrev":
-                        case "cmd_search":
-                        case "cmd_reload":
-                        case "cmd_getNewMessages":
-                        case "button_getNewMessages":
-                        case "button_print":
-                        case "cmd_print":
-                        case "cmd_printpreview":
-                        case "cmd_printSetup":
-                        case "cmd_close":
-                        case "cmd_settingsOffline":
-                        case "cmd_nextMsg":
-                        case "button_next":
-                        case "cmd_nextUnreadMsg":
-                        case "cmd_nextFlaggedMsg":
-                        case "cmd_nextUnreadThread":
-                        case "cmd_previousMsg":
-                        case "cmd_previousUnreadMsg":
-			case "cmd_previousFlaggedMsg":
-                          return true;
-                        case "cmd_synchronizeOffline":
-                        case "cmd_downloadFlagged":
-                        case "cmd_downloadSelected":
-                          return CheckOnline();
-                        default:
-                          return false;
-               }
-	},
+  supportsCommand: function(command)
+  {
+    switch (command)
+    {
+      case "cmd_reply":
+      case "button_reply":
+      case "cmd_replySender":
+      case "cmd_replyGroup":
+      case "cmd_replyall":
+      case "button_replyall":
+      case "cmd_forward":
+      case "button_forward":
+      case "cmd_forwardInline":
+      case "cmd_forwardAttachment":
+      case "cmd_editAsNew":
+      case "cmd_delete":
+      case "cmd_undo":
+      case "cmd_redo":
+      case "cmd_killThread":
+      case "cmd_watchThread":
+      case "button_delete":
+      case "button_junk":
+      case "cmd_shiftDelete":
+      case "cmd_saveAsFile":
+      case "cmd_saveAsTemplate":
+      case "cmd_viewPageSource":
+      case "cmd_getMsgsForAuthAccounts":
+      case "button_mark":
+      case "cmd_markAsRead":
+      case "cmd_markAllRead":
+      case "cmd_markThreadAsRead":
+      case "cmd_markAsFlagged":
+      case "cmd_label0":
+      case "cmd_label1":
+      case "cmd_label2":
+      case "cmd_label3":
+      case "cmd_label4":
+      case "cmd_label5":
+      case "button_file":
+      case "cmd_file":
+      case "cmd_markAsJunk":
+      case "cmd_markAsNotJunk":
+      case "cmd_applyFilters":
+      case "cmd_runJunkControls":
+      case "cmd_deleteJunk":
+      case "cmd_nextMsg":
+      case "button_next": 
+      case "cmd_nextUnreadMsg": 
+      case "cmd_nextFlaggedMsg": 
+      case "cmd_nextUnreadThread": 
+      case "cmd_previousMsg": 
+      case "cmd_previousUnreadMsg": 
+      case "cmd_previousFlaggedMsg":
+        return !(gDBView.keyForFirstSelectedMessage == nsMsgKey_None);
+      case "cmd_getNextNMessages":
+      case "cmd_find":
+      case "cmd_findAgain":
+      case "cmd_findPrev":
+      case "cmd_search":
+      case "cmd_reload":
+      case "cmd_getNewMessages":
+      case "button_getNewMessages":
+      case "button_print":
+      case "cmd_print":
+      case "cmd_printpreview":
+      case "cmd_printSetup":
+      case "cmd_close":
+      case "cmd_settingsOffline":
+      case "cmd_createFilterFromPopup":
+      case "cmd_createFilterFromMenu":
+        return true;
+      case "cmd_synchronizeOffline":
+      case "cmd_downloadFlagged":
+      case "cmd_downloadSelected":
+        return CheckOnline();
+      default:
+        return false;
+    }
+  },
 
 	isCommandEnabled: function(command)
 	{
-		switch ( command )
+		switch (command)
 		{
       case "cmd_createFilterFromPopup":
       case "cmd_createFilterFromMenu":
@@ -1037,10 +1042,12 @@ function GetDBView()
 
 function LoadMessageByMsgKey(messageKey)
 {
-  gDBView.loadMessageByMsgKey(messageKey);
-  if (gLoadCustomMessage)
+  // we only want to update the toolbar if there was no previous selected message.
+  if (nsMsgKey_None == gDBView.keyForFirstSelectedMessage)
   {
-     gLoadCustomMessage = false;
-     UpdateMailToolbar("update toolbar for message Window");
+    gDBView.loadMessageByMsgKey(messageKey);
+    UpdateMailToolbar("update toolbar for message Window");
   }
+  else
+    gDBView.loadMessageByMsgKey(messageKey);
 }

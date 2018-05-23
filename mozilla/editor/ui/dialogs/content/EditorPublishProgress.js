@@ -131,7 +131,7 @@ function Startup()
   }
 
   // Now that dialog is initialized, we can start publishing
-  window.opener.StartPublishing();
+  gPersistObj = window.opener.StartPublishing();
 }
 
 // this function is to be used when we cancel persist's saving
@@ -309,6 +309,25 @@ function CheckKeepOpen()
 
 function onClose()
 {
+  if (!gFinished)
+  {
+    const nsIPromptService = Components.interfaces.nsIPromptService;
+    var promptService = Components.classes["@mozilla.org/embedcomp/prompt-service;1"]
+                                  .getService(nsIPromptService);
+    const buttonFlags = (nsIPromptService.BUTTON_TITLE_IS_STRING *
+                         nsIPromptService.BUTTON_POS_0) +
+                        (nsIPromptService.BUTTON_TITLE_CANCEL *
+                         nsIPromptService.BUTTON_POS_1);
+    var button = promptService.confirmEx(window,
+                                         GetString("CancelPublishTitle"),
+                                         GetString("CancelPublishMessage"),
+                                         buttonFlags,
+                                         GetString("CancelPublishContinue"),
+                                         null, null, null, {});
+    if (button == 0)
+      return false;
+  }
+
   if (gTimerID)
   {
     clearTimeout(gTimerID);

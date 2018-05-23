@@ -32,7 +32,7 @@
  * GPL.
  */
 #ifdef DEBUG
-static const char CVS_ID[] = "@(#) $RCSfile: oiddata.c,v $ $Revision: 1.1 $ $Date: 2002/01/04 05:22:07 $ $Name: MOZILLA_1_3_1_RELEASE $ ; @(#) $RCSfile: oiddata.c,v $ $Revision: 1.1 $ $Date: 2002/01/04 05:22:07 $ $Name: MOZILLA_1_3_1_RELEASE $";
+static const char CVS_ID[] = "@(#) $RCSfile: oiddata.c,v $ $Revision: 1.1 $ $Date: 2002/01/04 05:22:07 $ $Name:  $ ; @(#) $RCSfile: oiddata.c,v $ $Revision: 1.1 $ $Date: 2002/01/04 05:22:07 $ $Name:  $";
 #endif /* DEBUG */
 
 #ifndef PKI1T_H

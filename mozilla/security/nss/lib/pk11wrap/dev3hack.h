@@ -35,7 +35,7 @@
 #define DEVNSS3HACK_H
 
 #ifdef DEBUG
-static const char DEVNSS3HACK_CVS_ID[] = "@(#) $RCSfile: dev3hack.h,v $ $Revision: 1.7 $ $Date: 2002/04/18 17:29:59 $ $Name: MOZILLA_1_3_1_RELEASE $";
+static const char DEVNSS3HACK_CVS_ID[] = "@(#) $RCSfile: dev3hack.h,v $ $Revision: 1.7 $ $Date: 2002/04/18 17:29:59 $ $Name:  $";
 #endif /* DEBUG */
 
 #include "cert.h"

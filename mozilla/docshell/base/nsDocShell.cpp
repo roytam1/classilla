@@ -241,7 +241,8 @@ nsDocShell::nsDocShell():
     mParent(nsnull),
     mTreeOwner(nsnull),
     mChromeEventHandler(nsnull),
-    mIsPrintingOrPP(PR_FALSE)
+    mIsPrintingOrPP(PR_FALSE),
+    mIsExecutingOnLoadHandler(PR_FALSE)
 {
 #ifdef PR_LOGGING
     if (! gDocShellLog)
@@ -584,7 +585,6 @@ nsDocShell::LoadURI(nsIURI * aURI,
         // First verify if this is a subframe.
         nsCOMPtr<nsIDocShellTreeItem> parentAsItem;
         GetSameTypeParent(getter_AddRefs(parentAsItem));
-
         nsCOMPtr<nsIDocShell> parentDS(do_QueryInterface(parentAsItem));
         PRUint32 parentLoadType;
 
@@ -613,14 +613,12 @@ nsDocShell::LoadURI(nsIURI * aURI,
                     if (shEntry && (parentLoadType == LOAD_NORMAL || parentLoadType == LOAD_LINK)) {
                         // The parent was loaded normally. In this case, this *brand new* child really shouldn't
                         // have a SHEntry. If it does, it could be because the parent is replacing an
-                        // existing frame with a new frame, probably in the onLoadHandler. We don't want this
+                        // existing frame with a new frame, in the onLoadHandler. We don't want this
                         // url to get into session history. Clear off shEntry, and set laod type to
                         // LOAD_BYPASS_HISTORY. 
-                        PRUint32 parentBusy=BUSY_FLAGS_NONE;
-                        parentDS->GetBusyFlags(&parentBusy);
-                        if (parentBusy & BUSY_FLAGS_BUSY) {
-                            // The parent is still busy. We most likely got here
-                            // through onLoadHandler. 
+                        PRBool inOnLoadHandler=PR_FALSE;
+                        parentDS->GetIsExecutingOnLoadHandler(&inOnLoadHandler);
+                        if (inOnLoadHandler) {
                             loadType = LOAD_NORMAL_REPLACE;
                             shEntry = nsnull;
                         }
@@ -646,31 +644,28 @@ nsDocShell::LoadURI(nsIURI * aURI,
                     // This is a pre-existing subframe. If the load was not originally initiated
                     // by session history, (if (!shEntry) condition succeeded) and mCurrentURI is not null,
                     // it is possible that a parent's onLoadHandler or even self's onLoadHandler is loading 
-                    // a new page in this child. Check parent's and self's busy status and if it is, 
+                    // a new page in this child. Check parent's and self's busy flag  and if it is set,
                     // we don't want this onLoadHandler load to get in to session history.
                     PRUint32 parentBusy=BUSY_FLAGS_NONE, selfBusy = BUSY_FLAGS_NONE;
                     parentDS->GetBusyFlags(&parentBusy);                    
                     GetBusyFlags(&selfBusy);
                     if (((parentBusy & BUSY_FLAGS_BUSY) || (selfBusy & BUSY_FLAGS_BUSY)) && shEntry) {
-                        // we don't want this additional load to get into history, since this
-                        // load will automatially happen everytime, no matter how the page is loaded.
                         loadType = LOAD_NORMAL_REPLACE;
                         shEntry = nsnull; 
                     }
                 }
             } // parent
         } //parentDS
-        else {  // This is the root docshell
-            PRUint32 selfBusy = BUSY_FLAGS_NONE;
-            GetBusyFlags(&selfBusy);
-            // If we are still busy loading the previous page, then this load was
-            // probably initiated by a onLoadhandler. Let the new page replace 
-            // previous one. 
-            if (mLSHE && (selfBusy & BUSY_FLAGS_BUSY)) {
+        else {  
+            // This is the root docshell. If we got here while  
+            // executing an onLoad Handler,this load will not go 
+            // into session history.
+            PRBool inOnLoadHandler=PR_FALSE;
+            GetIsExecutingOnLoadHandler(&inOnLoadHandler);
+            if (inOnLoadHandler) {
                 loadType = LOAD_NORMAL_REPLACE;
             }
-
-        }
+        } 
     } // !shEntry
 
     if (shEntry) {
@@ -3282,6 +3277,20 @@ nsDocShell::SetEnabled(PRBool aEnabled)
 }
 
 NS_IMETHODIMP
+nsDocShell::GetBlurSuppression(PRBool *aBlurSuppression)
+{
+  NS_ENSURE_ARG_POINTER(aBlurSuppression);
+  *aBlurSuppression = PR_FALSE;
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+NS_IMETHODIMP
+nsDocShell::SetBlurSuppression(PRBool aBlurSuppression)
+{
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+NS_IMETHODIMP
 nsDocShell::GetMainWidget(nsIWidget ** aMainWidget)
 {
     // We don't create our own widget, so simply return the parent one. 
@@ -3877,6 +3886,10 @@ nsDocShell::SetupRefreshURIFromHeader(nsIURI * aBaseURI,
             ++iter;
         }
 
+        // skip any remaining whitespace
+        while (iter != doneIterating && nsCRT::IsAsciiSpace(*iter))
+            ++iter;
+
         // skip ';' or ','
         if (iter != doneIterating && (*iter == ';' || *iter == ',')) {
             ++iter;
@@ -3916,21 +3929,30 @@ nsDocShell::SetupRefreshURIFromHeader(nsIURI * aBaseURI,
         }
     }
 
-    // skip a leading '"' or '\''
+    // skip a leading '"' or '\''.
+
+    PRBool isQuotedURI = PR_FALSE;
     if (tokenStart != doneIterating && (*tokenStart == '"' || *tokenStart == '\''))
+    {
+        isQuotedURI = PR_TRUE;
         ++tokenStart;
+    }
 
     // set iter to start of URI
     iter = tokenStart;
 
     // tokenStart here points to the beginning of URI
 
-    // skip anything which isn't whitespace
-    while (iter != doneIterating && !nsCRT::IsAsciiSpace(*iter))
+    // grab the rest of the URI
+    while (iter != doneIterating)
+    {
+        if (isQuotedURI && (*iter == '"' || *iter == '\''))
+            break;
         ++iter;
+    }
 
     // move iter one back if the last character is a '"' or '\''
-    if (iter != tokenStart) {
+    if (iter != tokenStart && isQuotedURI) {
         --iter;
         if (!(*iter == '"' || *iter == '\''))
             ++iter;
@@ -3948,6 +3970,7 @@ nsDocShell::SetupRefreshURIFromHeader(nsIURI * aBaseURI,
     }
     else {
         uriAttrib = Substring(tokenStart, iter);
+        // NS_NewURI takes care of any whitespace surrounding the URL
         rv = NS_NewURI(getter_AddRefs(uri), uriAttrib, nsnull, aBaseURI);
         specifiesURI = PR_TRUE;
     }
@@ -3969,9 +3992,10 @@ nsDocShell::SetupRefreshURIFromHeader(nsIURI * aBaseURI,
                                                nsIScriptSecurityManager::
                                                DISALLOW_FROM_MAIL);
             if (NS_SUCCEEDED(rv)) {
-                // since we can't travel back in time yet, just pretend it was meant figuratively
+                // Since we can't travel back in time yet, just pretend
+                // negative numbers do nothing at all.
                 if (seconds < 0)
-                    seconds = 0;
+                    return NS_ERROR_FAILURE;
 
                 rv = RefreshURI(uri, seconds * 1000, PR_FALSE, PR_TRUE);
             }
@@ -4156,7 +4180,7 @@ nsDocShell::OnStateChange(nsIWebProgress * aProgress, nsIRequest * aRequest,
         nsCOMPtr<nsIWyciwygChannel>  wcwgChannel(do_QueryInterface(aRequest));
         nsCOMPtr<nsIWebProgress> webProgress(do_QueryInterface(mLoadCookie));
 
-        // Was the wyciwyg document loaded on this docshell?   
+        // Was the wyciwyg document loaded on this docshell?
         if (wcwgChannel && !mLSHE && (mItemType == typeContent) && aProgress == webProgress.get()) {
             nsCOMPtr<nsIURI> uri;
             wcwgChannel->GetURI(getter_AddRefs(uri));
@@ -4272,7 +4296,9 @@ nsDocShell::EndPageLoad(nsIWebProgress * aProgress,
     // document...
     //
     if (!mEODForCurrentDocument && mContentViewer) {
+        mIsExecutingOnLoadHandler = PR_TRUE;
         mContentViewer->LoadComplete(aStatus);
+        mIsExecutingOnLoadHandler = PR_FALSE;
 
         mEODForCurrentDocument = PR_TRUE;
 
@@ -5071,16 +5097,29 @@ nsDocShell::InternalLoad(nsIURI * aURI,
              * recorded in session and global history.
              */             
             OnNewURI(aURI, nsnull, mLoadType);
-
-            /* save current position of scroller(s) (bug 59774) */
-            if (mOSHE)
+            nsCOMPtr<nsIInputStream> postData;
+            
+            if (mOSHE) {
+                /* save current position of scroller(s) (bug 59774) */
                 mOSHE->SetScrollPosition(cx, cy);
+                // Get the postdata from the current page, if it was
+                // loaded through normal means.
+                if (aLoadType == LOAD_NORMAL || aLoadType == LOAD_LINK)
+                    mOSHE->GetPostData(getter_AddRefs(postData));
+            }
             
             /* Assign mOSHE to mLSHE. This will either be a new entry created
              * by OnNewURI() for normal loads or aSHEntry for history loads.
              */
-            if (mLSHE)
+            if (mLSHE) {
                 mOSHE = mLSHE;
+                // Save the postData obtained from the previous page
+                // in to the session history entry created for the 
+                // anchor page, so that any history load of the anchor
+                // page will restore the appropriate postData.
+                if (postData)
+                    mOSHE->SetPostData(postData);
+            }
 
             /* restore previous position of scroller(s), if we're moving
              * back in history (bug 59774)
@@ -5766,10 +5805,10 @@ nsDocShell::ScrollIfAnchor(nsIURI * aURI, PRBool * aWasAnchor, PRUint32 aLoadTyp
         if (aLoadType == LOAD_HISTORY || aLoadType == LOAD_RELOAD_NORMAL)
             return rv;
         //An empty anchor. Scroll to the top of the page.
-        SetCurScrollPosEx(0, 0);
+        rv = SetCurScrollPosEx(0, 0);
     }
 
-    return NS_OK;
+    return rv;
 }
 
 
@@ -5812,7 +5851,7 @@ nsDocShell::OnNewURI(nsIURI * aURI, nsIChannel * aChannel,
     }  // rootSH
 
 
-    // Determine if this type of load should update history.    
+    // Determine if this type of load should update history.
     if (aLoadType == LOAD_BYPASS_HISTORY ||
          aLoadType & LOAD_CMD_HISTORY ||
          aLoadType == LOAD_RELOAD_NORMAL ||
@@ -6084,7 +6123,8 @@ nsDocShell::AddToSessionHistory(nsIURI * aURI,
     }
     else {  
         // This is a subframe.
-        if (mLoadType != LOAD_NORMAL_REPLACE)
+        if ((mLoadType != LOAD_NORMAL_REPLACE) ||
+            (mLoadType == LOAD_NORMAL_REPLACE && !mOSHE))
             rv = AddChildSHEntry(nsnull, entry, mChildOffset);
     }
 
@@ -6792,6 +6832,15 @@ nsDocShell::IsBeingDestroyed(PRBool *aDoomed)
 {
   NS_ENSURE_ARG(aDoomed);
   *aDoomed = mIsBeingDestroyed;
+  return NS_OK;
+}
+
+
+NS_IMETHODIMP 
+nsDocShell::GetIsExecutingOnLoadHandler(PRBool *aResult)
+{
+  NS_ENSURE_ARG(aResult);
+  *aResult = mIsExecutingOnLoadHandler;
   return NS_OK;
 }
 

@@ -35,7 +35,7 @@
 #define CKMD_H
 
 #ifdef DEBUG
-static const char CKMD_CVS_ID[] = "@(#) $RCSfile: ckmd.h,v $ $Revision: 1.1 $ $Date: 2000/03/31 19:43:13 $ $Name: MOZILLA_1_3_1_RELEASE $";
+static const char CKMD_CVS_ID[] = "@(#) $RCSfile: ckmd.h,v $ $Revision: 1.1 $ $Date: 2000/03/31 19:43:13 $ $Name:  $";
 #endif /* DEBUG */
 
 /*

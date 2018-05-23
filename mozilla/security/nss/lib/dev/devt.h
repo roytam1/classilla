@@ -35,7 +35,7 @@
 #define DEVT_H
 
 #ifdef DEBUG
-static const char DEVT_CVS_ID[] = "@(#) $RCSfile: devt.h,v $ $Revision: 1.17 $ $Date: 2002/04/18 17:29:54 $ $Name: MOZILLA_1_3_1_RELEASE $";
+static const char DEVT_CVS_ID[] = "@(#) $RCSfile: devt.h,v $ $Revision: 1.17.30.1 $ $Date: 2003/05/14 00:12:16 $ $Name:  $";
 #endif /* DEBUG */
 
 /*
@@ -124,6 +124,7 @@ struct NSSSlotStr
   CK_FLAGS ckFlags; /* from CK_SLOT_INFO.flags */
   struct nssSlotAuthInfoStr authInfo;
   PRIntervalTime lastTokenPing;
+  PZLock *lock;
 #ifdef NSS_3_4_CODE
   void *epv;
   PK11SlotInfo *pk11slot;
@@ -136,6 +137,7 @@ struct nssSessionStr
   CK_SESSION_HANDLE handle;
   NSSSlot *slot;
   PRBool isRW;
+  PRBool ownLock;
 };
 
 typedef enum {

@@ -39,12 +39,7 @@
 #include "nsIStreamBufferAccess.h"
 #include "nsMemory.h"
 #include "prlong.h"
-
-nsBinaryOutputStream::nsBinaryOutputStream(nsIOutputStream* aStream)
-  : mOutputStream(aStream),
-    mBufferAccess(do_QueryInterface(aStream))
-{
-}
+#include "nsGenericFactory.h"
 
 NS_IMPL_ISUPPORTS1(nsBinaryOutputStream, nsIBinaryOutputStream)
 
@@ -98,6 +93,7 @@ nsBinaryOutputStream::SetOutputStream(nsIOutputStream *aOutputStream)
 {
     NS_ENSURE_ARG_POINTER(aOutputStream);
     mOutputStream = aOutputStream;
+    mBufferAccess = do_QueryInterface(aOutputStream);
     return NS_OK;
 }
 
@@ -186,6 +182,7 @@ nsBinaryOutputStream::WriteWStringZ(const PRUnichar* aString)
 #ifdef IS_BIG_ENDIAN
     rv = WriteBytes(NS_REINTERPRET_CAST(const char*, aString), byteCount);
 #else
+    // XXX use WriteSegments here to avoid copy!
     PRUnichar *copy, temp[64];
     if (length <= 64) {
         copy = temp;
@@ -194,6 +191,7 @@ nsBinaryOutputStream::WriteWStringZ(const PRUnichar* aString)
         if (!copy)
             return NS_ERROR_OUT_OF_MEMORY;
     }
+    NS_ASSERTION((PRUptrdiff(aString) & 0x1) == 0, "aString not properly aligned");
     for (PRUint32 i = 0; i < length; i++)
         copy[i] = NS_SWAP16(aString[i]);
     rv = WriteBytes(NS_REINTERPRET_CAST(const char*, copy), byteCount);
@@ -222,6 +220,12 @@ nsBinaryOutputStream::WriteBytes(const char *aString, PRUint32 aLength)
     if (bytesWritten != aLength)
         return NS_ERROR_FAILURE;
     return rv;
+}
+
+NS_IMETHODIMP
+nsBinaryOutputStream::WriteByteArray(PRUint8 *aBytes, PRUint32 aLength)
+{
+    return WriteBytes(NS_REINTERPRET_CAST(char *, aBytes), aLength);
 }
 
 NS_IMETHODIMP
@@ -267,12 +271,6 @@ nsBinaryOutputStream::PutBuffer(char* aBuffer, PRUint32 aLength)
 {
     if (mBufferAccess)
         mBufferAccess->PutBuffer(aBuffer, aLength);
-}
-
-nsBinaryInputStream::nsBinaryInputStream(nsIInputStream* aStream)
-  : mInputStream(aStream),
-    mBufferAccess(do_QueryInterface(aStream))
-{
 }
 
 NS_IMPL_ISUPPORTS1(nsBinaryInputStream, nsIBinaryInputStream)
@@ -342,6 +340,7 @@ nsBinaryInputStream::SetInputStream(nsIInputStream *aInputStream)
 {
     NS_ENSURE_ARG_POINTER(aInputStream);
     mInputStream = aInputStream;
+    mBufferAccess = do_QueryInterface(aInputStream);
     return NS_OK;
 }
 
@@ -465,7 +464,7 @@ nsBinaryInputStream::ReadCString(nsACString& aString)
 // sometimes, WriteSegmentToString will be handed an odd-number of
 // bytes, which means we only have half of the last PRUnichar
 struct WriteStringClosure {
-    nsAString* mString;
+    PRUnichar *mWriteCursor;
     PRPackedBool mHasCarryoverByte;
     char mCarryoverByte;
 };
@@ -496,9 +495,9 @@ WriteSegmentToString(nsIInputStream* aStream,
 {
     NS_PRECONDITION(aCount > 0, "Why are we being told to write 0 bytes?");
     NS_PRECONDITION(sizeof(PRUnichar) == 2, "We can't handle other sizes!");
-    
+
     WriteStringClosure* closure = NS_STATIC_CAST(WriteStringClosure*,aClosure);
-    nsAString* outString = closure->mString;
+    PRUnichar *cursor = closure->mWriteCursor;
 
     // we're always going to consume the whole buffer no matter what
     // happens, so take care of that right now.. that allows us to
@@ -509,13 +508,12 @@ WriteSegmentToString(nsIInputStream* aStream,
     if (closure->mHasCarryoverByte) {
         // re-create the two-byte sequence we want to work with
         char bytes[2] = { closure->mCarryoverByte, *aFromSegment };
-        PRUnichar unichar = *(PRUnichar*)bytes;
+        *cursor = *(PRUnichar*)bytes;
         // Now the little endianness dance
 #ifdef IS_LITTLE_ENDIAN
-        outString->Append(PRUnichar(NS_SWAP16(unichar)));
-#else
-        outString->Append(unichar);        
+        *cursor = (PRUnichar) NS_SWAP16(*cursor);
 #endif
+        ++cursor;
         
         // now skip past the first byte of the buffer.. code from here
         // can assume normal operations, but should not assume aCount
@@ -526,17 +524,21 @@ WriteSegmentToString(nsIInputStream* aStream,
         closure->mHasCarryoverByte = PR_FALSE;
     }
     
+    // this array is possibly unaligned... be careful how we access it!
     const PRUnichar *unicodeSegment =
         NS_REINTERPRET_CAST(const PRUnichar*, aFromSegment);
+
+    // calculate number of full characters in segment (aCount could be odd!)
     PRUint32 segmentLength = aCount / sizeof(PRUnichar);
 
-    // this sucks. we have to swap every 2 bytes on some machines
+    // copy all data into our aligned buffer.  byte swap if necessary.
+    memcpy(cursor, unicodeSegment, segmentLength * sizeof(PRUnichar));
+    PRUnichar *end = cursor + segmentLength;
 #ifdef IS_LITTLE_ENDIAN
-    for (PRUint32 i = 0; i < segmentLength; i++)
-        outString->Append(PRUnichar(NS_SWAP16(unicodeSegment[i])));
-#else    
-    outString->Append(unicodeSegment, segmentLength);
+    for (; cursor < end; ++cursor)
+        *cursor = (PRUnichar) NS_SWAP16(*cursor);
 #endif
+    closure->mWriteCursor = end;
 
     // remember this is the modifed aCount and aFromSegment,
     // so that will take into account the fact that we might have
@@ -561,10 +563,13 @@ nsBinaryInputStream::ReadString(nsAString& aString)
     rv = Read32(&length);
     if (NS_FAILED(rv)) return rv;
 
-    aString.Truncate();
+    // pre-allocate output buffer, and get direct access to buffer...
+    aString.SetLength(length);
+    nsAString::iterator start;
+    aString.BeginWriting(start);
     
     WriteStringClosure closure;
-    closure.mString = &aString;
+    closure.mWriteCursor = start.get();
     closure.mHasCarryoverByte = PR_FALSE;
     
     rv = ReadSegments(WriteSegmentToString, &closure,
@@ -580,7 +585,7 @@ nsBinaryInputStream::ReadString(nsAString& aString)
 }
 
 NS_IMETHODIMP
-nsBinaryInputStream::ReadBytes(char* *aString, PRUint32 aLength)
+nsBinaryInputStream::ReadBytes(PRUint32 aLength, char* *_rval)
 {
     nsresult rv;
     PRUint32 bytesRead;
@@ -591,14 +596,23 @@ nsBinaryInputStream::ReadBytes(char* *aString, PRUint32 aLength)
         return NS_ERROR_OUT_OF_MEMORY;
 
     rv = Read(s, aLength, &bytesRead);
-    if (NS_FAILED(rv)) return rv;
+    if (NS_FAILED(rv)) {
+        nsMemory::Free(s);
+        return rv;
+    }
     if (bytesRead != aLength) {
         nsMemory::Free(s);
         return NS_ERROR_FAILURE;
     }
 
-    *aString = s;
+    *_rval = s;
     return NS_OK;
+}
+
+NS_IMETHODIMP
+nsBinaryInputStream::ReadByteArray(PRUint32 aLength, PRUint8* *_rval)
+{
+    return ReadBytes(aLength, NS_REINTERPRET_CAST(char **, _rval));
 }
 
 NS_IMETHODIMP

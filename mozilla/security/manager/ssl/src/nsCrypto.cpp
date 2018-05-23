@@ -380,9 +380,13 @@ nsCrypto::GetScriptPrincipal(JSContext *cx)
     }
   }
 
-  if (!principal) {
-    nsCOMPtr<nsIScriptContext> scriptContext = 
-             NS_REINTERPRET_CAST(nsIScriptContext*,JS_GetContextPrivate(cx));
+  if (principal)
+    return principal;
+
+  if (JS_GetOptions(cx) & JSOPTION_PRIVATE_IS_NSISUPPORTS) {
+    nsISupports* scriptContextSupports =
+      NS_STATIC_CAST(nsISupports*, JS_GetContextPrivate(cx));
+    nsCOMPtr<nsIScriptContext> scriptContext(do_QueryInterface(scriptContextSupports));
     if (scriptContext)
     {
       nsCOMPtr<nsIScriptGlobalObject> global;
@@ -887,8 +891,7 @@ nsSetEscrowAuthority(CRMFCertRequest *certReq, nsKeyPairInfo *keyInfo,
     return NS_ERROR_FAILURE;
 
   CRMFPKIArchiveOptions *archOpt = 
-      CRMF_CreatePKIArchiveOptions(crmfEncryptedPrivateKey, 
-                                   NS_STATIC_CAST(void*,encrKey)); 
+      CRMF_CreatePKIArchiveOptions(crmfEncryptedPrivateKey, encrKey);
   if (!archOpt) {
     CRMF_DestroyEncryptedKey(encrKey);
     return NS_ERROR_FAILURE;
@@ -2229,7 +2232,7 @@ nsCrypto::SignText(nsAString& aReturn)
   if (NS_FAILED(rv))
     return rv;  
 
-  nsCOMPtr<nsIInterfaceRequestor> uiCxt = new PipUIContext("Create a signature.");
+  nsCOMPtr<nsIInterfaceRequestor> uiCxt = new PipUIContext("signing text");
   PRBool bestOnly = PR_TRUE;
   PRBool validOnly = PR_TRUE;
   CERTCertList* certList = CERT_FindUserCertsByUsage(CERT_GetDefaultCertDB(), 
@@ -2419,11 +2422,6 @@ nsCrypto::SignText(nsAString& aReturn)
     SEC_OID_SHA1, &digest, 
     nsnull,
     uiCxt);
-
-  if (!ci) {
-    JS_ReportError(cx, "%s%s\n", JS_ERROR, "Unable to use certificate to create a signature.");
-    return NS_ERROR_FAILURE;
-  }
 
   SEC_PKCS7IncludeCertChain(ci, nsnull);
   SEC_PKCS7AddSigningTime(ci);

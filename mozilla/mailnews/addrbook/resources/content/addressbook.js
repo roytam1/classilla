@@ -699,7 +699,7 @@ function LaunchUrl(url)
 {
   var messenger = Components.classes["@mozilla.org/messenger;1"].createInstance(Components.interfaces.nsIMessenger);
   messenger.SetWindow(window,null);
-  messenger.OpenURL(url, true);
+  messenger.OpenURL(url);
 }
 
 function AbIMSelected()

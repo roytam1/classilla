@@ -208,13 +208,13 @@ MimeObject_parse_begin (MimeObject *obj)
     // we should mark the part for subsequent output.
     //
     obj->output_p = PR_FALSE;
-	  PRBool exactMatch = !nsCRT::strcmp(id, obj->options->part_to_load);
+	  PRBool exactMatch = !strcmp(id, obj->options->part_to_load);
     if (exactMatch)
       obj->output_p = PR_TRUE;
     else if (obj->options->format_out == nsMimeOutput::nsMimeMessageRaw ||
              obj->options->format_out == nsMimeOutput::nsMimeMessageBodyDisplay)
           {
-            obj->output_p = !nsCRT::strncmp((const char*)id, (const char*)obj->options->part_to_load, 
+            obj->output_p = !strncmp((const char*)id, (const char*)obj->options->part_to_load, 
                                             (unsigned int)strlen(obj->options->part_to_load));
     }
 

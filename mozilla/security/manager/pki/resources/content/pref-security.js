@@ -35,7 +35,7 @@
 
 function openCertManager()
 {
-    //check for an existing pref window and focus it; it's not application modal
+    //check for an existing certManager window and focus it; it's not application modal
     const kWindowMediatorContractID = "@mozilla.org/appshell/window-mediator;1";
     const kWindowMediatorIID = Components.interfaces.nsIWindowMediator;
     const kWindowMediator = Components.classes[kWindowMediatorContractID].getService(kWindowMediatorIID);
@@ -50,7 +50,7 @@ function openCertManager()
 
 function openDeviceManager()
 {
-    //check for an existing pref window and focus it; it's not application modal
+    //check for an existing deviceManger window and focus it; it's not application modal
     const kWindowMediatorContractID = "@mozilla.org/appshell/window-mediator;1";
     const kWindowMediatorIID = Components.interfaces.nsIWindowMediator;
     const kWindowMediator = Components.classes[kWindowMediatorContractID].getService(kWindowMediatorIID);

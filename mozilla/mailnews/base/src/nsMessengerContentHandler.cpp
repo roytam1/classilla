@@ -14,7 +14,7 @@
  *
  * The Original Code is mozilla.org code.
  *
- * The Initial Developer of the Original Code is 
+ * The Initial Developer of the Original Code is
  * Netscape Communications Corporation.
  * Portions created by the Initial Developer are Copyright (C) 1998
  * the Initial Developer. All Rights Reserved.
@@ -48,11 +48,9 @@
 #include "nsIMsgMailSession.h"
 #include "nsMsgBaseCID.h"
 
-static NS_DEFINE_CID(kCMsgMailSessionCID, NS_MSGMAILSESSION_CID);
-
 nsMessengerContentHandler::nsMessengerContentHandler()
 {
-	NS_INIT_ISUPPORTS();
+  NS_INIT_ISUPPORTS();
 }
 
 /* the following macro actually implement addref, release and query interface for our component. */
@@ -73,7 +71,7 @@ NS_IMETHODIMP nsMessengerContentHandler::HandleContent(const char * aContentType
   if (nsCRT::strcasecmp(aContentType, "x-message-display") == 0) {
     nsCOMPtr<nsIURI> aUri;
     nsCOMPtr<nsIChannel> aChannel = do_QueryInterface(request);
-    if(!aChannel) return NS_ERROR_FAILURE;
+    if (!aChannel) return NS_ERROR_FAILURE;
 
     rv = aChannel->GetURI(getter_AddRefs(aUri));
     if (aUri)
@@ -100,18 +98,14 @@ NS_IMETHODIMP nsMessengerContentHandler::HandleContent(const char * aContentType
 // Utility function to open a message display window and and load the message in it.
 nsresult nsMessengerContentHandler::OpenWindow(nsIURI* aURI)
 {
-  nsresult rv;
-  
   NS_ENSURE_ARG_POINTER(aURI);
   
-  nsCOMPtr<nsIWindowWatcher> wwatch(do_GetService("@mozilla.org/embedcomp/window-watcher;1"));
+  nsCOMPtr<nsIWindowWatcher> wwatch = do_GetService("@mozilla.org/embedcomp/window-watcher;1");
   if (!wwatch)
     return NS_ERROR_FAILURE;
 
   nsCOMPtr<nsIDOMWindow> newWindow;
-  rv = wwatch->OpenWindow(0, "chrome://messenger/content/messageWindow.xul",
+  return wwatch->OpenWindow(0, "chrome://messenger/content/messageWindow.xul",
                  "_blank", "all,chrome,dialog=no,status,toolbar", aURI,
                  getter_AddRefs(newWindow));
-
-  return rv;
 }

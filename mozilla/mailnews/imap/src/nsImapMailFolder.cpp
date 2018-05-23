@@ -3951,6 +3951,10 @@ nsresult nsImapMailFolder::HandleCustomFlags(nsMsgKey uidOfMessage, nsIMsgDBHdr 
   nsXPIDLCString::const_iterator b, e;
   if (FindInReadable(NS_LITERAL_CSTRING("NonJunk"), keywords.BeginReading(b), keywords.EndReading(e)))
     mDatabase->SetStringProperty(uidOfMessage, "junkscore", "0");
+  // Mac Mail uses "NotJunk"
+  else if (FindInReadable(NS_LITERAL_CSTRING("NotJunk"), keywords.BeginReading(b), keywords.EndReading(e)))
+    mDatabase->SetStringProperty(uidOfMessage, "junkscore", "0");
+  // ### TODO: we really should parse the keywords into space delimited keywords before checking
   else if (FindInReadable(NS_LITERAL_CSTRING("Junk"), keywords.BeginReading(b), keywords.EndReading(e)))
     mDatabase->SetStringProperty(uidOfMessage, "junkscore", "100");
   else
@@ -4031,6 +4035,8 @@ nsresult nsImapMailFolder::NotifyMessageFlagsFromHdr(nsIMsgDBHdr *dbHdr, nsMsgKe
     // make some people very unhappy.
     if (flags & kImapMsgLabelFlags)
       mDatabase->SetLabel(msgKey, (flags & kImapMsgLabelFlags) >> 9);
+    if (flags & kImapMsgMDNSentFlag)
+      mDatabase->MarkMDNSent(msgKey, PR_TRUE, nsnull);
   
     return NS_OK;
 }
@@ -5267,7 +5273,16 @@ const char *nsMsgIMAPFolderACL::GetRightsStringForUser(const char *inUserName)
   nsXPIDLCString userName;
   userName.Assign(inUserName);
   if (!userName.Length())
-    m_folder->GetUsername(getter_Copies(userName));
+  {
+    nsCOMPtr <nsIMsgIncomingServer> server;
+
+    nsresult rv = m_folder->GetServer(getter_AddRefs(server));
+    NS_ASSERTION(NS_SUCCEEDED(rv), "error getting server");
+    if (NS_FAILED(rv)) return nsnull;
+    // we need the real user name to match with what the imap server returns
+    // in the acl response.
+    server->GetRealUsername(getter_Copies(userName));
+  }
   nsCStringKey userKey(userName.get());
   
   return (const char *)m_rightsHash->Get(&userKey);
@@ -7182,11 +7197,8 @@ nsImapMailFolder::OnMessageClassified(const char *aMsgURI, nsMsgJunkStatus aClas
     // or when manually classifying messages in those folders
     if (!(mFlags & MSG_FOLDER_FLAG_JUNK || mFlags & MSG_FOLDER_FLAG_TRASH))
     {
-      PRBool moveOnSpam = PR_FALSE;
-        
-      rv = spamSettings->GetMoveOnSpam(&moveOnSpam);
-      NS_ENSURE_SUCCESS(rv, rv);
-
+      PRBool moveOnSpam;
+      (void)spamSettings->GetMoveOnSpam(&moveOnSpam);
       if (moveOnSpam)
       {
         rv = spamSettings->GetSpamFolderURI(getter_Copies(spamFolderURI));

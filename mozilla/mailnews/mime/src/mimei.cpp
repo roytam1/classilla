@@ -1839,13 +1839,16 @@ MimeObject_output_init(MimeObject *obj, const char *content_type)
 char *
 mime_get_base_url(const char *url)
 {
-  const char *s;
-  char *result;
-  
-  if (!url) return 0;
-  s = PL_strrchr(url, '?');
-  result = (char *) PR_MALLOC(strlen(url)+ 1);
+  if (!url)
+    return nsnull;
+
+  const char *s = strrchr(url, '?');
+  char *result = (char *) PR_MALLOC(strlen(url) + 1);
+  NS_ASSERTION(result, "out of memory");
+  if (!result)
+    return nsnull;
+
   memcpy(result, url, s - url);
-  result [s - url] = 0;
+  result[s - url] = 0;
   return result;
 }

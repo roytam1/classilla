@@ -32,7 +32,7 @@
  */
 
 #ifdef DEBUG
-static const char CVS_ID[] = "@(#) $RCSfile: dev3hack.c,v $ $Revision: 1.17 $ $Date: 2002/05/30 02:08:07 $ $Name: MOZILLA_1_3_1_RELEASE $";
+static const char CVS_ID[] = "@(#) $RCSfile: dev3hack.c,v $ $Revision: 1.17.12.1 $ $Date: 2003/05/14 00:12:19 $ $Name:  $";
 #endif /* DEBUG */
 
 #ifndef NSS_3_4_CODE
@@ -67,6 +67,7 @@ nssSession_ImportNSS3Session(NSSArena *arenaOpt,
     rvSession = nss_ZNEW(arenaOpt, nssSession);
     rvSession->handle = session;
     rvSession->lock = lock;
+    rvSession->ownLock = PR_FALSE;
     rvSession->isRW = rw;
     return rvSession;
 }
@@ -92,6 +93,23 @@ nssSlot_CreateSession
 	}
 	rvSession->isRW = PR_TRUE;
 	rvSession->slot = slot;
+        /*
+         * The session doesn't need its own lock.  Here's why.
+         * 1. If we are reusing the default RW session of the slot,
+         *    the slot lock is already locked to protect the session.
+         * 2. If the module is not thread safe, the slot (or rather
+         *    module) lock is already locked.
+         * 3. If the module is thread safe and we are using a new
+         *    session, no higher-level lock has been locked and we
+         *    would need a lock for the new session.  However, the
+         *    NSS_3_4_CODE usage of the session is that it is always
+         *    used and destroyed within the same function and never
+         *    shared with another thread.
+         * So the session is either already protected by another
+         * lock or only used by one thread.
+         */
+        rvSession->lock = NULL;
+        rvSession->ownLock = PR_FALSE;
 	return rvSession;
     } else {
 	return NULL;
@@ -136,6 +154,7 @@ nssSlot_CreateFromPK11SlotInfo(NSSTrustDomain *td, PK11SlotInfo *nss3slot)
     rvSlot->slotID = nss3slot->slotID;
     /* Grab the slot name from the PKCS#11 fixed-length buffer */
     rvSlot->base.name = nssUTF8_Duplicate(nss3slot->slot_name,td->arena);
+    rvSlot->lock = (nss3slot->isThreadSafe) ? NULL : nss3slot->sessionLock;
     return rvSlot;
 }
 

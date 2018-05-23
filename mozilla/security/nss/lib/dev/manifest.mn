@@ -30,7 +30,7 @@
 # may use your version of this file under either the MPL or the
 # GPL.
 #
-MANIFEST_CVS_ID = "@(#) $RCSfile: manifest.mn,v $ $Revision: 1.9 $ $Date: 2002/09/06 16:38:04 $ $Name: MOZILLA_1_3_1_RELEASE $"
+MANIFEST_CVS_ID = "@(#) $RCSfile: manifest.mn,v $ $Revision: 1.9 $ $Date: 2002/09/06 16:38:04 $ $Name:  $"
 
 CORE_DEPTH = ../../..
 

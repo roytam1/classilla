@@ -304,6 +304,13 @@ function goUpdatePasteMenuItems()
   goUpdateCommand('cmd_paste');
 }
 
+// update Find As You Type menu items, they rely on focus
+function goUpdateFindTypeMenuItems()
+{
+  goUpdateCommand('cmd_findTypeText');
+  goUpdateCommand('cmd_findTypeLinks');
+}
+
 // function that extracts the filename from a url
 function extractFileNameFromUrl(urlstr)
 {
@@ -386,15 +393,9 @@ function utilityOnLoad(aEvent)
   var observerService = Components.classes[kObserverServiceProgID]
 		          .getService(Components.interfaces.nsIObserverService);
 
-  // crude way to prevent registering twice.
-  try {
-    observerService.removeObserver(offlineObserver, "network:offline-status-changed");
-  }
-  catch (ex) {
-  }
   observerService.addObserver(offlineObserver, "network:offline-status-changed", false);
   // make sure we remove this observer later
-  addEventListener("unload",utilityOnUnload,false);
+  addEventListener("unload", utilityOnUnload, false);
 
   // set the initial state
   var ioService = Components.classes[kIOServiceProgID]
@@ -409,4 +410,4 @@ function utilityOnUnload(aEvent)
   observerService.removeObserver(offlineObserver, "network:offline-status-changed");
 }
 
-addEventListener("load",utilityOnLoad,true);
+addEventListener("load", utilityOnLoad, false);

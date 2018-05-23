@@ -35,7 +35,7 @@
 #define PKIT_H
 
 #ifdef DEBUG
-static const char PKIT_CVS_ID[] = "@(#) $RCSfile: pkit.h,v $ $Revision: 1.13 $ $Date: 2002/04/18 17:30:04 $ $Name: MOZILLA_1_3_1_RELEASE $";
+static const char PKIT_CVS_ID[] = "@(#) $RCSfile: pkit.h,v $ $Revision: 1.13 $ $Date: 2002/04/18 17:30:04 $ $Name:  $";
 #endif /* DEBUG */
 
 /*

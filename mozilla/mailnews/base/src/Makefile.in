@@ -103,10 +103,15 @@ CPPSRCS		= \
 		nsMsgSearchDBView.cpp \
 		nsMsgOfflineManager.cpp \
 		nsMsgProgress.cpp \
-	  nsMessengerContentHandler.cpp \
+		nsMessengerContentHandler.cpp \
 		nsSpamSettings.cpp \
 		nsCidProtocolHandler.cpp \
 		$(NULL)
+
+# MacOSX requires the MoreFiles module
+ifneq (,$(filter cocoa mac, $(MOZ_WIDGET_TOOLKIT)))
+REQUIRES += macmorefiles
+endif
 
 ifeq ($(OS_ARCH),WINNT)
 CPPSRCS		+= nsMessengerWinIntegration.cpp 
@@ -141,7 +146,7 @@ EXPORTS		= \
 		nsMsgPrintEngine.h \
 		nsStatusBarBiffManager.h \
 		nsMsgProgress.h \
-	  nsMessengerContentHandler.h \
+		nsMessengerContentHandler.h \
 		$(NULL)
 
 # we don't want the shared lib, but we want to force the creation of a static lib.

@@ -41,14 +41,13 @@
       <hbox id="searchterms"/>
       <listbox flex="1" id="searchTermList">
         <listcols>
-          // see bug #183994 for why these cells are hidden
-          <listcol flex="&searchTermListSpace1FlexValue;" hidden="true"/>
+          <listcol flex="&searchTermListSpace1FlexValue;"/>
           <listcol flex="&searchTermListAttributesFlexValue;"/>
-          <listcol flex="&searchTermListSpace2FlexValue;" hidden="true"/>
+          <listcol flex="&searchTermListSpace2FlexValue;"/>
           <listcol flex="&searchTermListOperatorsFlexValue;"/>
-          <listcol flex="&searchTermListSpace3FlexValue;" hidden="true"/>
+          <listcol flex="&searchTermListSpace3FlexValue;"/>
           <listcol flex="&searchTermListValueFlexValue;"/>
-          <listcol flex="&searchTermListSpace4FlexValue;" hidden="true"/>
+          <listcol flex="&searchTermListSpace4FlexValue;"/>
         </listcols>
 
         <!-- this is what the listitems will look like:

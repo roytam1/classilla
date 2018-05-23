@@ -32,7 +32,7 @@
  */
 
 #ifdef DEBUG
-static const char CVS_ID[] = "@(#) $RCSfile: pkistore.c,v $ $Revision: 1.21.2.1 $ $Date: 2003/01/09 02:05:09 $ $Name: MOZILLA_1_3_1_RELEASE $";
+static const char CVS_ID[] = "@(#) $RCSfile: pkistore.c,v $ $Revision: 1.21.2.1 $ $Date: 2003/01/09 02:05:09 $ $Name:  $";
 #endif /* DEBUG */
 
 #ifndef PKIM_H

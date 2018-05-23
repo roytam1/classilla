@@ -147,6 +147,8 @@ public:
 
 	NS_IMETHOD UpdateSummaryTotals(PRBool force) ;
 
+  NS_IMETHOD  GetManyHeadersToDownload(PRBool *retval);
+
 	NS_IMETHOD GetDeletable (PRBool *deletable); 
   NS_IMETHOD GetRequiresCleanup(PRBool *requiresCleanup);
 	NS_IMETHOD GetSizeOnDisk(PRUint32* size);
@@ -216,6 +218,7 @@ protected:
 	virtual const char* GetIncomingServerType();
   nsresult InitCopyState(nsISupports* aSupport, nsISupportsArray* messages,
                          PRBool isMove, nsIMsgCopyServiceListener* listener, nsIMsgWindow *msgWindow, PRBool isMoveFolder, PRBool allowUndo);
+	void CopyPropertiesToMsgHdr(nsIMsgDBHdr *destHdr, nsIMsgDBHdr *srcHdr);
   nsresult OnCopyCompleted(nsISupports *srcSupport, PRBool moveCopySucceeded);
 	virtual nsresult CreateBaseMessageURI(const char *aURI);
   virtual nsresult SpamFilterClassifyMessage(const char *aURI, nsIMsgWindow *aMsgWindow, nsIJunkMailPlugin *aJunkMailPlugin);

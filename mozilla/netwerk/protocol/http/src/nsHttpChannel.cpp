@@ -187,12 +187,8 @@ nsHttpChannel::Init(nsIURI *uri,
         AddStandardRequestHeaders(&mRequestHead.Headers(), caps,
                                   !mConnectionInfo->UsingSSL() &&
                                   mConnectionInfo->UsingHttpProxy());
-    if (NS_FAILED(rv)) return rv;
 
-    // check to see if authorization headers should be included
-    AddAuthorizationHeaders();
-
-    return NS_OK;
+    return rv;
 }
 
 //-----------------------------------------------------------------------------
@@ -311,6 +307,9 @@ nsHttpChannel::Connect(PRBool firstTime)
             return NS_ERROR_DOCUMENT_NOT_CACHED;
         }
     }
+
+    // check to see if authorization headers should be included
+    AddAuthorizationHeaders();
 
     // hit the net...
     rv = SetupTransaction();
@@ -728,6 +727,58 @@ nsHttpChannel::ProcessNormal()
     // install cache listener if we still have a cache entry open
     if (mCacheEntry)
         rv = InstallCacheListener();
+
+    return rv;
+}
+
+nsresult
+nsHttpChannel::GetCallback(const nsIID &aIID, void **aResult)
+{
+    nsresult rv;
+    NS_ASSERTION(aResult, "Invalid argument in GetCallback!");
+    *aResult = nsnull;
+    NS_ENSURE_TRUE(mCallbacks, NS_ERROR_NOT_INITIALIZED);
+    rv = mCallbacks->GetInterface(aIID, aResult);
+    if (NS_FAILED(rv)) {
+        if (mLoadGroup) {
+            nsCOMPtr<nsIInterfaceRequestor> cbs;
+            rv = mLoadGroup->GetNotificationCallbacks(getter_AddRefs(cbs));
+            if (NS_SUCCEEDED(rv))
+                rv = cbs->GetInterface(aIID, aResult);
+        }
+    }
+
+    // defend against bad nsIInterfaceRequestor implementations.
+    if (NS_SUCCEEDED(rv) && !*aResult)
+        return NS_ERROR_NO_INTERFACE;
+
+    return rv;
+}
+
+nsresult
+nsHttpChannel::PromptTempRedirect()
+{
+    nsresult rv;
+    nsCOMPtr<nsIStringBundleService> bundleService =
+            do_GetService(NS_STRINGBUNDLE_CONTRACTID, &rv);
+    if (NS_FAILED(rv)) return rv;
+
+    nsCOMPtr<nsIStringBundle> stringBundle;
+    rv = bundleService->CreateBundle(NECKO_MSGS_URL, getter_AddRefs(stringBundle));
+    if (NS_FAILED(rv)) return rv;
+
+    nsXPIDLString messageString;
+    rv = stringBundle->GetStringFromName(NS_LITERAL_STRING("RepostFormData").get(), getter_Copies(messageString));
+    //GetStringFromName can return NS_OK and NULL messageString.
+    if (NS_SUCCEEDED(rv) && messageString) {
+        PRBool repost = PR_FALSE;
+        nsCOMPtr<nsIPrompt> prompt;
+        rv = GetCallback(NS_GET_IID(nsIPrompt), getter_AddRefs(prompt));
+        if (NS_FAILED(rv)) return rv;
+        prompt->Confirm(nsnull, messageString, &repost);
+        if (!repost)
+            return NS_ERROR_FAILURE;
+    }
 
     return rv;
 }
@@ -1556,6 +1607,32 @@ nsHttpChannel::ProcessRedirection(PRUint32 redirectType)
 
     nsCOMPtr<nsIHttpChannel> httpChannel = do_QueryInterface(newChannel);
     if (httpChannel) {
+        if (redirectType == 307 && mUploadStream) {
+            //307 is Temporary Redirect response. Redirect the postdata to the new URI.
+            rv = PromptTempRedirect();
+            if (NS_FAILED(rv)) return rv;
+
+            nsCOMPtr<nsISeekableStream> seekable = do_QueryInterface(mUploadStream, &rv);
+            if (NS_FAILED(rv)) return rv;
+            rv = seekable->Seek(nsISeekableStream::NS_SEEK_SET, 0);
+            if (NS_FAILED(rv)) return rv;
+
+            nsCOMPtr<nsIUploadChannel> uploadChannel = do_QueryInterface(httpChannel, &rv);
+            if (NS_FAILED(rv)) return rv;
+                
+            if (mUploadStreamHasHeaders)
+                uploadChannel->SetUploadStream(mUploadStream, NS_LITERAL_CSTRING(""), -1);
+            else {
+                const char *ctype;
+                ctype = mRequestHead.PeekHeader(nsHttp::Content_Type);
+                const char *clength;
+                clength = mRequestHead.PeekHeader(nsHttp::Content_Length);
+                uploadChannel->SetUploadStream(mUploadStream, nsDependentCString(ctype), atoi(clength));
+            }
+
+            httpChannel->SetRequestMethod(nsDependentCString(mRequestHead.Method()));
+        }
+
         nsCOMPtr<nsIHttpChannelInternal> httpInternal = do_QueryInterface(newChannel);
         NS_ENSURE_TRUE(httpInternal, NS_ERROR_UNEXPECTED);
 
@@ -1594,12 +1671,8 @@ nsHttpChannel::ProcessRedirection(PRUint32 redirectType)
     rv = newChannel->AsyncOpen(mListener, mListenerContext);
     if (NS_FAILED(rv)) return rv;
 
-    // set redirect status
-    mStatus = NS_BINDING_REDIRECTED;
-
-    // close down this transaction (null if processing a cached redirect)
-    if (mTransaction)
-        gHttpHandler->CancelTransaction(mTransaction, NS_BINDING_REDIRECTED);
+    // close down this channel
+    Cancel(NS_BINDING_REDIRECTED);
     
     // disconnect from our listener
     mListener = 0;
@@ -1929,21 +2002,9 @@ nsHttpChannel::PromptForUserPass(const char *host,
     LOG(("nsHttpChannel::PromptForUserPass [this=%x realm=%s]\n", this, realm));
 
     nsresult rv;
-    nsCOMPtr<nsIAuthPrompt> authPrompt(do_GetInterface(mCallbacks, &rv)); 
-    if (NS_FAILED(rv)) {
-        // Ok, perhaps the loadgroup's notification callbacks provide an auth prompt...
-        if (mLoadGroup) {
-            nsCOMPtr<nsIInterfaceRequestor> cbs;
-            rv = mLoadGroup->GetNotificationCallbacks(getter_AddRefs(cbs));
-            if (NS_SUCCEEDED(rv))
-                authPrompt = do_GetInterface(cbs, &rv);
-        }
-        if (NS_FAILED(rv)) {
-            // Unable to prompt -- return
-            NS_WARNING("notification callbacks should provide nsIAuthPrompt");
-            return rv;
-        }
-    }
+    nsCOMPtr<nsIAuthPrompt> authPrompt;
+    rv = GetCallback(NS_GET_IID(nsIAuthPrompt), getter_AddRefs(authPrompt));
+    if (NS_FAILED(rv)) return rv;
 
     // construct the domain string
     // we always add the port to domain since it is used
@@ -2035,11 +2096,12 @@ nsHttpChannel::SetAuthorizationHeader(nsHttpAuthCache *authCache,
     if (NS_SUCCEEDED(rv)) {
         nsXPIDLCString temp;
         const char *creds = entry->Creds();
-        if (!creds) {
+        const char *challenge = entry->Challenge();
+        if (!creds && challenge) {
             nsCAutoString foo;
-            rv = SelectChallenge(entry->Challenge(), foo, getter_AddRefs(auth));
+            rv = SelectChallenge(challenge, foo, getter_AddRefs(auth));
             if (NS_SUCCEEDED(rv)) {
-                rv = auth->GenerateCredentials(this, entry->Challenge(),
+                rv = auth->GenerateCredentials(this, challenge,
                                                entry->User(), entry->Pass(),
                                                entry->MetaData(),
                                                getter_Copies(temp));
@@ -2821,7 +2883,7 @@ nsHttpChannel::GetRedirectionLimit(PRUint32 *value)
 NS_IMETHODIMP
 nsHttpChannel::SetRedirectionLimit(PRUint32 value)
 {
-    mRedirectionLimit = CLAMP(value, 0, 0xff);
+    mRedirectionLimit = PR_MIN(value, 0xff);
     return NS_OK;
 }
 
@@ -3017,7 +3079,7 @@ nsHttpChannel::OnDataAvailable(nsIRequest *request, nsISupports *ctxt,
         return rv;
     }
 
-    return NS_BASE_STREAM_CLOSED;
+    return NS_ERROR_ABORT;
 }
 
 //-----------------------------------------------------------------------------
@@ -3028,8 +3090,8 @@ NS_IMETHODIMP
 nsHttpChannel::OnTransportStatus(nsITransport *trans, nsresult status,
                                  PRUint32 progress, PRUint32 progressMax)
 {
-    // block socket status event after OnStopRequest has been fired.
-    if (mProgressSink && mIsPending && !(mLoadFlags & LOAD_BACKGROUND)) {
+    // block socket status event after Cancel or OnStopRequest has been called.
+    if (mProgressSink && NS_SUCCEEDED(mStatus) && mIsPending && !(mLoadFlags & LOAD_BACKGROUND)) {
         LOG(("sending status notification [this=%x status=%x progress=%u/%u]\n",
             this, status, progress, progressMax));
 

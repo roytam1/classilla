@@ -396,6 +396,10 @@ PluginViewerImpl::CreatePlugin(nsIRequest* request, nsIPluginHost* aHost, const 
     channel->GetContentType(ct);
     if (NS_FAILED(rv)) return rv;
     rv = aHost->InstantiateFullPagePlugin(ct.get(), str, aResult, mOwner);
+
+    if (NS_SUCCEEDED(rv)) {
+      NS_STATIC_CAST(nsPluginNativeWindow*, win)->SetPluginWidget(mWindow);
+    }
   }
 
   return rv;
@@ -496,6 +500,9 @@ PluginViewerImpl::Destroy(void)
         window ? window->CallSetWindow(nullinst) : inst->SetWindow(nsnull);
         inst->Stop();
       }
+
+      if (window)
+        window->SetPluginWidget(nsnull);
     }
   }
   return NS_OK;

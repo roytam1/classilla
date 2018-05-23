@@ -48,6 +48,10 @@
 #include "nsIMsgFolder.h"
 #include "nsMsgUtils.h"
 #include "nsMsgFolderFlags.h"
+#include "nsImapCore.h"
+#include "nsIImapIncomingServer.h"
+#include "nsIRDFService.h"
+#include "nsIRDFResource.h"
 
 nsSpamSettings::nsSpamSettings()
 {
@@ -58,6 +62,8 @@ nsSpamSettings::nsSpamSettings()
   mPurgeInterval = 14; // 14 days
   mUseWhiteList = PR_FALSE;
   mLoggingEnabled = PR_FALSE;
+  mManualMark = PR_FALSE;
+  mManualMarkMode = nsISpamSettings::MANUAL_MARK_MODE_MOVE;
 }
 
 nsSpamSettings::~nsSpamSettings()
@@ -91,8 +97,23 @@ nsSpamSettings::GetMoveTargetMode(PRInt32 *aMoveTargetMode)
 
 NS_IMETHODIMP nsSpamSettings::SetMoveTargetMode(PRInt32 aMoveTargetMode)
 {
-  NS_ASSERTION((aMoveTargetMode == 0 || aMoveTargetMode == 1), "bad mode");
+  NS_ASSERTION((aMoveTargetMode == nsISpamSettings::MOVE_TARGET_MODE_FOLDER || aMoveTargetMode == nsISpamSettings::MOVE_TARGET_MODE_ACCOUNT), "bad move target mode");
   mMoveTargetMode = aMoveTargetMode;
+  return NS_OK;
+}
+
+NS_IMETHODIMP 
+nsSpamSettings::GetManualMarkMode(PRInt32 *aManualMarkMode)
+{
+  NS_ENSURE_ARG_POINTER(aManualMarkMode);
+  *aManualMarkMode = mManualMarkMode;
+  return NS_OK;
+}
+
+NS_IMETHODIMP nsSpamSettings::SetManualMarkMode(PRInt32 aManualMarkMode)
+{ 
+  NS_ASSERTION((aManualMarkMode == nsISpamSettings::MANUAL_MARK_MODE_MOVE || aManualMarkMode == nsISpamSettings::MANUAL_MARK_MODE_DELETE), "bad manual mark mode");
+  mManualMarkMode = aManualMarkMode;
   return NS_OK;
 }
 
@@ -100,7 +121,7 @@ NS_IMPL_GETSET(nsSpamSettings, LoggingEnabled, PRBool, mLoggingEnabled);
 NS_IMPL_GETSET(nsSpamSettings, MoveOnSpam, PRBool, mMoveOnSpam);
 NS_IMPL_GETSET(nsSpamSettings, Purge, PRBool, mPurge);
 NS_IMPL_GETSET(nsSpamSettings, UseWhiteList, PRBool, mUseWhiteList);
-
+NS_IMPL_GETSET(nsSpamSettings, ManualMark, PRBool, mManualMark);
 
 NS_IMETHODIMP nsSpamSettings::GetWhiteListAbURI(char * *aWhiteListAbURI)
 {
@@ -323,11 +344,10 @@ NS_IMETHODIMP nsSpamSettings::Clone(nsISpamSettings *aSpamSettings)
   nsresult rv = aSpamSettings->GetUseWhiteList(&mUseWhiteList); 
   NS_ENSURE_SUCCESS(rv,rv);
 
-  rv = aSpamSettings->GetMoveOnSpam(&mMoveOnSpam); 
-  NS_ENSURE_SUCCESS(rv,rv);
-
-  rv = aSpamSettings->GetPurge(&mPurge); 
-  NS_ENSURE_SUCCESS(rv,rv);
+  (void)aSpamSettings->GetMoveOnSpam(&mMoveOnSpam);
+  (void)aSpamSettings->GetManualMark(&mManualMark); 
+  (void)aSpamSettings->GetManualMarkMode(&mManualMarkMode); 
+  (void)aSpamSettings->GetPurge(&mPurge); 
 
   rv = aSpamSettings->GetPurgeInterval(&mPurgeInterval); 
   NS_ENSURE_SUCCESS(rv,rv);
@@ -367,14 +387,50 @@ NS_IMETHODIMP nsSpamSettings::GetSpamFolderURI(char **aSpamFolderURI)
   if (mMoveTargetMode == nsISpamSettings::MOVE_TARGET_MODE_FOLDER)
     return GetActionTargetFolder(aSpamFolderURI);
 
-  // if the mode is MOVE_TARGET_MODE_ACCOUNT
+  // if the mode is nsISpamSettings::MOVE_TARGET_MODE_ACCOUNT
   // the spam folder URI = account uri + "/Junk"
   nsXPIDLCString folderURI;
   nsresult rv = GetActionTargetAccount(getter_Copies(folderURI));
   NS_ENSURE_SUCCESS(rv,rv);
 
+  // we might be trying to get the old spam folder uri
+  // in order to clear the flag
+  // if we didn't have one, bail out.
+  if (folderURI.IsEmpty())
+    return NS_OK;
+
+  nsCOMPtr<nsIRDFService> rdf(do_GetService("@mozilla.org/rdf/rdf-service;1", &rv));
+  NS_ENSURE_SUCCESS(rv, rv);
+  
+  nsCOMPtr<nsIRDFResource> folderResource;
+  rv = rdf->GetResource(folderURI, getter_AddRefs(folderResource));
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  nsCOMPtr <nsIMsgFolder> folder = do_QueryInterface(folderResource);
+  if (!folder)
+    return NS_ERROR_UNEXPECTED;
+
+  nsCOMPtr <nsIMsgIncomingServer> server;
+  rv = folder->GetServer(getter_AddRefs(server));
+  NS_ENSURE_SUCCESS(rv,rv);
+
   // see nsMsgFolder::SetPrettyName() for where the pretty name is set.
   folderURI.Append("/Junk");
+  
+  // XXX todo
+  // better not to make base depend in imap
+  // but doing it here, like in nsMsgCopy.cpp
+  // one day, we'll fix this (and nsMsgCopy.cpp) to use GetMsgFolderFromURI()
+  nsCOMPtr<nsIImapIncomingServer> imapServer = do_QueryInterface(server);
+  if (imapServer) {
+    // Make sure an specific IMAP folder has correct personal namespace
+    // see bug #197043
+    nsXPIDLCString folderUriWithNamespace;
+    (void)imapServer->GetUriWithNamespacePrefixIfNecessary(kPersonalNamespace, folderURI.get(), getter_Copies(folderUriWithNamespace));
+    if (!folderUriWithNamespace.IsEmpty())
+      folderURI = folderUriWithNamespace;
+  }
+
   *aSpamFolderURI = ToNewCString(folderURI);
   if (!*aSpamFolderURI)
     return NS_ERROR_OUT_OF_MEMORY;

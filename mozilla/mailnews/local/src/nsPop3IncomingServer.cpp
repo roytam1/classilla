@@ -165,7 +165,16 @@ NS_IMETHODIMP nsPop3IncomingServer::PerformBiff()
         if (NS_SUCCEEDED(rv) && valid)
           rv = pop3Service->GetNewMail(msgWindow, urlListener, inbox, this, nsnull);
         else
-          rv = localInbox->SetCheckForNewMessagesAfterParsing(PR_TRUE);
+        {
+          PRBool isLocked;
+          inbox->GetLocked(&isLocked);
+          if (!isLocked)
+          {
+            rv = localInbox->ParseFolder(msgWindow, urlListener);
+          }
+          if (NS_SUCCEEDED(rv))
+            rv = localInbox->SetCheckForNewMessagesAfterParsing(PR_TRUE);
+        }
       }
     }
     else
@@ -194,7 +203,8 @@ nsPop3IncomingServer::SetFlagsOnDefaultMailboxes()
                                             MSG_FOLDER_FLAG_SENTMAIL |
                                             MSG_FOLDER_FLAG_DRAFTS |
                                             MSG_FOLDER_FLAG_TEMPLATES |
-                                            MSG_FOLDER_FLAG_TRASH);
+                                            MSG_FOLDER_FLAG_TRASH |
+                                            MSG_FOLDER_FLAG_JUNK);
     return NS_OK;
 }
     

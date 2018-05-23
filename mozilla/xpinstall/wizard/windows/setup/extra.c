@@ -704,6 +704,24 @@ HRESULT Initialize(HINSTANCE hInstance)
       }
     }
   }
+  else
+  {
+    // we're not running in mmi mode (allow multiple instances of installer
+    // to run at the same time), we should look for and remove the dirs
+    // that are created in the mmi mode.
+    DWORD dwLen;
+    char tempDirToCleanup[MAX_BUF];
+    int i = 1;
+
+    lstrcpy(tempDirToCleanup, szTempDir);
+    dwLen = lstrlen(tempDirToCleanup);
+    itoa(i, (tempDirToCleanup + dwLen), 10);
+    for(i = 2; i <= 100 && (FileExists(tempDirToCleanup)); i++)
+    {
+      DirectoryRemove(tempDirToCleanup, TRUE);
+      itoa(i, (tempDirToCleanup + dwLen), 10);
+    }
+  }
 
   if(!FileExists(szTempDir))
   {
@@ -6676,6 +6694,12 @@ HRESULT ParseConfigIni(LPSTR lpszCmdLine)
   /* check the windows registry to see if a previous instance of setup finished downloading
    * all the required archives. */
   dwPreviousUnfinishedState = GetPreviousUnfinishedState();
+
+  // Delete archives from the previous state *if* the user did not cancel
+  // out of the download state.
+  if(dwPreviousUnfinishedState == PUS_NONE)
+    DeleteArchives(DA_ONLY_IF_NOT_IN_ARCHIVES_LST);
+
   gbPreviousUnfinishedDownload = dwPreviousUnfinishedState == PUS_DOWNLOAD;
   if(gbPreviousUnfinishedDownload)
   {
@@ -7266,7 +7290,7 @@ HRESULT DecryptVariable(LPSTR szVariable, DWORD dwVariableSize)
   }
   else if(lstrcmpi(szVariable, "WIZTEMP") == 0)
   {
-    /* parse for the "c:\Temp" path */
+    /* parse for the "c:\Temp\ns_temp" path */
     lstrcpy(szVariable, szTempDir);
     if(szVariable[strlen(szVariable) - 1] == '\\')
       szVariable[strlen(szVariable) - 1] = '\0';

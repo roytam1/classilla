@@ -863,8 +863,10 @@ nsWindow::nsWindow() : nsBaseWidget()
     mIMECompClauseString = NULL;
     mIMECompClauseStringSize = 0;
     mIMECompClauseStringLength = 0;
+    mIMECursorPosition = 0;
     mIMEReconvertUnicode = NULL;
     mLeadByte = '\0';
+    mBlurEventSuppressionLevel = 0;
     mIMECompCharPos = nsnull;
 
   static BOOL gbInitGlobalValue = FALSE;
@@ -956,7 +958,6 @@ nsWindow::~nsWindow()
     nsMemory::Free(mIMEReconvertUnicode);
 
   NS_IF_RELEASE(mNativeDragTarget);
-
 }
 
 
@@ -1094,6 +1095,35 @@ void nsWindow::InitEvent(nsGUIEvent& event, PRUint32 aEventType, nsPoint* aPoint
     mLastPoint.y = event.point.y;
 }
 
+/* In some circumstances (opening dependent windows) it makes more sense
+   (and fixes a crash bug) to not blur the parent window. */
+void nsWindow::SuppressBlurEvents(PRBool aSuppress)
+{
+  if (aSuppress)
+    ++mBlurEventSuppressionLevel; // for this widget
+  else {
+    NS_ASSERTION(mBlurEventSuppressionLevel > 0, "unbalanced blur event suppression");
+    if (mBlurEventSuppressionLevel > 0)
+      --mBlurEventSuppressionLevel;
+  }
+}
+
+PRBool nsWindow::BlurEventsSuppressed()
+{
+  // are they suppressed in this window?
+  if (mBlurEventSuppressionLevel > 0)
+    return PR_TRUE;
+
+  // are they suppressed by any container widget?
+  HWND parentWnd = ::GetParent(mWnd);
+  if (parentWnd) {
+    nsWindow *parent = GetNSWindowPtr(parentWnd);
+    if (parent)
+      return parent->BlurEventsSuppressed();
+  }
+  return PR_FALSE;
+}
+
 //-------------------------------------------------------------------------
 //
 // Invokes callback and  ProcessEvent method on Event Listener object
@@ -1111,7 +1141,12 @@ NS_IMETHODIMP nsWindow::DispatchEvent(nsGUIEvent* event, nsEventStatus & aStatus
 #endif // NS_DEBUG
 
   aStatus = nsEventStatus_eIgnore;
- 
+
+  // skip processing of suppressed blur events
+  if ((event->message == NS_DEACTIVATE || event->message == NS_LOSTFOCUS) &&
+      BlurEventsSuppressed())
+    return NS_OK;
+
   if (nsnull != mEventCallback) {
     aStatus = (*mEventCallback)(event);
   }
@@ -5713,13 +5748,13 @@ NS_METHOD nsWindow::SetIcon(const nsAString& anIconSpec)
                                        IMAGE_ICON,
                                        ::GetSystemMetrics(SM_CXICON),
                                        ::GetSystemMetrics(SM_CYICON),
-                                       LR_LOADFROMFILE | LR_SHARED );
+                                       LR_LOADFROMFILE );
   HICON smallIcon = (HICON)::LoadImageW( NULL,
                                          (LPCWSTR)iconPath.get(),
                                          IMAGE_ICON,
                                          ::GetSystemMetrics(SM_CXSMICON),
                                          ::GetSystemMetrics(SM_CYSMICON),
-                                         LR_LOADFROMFILE | LR_SHARED );
+                                         LR_LOADFROMFILE );
 
   // See if unicode API not implemented and if not, try ascii version
   if ( ::GetLastError() == ERROR_CALL_NOT_IMPLEMENTED ) {

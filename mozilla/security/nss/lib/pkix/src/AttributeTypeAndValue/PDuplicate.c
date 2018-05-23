@@ -32,7 +32,7 @@
  */
 
 #ifdef DEBUG
-static const char CVS_ID[] = "@(#) $Source: /cvsroot/mozilla/security/nss/lib/pkix/src/AttributeTypeAndValue/PDuplicate.c,v $ $Revision: 1.1 $ $Date: 2000/03/31 19:13:27 $ $Name: MOZILLA_1_3_1_RELEASE $";
+static const char CVS_ID[] = "@(#) $Source: /home/kai/cvsmo/data/mozilla/security/nss/lib/pkix/src/AttributeTypeAndValue/PDuplicate.c,v $ $Revision: 1.1 $ $Date: 2000/03/31 19:13:27 $ $Name:  $";
 #endif /* DEBUG */
 
 #ifndef PKIX_H

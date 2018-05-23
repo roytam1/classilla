@@ -335,7 +335,7 @@ GenerateAttachmentData(MimeObject *object, const char *aMessageURL, MimeDisplayO
       no_part_url = mime_get_base_url(aMessageURL);
     if (no_part_url) {
       urlSpec = mime_set_url_part(no_part_url, part.get(), PR_TRUE);
-      PR_FREEIF(no_part_url);
+      PR_Free(no_part_url);
     }
     else
       urlSpec = mime_set_url_part(aMessageURL, part.get(), PR_TRUE);
@@ -1587,8 +1587,8 @@ mime_bridge_create_display_stream(
   }
  
   if (msd->options->headers == MimeHeadersMicro &&
-     (msd->url_name == NULL || (nsCRT::strncmp(msd->url_name, "news:", 5) != 0 &&
-              nsCRT::strncmp(msd->url_name, "snews:", 6) != 0)) )
+     (msd->url_name == NULL || (strncmp(msd->url_name, "news:", 5) != 0 &&
+              strncmp(msd->url_name, "snews:", 6) != 0)) )
     msd->options->headers = MimeHeadersMicroPlus;
 
   msd->options->url = msd->url_name;

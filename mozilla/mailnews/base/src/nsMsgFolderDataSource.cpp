@@ -879,14 +879,12 @@ nsMsgFolderDataSource::OnItemIntPropertyChanged(nsISupports *item,
 	nsCOMPtr<nsIMsgFolder> folder = do_QueryInterface(item);
 	if(folder)
 	{
-
-		if (kTotalMessagesAtom == property)
-			OnTotalMessagePropertyChanged(folder, oldValue, newValue);
-		else if (kTotalUnreadMessagesAtom == property)
-			OnUnreadMessagePropertyChanged(folder, oldValue, newValue);
-                else if (kFolderSizeAtom == property)
-			OnFolderSizePropertyChanged(folder, oldValue, newValue);
-
+    if (kTotalMessagesAtom == property)
+      OnTotalMessagePropertyChanged(folder, oldValue, newValue);
+    else if (kTotalUnreadMessagesAtom == property)
+      OnUnreadMessagePropertyChanged(folder, oldValue, newValue);
+    else if (kFolderSizeAtom == property)
+      OnFolderSizePropertyChanged(folder, oldValue, newValue);
 	}
 	return NS_OK;
 }
@@ -2213,7 +2211,6 @@ nsresult nsMsgFolderDataSource::DoFolderHasAssertion(nsIMsgFolder *folder,
            (kNC_Charset == property) ||
            (kNC_BiffState == property) ||
            (kNC_HasUnreadMessages == property) ||
-           (kNC_NoSelect == property)  ||
            (kNC_NoSelect == property)  ||
            (kNC_Synchronize == property) ||
            (kNC_SyncDisabled == property) ||

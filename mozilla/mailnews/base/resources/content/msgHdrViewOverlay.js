@@ -568,11 +568,11 @@ function UpdateMessageHeaders()
     if (headerName == "subject")
     {
       try {
-        if (gLoadCustomMessage)
+        if (gDBView.keyForFirstSelectedMessage == nsMsgKey_None)
         {
           var folder = null;
           if (gCurrentFolderUri)
-	    folder = RDF.GetResource(gCurrentFolderUri).QueryInterface(Components.interfaces.nsIMsgFolder);
+            folder = RDF.GetResource(gCurrentFolderUri).QueryInterface(Components.interfaces.nsIMsgFolder);
           setTitleFromFolder(folder, headerField.headerValue);
         }
       } catch (ex) {}

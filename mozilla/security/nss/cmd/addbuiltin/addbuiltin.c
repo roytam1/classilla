@@ -194,7 +194,7 @@ printheader() {
      "# may use your version of this file under either the MPL or the\n"
      "# GPL.\n"
      "#\n"
-     "CVS_ID \"@(#) $RCSfile: addbuiltin.c,v $ $Revision: 1.5 $ $Date: 2002/10/30 17:22:06 $ $Name: MOZILLA_1_3_1_RELEASE $\"\n"
+     "CVS_ID \"@(#) $RCSfile: addbuiltin.c,v $ $Revision: 1.5 $ $Date: 2002/10/30 17:22:06 $ $Name:  $\"\n"
      "\n"
      "#\n"
      "# certdata.txt\n"

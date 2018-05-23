@@ -35,7 +35,7 @@
 #define NSSDEVT_H
 
 #ifdef DEBUG
-static const char NSSDEVT_CVS_ID[] = "@(#) $RCSfile: nssdevt.h,v $ $Revision: 1.3 $ $Date: 2001/11/28 16:23:39 $ $Name: MOZILLA_1_3_1_RELEASE $";
+static const char NSSDEVT_CVS_ID[] = "@(#) $RCSfile: nssdevt.h,v $ $Revision: 1.3 $ $Date: 2001/11/28 16:23:39 $ $Name:  $";
 #endif /* DEBUG */
 
 /*

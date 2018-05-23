@@ -4378,8 +4378,9 @@ nsTextFrame::PeekOffset(nsIPresContext* aPresContext, nsPeekOffsetStruct *aPos)
                           ? mContentOffset + mContentLength : -1;
 #endif // IBMBIDI
                   }
-                  keepSearching = PR_FALSE;
-                  found = PR_TRUE;
+                  keepSearching = (mContentOffset + mContentLength) <= aPos->mContentOffset;
+                  if (!keepSearching)
+                    found = PR_TRUE;
                 }
                 else  //we just need to jump the space, done here
                 {
@@ -4400,13 +4401,15 @@ nsTextFrame::PeekOffset(nsIPresContext* aPresContext, nsPeekOffsetStruct *aPos)
               wordLen = (mState & NS_FRAME_IS_BIDI) ? mContentOffset + mContentLength : -1;
 #endif // IBMBIDI
                   }
-                  keepSearching = PR_FALSE;
-                  found = PR_TRUE;
+                  keepSearching = (mContentOffset + mContentLength) <= aPos->mContentOffset;
+                  if (!keepSearching)
+                    found = PR_TRUE;
                 }
               } // if we should eat space to the next word
               else {
-                keepSearching = PR_FALSE;
-                found = PR_TRUE;
+                keepSearching = (mContentOffset + mContentLength) <= aPos->mContentOffset;
+                if (!keepSearching)
+                  found = PR_TRUE;
               }
             }
             else if (aPos->mEatingWS)
@@ -4774,6 +4777,13 @@ nsTextFrame::MeasureText(nsIPresContext*          aPresContext,
   PRBool  justDidFirstLetter = PR_FALSE;
   nsTextDimensions dimensions, lastWordDimensions;
   PRBool  measureTextRuns = PR_FALSE;
+
+  if (contentLength == 0) {
+    aTextData.mX = 0;
+    aTextData.mAscent = 0;
+    aTextData.mDescent = 0;
+    return NS_FRAME_COMPLETE;
+  }
 #if defined(_WIN32) || defined(XP_OS2) || defined(MOZ_X11)
   // see if we have implementation for GetTextDimensions()
   PRUint32 hints = 0;
@@ -4845,6 +4855,9 @@ nsTextFrame::MeasureText(nsIPresContext*          aPresContext,
     wordLen = start;
 #endif // IBMBIDI
 
+    bp2 = aTx.GetNextWord(aTextData.mInWord, &wordLen, &contentLen, &isWhitespace,
+                          &wasTransformed, textRun.mNumSegments == 0);
+
     // We need to set aTextData.mCanBreakBefore to true after 1st word. But we can't set 
     // aTextData.mCanBreakBefore without seeing the 2nd word. That's because this frame 
     // may only contain part of one word, the other part is in next frame. 
@@ -4853,8 +4866,6 @@ nsTextFrame::MeasureText(nsIPresContext*          aPresContext,
       firstWordDone = PR_TRUE;
     }
 
-    bp2 = aTx.GetNextWord(aTextData.mInWord, &wordLen, &contentLen, &isWhitespace,
-                          &wasTransformed, textRun.mNumSegments == 0);
 #ifdef IBMBIDI
     if (nextBidi) {
       mContentLength -= contentLen;

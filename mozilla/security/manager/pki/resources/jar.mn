@@ -24,7 +24,7 @@ pippki.jar:
     content/pippki/cacertexists.js           (content/cacertexists.js)
     content/pippki/cacertexists.xul          (content/cacertexists.xul)
     content/pippki/securityTasksOverlay.xul  (content/securityTasksOverlay.xul)
-    content/pippki/openManager.js            (content/openManager.js)
+    content/pippki/securityTasksOverlay.js   (content/securityTasksOverlay.js)
     content/pippki/certManager.js            (content/certManager.js)
     content/pippki/certManager.xul           (content/certManager.xul)
     content/pippki/CAOverlay.xul             (content/CAOverlay.xul)

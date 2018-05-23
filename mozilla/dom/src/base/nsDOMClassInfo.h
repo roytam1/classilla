@@ -63,6 +63,7 @@ struct nsDOMClassInfoData
     nsDOMClassInfoConstructorFnc mConstructorFptr;
     nsDOMClassInfoExternalConstructorFnc mExternalConstructorFptr;
   } u;
+
   nsIClassInfo *mCachedClassInfo; // low bit is set to 1 if external,
                                   // so be sure to mask if necessary!
   const nsIID *mProtoChainInterface;
@@ -150,6 +151,7 @@ protected:
   static inline PRBool IsReadonlyReplaceable(jsval id)
   {
     return (id == sTop_id          ||
+            id == sParent_id       ||
             id == sScrollbars_id   ||
             id == sContent_id      ||
             id == sSidebar_id      ||
@@ -163,7 +165,8 @@ protected:
             id == sScrollX_id      ||
             id == sScrollY_id      ||
             id == sLength_id       ||
-            id == sFrames_id);
+            id == sFrames_id       ||
+            id == sSelf_id);
   }
 
   static inline PRBool IsWritableReplaceable(jsval id)
@@ -194,6 +197,7 @@ protected:
   static PRBool sIsInitialized;
 
   static jsval sTop_id;
+  static jsval sParent_id;
   static jsval sScrollbars_id;
   static jsval sLocation_id;
   static jsval sComponents_id;
@@ -250,6 +254,7 @@ protected:
   static jsval sDocument_id;
   static jsval sWindow_id;
   static jsval sFrames_id;
+  static jsval sSelf_id;
 
   static const JSClass *sObjectClass;
 

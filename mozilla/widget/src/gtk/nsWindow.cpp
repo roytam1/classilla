@@ -2339,13 +2339,20 @@ NS_IMETHODIMP nsWindow::SetTitle(const nsString& aTitle)
 
 
   nsresult rv;
-  char *platformText;
+  char *platformText = nsnull;
   PRInt32 platformLen;
 
   // Set UTF8_STRING title for NET_WM-supporting window managers
   NS_ConvertUCS2toUTF8 utf8_title(aTitle);
   XChangeProperty(GDK_DISPLAY(), GDK_WINDOW_XWINDOW(mShell->window),
                 XInternAtom(GDK_DISPLAY(), "_NET_WM_NAME", False),
+                XInternAtom(GDK_DISPLAY(), "UTF8_STRING", False),
+                8, PropModeReplace, (unsigned char *) utf8_title.get(),
+                utf8_title.Length());
+
+  // Set UTF8_STRING title for _NET_WM_ICON_NAME as well
+  XChangeProperty(GDK_DISPLAY(), GDK_WINDOW_XWINDOW(mShell->window),
+                XInternAtom(GDK_DISPLAY(), "_NET_WM_ICON_NAME", False),
                 XInternAtom(GDK_DISPLAY(), "UTF8_STRING", False),
                 8, PropModeReplace, (unsigned char *) utf8_title.get(),
                 utf8_title.Length());
@@ -2382,11 +2389,13 @@ NS_IMETHODIMP nsWindow::SetTitle(const nsString& aTitle)
 
   if (platformLen > 0 && platformText) {
     gtk_window_set_title(GTK_WINDOW(mShell), platformText);
-    nsMemory::Free(platformText);
   }
   else {
     gtk_window_set_title(GTK_WINDOW(mShell), "");
   }
+
+  if (platformText)
+    nsMemory::Free(platformText);
 
   return NS_OK;
 }

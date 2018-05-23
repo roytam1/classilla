@@ -123,6 +123,7 @@ function SetupTextEditorCommands()
   commandManager.registerCommand("cmd_find",       nsFindCommand);
   commandManager.registerCommand("cmd_findNext",   new nsFindAgainCommand(false));
   commandManager.registerCommand("cmd_findPrev",   new nsFindAgainCommand(true));
+  commandManager.registerCommand("cmd_rewrap",     nsRewrapCommand);
   commandManager.registerCommand("cmd_spelling",   nsSpellingCommand);
   commandManager.registerCommand("cmd_validate",   nsValidateCommand);
   commandManager.registerCommand("cmd_checkLinks", nsCheckLinksCommand);
@@ -973,6 +974,7 @@ function OutputFileWithPersistAPI(editorDoc, aDestinationLocation, aRelatedFiles
                             | webPersist.PERSIST_FLAGS_NO_BASE_TAG_MODIFICATIONS
                             | webPersist.PERSIST_FLAGS_REPLACE_EXISTING_FILES
                             | webPersist.PERSIST_FLAGS_DONT_FIXUP_LINKS
+                            | webPersist.PERSIST_FLAGS_DONT_CHANGE_FILENAMES
                             | webPersist.PERSIST_FLAGS_FIXUP_ORIGINAL_DOM;
     persistObj.saveDocument(editorDoc, aDestinationLocation, aRelatedFilesParentDir, 
                             aMimeType, outputFlags, wrapColumn);
@@ -1927,7 +1929,9 @@ function StartPublishing()
     OutputFileWithPersistAPI(editor.document, 
                              gPublishData.docURI, gPublishData.otherFilesURI, 
                              editor.contentsMIMEType);
+    return gPersistObj;
   }
+  return null;
 }
 
 function CancelPublishing()
@@ -2376,6 +2380,24 @@ nsFindAgainCommand.prototype =
       findInst.findBackwards = findService.findBackwards; 
     }
     catch (ex) {}
+  }
+};
+
+//-----------------------------------------------------------------------------------
+var nsRewrapCommand =
+{
+  isCommandEnabled: function(aCommand, dummy)
+  {
+    return (IsDocumentEditable() && !IsInHTMLSourceMode() &&
+            GetCurrentEditor() instanceof Components.interfaces.nsIEditorMailSupport);
+  },
+
+  getCommandStateParams: function(aCommand, aParams, aRefCon) {},
+  doCommandParams: function(aCommand, aParams, aRefCon) {},
+
+  doCommand: function(aCommand)
+  {
+    GetCurrentEditor().QueryInterface(Components.interfaces.nsIEditorMailSupport).rewrap(false);
   }
 };
 

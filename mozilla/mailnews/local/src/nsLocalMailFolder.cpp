@@ -362,7 +362,23 @@ NS_IMETHODIMP nsMsgLocalMailFolder::AddSubfolder(nsAutoString *name,
 	return rv;
 }
 
+NS_IMETHODIMP nsMsgLocalMailFolder::GetManyHeadersToDownload(PRBool *retval)
+{
+  PRBool isLocked;
+  // if the folder is locked, we're probably reparsing - let's build the
+  // view when we've finished reparsing.
+  GetLocked(&isLocked);
+  if (isLocked)
+  {
+    *retval = PR_TRUE;
+    return NS_OK;
+  }
+  else
+  {
+    return nsMsgDBFolder::GetManyHeadersToDownload(retval);
+  }
 
+}
 //run the url to parse the mailbox
 NS_IMETHODIMP nsMsgLocalMailFolder::ParseFolder(nsIMsgWindow *aMsgWindow, nsIUrlListener *listener)
 {
@@ -1045,8 +1061,13 @@ NS_IMETHODIMP nsMsgLocalMailFolder::EmptyTrash(nsIMsgWindow *msgWindow,
           parentFolder->CreateSubfolder(NS_LITERAL_STRING("Trash").get(),nsnull);
           nsCOMPtr<nsIMsgFolder> newTrashFolder;
           rv = GetTrashFolder(getter_AddRefs(newTrashFolder));
-          if (NS_SUCCEEDED(rv) && newTrashFolder)
+          if (NS_SUCCEEDED(rv) && newTrashFolder) {
             newTrashFolder->SetDBTransferInfo(transferInfo);
+            // update the summary totals so the front end will
+            // show the right thing for the new trash folder
+            // see bug #161999
+            newTrashFolder->UpdateSummaryTotals(PR_TRUE);
+          }
         }
     }
     return rv;
@@ -2127,7 +2148,7 @@ nsMsgLocalMailFolder::CopyFolderLocal(nsIMsgFolder *srcFolder, PRBool isMoveFold
   nsCOMPtr<nsISupports> supports;
   rv = aEnumerator->First();
   nsresult copyStatus = NS_OK;
-  while (NS_SUCCEEDED(rv))
+  while (NS_SUCCEEDED(rv) && NS_SUCCEEDED(copyStatus))
   {
     rv = aEnumerator->CurrentItem(getter_AddRefs(supports));
     folder = do_QueryInterface(supports);
@@ -2516,6 +2537,16 @@ NS_IMETHODIMP nsMsgLocalMailFolder::CopyData(nsIInputStream *aIStream, PRInt32 a
   return rv;
 }
 
+void nsMsgLocalMailFolder::CopyPropertiesToMsgHdr(nsIMsgDBHdr *destHdr, nsIMsgDBHdr *srcHdr)
+{
+	nsXPIDLCString sourceJunkScore;
+	srcHdr->GetStringProperty("junkscore", getter_Copies(sourceJunkScore));
+	destHdr->SetStringProperty("junkscore", sourceJunkScore);
+	srcHdr->GetStringProperty("junkscoreorigin", getter_Copies(sourceJunkScore));
+	destHdr->SetStringProperty("junkscoreorigin", sourceJunkScore);
+}
+
+
 NS_IMETHODIMP nsMsgLocalMailFolder::EndCopy(PRBool copySucceeded)
 {
   // we are the destination folder for a move/copy
@@ -2560,10 +2591,7 @@ NS_IMETHODIMP nsMsgLocalMailFolder::EndCopy(PRBool copySucceeded)
     mCopyState->m_fromLineSeen = PR_FALSE;
     // flush the copied message.
     if (mCopyState->m_fileStream)
-    {
-      rv = mCopyState->m_fileStream->flush();
-      NS_ENSURE_SUCCESS(rv,rv);
-    }
+       mCopyState->m_fileStream->seek(PR_SEEK_CUR, 0); // seeking causes a flush, w/o syncing
   }
   //Copy the header to the new database
   if(copySucceeded && mCopyState->m_message)
@@ -2584,8 +2612,9 @@ NS_IMETHODIMP nsMsgLocalMailFolder::EndCopy(PRBool copySucceeded)
         if (newHdr)
           newHdr->AndFlags(~MSG_FLAG_OFFLINE, &newHdrFlags);
       }
-      else
-        mCopyState->m_undoMsgTxn = nsnull; //null out the transaction because we can't undo w/o the msg db
+      // we can do undo with the dest folder db, see bug #198909
+      //else
+      //  mCopyState->m_undoMsgTxn = nsnull; //null out the transaction because we can't undo w/o the msg db
     }
     
     // if we plan on allowing undo, (if we have a mCopyState->m_parseMsgState or not)
@@ -2597,8 +2626,11 @@ NS_IMETHODIMP nsMsgLocalMailFolder::EndCopy(PRBool copySucceeded)
       if (!isImap || !mCopyState->m_copyingMultipleMessages)
       {
         nsMsgKey aKey;
+				PRUint32 statusOffset;
         mCopyState->m_message->GetMessageKey(&aKey);
+				mCopyState->m_message->GetStatusOffset(&statusOffset);
         localUndoTxn->AddSrcKey(aKey);
+				localUndoTxn->AddSrcStatusOffset(statusOffset);
         localUndoTxn->AddDstKey(mCopyState->m_curDstKey);
       }
     }
@@ -2625,6 +2657,9 @@ NS_IMETHODIMP nsMsgLocalMailFolder::EndCopy(PRBool copySucceeded)
 		  nsresult result = mCopyState->m_parseMsgState->GetNewMsgHdr(getter_AddRefs(newHdr));
 		  if (NS_SUCCEEDED(result) && newHdr)
 		  {
+        // need to copy junk score from mCopyState->m_message to newHdr.
+        if (mCopyState->m_message)
+					CopyPropertiesToMsgHdr(newHdr, mCopyState->m_message);
 		    msgDb->AddNewHdrToDB(newHdr, PR_TRUE);
 		    if (localUndoTxn)
         { 
@@ -2785,10 +2820,23 @@ NS_IMETHODIMP nsMsgLocalMailFolder::EndMessage(nsMsgKey key)
 
     mCopyState->m_parseMsgState->FinishHeader();
 
-    result =
-      mCopyState->m_parseMsgState->GetNewMsgHdr(getter_AddRefs(newHdr));
+    result = mCopyState->m_parseMsgState->GetNewMsgHdr(getter_AddRefs(newHdr));
     if (NS_SUCCEEDED(result) && newHdr)
     {
+			nsCOMPtr<nsIMsgFolder> srcFolder = do_QueryInterface(mCopyState->m_srcSupport);
+			nsCOMPtr<nsIMsgDatabase> srcDB;
+			if (srcFolder)
+			{
+				srcFolder->GetMsgDatabase(nsnull, getter_AddRefs(srcDB));
+				if (srcDB)
+				{
+					nsCOMPtr <nsIMsgDBHdr> srcMsgHdr;
+					srcDB->GetMsgHdrForKey(key, getter_AddRefs(srcMsgHdr));
+					if (srcMsgHdr)
+						CopyPropertiesToMsgHdr(newHdr, srcMsgHdr);
+				}
+			}
+
       result = GetDatabaseWOReparse(getter_AddRefs(msgDb));
       if (NS_SUCCEEDED(result) && msgDb)
       {
@@ -2888,7 +2936,7 @@ nsresult nsMsgLocalMailFolder::CopyMessagesTo(nsISupportsArray *messages,
 }
 
 nsresult nsMsgLocalMailFolder::CopyMessageTo(nsISupports *message, 
-                                             nsIMsgFolder *dstFolder,
+                                             nsIMsgFolder *dstFolder /* dst same as "this" */,
                                              nsIMsgWindow *aMsgWindow,
                                              PRBool isMove)
 {
@@ -3225,12 +3273,15 @@ nsMsgLocalMailFolder::OnStopRunningUrl(nsIURI * aUrl, nsresult aExitCode)
       }
       if (mDatabase)
       {
-        PRBool valid;
-        mDatabase->GetSummaryValid(&valid);
-        if (valid && mCheckForNewMessagesAfterParsing)
+        if (mCheckForNewMessagesAfterParsing)
         {
-          if (msgWindow)
-           rv = GetNewMessages(msgWindow, nsnull);
+          PRBool valid;
+          mDatabase->GetSummaryValid(&valid);
+          if (valid)
+          {
+            if (msgWindow)
+             rv = GetNewMessages(msgWindow, nsnull);
+          }
           mCheckForNewMessagesAfterParsing = PR_FALSE;
         }
       }
@@ -3329,7 +3380,9 @@ nsMsgLocalMailFolder::SetFlagsOnDefaultMailboxes(PRUint32 flags)
   if (flags & MSG_FOLDER_FLAG_QUEUE)
     setSubfolderFlag(NS_LITERAL_STRING("Unsent Messages").get(), MSG_FOLDER_FLAG_QUEUE);
 	
-  // what about the Junk folder?
+  if (flags & MSG_FOLDER_FLAG_JUNK)
+    setSubfolderFlag(NS_LITERAL_STRING("Junk").get(), MSG_FOLDER_FLAG_JUNK);
+
 	return NS_OK;
 }
 

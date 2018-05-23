@@ -35,7 +35,7 @@
 #define NSSPKI_H
 
 #ifdef DEBUG
-static const char NSSPKI_CVS_ID[] = "@(#) $RCSfile: nsspki.h,v $ $Revision: 1.7 $ $Date: 2001/12/14 17:32:19 $ $Name: MOZILLA_1_3_1_RELEASE $";
+static const char NSSPKI_CVS_ID[] = "@(#) $RCSfile: nsspki.h,v $ $Revision: 1.7 $ $Date: 2001/12/14 17:32:19 $ $Name:  $";
 #endif /* DEBUG */
 
 /*

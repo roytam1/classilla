@@ -45,9 +45,8 @@ const MSG_FOLDER_FLAG_JUNK = 0x40000000;
 
 function OpenURL(url)
 {
-  //dump("\n\nOpenURL from XUL\n\n\n");
   messenger.SetWindow(window, msgWindow);
-  messenger.OpenURL(url, true);
+  messenger.OpenURL(url);
 }
 
 function GetMsgFolderFromResource(folderResource)
@@ -101,22 +100,18 @@ function LoadMessageByUri(uri)
 
 function setTitleFromFolder(msgfolder, subject)
 {
-    var title;
-    
-    if (null != subject)
-      title = subject;
-    else
-      title = "";
-    
+    var title = subject || "";
+
     if (msgfolder)
     {
-      var server = msgfolder.server;
-    
-      title +=" - ";
-    
-      if (msgfolder.isServer)
-        title += server.prettyName;
-      else {
+      if (title)
+        title += " - ";
+
+      title += msgfolder.prettyName;
+
+      if (!msgfolder.isServer)
+      {
+        var server = msgfolder.server;
         var middle;
         var end;
         if (server.type == "nntp") {
@@ -134,7 +129,6 @@ function setTitleFromFolder(msgfolder, subject)
             end = identity.email;
           } catch (ex) {}
         }
-        title += msgfolder.prettyName;
         if (middle) title += " " + middle;
         if (end) title += " " + end;
       }
@@ -233,6 +227,7 @@ function ChangeFolderByURI(uri, viewType, viewFlags, sortType, sortOrder)
     gRerootOnFolderLoad = true;
     try
     {
+      ClearThreadPane();
       SetBusyCursor(window, true);
       msgfolder.startFolderLoading();
       msgfolder.updateFolder(msgWindow);

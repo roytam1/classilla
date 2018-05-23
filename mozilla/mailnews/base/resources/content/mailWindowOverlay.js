@@ -1241,18 +1241,26 @@ function MsgViewPageSource()
     ViewPageSource(messages);
 }
 
+var gFindInstData;
+function getFindInstData()
+{
+  if (!gFindInstData) {
+    gFindInstData = new nsFindInstData();
+    gFindInstData.browser = getMessageBrowser();
+    gFindInstData.rootSearchWindow = window.top.content;
+    gFindInstData.currentSearchWindow = window.top.content;
+  }
+  return gFindInstData;
+}
+
 function MsgFind()
 {
-  var contentWindow = window.top._content;
-
-  // from utilityOverlay.js
-  findInPage(getMessageBrowser(), contentWindow, contentWindow)
+  findInPage(getFindInstData());
 }
 
 function MsgFindAgain(reverse)
 {
-  var contentWindow = window.top._content;
-  findAgainInPage(getMessageBrowser(), contentWindow, contentWindow, reverse)
+  findAgainInPage(getFindInstData(), reverse);
 }
 
 function MsgCanFindAgain()
@@ -1535,14 +1543,14 @@ function IsEmptyTrashEnabled()
 {
   var folderURI = GetSelectedFolderURI();
   var server = GetServer(folderURI);
-  return (server.canEmptyTrashOnExit?IsMailFolderSelected():false);
+  return (server && server.canEmptyTrashOnExit ? IsMailFolderSelected() : false);
 }
 
 function IsCompactFolderEnabled()
 {
   var folderURI = GetSelectedFolderURI();
   var server = GetServer(folderURI);
-  if (!(server.canCompactFoldersOnServer))
+  if (!(server && server.canCompactFoldersOnServer))
     return false;
 
   var folderTree = GetFolderTree();
@@ -1890,10 +1898,10 @@ function SetupUndoRedoCommand(command)
     return canUndoOrRedo;
 }
 
-function OnMsgLoaded(folder, msgURI)
+function OnMsgLoaded(folder, aMessageURI)
 {
     var currentMsgFolder = folder.QueryInterface(Components.interfaces.nsIMsgFolder);
-    if (!IsImapMessage(msgURI))
+    if (!IsImapMessage(aMessageURI))
       return;
 
     var imapServer = currentMsgFolder.server.QueryInterface(Components.interfaces.nsIImapIncomingServer);
@@ -1982,4 +1990,5 @@ function OpenOrFocusWindow(args, windowType, chromeURL)
   else
     window.openDialog(chromeURL, "", "chrome,resizable,status,centerscreen,dialog=no", args);
 }
+
 

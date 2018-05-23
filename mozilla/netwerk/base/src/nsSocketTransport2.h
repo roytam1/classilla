@@ -76,13 +76,13 @@ public:
     void OnSocketReady(nsresult condition);
 
 private:
-    nsSocketTransport    *mTransport;
-    nsrefcnt              mReaderRefCnt;
+    nsSocketTransport             *mTransport;
+    nsrefcnt                       mReaderRefCnt;
 
     // access to these is protected by mTransport->mLock
-    nsresult              mCondition;
-    nsIInputStreamNotify *mNotify;
-    PRUint32              mByteCount;
+    nsresult                       mCondition;
+    nsCOMPtr<nsIInputStreamNotify> mNotify;
+    PRUint32                       mByteCount;
 };
 
 //-----------------------------------------------------------------------------
@@ -109,13 +109,13 @@ private:
                                        const char *, PRUint32 offset,
                                        PRUint32 count, PRUint32 *countRead);
 
-    nsSocketTransport     *mTransport;
-    nsrefcnt               mWriterRefCnt;
+    nsSocketTransport              *mTransport;
+    nsrefcnt                        mWriterRefCnt;
 
     // access to these is protected by mTransport->mLock
-    nsresult               mCondition;
-    nsIOutputStreamNotify *mNotify;
-    PRUint32               mByteCount;
+    nsresult                        mCondition;
+    nsCOMPtr<nsIOutputStreamNotify> mNotify;
+    PRUint32                        mByteCount;
 };
 
 //-----------------------------------------------------------------------------
@@ -149,6 +149,7 @@ private:
     enum {
         MSG_ENSURE_CONNECT,       // no args
         MSG_DNS_LOOKUP_COMPLETE,  // uparam holds "status"
+        MSG_RETRY_INIT_SOCKET,    // no args
         MSG_INPUT_CLOSED,         // uparam holds "reason"
         MSG_INPUT_PENDING,        // no args
         MSG_OUTPUT_CLOSED,        // uparam holds "reason"

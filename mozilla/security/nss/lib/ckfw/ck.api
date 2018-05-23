@@ -34,7 +34,7 @@
 # This file is in part derived from a file "pkcs11f.h" made available
 # by RSA Security at ftp://ftp.rsasecurity.com/pub/pkcs/pkcs-11/pkcs11f.h
 
-CVS_ID "@(#) $RCSfile: ck.api,v $ $Revision: 1.1 $ $Date: 2000/03/31 19:43:09 $ $Name: MOZILLA_1_3_1_RELEASE $"
+CVS_ID "@(#) $RCSfile: ck.api,v $ $Revision: 1.1 $ $Date: 2000/03/31 19:43:09 $ $Name:  $"
 
 # Fields
 #  FUNCTION introduces a Cryptoki function

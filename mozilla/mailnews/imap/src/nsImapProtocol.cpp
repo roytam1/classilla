@@ -960,6 +960,10 @@ NS_IMETHODIMP nsImapProtocol::Run()
     }
         
     me->m_runningUrl = nsnull;
+    if (m_inputStream)
+      m_inputStream->Close();
+    if (m_outputStream)
+      m_outputStream->Close();
     if (m_transport)
     {
         // make sure the transport closes (even if someone is still indirectly
@@ -1040,7 +1044,7 @@ NS_IMETHODIMP
 nsImapProtocol::TellThreadToDie(PRBool isSaveToClose)
 {
     // **** jt - This routine should only be called by imap service.
-  nsAutoCMonitor(this);
+  nsAutoCMonitor mon(this);
 
   m_urlInProgress = PR_TRUE;  // let's say it's busy so no one tries to use
                               // this about to die connection.
@@ -1076,10 +1080,6 @@ nsImapProtocol::TellThreadToDie(PRBool isSaveToClose)
 
   Log("TellThreadToDie", nsnull, "close socket connection");
 
-  // kill the socket connection
-  if (m_transport)
-    m_transport->Close(NS_ERROR_ABORT);
-
   PR_EnterMonitor(m_threadDeathMonitor);
   m_threadShouldDie = PR_TRUE;
   PR_ExitMonitor(m_threadDeathMonitor);
@@ -1103,7 +1103,7 @@ nsImapProtocol::TellThreadToDie(PRBool isSaveToClose)
 NS_IMETHODIMP
 nsImapProtocol::GetLastActiveTimeStamp(PRTime* aTimeStamp)
 {
-  nsAutoCMonitor(this);
+  nsAutoCMonitor mon(this);
   if (aTimeStamp)
       *aTimeStamp = m_lastActiveTime;
   return NS_OK;
@@ -1116,7 +1116,7 @@ nsImapProtocol::PseudoInterruptMsgLoad(nsIMsgFolder *aImapFolder, nsIMsgWindow *
 
   *interrupted = PR_FALSE;
 
-  nsAutoCMonitor(this);
+  nsAutoCMonitor mon(this);
 
   if (m_runningUrl && !TestFlag(IMAP_CLEAN_UP_URL_STATE))
   {
@@ -5076,6 +5076,19 @@ void nsImapProtocol::OnAppendMsgFromFile()
     }
 }
 
+void nsImapProtocol::CheckAndSetMDNSentFlag(nsImapAction imapAction, nsMsgKey key)
+{
+  // If we're appending msg to folder and we support
+  // MDNSent flag then flag the msg with "MDNSent".
+  if ((imapAction == nsIImapUrl::nsImapAppendMsgFromFile) &&
+      (GetServerStateParser().SupportsUserFlags() & kImapMsgSupportMDNSentFlag))
+  {
+    nsCAutoString newMsgId;
+    newMsgId.AppendInt(key);
+    Store(newMsgId.get(), "+FLAGS ($MDNSent)", PR_TRUE);
+  }
+}
+
 void nsImapProtocol::UploadMessageFromFile (nsIFileSpec* fileSpec,
                                             const char* mailboxName,
                                             imapMessageFlagsType flags)
@@ -5156,6 +5169,8 @@ void nsImapProtocol::UploadMessageFromFile (nsIFileSpec* fileSpec,
         {
           nsMsgKey newKey =
             GetServerStateParser().CurrentResponseUID();
+          // See if we have to mark "MDN sent" flag on the msg.
+          CheckAndSetMDNSentFlag(imapAction, newKey);
           if (m_imapExtensionSink)
           {
             m_imapExtensionSink->SetAppendMsgUid(this, newKey,
@@ -5214,6 +5229,8 @@ void nsImapProtocol::UploadMessageFromFile (nsIFileSpec* fileSpec,
                 delete searchResult;
                 if (newkey != nsMsgKey_None)
                 {
+                  // See if we have to mark "MDN sent" flag on the msg.
+                  CheckAndSetMDNSentFlag(imapAction, newkey);
                   m_imapExtensionSink->SetAppendMsgUid
                     (this, newkey, m_runningUrl);
                   WaitForFEEventCompletion();
@@ -8205,7 +8222,7 @@ NS_IMETHODIMP
 nsImapMockChannel::OnTransportStatus(nsITransport *transport, nsresult status,
                                      PRUint32 progress, PRUint32 progressMax)
 {
-  if (mProgressEventSink && !(mLoadFlags & LOAD_BACKGROUND))
+  if (mProgressEventSink && NS_SUCCEEDED(m_cancelStatus) && !(mLoadFlags & LOAD_BACKGROUND))
   {
     // these transport events should not generate any status messages
     if (status == nsISocketTransport::STATUS_RECEIVING_FROM ||

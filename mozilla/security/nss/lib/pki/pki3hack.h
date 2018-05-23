@@ -35,7 +35,7 @@
 #define PKINSS3HACK_H
 
 #ifdef DEBUG
-static const char PKINSS3HACK_CVS_ID[] = "@(#) $RCSfile: pki3hack.h,v $ $Revision: 1.12.12.1 $ $Date: 2003/01/09 02:05:08 $ $Name: MOZILLA_1_3_1_RELEASE $";
+static const char PKINSS3HACK_CVS_ID[] = "@(#) $RCSfile: pki3hack.h,v $ $Revision: 1.12.12.1 $ $Date: 2003/01/09 02:05:08 $ $Name:  $";
 #endif /* DEBUG */
 
 #ifndef NSSDEVT_H

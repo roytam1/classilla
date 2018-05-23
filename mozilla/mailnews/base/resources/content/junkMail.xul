@@ -67,9 +67,13 @@
     <label value="&account.label;" accesskey="&account.accesskey;"/>
     <menulist oncommand="onServerClick(event);" id="server">
       <menupopup datasources="rdf:msgaccountmanager rdf:mailnewsfolders"
-                   containment="http://home.netscape.com/NC-rdf#child" ref="msgaccounts:/">
+                 sortResource="http://home.netscape.com/NC-rdf#FolderTreeName"
+                 sortDirection="ascending" ref="msgaccounts:/">
         <template>
-          <rule nc:CanGetIncomingMessages="true">
+		  <rule nc:IsServer="true" nc:ServerType="nntp">
+		    <!-- no support for news yet -->
+		  </rule>
+          <rule nc:IsServer="true">
             <menuitem uri="..." value="..."
                  class="folderMenuItem menuitem-iconic"
                  IsServer="rdf:http://home.netscape.com/NC-rdf#IsServer"
@@ -140,6 +144,17 @@
       <textbox size="3" id="purgeInterval" />
       <label id="purgeLabel" value="&purge2.label;"/>
     </hbox>
+  </vbox>
+
+  <vbox align="start">
+    <checkbox id="manualMark" oncommand="conditionallyEnableUI('manualMark')" label="&manualMark.label;"/>
+    <hbox>
+      <spacer width="20px"/>
+      <radiogroup id="manualMarkMode">
+        <radio id="manualMarkMode0" value="0" label="&manualMarkModeMove.label;"/> 
+        <radio id="manualMarkMode1" value="1" label="&manualMarkModeDelete.label;"/> 
+      </radiogroup>
+    </hbox>   
   </vbox>
 
 </dialog>

@@ -35,7 +35,7 @@
 #define PKITM_H
 
 #ifdef DEBUG
-static const char PKITM_CVS_ID[] = "@(#) $RCSfile: pkitm.h,v $ $Revision: 1.10 $ $Date: 2002/10/01 14:32:15 $ $Name: MOZILLA_1_3_1_RELEASE $";
+static const char PKITM_CVS_ID[] = "@(#) $RCSfile: pkitm.h,v $ $Revision: 1.10 $ $Date: 2002/10/01 14:32:15 $ $Name:  $";
 #endif /* DEBUG */
 
 /*

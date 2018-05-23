@@ -30,7 +30,7 @@
 # may use your version of this file under either the MPL or the
 # GPL.
 #
-CONFIG_CVS_ID = "@(#) $RCSfile: config.mk,v $ $Revision: 1.2 $ $Date: 2001/10/11 17:41:47 $ $Name: MOZILLA_1_3_1_RELEASE $"
+CONFIG_CVS_ID = "@(#) $RCSfile: config.mk,v $ $Revision: 1.2 $ $Date: 2001/10/11 17:41:47 $ $Name:  $"
 
 ifdef BUILD_IDG
 DEFINES += -DNSSDEBUG

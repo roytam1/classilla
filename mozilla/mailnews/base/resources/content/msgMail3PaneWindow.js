@@ -183,9 +183,22 @@ var folderListener = {
              }
            }
            if (uri == gCurrentLoadingFolderURI) {
+             // NOTE,
+             // if you change the scrolling code below,
+             // double check the scrolling logic in
+             // searchBar.js, restorePreSearchView()
+
              gCurrentLoadingFolderURI = "";
 
+             // if we didn't just scroll, 
+             // scroll to the first new message
+             // but don't select it
+             if (!scrolled)
+               scrolled = ScrollToMessage(nsMsgNavigationType.firstNew, true, false /* selectMessage */);
+
              if (!scrolled && pref.getBoolPref("mailnews.remember_selected_message")) {
+               // if we failed to scroll to a new message,
+               // reselect the last selected message
                var lastMessageLoaded = msgFolder.lastMessageLoaded;
                  
                if (lastMessageLoaded != nsMsgKey_None) {
@@ -193,30 +206,31 @@ var folderListener = {
                }
              }
 
-             // Now let's select the first new message if there is one
              if (!scrolled) {
-               // if we didn't just scroll, scroll to the first new message
-               // don't select it though
-               scrolled = ScrollToMessage(nsMsgNavigationType.firstNew, true, false /* selectMessage */);
-                    
-               // if we failed to find a new message, 
+               // if we still haven't scrolled,
                // scroll to the newest, which might be the top or the bottom
                // depending on our sort order and sort type
-               if (!scrolled) {
-                 if (gDBView.sortOrder == nsMsgViewSortOrder.ascending) {
-                   switch (gDBView.sortType) {
-                     case nsMsgViewSortType.byDate: 
-                     case nsMsgViewSortType.byId: 
-                     case nsMsgViewSortType.byThread: 
-                       scrolled = ScrollToMessage(nsMsgNavigationType.lastMessage, true, false /* selectMessage */);
-                       break;
-                   }
+               if (gDBView.sortOrder == nsMsgViewSortOrder.ascending) {
+                 switch (gDBView.sortType) {
+                   case nsMsgViewSortType.byDate: 
+                   case nsMsgViewSortType.byId: 
+                   case nsMsgViewSortType.byThread: 
+                     scrolled = ScrollToMessage(nsMsgNavigationType.lastMessage, true, false /* selectMessage */);
+                     break;
                  }
                }
 
+               // if still we haven't scrolled,
+               // scroll to the top.
                if (!scrolled)
                  EnsureRowInThreadTreeIsVisible(0);
-             }
+             }            
+
+             // NOTE,
+             // if you change the scrolling code above,
+             // double check the scrolling logic in
+             // searchBar.js, restorePreSearchView()
+
              SetBusyCursor(window, false);
            }
            if (gNotifyDefaultInboxLoadedOnStartup && (folder.flags & 0x1000))
@@ -1308,22 +1322,42 @@ function GetCompositeDataSource(command)
 	return null;
 }
 
+// Figures out how many messages are selected (hilighted - does not necessarily
+// have the dotted outline) above a given index row value in the thread pane.
+function NumberOfSelectedMessagesAboveCurrentIndex(index)
+{
+  var numberOfMessages = 0;
+  var indicies = GetSelectedIndices(gDBView);
+
+  if (indicies && indicies.length)
+  {
+    for (var i = 0; i < indicies.length; i++)
+    {
+      if (indicies[i] < index)
+        ++numberOfMessages;
+      else
+        break;
+    }
+  }
+  return numberOfMessages;
+}
+
 function SetNextMessageAfterDelete()
 {
   var treeSelection = GetThreadTree().treeBoxObject.selection;
 
-  gThreadPaneDeleteOrMoveOccurred = true;
-  if (treeSelection.isSelected(treeSelection.currentIndex))
-    gNextMessageViewIndexAfterDelete = gDBView.msgToSelectAfterDelete;
-  else if (treeSelection.currentIndex > gThreadPaneCurrentSelectedIndex)
-    // Since the currentIndex (the row with the outline/dotted line) is greater
-    // than the currently selected row (the row that is highlighted), we need to
-    // make sure that upon a Delete or Move of the selected row, the highlight
-    // returns to the currentIndex'ed row.  It is necessary to subtract 1
-    // because the row being deleted is above the row with the currentIndex.
-    // If the subtraction is not done, then the highlight will end up on the
-    // row listed after the currentIndex'ed row.
-    gNextMessageViewIndexAfterDelete = treeSelection.currentIndex - 1;
+  // Only set gThreadPaneDeleteOrMoveOccurred to true if the message was
+  // truly moved to the trash or deleted, as opposed to an IMAP delete
+  // (where it is only "marked as deleted".  This will prevent bug 142065.
+  //
+  // If it's an IMAP delete, then just set gNextMessageViewIndexAfterDelete
+  // to treeSelection.currentIndex (where the outline is at) because nothing
+  // was moved or deleted from the folder.
+  if(gDBView.removeRowOnMoveOrDelete)
+  {
+    gThreadPaneDeleteOrMoveOccurred = true;
+    gNextMessageViewIndexAfterDelete = treeSelection.currentIndex - NumberOfSelectedMessagesAboveCurrentIndex(treeSelection.currentIndex);
+  }
   else
     gNextMessageViewIndexAfterDelete = treeSelection.currentIndex;
 }

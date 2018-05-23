@@ -125,6 +125,7 @@ ErrorAccordingToNSPR(PRErrorCode errorCode)
         break;
     case PR_CONNECT_REFUSED_ERROR:
     case PR_NETWORK_UNREACHABLE_ERROR: // XXX need new nsresult for this!
+    case PR_HOST_UNREACHABLE_ERROR:    // XXX and this!
         rv = NS_ERROR_CONNECTION_REFUSED;
         break;
     case PR_IO_TIMEOUT_ERROR:
@@ -146,15 +147,12 @@ nsSocketInputStream::nsSocketInputStream(nsSocketTransport *trans)
     : mTransport(trans)
     , mReaderRefCnt(0)
     , mCondition(NS_OK)
-    , mNotify(nsnull)
     , mByteCount(0)
 {
 }
 
 nsSocketInputStream::~nsSocketInputStream()
 {
-    // mNotify normally cleaned up inside Close()
-    NS_ASSERTION(mNotify == nsnull, "leaking mNotify");
 }
 
 // called on the socket transport thread...
@@ -167,8 +165,7 @@ nsSocketInputStream::OnSocketReady(nsresult condition)
     LOG(("nsSocketInputStream::OnSocketReady [this=%x cond=%x]\n",
         this, condition));
 
-    nsIInputStreamNotify *notify = nsnull;
-
+    nsCOMPtr<nsIInputStreamNotify> notify;
     {
         nsAutoLock lock(mTransport->mLock);
 
@@ -182,10 +179,8 @@ nsSocketInputStream::OnSocketReady(nsresult condition)
         mNotify = nsnull;
     }
 
-    if (notify) {
+    if (notify)
         notify->OnInputStreamReady(this);
-        NS_RELEASE(notify);
-    }
 }
 
 NS_IMPL_QUERY_INTERFACE2(nsSocketInputStream,
@@ -304,6 +299,11 @@ nsSocketInputStream::Read(char *buf, PRUint32 count, PRUint32 *countRead)
     }
     if (NS_FAILED(rv))
         mTransport->OnInputClosed(rv);
+
+    // only send this notification if we have indeed read some data.
+    // see bug 196827 for an example of why this is important.
+    if (n > 0)
+        mTransport->SendStatus(nsISocketTransport::STATUS_RECEIVING_FROM);
     return rv;
 }
 
@@ -349,32 +349,26 @@ nsSocketInputStream::AsyncWait(nsIInputStreamNotify *notify, PRUint32 amount,
 {
     LOG(("nsSocketInputStream::AsyncWait [this=%x]\n", this));
 
-    nsresult rv;
     {
         nsAutoLock lock(mTransport->mLock);
 
-        // replace a pending notify
-        NS_IF_RELEASE(mNotify);
-
         if (eventQ) {
+            //
             // build event proxy
-            rv = NS_NewInputStreamReadyEvent(&mNotify, notify, eventQ);
-            if (NS_FAILED(rv)) {
-                mNotify = 0;
-                if (NS_SUCCEEDED(mCondition))
-                    mCondition = rv;
-            }
+            //
+            // failure to create an event proxy (most likely out of memory)
+            // shouldn't alter the state of the transport.
+            //
+            nsCOMPtr<nsIInputStreamNotify> temp;
+            nsresult rv = NS_NewInputStreamReadyEvent(getter_AddRefs(temp),
+                                                      notify, eventQ);
+            if (NS_FAILED(rv)) return rv;
+            mNotify = temp;
         }
         else
-            NS_ADDREF(mNotify = notify);
-
-        rv = mCondition;
+            mNotify = notify;
     }
-
-    if (NS_FAILED(rv))
-        mTransport->OnInputClosed(rv);
-    else
-        mTransport->OnInputPending();
+    mTransport->OnInputPending();
     return NS_OK;
 }
 
@@ -386,15 +380,12 @@ nsSocketOutputStream::nsSocketOutputStream(nsSocketTransport *trans)
     : mTransport(trans)
     , mWriterRefCnt(0)
     , mCondition(NS_OK)
-    , mNotify(nsnull)
     , mByteCount(0)
 {
 }
 
 nsSocketOutputStream::~nsSocketOutputStream()
 {
-    // mNotify normally cleaned up inside Close()
-    NS_ASSERTION(mNotify == nsnull, "leaking mNotify");
 }
 
 // called on the socket transport thread...
@@ -407,8 +398,7 @@ nsSocketOutputStream::OnSocketReady(nsresult condition)
     LOG(("nsSocketOutputStream::OnSocketReady [this=%x cond=%x]\n",
         this, condition));
 
-    nsIOutputStreamNotify *notify = nsnull;
-
+    nsCOMPtr<nsIOutputStreamNotify> notify;
     {
         nsAutoLock lock(mTransport->mLock);
 
@@ -422,10 +412,8 @@ nsSocketOutputStream::OnSocketReady(nsresult condition)
         mNotify = nsnull;
     }
 
-    if (notify) {
+    if (notify)
         notify->OnOutputStreamReady(this);
-        NS_RELEASE(notify);
-    }
 }
 
 NS_IMPL_QUERY_INTERFACE2(nsSocketOutputStream,
@@ -509,6 +497,11 @@ nsSocketOutputStream::Write(const char *buf, PRUint32 count, PRUint32 *countWrit
     }
     if (NS_FAILED(rv))
         mTransport->OnOutputClosed(rv);
+
+    // only send this notification if we have indeed written some data.
+    // see bug 196827 for an example of why this is important.
+    if (n > 0)
+        mTransport->SendStatus(nsISocketTransport::STATUS_SENDING_TO);
     return rv;
 }
 
@@ -572,31 +565,26 @@ nsSocketOutputStream::AsyncWait(nsIOutputStreamNotify *notify, PRUint32 amount,
 {
     LOG(("nsSocketOutputStream::AsyncWait [this=%x]\n", this));
 
-    nsresult rv;
     {
         nsAutoLock lock(mTransport->mLock);
 
-        // replace a pending notify
-        NS_IF_RELEASE(mNotify);
-
         if (eventQ) {
+            //
             // build event proxy
-            rv = NS_NewOutputStreamReadyEvent(&mNotify, notify, eventQ);
-            if (NS_FAILED(rv)) {
-                mNotify = 0;
-                if (NS_SUCCEEDED(mCondition))
-                    mCondition = rv;
-            }
+            //
+            // failure to create an event proxy (most likely out of memory)
+            // shouldn't alter the state of the transport.
+            //
+            nsCOMPtr<nsIOutputStreamNotify> temp;
+            nsresult rv = NS_NewOutputStreamReadyEvent(getter_AddRefs(temp),
+                                                       notify, eventQ);
+            if (NS_FAILED(rv)) return rv;
+            mNotify = temp;
         }
         else
-            NS_ADDREF(mNotify = notify);
-
-        rv = mCondition;
+            mNotify = notify;
     }
-    if (NS_FAILED(rv))
-        mTransport->OnOutputClosed(rv);
-    else
-        mTransport->OnOutputPending();
+    mTransport->OnOutputPending();
     return NS_OK;
 }
 
@@ -879,6 +867,21 @@ nsSocketTransport::InitiateSocket()
     LOG(("nsSocketTransport::InitiateSocket [this=%x]\n", this));
 
     //
+    // find out if it is going to be ok to attach another socket to the STS.
+    // if not then we have to wait for the STS to tell us that it is ok.
+    // the notification is asynchronous, which means that when we could be
+    // in a race to call AttachSocket once notified.  for this reason, when
+    // we get notified, we just re-enter this function.  as a result, we are
+    // sure to ask again before calling AttachSocket.  in this way we deal
+    // with the race condition.  though it isn't the most elegant solution,
+    // it is far simpler than trying to build a system that would guarantee
+    // FIFO ordering (which wouldn't even be that valuable IMO).  see bug
+    // 194402 for more info.
+    //
+    if (!gSocketTransportService->CanAttachSocket())
+        return gSocketTransportService->NotifyWhenCanAttachSocket(this, MSG_RETRY_INIT_SOCKET);
+
+    //
     // create new socket fd, push io layers, etc.
     //
     PRFileDesc *fd;
@@ -1151,8 +1154,13 @@ nsSocketTransport::OnSocketEvent(PRUint32 type, PRUint32 uparam, void *vparam)
         this, type, uparam, vparam));
 
     if (NS_FAILED(mCondition)) {
-        // ignore event since we're apparently already dead.
-        LOG(("  ignoring event [condition=%x]\n", mCondition));
+        // block event since we're apparently already dead.
+        LOG(("  blocking event [condition=%x]\n", mCondition));
+        //
+        // notify input/output streams in case either has a pending notify.
+        //
+        mInput.OnSocketReady(mCondition);
+        mOutput.OnSocketReady(mCondition);
         return NS_OK;
     }
 
@@ -1182,6 +1190,10 @@ nsSocketTransport::OnSocketEvent(PRUint32 type, PRUint32 uparam, void *vparam)
         }
         else if (mState == STATE_RESOLVING)
             mCondition = InitiateSocket();
+        break;
+
+    case MSG_RETRY_INIT_SOCKET:
+        mCondition = InitiateSocket();
         break;
 
     case MSG_INPUT_CLOSED:
@@ -1231,7 +1243,6 @@ nsSocketTransport::OnSocketReady(PRFileDesc *fd, PRInt16 outFlags)
     if (mState == STATE_TRANSFERRING) {
         // if waiting to write and socket is writable or hit an exception.
         if ((mPollFlags & PR_POLL_WRITE) && (outFlags & ~PR_POLL_READ)) {
-            SendStatus(STATUS_SENDING_TO);
             // assume that we won't need to poll any longer (the stream will
             // request that we poll again if it is still pending).
             mPollFlags &= ~PR_POLL_WRITE;
@@ -1239,7 +1250,6 @@ nsSocketTransport::OnSocketReady(PRFileDesc *fd, PRInt16 outFlags)
         }
         // if waiting to read and socket is readable or hit an exception.
         if ((mPollFlags & PR_POLL_READ) && (outFlags & ~PR_POLL_WRITE)) {
-            SendStatus(STATUS_RECEIVING_FROM);
             // assume that we won't need to poll any longer (the stream will
             // request that we poll again if it is still pending).
             mPollFlags &= ~PR_POLL_READ;
@@ -1331,7 +1341,8 @@ nsSocketTransport::OnSocketDetached(PRFileDesc *fd)
 //-----------------------------------------------------------------------------
 // xpcom api
 
-NS_IMPL_THREADSAFE_ISUPPORTS3(nsSocketTransport,
+NS_IMPL_THREADSAFE_ISUPPORTS4(nsSocketTransport,
+                              nsISocketEventHandler,
                               nsISocketTransport,
                               nsITransport,
                               nsIDNSListener)

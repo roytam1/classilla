@@ -389,6 +389,9 @@ nsFtpState::nsFtpState()
     mDRequestForwarder = nsnull;
     mFileSize          = PRUint32(-1);
     mModTime           = -1;
+
+    // make sure handler stays around
+    NS_ADDREF(gFtpHandler);
 }
 
 nsFtpState::~nsFtpState() 
@@ -397,6 +400,10 @@ nsFtpState::~nsFtpState()
     
     if (mIPv6ServerAddress) nsMemory::Free(mIPv6ServerAddress);
     NS_IF_RELEASE(mDRequestForwarder);
+
+    // release reference to handler
+    nsFtpProtocolHandler *handler = gFtpHandler;
+    NS_RELEASE(handler);
 }
 
 nsresult
@@ -571,11 +578,11 @@ nsFtpState::EstablishControlConnection()
 
     PR_LOG(gFTPLog, PR_LOG_DEBUG, ("(%x) trying cached control\n", this));
         
-    nsISupports* connection;
-    (void) nsFtpProtocolHandler::RemoveConnection(mURL, &connection);
+    nsFtpControlConnection* connection;
+    (void) gFtpHandler->RemoveConnection(mURL, &connection);
     
     if (connection) {
-        mControlConnection = NS_STATIC_CAST(nsFtpControlConnection*, (nsIStreamListener*)connection);
+        mControlConnection = connection;
         if (mControlConnection->IsAlive())
         {
             // set stream listener of the control connection to be us.        
@@ -599,12 +606,11 @@ nsFtpState::EstablishControlConnection()
             if (NS_SUCCEEDED(rv))
                 return rv;
         }
-#if defined(PR_LOGGING)
         else 
         {
             PR_LOG(gFTPLog, PR_LOG_DEBUG, ("(%x) isAlive return false\n", this));
+            NS_RELEASE(mControlConnection);
         }
-#endif
     }
 
     PR_LOG(gFTPLog, PR_LOG_DEBUG, ("(%x) creating control\n", this));
@@ -2240,17 +2246,16 @@ nsFtpState::Init(nsIFTPChannel* aChannel,
     // pull any username and/or password out of the uri
     nsCAutoString uname;
     rv = mURL->GetUsername(uname);
-    if (NS_FAILED(rv)) {
+    if (NS_FAILED(rv))
         return rv;
-    } else {
-        if (!uname.IsEmpty()) {
-            mAnonymous = PR_FALSE;
-            mUsername = NS_ConvertUTF8toUCS2(NS_UnescapeURL(uname));
 
-            // return an error if we find a CR or LF in the username
-            if (uname.FindCharInSet(CRLF) >= 0)
-                return NS_ERROR_MALFORMED_URI;
-        }
+    if (!uname.IsEmpty() && !uname.Equals(NS_LITERAL_CSTRING("anonymous"))) {
+        mAnonymous = PR_FALSE;
+        mUsername = NS_ConvertUTF8toUCS2(NS_UnescapeURL(uname));
+        
+        // return an error if we find a CR or LF in the username
+        if (uname.FindCharInSet(CRLF) >= 0)
+            return NS_ERROR_MALFORMED_URI;
     }
 
     nsCAutoString password;
@@ -2313,12 +2318,6 @@ void
 nsFtpState::KillControlConnection() {
     mControlReadCarryOverBuf.Truncate(0);
 
-    if (mDPipe) {
-        mDPipe->SetSecurityCallbacks(nsnull);
-        mDPipe->SetEventSink(nsnull, nsnull);
-        mDPipe = 0;
-    }
-    
     NS_IF_RELEASE(mDRequestForwarder);
 
     mIPv6Checked = PR_FALSE;
@@ -2348,8 +2347,7 @@ nsFtpState::KillControlConnection() {
         mControlConnection->mServerType = mServerType;           
         mControlConnection->mPassword = mPassword;
         mControlConnection->mPwd = mPwd;
-        nsresult rv = nsFtpProtocolHandler::InsertConnection(mURL, 
-                                           NS_STATIC_CAST(nsISupports*, (nsIStreamListener*)mControlConnection));
+        nsresult rv = gFtpHandler->InsertConnection(mURL, mControlConnection);
         // Can't cache it?  Kill it then.  
         mControlConnection->Disconnect(rv);
     } 
@@ -2491,7 +2489,7 @@ nsFtpState::BuildStreamConverter(nsIStreamListener** convertStreamListener)
     return rv;
 }
 
-nsresult
+void
 nsFtpState::DataConnectionEstablished()
 {
     PR_LOG(gFTPLog, PR_LOG_DEBUG, ("(%x) Data Connection established.", this));
@@ -2502,8 +2500,19 @@ nsFtpState::DataConnectionEstablished()
     // control socket to write out its buffer.
     nsCString a("");
     SendFTPCommand(a);
-    
-    return NS_OK;
+}
+
+void
+nsFtpState::DataConnectionComplete()
+{
+    PR_LOG(gFTPLog, PR_LOG_DEBUG, ("(%x) Data Connection complete.", this));
+
+    if (mDPipe) {
+        mDPipe->SetSecurityCallbacks(nsnull);
+        mDPipe->SetEventSink(nsnull, nsnull);
+        mDPipe->Close(NS_ERROR_ABORT);
+        mDPipe = 0;
+    }
 }
 
 nsresult 

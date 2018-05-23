@@ -69,6 +69,10 @@
   -moz-image-region: rect(102px 199px 135px 150px) !important;
 } 
 
+#button-getmsg[buttonstyle="text"] > stack > .toolbarbutton-menubutton-dropmarker {
+  margin: 0px 2px 0px 55px !important;
+}
+
 #button-newmsg {
   -moz-image-region: rect(170px 49px 203px 0);
 }
@@ -248,3 +252,7 @@
   list-style-image: url("chrome://messenger/skin/icons/junk-dis.gif");
 }
 
+
+#junkIcon {
+  list-style-image: url("chrome://messenger/skin/icons/message-junk-other.gif");
+}

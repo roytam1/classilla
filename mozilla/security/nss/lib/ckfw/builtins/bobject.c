@@ -32,7 +32,7 @@
  */
 
 #ifdef DEBUG
-static const char CVS_ID[] = "@(#) $RCSfile: bobject.c,v $ $Revision: 1.2 $ $Date: 2002/03/29 07:34:22 $ $Name: MOZILLA_1_3_1_RELEASE $";
+static const char CVS_ID[] = "@(#) $RCSfile: bobject.c,v $ $Revision: 1.2 $ $Date: 2002/03/29 07:34:22 $ $Name:  $";
 #endif /* DEBUG */
 
 #include "builtins.h"
