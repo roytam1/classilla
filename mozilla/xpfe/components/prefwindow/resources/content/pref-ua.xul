@@ -42,8 +42,11 @@ Cameron Kaiser
     					pref = prefService.getBranch(null);
     					var k = pref.getCharPref(prefName);
     					var l = pref.getCharPref("general.useragent.misc");
+    					//var lo = pref.getCharPref("general.useragent.locale"); // This doesn't work. Just use en-US for now.
+    					var lo = "en-US";
     					l = "mimic; "+ l;
     					k = k.replace("%s", l);
+    					k = k.replace("%l", lo);
     					pref.setCharPref("general.useragent.override", k);
      				} catch(e) {
     					// damn it
@@ -96,11 +99,13 @@ Cameron Kaiser
               preftype="string"
               prefstring="general.useragent.override_template">
     <radio value=""
-           label="&uaDefault;"/>
-    <radio value="Mozilla/5.0 (Macintosh; U; PPC; en-US; %s) (mimic Gecko/20100722 Firefox/3.6.8) Classilla/CFM"
+           label="Nokia N90 (&uaDefault;)"/>
+    <radio value="Mozilla/5.0 (Macintosh; U; PPC; %l; %s) Clecko/20120101 Classilla/CFM"
+           label="Classilla 9.3.x"/>
+    <radio value="Mozilla/5.0 (Macintosh; U; PPC; %l; %s) Gecko/20120117 Firefox/3.6.25 Classilla/CFM"
            label="Mozilla Firefox 3.6"/>
-    <radio value="Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1; .NET CLR 1.1.4322; .NET CLR 2.0.50727; %s) Classilla/CFM"
-           label="Microsoft Internet Explorer 7 (Windows)"/>
+    <radio value="Mozilla/4.0 (compatible; MSIE 9.0; Windows NT 6.0; %s) Classilla/CFM"
+           label="Microsoft Internet Explorer 9 (Windows)"/>
     <radio value="Mozilla/4.0 (Windows; U; MSIE 6.0; Windows NT 5.1; SV1; .NET CLR 2.0.50727; %s) Classilla/CFM"
            label="Microsoft Internet Explorer 6 (Windows)"/>
     <radio value="Mozilla/5.0 (iPhone; U; CPU iPhone OS 3_1_3 like Mac OS X; en-us; %s) AppleWebKit/528.18 (KHTML, like Gecko) Version/4.0 Mobile/7E18 Safari/528.16 Classilla/CFM"
@@ -109,8 +114,6 @@ Cameron Kaiser
     	   label="Opera Mini 3"/>
     <radio value="Opera/9.60 (J2ME/MIDP; Opera Mini/4.2.13918/488; U; en; %s) Presto/2.2.0 Classilla/CFM"
     	   label="Opera Mini 4"/>
-    <radio value="T-Mobile Dash Mozilla/4.0 (compatible; MSIE 4.01; Windows CE; Smartphone; 320x240; %s) Classilla/CFM"
-    	   label="Windows CE Internet Explorer 4"/>
   </radiogroup>
 
 </groupbox>

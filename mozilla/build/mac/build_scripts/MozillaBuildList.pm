@@ -2213,7 +2213,7 @@ sub BuildEmbeddingProjects()
     BuildProject(":mozilla:embedding:base:macbuild:EmbedAPI.xml", "EmbedAPI$D.o");
     MakeAlias(":mozilla:embedding:base:macbuild:EmbedAPI$D.o", ":mozilla:dist:embedding:");
 
-    if ($main::options{embedding_test})
+    if (0) # $main::options{embedding_test})
     {
     	my($PowerPlantPath) = "MacOS Support:PowerPlant";
         if (-e GetCodeWarriorRelativePath($PowerPlantPath))
@@ -2525,7 +2525,7 @@ sub BuildMozilla()
 
     # build tool to create Component Registry in release builds only.
     if (!($main::DEBUG)) {
-        BuildProject(":mozilla:xpcom:tools:registry:macbuild:RegXPCOM.xml", "RegXPCOM");
+        #BuildProject(":mozilla:xpcom:tools:registry:macbuild:RegXPCOM.xml", "RegXPCOM");
     }
     
     # build XPCShell to test the cache in debugging builds only.
@@ -2627,7 +2627,7 @@ sub BuildProjects()
     BuildAccessiblityProjects();   
     BuildEditorProjects();
     BuildEmbeddingProjects();
-    BuildViewerProjects();
+    #BuildViewerProjects();
     BuildXPAppProjects();
     BuildExtensionsProjects();
     BuildPluginsProjects();

@@ -34,6 +34,17 @@
 #include "nsIOutputStream.h"
 #include "nsMemory.h"
 
+#define NS_STORAGESTREAM_CID \
+{ /* 86c37b9b-74e8-4673-844e-6e7dd83ba485 */         \
+     0x86c37b9b,                                     \
+     0x74e8,                                         \
+     0x4673,                                         \
+    {0x84, 0x4e, 0x6e, 0x7d, 0xd8, 0x3b, 0xa4, 0x85} \
+}
+
+#define NS_STORAGESTREAM_CONTRACTID "@mozilla.org/storagestream;1"
+#define NS_STORAGESTREAM_CLASSNAME "Classilla Storage Stream"
+
 class nsSegmentedBuffer;
 
 class nsStorageStream : public nsIStorageStream,
@@ -43,7 +54,8 @@ public:
     nsStorageStream();
     virtual ~nsStorageStream();
     
-    NS_METHOD Init(PRUint32 segmentSize, PRUint32 maxSize, nsIMemory *segmentAllocator = 0);
+    // This is now in the .idl.
+    //NS_METHOD Init(PRUint32 segmentSize, PRUint32 maxSize, nsIMemory *segmentAllocator = 0);
 
     NS_DECL_ISUPPORTS
     NS_DECL_NSISTORAGESTREAM

@@ -510,6 +510,18 @@ nsHttpHandler::OnModifyRequest(nsIHttpChannel *chan)
         // fire off the notification, ignore the return code.
         httpNotify->OnModifyRequest(chan);
     }
+
+    // notify interested observers (in our case, Site Control) (Classilla issue 169)
+	nsCOMPtr<nsIObserverService> os(do_GetService("@mozilla.org/observer-service;1", &rv));
+  	if (os) {
+  		// force the channel to become an nsIHttpChannel, or this won't work.
+  		// This is going to look like an nsISupports to the other end, however, so
+  		// the other end will need to QI the resulting object to what it wants.
+  		nsCOMPtr<nsIHttpChannel> hchanptr(do_QueryInterface(chan, &rv));
+  		if (NS_SUCCEEDED(rv))
+    		rv = os->NotifyObservers(hchanptr, "http-on-modify-request", 0);
+    	// we don't care if this fails.
+  	}
     
     return NS_OK;
 }
@@ -552,6 +564,18 @@ nsHttpHandler::OnExamineResponse(nsIHttpChannel *chan)
         httpNotify->OnExamineResponse(chan);
     }
     
+    // notify interested observers (in our case, the Byblos manager) (Classilla issue 170)
+	nsCOMPtr<nsIObserverService> os(do_GetService("@mozilla.org/observer-service;1", &rv));
+  	if (os) {
+  		// force the channel to become an nsIHttpChannel, or this won't work.
+  		// This is going to look like an nsISupports to the other end, however, so
+  		// the other end will need to QI the resulting object to what it wants.
+  		nsCOMPtr<nsIHttpChannel> hchanptr(do_QueryInterface(chan, &rv));
+  		if (NS_SUCCEEDED(rv))
+    		rv = os->NotifyObservers(hchanptr, "http-on-examine-response", 0);
+    	// we don't care if this fails.
+  	}
+
     return NS_OK;
 }
 
@@ -587,6 +611,7 @@ nsHttpHandler::BuildUserAgent()
                  !mOscpu.IsEmpty(),
                  "HTTP cannot send practical requests without this much");
 
+#if(0)
     // preallocate to worst-case size, which should always be better
     // than if we didn't preallocate at all.
     mUserAgent.SetCapacity(mAppName.Length() + 
@@ -656,6 +681,41 @@ nsHttpHandler::BuildUserAgent()
             mUserAgent += ')';
         }
     }
+#else
+	// Classilla issue 171
+    mUserAgent.SetCapacity(
+                           mProduct.Length() +
+                           mProductSub.Length() +
+                           160);
+                           
+    mUserAgent.Assign("NokiaN90-1/3.0545.5.1 Series60/2.8 Profile/MIDP-2.0 Configuration/CLDC-1.1 ");
+    // Application comment. Send language and rv: only.
+    mUserAgent += '(';
+    if (!mLanguage.IsEmpty()) {
+        mUserAgent += mLanguage;
+    }
+    if (!mMisc.IsEmpty()) {
+        mUserAgent += "; ";
+        mUserAgent += mMisc;
+    }
+    mUserAgent += ')';
+    
+    // Product portion
+    if (!mProduct.IsEmpty()) {
+        mUserAgent += ' ';
+        mUserAgent += mProduct;
+        if (!mProductSub.IsEmpty()) {
+            mUserAgent += '/';
+            mUserAgent += mProductSub;
+        }
+        if (!mProductComment.IsEmpty()) {
+            mUserAgent += " (";
+            mUserAgent += mProductComment;
+            mUserAgent += ')';
+        }
+    }    
+	
+#endif
 }
 
 void

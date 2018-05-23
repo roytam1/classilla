@@ -49,6 +49,7 @@
 #include "nsPersistentProperties.h"
 #include "nsScriptableInputStream.h"
 #include "nsBinaryStream.h"
+#include "nsStorageStream.h" // Classilla issue 170
 
 #include "nsMemoryImpl.h"
 #include "nsErrorService.h"
@@ -176,6 +177,7 @@ NS_GENERIC_FACTORY_CONSTRUCTOR(nsTimerImpl);
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsTimerManager);
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsBinaryOutputStream)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsBinaryInputStream)
+NS_GENERIC_FACTORY_CONSTRUCTOR(nsStorageStream); // Classilla issue 170
 
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsVariant);
 
@@ -295,6 +297,7 @@ static const nsModuleComponentInfo components[] = {
     COMPONENT(SCRIPTABLEINPUTSTREAM, nsScriptableInputStream::Create),
     COMPONENT(BINARYINPUTSTREAM, nsBinaryInputStreamConstructor),
     COMPONENT(BINARYOUTPUTSTREAM, nsBinaryOutputStreamConstructor),
+    COMPONENT(STORAGESTREAM, nsStorageStreamConstructor), // Classilla issue 170
 
 #define NS_PROPERTIES_CLASSNAME  "Properties"
     COMPONENT(PROPERTIES, nsProperties::Create),

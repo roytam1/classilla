@@ -118,14 +118,24 @@ typedef struct _MDSocketCallerInfo {
 
 struct _MDFileDesc {
     PRInt32         osfd;
-    PRPackedBool	deferredOD; // Classilla issue 161
-    PRPackedBool	deferredDi; // idem
-    PRPackedBool	everGotData; // idem
     PRPackedBool    orderlyDisconnect;
     PRPackedBool    readReady;
     PRPackedBool    writeReady;
     PRPackedBool    exceptReady;
     PRLock *        miscLock;
+    
+#if(0)
+    /* Buffered OTRcv information -- Classilla issue 161 */
+    PRPackedBool	evergotdata;
+    void *otrcvbuffer;
+    PRInt32 rcvbuflen;
+    PRInt32 rcvbufptr;
+#else
+    /* 9.2.3 implementation */
+    PRPackedBool deferredDi;
+    PRPackedBool deferredOD;
+    PRPackedBool everGotData;
+#endif
 
     /* Server sockets: listen bit tells the notifier func what to do */
     PRBool          doListen;

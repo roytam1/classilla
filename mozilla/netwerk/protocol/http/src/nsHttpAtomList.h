@@ -130,3 +130,6 @@ HTTP_ATOM(Delete,                    "DELETE")
 HTTP_ATOM(Trace,                     "TRACE")
 HTTP_ATOM(Connect,                   "CONNECT")
 HTTP_ATOM(M_Post,                    "M-POST")
+
+// Classilla custom atoms
+HTTP_ATOM(X_Classilla,				 "X-Classilla")

@@ -24,6 +24,8 @@
  *   Peter Annema <disttsc@bart.nl>
  *   Samir Gehani <sgehani@netscape.com>
  *
+ * Modified for Classilla by Cameron Kaiser
+ *
  * Alternatively, the contents of this file may be used under the terms of
  * either the GNU General Public License Version 2 or later (the "GPL"), or 
  * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -48,6 +50,297 @@ var gChromeState = null; // chrome state before we went into print preview
 var gOldCloseHandler = null; // close handler before we went into print preview
 var gInPrintPreviewMode = false;
 var gWebProgress        = null;
+
+/*
+ *
+ * Byblos stelae controller
+ * Classilla issue 170
+ *
+ */
+ 
+var Cc = Components.classes;
+var Ci = Components.interfaces;
+
+var observerService = Cc["@mozilla.org/observer-service;1"].getService(Ci.nsIObserverService);
+    
+// The tracer is responsible for aggregating events from the HTTP traced channel
+// and consuming data, handing it to the designated stele for translation.
+//
+// These functions are designed to be absolutely bulletproof because if they don't
+// work, the browser don't work.
+
+function ByblosTracer() { }
+
+ByblosTracer.prototype = {
+	originalListener : null, // observer sets this
+	receivedData : null,
+	buffer : null,
+	stele : null, // observer sets this
+	console : null, // observer sets this
+	
+	onStartRequest : function(request, context) {
+		//this.console.logStringMessage("tracer onStartRequest");
+		this.receivedData = [];
+		this.buffer = [];
+		
+		this.originalListener.onStartRequest(request, context);
+	},
+	onDataAvailable : function(request, context, stream, offset, count) {
+		var Cc = Components.classes;
+		var Ci = Components.interfaces;
+
+		//this.console.logStringMessage("tracer onDataAvailable");
+
+       	var binaryInputStream = Cc["@mozilla.org/binaryinputstream;1"]
+                                .createInstance(Ci.nsIBinaryInputStream);
+        binaryInputStream.setInputStream(stream);
+
+        // Copy received data as they come.
+        var data = binaryInputStream.readBytes(count);
+        this.receivedData.push(data);
+
+		// Defer! DEFER! But don't delete! Or something. (This is here for debugging)
+		//this.originalListener.onDataAvailable(request, context, stream, offset, count);
+	},
+	onStopRequest : function(request, context, status) {
+		var i, j;
+		var did_rewrite = true;
+		var Cc = Components.classes;
+		var Ci = Components.interfaces;
+
+		//this.console.logStringMessage("tracer onStopRequest");
+		
+		// Hand the coalesced data to the stele.
+		var fump = this.receivedData.join('');
+		var lump = fump;
+		try {
+			var respobj = this.stele.parseHTML(fump);
+			lump = (respobj.response == "ok") ? respobj.body : fump;
+		} catch(e) {
+			this.console.logStringMessage("Byblos failure: stele failed parsing the page: "+e);
+			did_rewrite = false;
+		}
+		
+		// Break up the lump into 4K gobs to simulate a network read using a storage stream.
+		var storageStream = Cc["@mozilla.org/storagestream;1"]
+							.createInstance(Ci.nsIStorageStream);
+		storageStream.init(4096, lump.length, null);
+		var binaryOutputStream = Cc["@mozilla.org/binaryoutputstream;1"]
+								 .createInstance(Ci.nsIBinaryOutputStream);
+
+		binaryOutputStream.setOutputStream(storageStream.getOutputStream(0));
+		binaryOutputStream.writeBytes(lump, lump.length);
+		j = lump.length;
+		for (i = 0; i < lump.length; i += 4096) {
+			var c = (j < 4096) ? j : 4096;
+			//this.console.logStringMessage("simulating onDataAvailable "+i+" "+j+" "+c);
+			this.originalListener.onDataAvailable(request, context, storageStream.newInputStream(i), 0, c);
+			j -= 4096;
+			if (j < 1) break;
+		}		
+		
+		// Finally, push the stop request.
+		if (did_rewrite)
+			this.console.logStringMessage("Byblos success: successfully rewrote page");
+		this.originalListener.onStopRequest(request, context, status);
+	},
+	QueryInterface : function(aIID) {
+		var Cc = Components.classes;
+		var Ci = Components.interfaces;
+
+		if (aIID.equals(Ci.nsIStreamListener) || aIID.equals(Ci.nsISupports))
+			return this;
+		throw Components.results.NS_NOINTERFACE;
+	}
+};
+
+// The request observer is responsible for watching for URIs it can intercept and
+// determining if a stele exists for translation.
+
+var httpRequestObserver = { // watches for URIs it can intercept
+	observe : function(subject, topic, data) {
+		if (topic == "http-on-examine-response" && subject) {
+			var Cc = null;
+			var Ci = null;
+			try {
+				Cc = Components.classes;
+				Ci = Components.interfaces;
+			} catch(e) { }
+			if (!Cc) return; // wtf?!
+
+			var consoleService = Cc["@mozilla.org/consoleservice;1"]
+                               	.getService(Ci.nsIConsoleService);
+            if (!consoleService)
+            	consoleService = { logStringMessage : function(w) { } };
+                               	
+            // The object we get from nsHttpHandler is a raw nsISupports, so now we need to
+            // QI it. We start with an nsIChannel to get the URI and MIME type.
+			subject.QueryInterface(Ci.nsIChannel);
+			if (!subject.URI)
+				return; // wtf?
+			var uri = subject.URI;
+			var host = subject.URI.asciiHost;
+			            
+            // Next, QI to nsIHttpChannel to get the request information.
+			subject.QueryInterface(Ci.nsIHttpChannel);
+            if (!subject.getResponseHeader)
+            	return; // wtf?
+
+            // Examine the response headers. If the content type is not text/html, ignore it also.
+            var mime = "???";
+            try {
+            	mime = subject.getResponseHeader("Content-Type");
+            } catch(e) { /* Hmm. */ }
+			// Remove the character set, if there is one.
+			mime = mime.replace(/; charset=.+$/i, "");
+			
+			//consoleService.logStringMessage("HTTP observer fired "+subject+" "+mime+" "+host);
+
+            if (mime != "text/html" && mime != "application/xhtml+xml")
+            	return;
+			
+			// Is this a site that has a stele available for translation? Let's try loading one.
+			var str = "";
+			var srcUrl = "resource://programdir/Byblos/"+host+".js";
+			try {
+				var ioService=Cc["@mozilla.org/network/io-service;1"]
+    							.getService(Ci.nsIIOService);
+  				var scriptableStream=Cc["@mozilla.org/scriptableinputstream;1"]
+    							.getService(Ci.nsIScriptableInputStream);
+  				var channel=ioService.newChannel(srcUrl,null,null);
+  				var input=channel.open();
+  				scriptableStream.init(input);
+  				str=scriptableStream.read(input.available());
+  				scriptableStream.close();
+  				input.close();
+  			} catch(e) { }
+
+			// Couldn't load from the Byblos directory, so quietly fail.
+			if (!str)
+				return;
+				
+			// Try to interpret the JS.
+			var stele = null;
+			try {
+				var stelef = null;
+				eval("var stelef = "+str+";");
+				stele = stelef();
+			} catch(e) { consoleService.logStringMessage("Byblos failure parsing stele for "+host+": "+e); }
+			if (!stele)
+				return;
+			
+			consoleService.logStringMessage("Byblos info: got stele for "+host);
+			// See if the stele wants this URL.
+			if (!stele.wantURI(uri))
+				// Guess not.
+				return;
+
+			// Yes, start the Byblos tracer. This is delicate -- if the QI fails on setNewListener,
+			// we must undo this immediately.
+			var tracer = new ByblosTracer();
+			tracer.console = consoleService;
+			tracer.stele = stele;
+			// Finally QI ourselves to nsITraceableChannel. Do NOT catch failure here; it should propagate.
+			subject.QueryInterface(Ci.nsITraceableChannel);
+			
+			try {
+				// See if we can QI the tracer to the desired object. XHR will fail this, so
+				// we need to fail in a recoverable way (unlike the original nsITraceableChannel).
+				tracer.originalListener = subject.getCurrentListener();
+			} catch(e) { }
+			if (tracer.originalListener == null)
+				// This will not work. Abort now.
+				return;
+			// We do NOT want to catch this error; it should be propagated if this fails.
+			subject.setNewListener(tracer);
+		}
+	},
+	QueryInterface : function (aIID) {
+		var Cc = Components.classes;
+		var Ci = Components.interfaces;
+
+        if (aIID.equals(Ci.nsIObserver) || aIID.equals(Ci.nsISupports))
+        	return this;
+        throw Components.results.NS_NOINTERFACE;
+    }
+};
+
+// Enable the observer.
+observerService.addObserver(httpRequestObserver, "http-on-examine-response", false);
+
+/*
+ *
+ * Site Control
+ * This controls aspects of how the request is made, such as dynamic User-Agent control, etc.
+ * In 9.3.0, this is very basic and used only to control Google, which is weird.
+ * Classilla issue 169
+ *
+ */
+
+var httpModifyObserver = { // watches for requests
+	observe : function(subject, topic, data) {
+		if (topic == "http-on-modify-request" && subject) {
+			var Cc = null;
+			var Ci = null;
+			try {
+				Cc = Components.classes;
+				Ci = Components.interfaces;
+			} catch(e) { }
+			if (!Cc) return; // wtf?!
+
+			var consoleService = Cc["@mozilla.org/consoleservice;1"]
+                               	.getService(Ci.nsIConsoleService);
+            if (!consoleService)
+            	consoleService = { logStringMessage : function(w) { } };
+            	
+			// QI to a channel and get the URI.
+			try {
+				subject.QueryInterface(Ci.nsIChannel);
+			} catch(e) {
+				// We're dead.
+				consoleService.logStringMessage("Site Control observer failure on "+subject+": "+e);
+			}
+			
+			if (!subject.URI)
+				return; // abort now
+			var spec = subject.URI.spec;
+			if (!/^https?:\/\/(www\.|mail\.|accounts\.)?google\.com($|\/)/.test(spec))
+				return;
+			
+			// Now QI to an nsIHttpChannel so we can modify the request.
+			try {
+				subject.QueryInterface(Ci.nsIHttpChannel);
+			} catch(e) {
+				// We're so dead.
+				consoleService.logStringMessage("Site Control observer failure on "+subject+": "+e);
+			}
+			
+			if (!subject.setRequestHeader)
+				return; // abort now
+				
+			// This is where the logic would ordinarily be. Here we just forge the user agent.
+			subject.setRequestHeader("User-Agent", "Classilla/CFM", false);
+				
+			// successful
+			//consoleService.logStringMessage("Silent user-agent change for "+spec);
+		}
+	},
+	QueryInterface : function (aIID) {
+        if (aIID.equals(Ci.nsIObserver) || aIID.equals(Ci.nsISupports))
+        	return this;
+        throw Components.results.NS_NOINTERFACE;
+    }	
+};
+
+// Enable the observer.
+observerService.addObserver(httpModifyObserver, "http-on-modify-request", false);
+
+/*
+ *
+ * Back to the browser, which is already in progress.
+ *
+ */
+
 
 function getWebNavigation()
 {

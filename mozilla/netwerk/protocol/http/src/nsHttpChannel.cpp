@@ -77,6 +77,7 @@ nsHttpChannel::nsHttpChannel()
     , mResponseHeadersModified(PR_FALSE)
     , mCanceled(PR_FALSE)
     , mUploadStreamHasHeaders(PR_FALSE)
+    , mTracingEnabled(PR_TRUE)
 {
     LOG(("Creating nsHttpChannel @%x\n", this));
 
@@ -570,7 +571,14 @@ nsHttpChannel::ApplyContentConversions()
 nsresult
 nsHttpChannel::CallOnStartRequest()
 {
+	mTracingEnabled = PR_FALSE; // issue 170 (bug 430155)
+	
     if (mResponseHead && mResponseHead->ContentType().IsEmpty()) {
+     // bug 667907 (Classilla issue 178)
+     if (mResponseHead->Version() == NS_HTTP_VERSION_0_9 &&
+     	mConnectionInfo->Port() != mConnectionInfo->DefaultPort()) {
+     		mResponseHead->SetContentType(NS_LITERAL_CSTRING(TEXT_PLAIN));
+     } else {
         // Uh-oh.  We had better find out what type we are!
 
         // XXX This does not work with content-encodings...  but
@@ -592,6 +600,7 @@ nsHttpChannel::CallOnStartRequest()
                 mListener = converter;
             }
         }
+      }
     }
     
     nsresult rv = mListener->OnStartRequest(this, mListenerContext);
@@ -2179,6 +2188,7 @@ NS_INTERFACE_MAP_BEGIN(nsHttpChannel)
     NS_INTERFACE_MAP_ENTRY(nsIEncodedChannel)
     NS_INTERFACE_MAP_ENTRY(nsIHttpChannelInternal)
     NS_INTERFACE_MAP_ENTRY(nsITransportEventSink)
+    NS_INTERFACE_MAP_ENTRY(nsITraceableChannel)
     NS_INTERFACE_MAP_ENTRY_AMBIGUOUS(nsISupports, nsIChannel)
 NS_INTERFACE_MAP_END
 
@@ -3451,3 +3461,88 @@ nsHttpChannel::nsContentEncodings::PrepareForNext(void)
     return NS_OK;
 }
 
+/* The two blocks below are part of Classilla issue 170 (Mozilla bug 430155 modified for 1.3.1). */
+
+//-----------------------------------------------------------------------------
+// nsStreamListenerWrapper <private>
+//-----------------------------------------------------------------------------
+
+// Wrapper class to make replacement of nsHttpChannel's listener
+// from JavaScript possible. It is workaround for bug 433711.
+class nsStreamListenerWrapper : public nsIStreamListener
+{
+public:
+    nsStreamListenerWrapper(nsIStreamListener *listener);
+    void gimme(nsIStreamListener **_retval);
+    void forget(nsIStreamListener **_retval); // see below
+
+    NS_DECL_ISUPPORTS
+    NS_FORWARD_NSIREQUESTOBSERVER(mListener->)
+    NS_FORWARD_NSISTREAMLISTENER(mListener->)
+
+private:
+    ~nsStreamListenerWrapper() {}
+    nsCOMPtr<nsIStreamListener> mListener;
+};
+
+nsStreamListenerWrapper::nsStreamListenerWrapper(nsIStreamListener *listener)
+    : mListener(listener) 
+{
+    NS_ASSERTION(mListener, "no stream listener specified");
+}
+
+void
+nsStreamListenerWrapper::gimme(nsIStreamListener **_retval)
+{
+	*_retval = mListener;
+	NS_IF_ADDREF(*_retval);
+}
+
+void
+nsStreamListenerWrapper::forget(nsIStreamListener **_retval)
+{
+	// We need to add this method for Classilla. It implements nsCOMPtr forget(T** rhs) and swap(T*& rhs).
+	// Ordinarily this is implemented in nsCOMPtr.h, but that wasn't until Mozilla 1.9.0.
+    gimme(_retval);
+	mListener = nsnull;
+}
+
+NS_IMPL_ISUPPORTS2(nsStreamListenerWrapper,
+                   nsIStreamListener,
+                   nsIRequestObserver)
+
+//-----------------------------------------------------------------------------
+// nsHttpChannel::nsITraceableChannel
+//-----------------------------------------------------------------------------
+
+NS_IMETHODIMP
+nsHttpChannel::SetNewListener(nsIStreamListener *aListener, nsIStreamListener **_retval)
+{
+    if (!mTracingEnabled)
+        return NS_ERROR_FAILURE;
+
+    NS_ENSURE_ARG_POINTER(aListener);
+
+    nsCOMPtr<nsStreamListenerWrapper> wrapper = 
+        new nsStreamListenerWrapper(mListener);
+
+    if (!wrapper)
+        return NS_ERROR_OUT_OF_MEMORY;
+
+    wrapper->forget(_retval);
+    mListener = aListener;
+    return NS_OK;
+}
+
+NS_IMETHODIMP
+nsHttpChannel::GetCurrentListener(nsIStreamListener **_retval)
+{
+    nsCOMPtr<nsStreamListenerWrapper> wrapper = 
+        new nsStreamListenerWrapper(mListener);
+
+    if (!wrapper)
+        return NS_ERROR_OUT_OF_MEMORY;
+
+    wrapper->gimme(_retval);
+    return NS_OK;
+}

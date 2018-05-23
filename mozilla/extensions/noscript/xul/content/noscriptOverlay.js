@@ -3,7 +3,7 @@
 NoScript - a Firefox extension for whitelist driven safe JavaScript execution
 Copyright (C) 2004-2005 Giorgio Maone - g.maone@informaction.com
 
-Modified for Classilla (C)2009-2010 Cameron Kaiser
+Modified for Classilla (C)2009-2012 Cameron Kaiser
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -84,10 +84,18 @@ NoScriptOverlay.prototype={
     try {
       doc=this.srcDocument;
       durl=doc.URL;
-    } catch(ex) {
-      // OMG WORST KLUDGE EVAR
-      // this depends on chrome documents, XUL windows, etc. not having srcDocs or URLs
-      durl = "chrome:";
+    } catch(ex) { }
+    if (!durl || !durl.length || durl.length == 0) {
+      // try with the window
+      try {
+      	doc = window._content.document;
+      	durl = window._content.location.href;
+      } catch(ex) {
+      	// OMG WORST KLUDGE EVAR
+      	// this depends on chrome documents, XUL windows, etc. not having srcDocs or URLs
+      	// doc is probably null
+      	durl = "chrome:";
+      }
     }
     try {
     	//this._myLogIt(durl);
@@ -264,7 +272,7 @@ _noScript_syncUI=function(ev) {
   noscriptOverlay.syncUI(ev); 
 };
 
-function _noScript_openPopup(ev) {
+function _noScript_openPopup() {
 	if (noscriptOverlay.docdoc == null || noscriptOverlay.docdoc == "about:blank" ||
 			noscriptOverlay.ns.jsEnabled) {
 		_noScript_openOptions(null);

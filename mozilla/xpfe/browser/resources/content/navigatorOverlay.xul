@@ -84,6 +84,7 @@
     <key id="key_viewSource" key="&pageSourceCmd.commandkey;" command="View:PageSource" modifiers="accel"/>
     <key id="key_viewInfo"   key="&pageInfoCmd.commandkey;"   command="View:PageInfo"   modifiers="accel"/>
     <key id="key_viewSlowScroll" key="&viewSlowScroll.commandkey;" command="View:SlowScroll" modifiers="accel,shift"/>
+    <key id="key_viewNoStyle" key="z" command="View:NoStyle" modifiers="accel,shift"/>
     <!-- key id="key_viewFixups" key="&viewFixups.commandkey;" command="View:Fixups" modifiers="accel,shift" -->
     <key id="key_viewNextSidebarPanel" keycode="VK_PAGE_DOWN"  oncommand="SidebarGetRelativePanel(1);"  modifiers="alt" />
     <key id="key_viewPrevSidebarPanel" keycode="VK_PAGE_UP"  oncommand="SidebarGetRelativePanel(-1);"  modifiers="alt" />
@@ -136,6 +137,7 @@
     <command id="Browser:PrintSetup" oncommand="NSPrintSetup();"/>
     <command id="Browser:Print" oncommand="NSPrint();"/>
     <command id="Browser:PrintPreview" oncommand="BrowserPrintPreview();"/>
+    <command id="View:NoStyle" oncommand="setStyleDisabled(true); BrowserReload(); event.preventBubble();"/>
     <command id="cmd_quit"/>
     <command id="cmd_close" oncommand="BrowserCloseTabOrWindow()"/>
     <command id="cmd_closeOtherTabs" oncommand="BrowserCloseOtherTabs()"/>
@@ -293,7 +295,8 @@
         <!-- bug 32732 -->
           <menupopup onpopupshowing="stylesheetFillPopup(this);"
                      oncommand="stylesheetSwitchAll(window.content, event.target.getAttribute('data')); setStyleDisabled(false);" type="radio">
-            <menuitem label="&useStyleSheetNone.label;" accesskey="&useStyleSheetNone.accesskey;" oncommand="setStyleDisabled(true); BrowserReload(); event.preventBubble();" type="radio"/>
+            <!-- menuitem label="&useStyleSheetNone.label;" accesskey="&useStyleSheetNone.accesskey;" key="key_viewNoStyle" oncommand="setStyleDisabled(true); BrowserReload(); event.preventBubble();" type="radio" -->
+            <menuitem label="&useStyleSheetNone.label;" accesskey="&useStyleSheetNone.accesskey;" command="View:NoStyle" type="radio"/>
             <menuitem label="&useStyleSheetPersistentOnly.label;" accesskey="&useStyleSheetPersistentOnly.accesskey;" type="radio"/>
           </menupopup>
         </menu>

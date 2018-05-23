@@ -808,6 +808,11 @@ nsXMLHttpRequest::GetStreamForWString(const PRUnichar* aStr,
   httpChannel->SetRequestHeader(NS_LITERAL_CSTRING("Content-Length"),
                                 nsPrintfCString("%d", charLength),
                                 PR_FALSE);
+                                
+  // Tag all our XHR headers, just in case.
+  httpChannel->SetRequestHeader(NS_LITERAL_CSTRING("X-Classilla"),
+  								NS_LITERAL_CSTRING("XHR"),
+  								PR_TRUE);
 
   // Shove in the trailing and leading CRLF
   postData[0] = nsCRT::CR;

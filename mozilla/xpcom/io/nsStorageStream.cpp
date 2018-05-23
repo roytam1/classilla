@@ -537,7 +537,7 @@ NS_NewStorageStream(PRUint32 segmentSize, PRUint32 maxSize, nsIStorageStream **r
     nsStorageStream* storageStream = new nsStorageStream();
     if (!storageStream) return NS_ERROR_OUT_OF_MEMORY;
     
-    storageStream->Init(segmentSize, maxSize);
+    storageStream->Init(segmentSize, maxSize, nsnull);
     NS_ADDREF(storageStream);
     *result = storageStream;
     return NS_OK;

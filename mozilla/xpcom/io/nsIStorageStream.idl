@@ -20,6 +20,7 @@
  */
 
 #include "nsISupports.idl"
+#include "nsIMemory.idl"
 #include "nsrootidl.idl"
 
 interface nsIInputStream;
@@ -34,6 +35,11 @@ interface nsIOutputStream;
 [scriptable, uuid(604ad9d0-753e-11d3-90ca-0040056a906e)]
 interface nsIStorageStream : nsISupports
 {
+    /**
+     * Init the storage stream. This is new to Classilla and is needed by Byblos..
+     */
+    void init(in PRUint32 segmentSize, in PRUint32 maxSize, in nsIMemory segmentAllocator);
+    
     /**
      * Get a reference to the one and only output stream for this instance.
      * The zero-based startPosition argument is used is used to set the initial

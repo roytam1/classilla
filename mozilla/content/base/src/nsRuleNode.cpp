@@ -420,6 +420,9 @@ nsRuleNode::operator new(size_t sz, nsIPresContext* aPresContext) CPP_THROW_NEW
 void 
 nsRuleNode::Destroy()
 {
+if (!this) return;
+if (!mPresContext) return;
+
   // Destroy ourselves.
   this->~nsRuleNode();
   
@@ -457,6 +460,7 @@ DeleteRuleNodeChildren(PLDHashTable *table, PLDHashEntryHdr *hdr,
 
 nsRuleNode::~nsRuleNode()
 {
+if (!this) return;
   MOZ_COUNT_DTOR(nsRuleNode);
   if (mStyleData.mResetData || mStyleData.mInheritedData)
     mStyleData.Destroy(0, mPresContext);
@@ -5405,15 +5409,18 @@ nsRuleNode::GetStyleData(nsStyleStructID aSID,
 void
 nsRuleNode::Mark()
 {
-return; // 9.2.3 temporary fix
+if (!this) return;
+if (!mParent) return;
 
-  if (!this->mParent || !this->mDependentBits) {
-  	// Try to mark ourselves, and escape. this isn't generally good enough.
-  	mDependentBits |= NS_RULE_NODE_GC_MARK;
-  	return;
-  }
+//return; // 9.2.3 temporary fix
+
+  //if (!this->mParent) {
+  //	mDependentBits |= NS_RULE_NODE_GC_MARK;
+  //	return;
+  //}
   for (nsRuleNode *node = this;
-       node && node->mDependentBits && !(node->mDependentBits & NS_RULE_NODE_GC_MARK);
+       node && // node->mDependentBits && node->mParent &&
+       		!(node->mDependentBits & NS_RULE_NODE_GC_MARK);
        node = node->mParent)
     node->mDependentBits |= NS_RULE_NODE_GC_MARK;
 }
@@ -5433,7 +5440,8 @@ SweepRuleNodeChildren(PLDHashTable *table, PLDHashEntryHdr *hdr,
 PRBool
 nsRuleNode::Sweep()
 {
-return PR_FALSE; // 9.2.3 temporary fix
+//return PR_FALSE; // 9.2.3 temporary fix
+if (!this) return PR_TRUE;
 
   // If we're not marked, then we have to delete ourself.
   if (!(mDependentBits & NS_RULE_NODE_GC_MARK)) {

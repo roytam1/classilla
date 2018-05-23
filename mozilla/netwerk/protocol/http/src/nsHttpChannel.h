@@ -52,6 +52,7 @@
 #include "nsIAsyncInputStream.h"
 #include "nsIInputStreamPump.h"
 #include "nsIPrompt.h"
+#include "nsITraceableChannel.h" // issue 170/bug 430155
 
 class nsHttpResponseHead;
 class nsHttpAuthCache;
@@ -70,6 +71,7 @@ class nsHttpChannel : public nsIHttpChannel
                     , public nsICacheListener
                     , public nsIEncodedChannel
                     , public nsITransportEventSink
+                    , public nsITraceableChannel // issue 170
 {
 public:
     NS_DECL_ISUPPORTS
@@ -84,6 +86,7 @@ public:
     NS_DECL_NSIENCODEDCHANNEL
     NS_DECL_NSIHTTPCHANNELINTERNAL
     NS_DECL_NSITRANSPORTEVENTSINK
+    NS_DECL_NSITRACEABLECHANNEL
 
     nsHttpChannel();
     virtual ~nsHttpChannel();
@@ -210,6 +213,7 @@ private:
     PRPackedBool                      mResponseHeadersModified;
     PRPackedBool                      mCanceled;
     PRPackedBool                      mUploadStreamHasHeaders;
+    PRPackedBool                      mTracingEnabled; // issue 170
 
     class nsContentEncodings : public nsISimpleEnumerator
     {
