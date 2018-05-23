@@ -180,10 +180,10 @@ nsresult nsMacCommandLine::Initialize(int& argc, char**& argv)
       err = ::AEProcessAppleEvent(&anEvent);
     }
   }
-  
+#ifdef XP_MACOSX  
   if (GetCurrentKeyModifiers() & optionKey)
     AddToCommandLine("-p");
-
+#endif
   // we've started up now
   mStartedUp = PR_TRUE;
   

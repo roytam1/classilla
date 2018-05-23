@@ -19,6 +19,7 @@
    
    Contributor(s): 
      Mike Kowalski <mikejk@ameritech.net>
+   Modified for Classilla by Cameron Kaiser <ckaiser@floodgap.com>
   -->
 <?xml-stylesheet href="chrome://communicator/skin/" type="text/css"?>
 
@@ -27,6 +28,7 @@
 %brandDTD;
 <!ENTITY % prefAdvancedDTD SYSTEM "chrome://communicator/locale/pref/pref-advanced.dtd"> %prefAdvancedDTD;
 ]>
+<!-- mozilla:xpfe:components:prefwindow:resources:locale:en-US:pref-advanced.dtd -->
 
 <page xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
       onload="parent.initPanel('chrome://communicator/content/pref/pref-advanced.xul');"
@@ -140,6 +142,7 @@
     <vbox align="start" id="contentEnablingBox">
       <checkbox id="advancedJavaAllow" label="&enbJavaCheck.label;" accesskey="&enbJavaCheck.accesskey;"
                 prefstring="security.enable_java"/>
+      <description>&enbJavaCheck.warning;</description>
     </vbox>
     <vbox>
     <vbox align="start">

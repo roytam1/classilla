@@ -89,6 +89,7 @@
 #define PLACED_LEFT  0x1
 #define PLACED_RIGHT 0x2
 
+// wtf?
 #define HACK_MEW
 //#undef HACK_MEW
 #ifdef HACK_MEW
@@ -102,7 +103,11 @@ static nscoord AccumulateImageSizes(nsIPresContext& aPresContext, nsIFrame& aFra
   if(type.get() == nsLayoutAtoms::imageFrame) {
     nsSize size;
     aFrame.GetSize(size);
-    sizes += NS_STATIC_CAST(nscoord,size.width);
+    
+// bug 79315 modified for 1.3
+//    sizes += NS_STATIC_CAST(nscoord,size.width);
+      sizes += size.width;
+      
   } else {
     // see if there are children to process
     nsIFrame* child = nsnull;
@@ -1235,7 +1240,11 @@ nsLineLayout::ReflowFrame(nsIFrame* aFrame,
   }
 
   // Size the frame and size its view (if it has one)
+  // ... until 79315 when RelativePositionFrames will do that for us
   aFrame->SizeTo(mPresContext, metrics.width, metrics.height);
+  
+// bug 79315 modified for 1.3
+#if(0)
   nsIView*  view;
   aFrame->GetView(mPresContext, &view);
   if (view) {
@@ -1250,6 +1259,7 @@ nsLineLayout::ReflowFrame(nsIFrame* aFrame,
 #endif
     NS_RELEASE(vm);
   }
+#endif
 
   // Tell the frame that we're done reflowing it
   aFrame->DidReflow(mPresContext, &reflowState, NS_FRAME_REFLOW_FINISHED);
@@ -1918,6 +1928,7 @@ nsLineLayout::VerticalAlignLine(nsLineBox* aLineBox,
         if (!strictMode && inUnconstrainedTable ) {
 
           nscoord imgSizes = AccumulateImageSizes(*mPresContext, *pfd->mFrame);
+          // per bug 79315 we should NOT use mCombinedArea here, so why are we?
           PRBool curFrameAccumulates = (imgSizes > 0) || 
                                        (pfd->mMaxElementWidth == pfd->mCombinedArea.width &&
                                         pfd->GetFlag(PFD_ISNONWHITESPACETEXTFRAME));
@@ -2521,8 +2532,18 @@ nsLineLayout::VerticalAlignFrames(PerSpanData* psd)
       if (!canUpdate && pfd->GetFlag(PFD_ISNONWHITESPACETEXTFRAME)) {
         const nsStyleText* textStyle;
         frame->GetStyleData(eStyleStruct_Text, (const nsStyleStruct*&)textStyle);
+
+// bug 213591 modified for 1.3
+// this looks like it's more of an efficiency improvement, but whatev
+#if(0)
         canUpdate = textStyle->mLineHeight.GetUnit() == eStyleUnit_Normal ||
                     textStyle->mLineHeight.GetUnit() == eStyleUnit_Null;
+#else
+        nsStyleUnit lhUnit = textStyle->mLineHeight.GetUnit();
+        canUpdate = ((lhUnit == eStyleUnit_Normal) || 
+                     (lhUnit == eStyleUnit_Null));
+#endif
+
       }
       if (canUpdate) {
 #endif
@@ -3194,44 +3215,94 @@ nsLineLayout::RelativePositionFrames(PerSpanData* psd, nsRect& aCombinedArea)
   nsRect spanCombinedArea;
   PerFrameData* pfd;
 
+/* This really needs to be cleaned up BAD. */
+
   nscoord minX, minY, maxX, maxY;
+  nsRect combinedAreaResult; // bug 235778
   if (nsnull != psd->mFrame) {
     // The minimum combined area for the frames in a span covers the
     // entire span frame.
+    // 's overflow area. The span frame might have overflowing frames.
+    // bug 235778
     pfd = psd->mFrame;
+#if(0)
     minX = 0;
     minY = 0;
     maxX = pfd->mBounds.width;
     maxY = pfd->mBounds.height;
+#endif
+    combinedAreaResult = pfd->mCombinedArea;
   }
   else {
     // The minimum combined area for the frames that are direct
     // children of the block starts at the upper left corner of the
     // line and is sized to match the size of the line's bounding box
     // (the same size as the values returned from VerticalAlignFrames)
+
+// bug 235778
+#if(0)
     minX = psd->mLeftEdge;
     maxX = psd->mX;
     minY = mTopEdge;
     maxY = mTopEdge + mFinalLineHeight;
+#endif
+    combinedAreaResult.x = psd->mLeftEdge;
+    // If this turns out to be negative, the rect will be treated as empty.
+    // Which is just fine.
+    combinedAreaResult.width = psd->mX - combinedAreaResult.x;
+    combinedAreaResult.y = mTopEdge;
+    combinedAreaResult.height = mFinalLineHeight;
+// end bug
+
   }
 
+// bug 79315
+#if(0)
   pfd = psd->mFirstFrame;
   PRBool updatedCombinedArea = PR_FALSE;
   while (nsnull != pfd) {
+#endif
+  for (pfd = psd->mFirstFrame; pfd; pfd = pfd->mNext) {
+// end bug
+
     nscoord x = pfd->mBounds.x;
     nscoord y = pfd->mBounds.y;
-
+    nsIFrame* frame = pfd->mFrame; // bug 213591
+    nsPoint origin = nsPoint(x, y); // bug 235778
+    
     // Adjust the origin of the frame
     if (pfd->GetFlag(PFD_RELATIVEPOS)) {
-      nsIFrame* frame = pfd->mFrame;
+    
+      // nsIFrame* frame = ...
+// bug 213591
+// however, we seem to be better off using the original code
+//f(0)
       frame->GetOrigin(origin);
       // XXX what about right and bottom?
       nscoord dx = pfd->mOffsets.left;
       nscoord dy = pfd->mOffsets.top;
       frame->MoveTo(mPresContext, origin.x + dx, origin.y + dy);
-      x += dx;
-      y += dy;
+      //x += dx;
+      //y += dy;
+//ndif
+      // right and bottom will now be handled by
+      // nsHTMLReflowState::ComputeRelativeOffsets
+      //nsPoint change(pfd->mOffsets.left, pfd->mOffsets.top);
+      //frame->SetPosition(frame->GetPosition() + change); // nsFrame does not have Get/Set Position
+      //x += change.x;
+      //y += change.y;
+// end bug
+      nsPoint change(pfd->mOffsets.left, pfd->mOffsets.top); // dx, dy?
+      origin += change; // bug 235778
+      
     }
+// bug 214623 modified for 1.3 (with efficiency for 213591 below)
+    nsIView* view;
+    frame->GetView(mPresContext, &view);
+    if (view)
+      nsContainerFrame::SyncFrameViewAfterReflow(mPresContext, frame,
+        view, &pfd->mCombinedArea, // bug 214623 says this is ignored. wtf??
+        NS_FRAME_NO_SIZE_VIEW);
 
     // Note: the combined area of a child is in its coordinate
     // system. We adjust the childs combined area into our coordinate
@@ -3244,7 +3315,25 @@ nsLineLayout::RelativePositionFrames(PerSpanData* psd, nsRect& aCombinedArea)
       r = &spanCombinedArea;
       RelativePositionFrames(pfd->mSpan, spanCombinedArea);
     }
+// bug 214623
+    else {
+      // If we have something that's not an inline but with
+      // a complex frame hierarchy, they need to be positioned.
+      nsContainerFrame::PositionChildViews(mPresContext, frame);
+    }
+// end bug
+    
+// bug 213591 modified for 1.3 (replaces 79315 down at the bottom)
+// modified again by bug 214623 (optimized by me for 1.3)
+// this is here for a second time:
+// Do this here (rather than along with NS_F_O_CHILDREN) to get leaf frames
+    if (view)
+      nsContainerFrame::SyncFrameViewAfterReflow(mPresContext, frame, view, r,
+        NS_FRAME_NO_MOVE_VIEW); // bug 214623
+// end if
 
+// bug 79315
+#if (0)
     // see bug 21415: we used to prevent empty inlines from impacting the
     // size of the combined area, however that is wrong so now we allow
     // empty inlines to contribute to the line's combined area.
@@ -3257,6 +3346,7 @@ nsLineLayout::RelativePositionFrames(PerSpanData* psd, nsRect& aCombinedArea)
     // don't want to happen.
     if (r->width && r->height) {
 #endif
+
       nscoord xl = x + r->x;
       nscoord xr = x + r->XMost();
       if (xl < minX) {
@@ -3274,12 +3364,43 @@ nsLineLayout::RelativePositionFrames(PerSpanData* psd, nsRect& aCombinedArea)
         maxY = yb;
       }
       updatedCombinedArea = PR_TRUE;
+
 #if 0
     }
 #endif
     pfd = pfd->mNext;
-  }
+#endif // end bug out
 
+// bug 235778
+#if(0)
+    nscoord xl = x + r->x;
+    if (xl < minX) {
+      minX = xl;
+    }
+    nscoord xr = x + r->XMost();
+    if (xr > maxX) {
+      maxX = xr;
+    }
+    nscoord yt = y + r->y;
+    if (yt < minY) {
+      minY = yt;
+    }
+    nscoord yb = y + r->YMost();
+    if (yb > maxY) {
+      maxY = yb;
+    }
+#endif
+    //combinedAreaResult.UnionRect(combinedAreaResult, *r + origin);
+    r->MoveBy(origin.x, origin.y);
+    nsRect nucar;
+    nucar.UnionRect(combinedAreaResult,
+    *r);
+    combinedAreaResult = nucar;
+  }
+// end bug
+
+// bug 79315
+#if (0)
   // Compute aggregated combined area
   if (updatedCombinedArea) {
     aCombinedArea.x = minX;
@@ -3293,6 +3414,17 @@ nsLineLayout::RelativePositionFrames(PerSpanData* psd, nsRect& aCombinedArea)
     aCombinedArea.width = 0;
     aCombinedArea.height = 0;
   }
+#endif
+
+// bug 235778
+#if(0)
+  aCombinedArea.x = minX;
+  aCombinedArea.y = minY;
+  aCombinedArea.width = maxX - minX;
+  aCombinedArea.height = maxY - minY;
+#endif
+  aCombinedArea = combinedAreaResult;
+// end bug
 
   // If we just computed a spans combined area, we need to update its
   // NS_FRAME_OUTSIDE_CHILDREN bit..
@@ -3302,13 +3434,34 @@ nsLineLayout::RelativePositionFrames(PerSpanData* psd, nsRect& aCombinedArea)
     nsFrameState oldState;
     frame->GetFrameState(&oldState);
     nsFrameState newState = oldState & ~NS_FRAME_OUTSIDE_CHILDREN;
+
+// bug 235778
+#if(0)
     if ((minX < 0) || (minY < 0) ||
         (maxX > pfd->mBounds.width) || (maxY > pfd->mBounds.height)) {
+#endif
+    if ((combinedAreaResult.x < 0) || (combinedAreaResult.y < 0) ||
+        (combinedAreaResult.XMost() > pfd->mBounds.width) ||
+        (combinedAreaResult.YMost() > pfd->mBounds.height)) {
+// end bug
+
       newState |= NS_FRAME_OUTSIDE_CHILDREN;
     }
     if (newState != oldState) {
       frame->SetFrameState(newState);
     }
+    
+// bug 79315 modified for 1.3 was here but moved above to 213591
+#if(0)
+    nsIView*  view;
+    frame->GetView(mPresContext, &view);
+    if (view) {
+      nsContainerFrame::SyncFrameViewAfterReflow(mPresContext, frame,
+        view, &aCombinedArea);
+    }
+#endif
+// end bug
+
   }
 }
 

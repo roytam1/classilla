@@ -3335,7 +3335,9 @@ inline static PRBool
 css_RequiresAbsoluteURI(const nsString& uri)
 {
   // cheap shot at figuring out if this requires an absolute url translation
-  return Substring(uri, 0, 9).Equals(NS_LITERAL_STRING("chrome:")) == PR_FALSE;
+  // bug 210834
+  return ((Substring(uri, 0, 9).Equals(NS_LITERAL_STRING("chrome:"))) == PR_FALSE);
+  //return !StringBeginsWith(uri, NS_LITERAL_STRING("chrome:"));
 }
 
 PRBool CSSParserImpl::ParseURL(PRInt32& aErrorCode, nsCSSValue& aValue)
@@ -3350,14 +3352,15 @@ PRBool CSSParserImpl::ParseURL(PRInt32& aErrorCode, nsCSSValue& aValue)
       // the style sheet.
       // XXX editors won't like this - too bad for now
       nsAutoString absURL;
+      nsresult rv = NS_ERROR_FAILURE; // bug 210834
       if (nsnull != mURL && css_RequiresAbsoluteURI(tk->mIdent)) {
-        nsresult rv;
+        //nsresult rv;
         rv = NS_MakeAbsoluteURI(absURL, tk->mIdent, mURL);
-        if (NS_FAILED(rv)) {
-          absURL = tk->mIdent;
-        }
+        //if (NS_FAILED(rv)) {
+        //  absURL = tk->mIdent;
+        //}
       }
-      else {
+      if(NS_FAILED(rv)) { // else {
         absURL = tk->mIdent;
       }
       if (ExpectSymbol(aErrorCode, ')', PR_TRUE)) {
@@ -3654,8 +3657,12 @@ PRBool CSSParserImpl::ParseProperty(PRInt32& aErrorCode,
 #define BG_BOTTOM  0x04
 #define BG_LEFT    0x08
 #define BG_RIGHT   0x10
+/* bug 219829
 #define BG_CENTER1 0x20
 #define BG_CENTER2 0x40
+*/
+#define BG_CTB     (BG_CENTER | BG_TOP | BG_BOTTOM)
+#define BG_CLR     (BG_CENTER | BG_LEFT | BG_RIGHT)
 
 // Note: Don't change this table unless you update
 // parseBackgroundPosition!
@@ -4096,6 +4103,7 @@ PRBool CSSParserImpl::ParseAzimuth(PRInt32& aErrorCode, nsCSSValue& aValue)
   return PR_FALSE;
 }
 
+
 PRBool CSSParserImpl::ParseAppearance(PRInt32& aErrorCode, nsCSSDeclaration* aDeclaration, 
                                       nsChangeHint& aChangeHint)
 {
@@ -4109,6 +4117,30 @@ PRBool CSSParserImpl::ParseAppearance(PRInt32& aErrorCode, nsCSSDeclaration* aDe
     return PR_FALSE;
 
   return PR_TRUE;
+}
+
+// bug 219829
+static nsCSSValue
+BackgroundPositionMaskToCSSValue(PRInt32 aMask, PRBool isX)
+{
+  PRInt32 pct = 50;
+  if (isX) {
+    if (aMask & BG_LEFT) {
+      pct = 0;
+    }
+    else if (aMask & BG_RIGHT) {
+      pct = 100;
+    }
+  }
+  else {
+    if (aMask & BG_TOP) {
+      pct = 0;
+    }
+    else if (aMask & BG_BOTTOM) {
+      pct = 100;
+    }
+  }
+  return nsCSSValue(pct, eCSSUnit_Enumerated);
 }
 
 PRBool CSSParserImpl::ParseBackground(PRInt32& aErrorCode, nsCSSDeclaration* aDeclaration, 
@@ -4133,6 +4165,8 @@ PRBool CSSParserImpl::ParseBackground(PRInt32& aErrorCode, nsCSSDeclaration* aDe
   if (0 != (found & 0x30)) {  // found one or more position values, validate them
     if (0 == (found & 0x20)) {  // x value only
       if (eCSSUnit_Enumerated == values[4].GetUnit()) {
+// bug 219829
+#if(0)
         switch (values[4].GetIntValue()) {
           case BG_CENTER:
             values[4].SetIntValue(50, eCSSUnit_Enumerated);
@@ -4155,6 +4189,11 @@ PRBool CSSParserImpl::ParseBackground(PRInt32& aErrorCode, nsCSSDeclaration* aDe
             values[5].SetIntValue(50, eCSSUnit_Enumerated);
             break;
         }
+#endif
+        PRInt32 mask = values[4].GetIntValue();
+        values[4] = BackgroundPositionMaskToCSSValue(mask, PR_TRUE);
+        values[5] = BackgroundPositionMaskToCSSValue(mask, PR_FALSE);
+// end bug
       }
       else if (eCSSUnit_Inherit == values[4].GetUnit()) {
         values[5].SetInheritValue();
@@ -4169,9 +4208,10 @@ PRBool CSSParserImpl::ParseBackground(PRInt32& aErrorCode, nsCSSDeclaration* aDe
     else { // both x & y values
       nsCSSUnit xUnit = values[4].GetUnit();
       nsCSSUnit yUnit = values[5].GetUnit();
-      if (eCSSUnit_Enumerated == xUnit) { // if one is enumerated, both must be
+      if (eCSSUnit_Enumerated == xUnit) { // if one is enumerated, both must be NO! bug 219829!
+        PRInt32 xValue = values[4].GetIntValue(); // moved here by bug 219829
         if (eCSSUnit_Enumerated == yUnit) {
-          PRInt32 xValue = values[4].GetIntValue();
+          //PRInt32 xValue = values[4].GetIntValue(); // moved above by bug 219829
           PRInt32 yValue = values[5].GetIntValue();
           if (0 != (xValue & (BG_LEFT | BG_RIGHT)) &&  // x is really an x value
               0 != (yValue & (BG_LEFT | BG_RIGHT))) {  // y is also an x value
@@ -4187,6 +4227,8 @@ PRBool CSSParserImpl::ParseBackground(PRInt32& aErrorCode, nsCSSDeclaration* aDe
             xValue = yValue;
             yValue = holdXValue;
           }
+// bug 219829
+#if(0)
           switch (xValue) {
             case BG_LEFT:
               values[4].SetIntValue(0, eCSSUnit_Enumerated);
@@ -4213,14 +4255,33 @@ PRBool CSSParserImpl::ParseBackground(PRInt32& aErrorCode, nsCSSDeclaration* aDe
             default:
               NS_ERROR("bad y value");
           }
+#endif
+          NS_ASSERTION(xValue & BG_CLR, "bad x value");
+          NS_ASSERTION(yValue & BG_CTB, "bad y value");
+          values[4] = BackgroundPositionMaskToCSSValue(xValue, PR_TRUE);
+          values[5] = BackgroundPositionMaskToCSSValue(yValue, PR_FALSE);
+// end bug
         }
         else {
-          return PR_FALSE;
+          //return PR_FALSE; // bug 219829
+          if (!(xValue & BG_CLR)) {
+            // The first keyword can only be 'center', 'left', or 'right'
+            return PR_FALSE;
+          }
+          values[4] = BackgroundPositionMaskToCSSValue(xValue, PR_TRUE);
+          // end bug
         }
       }
       else {
         if (eCSSUnit_Enumerated == yUnit) {
-          return PR_FALSE;
+          //return PR_FALSE; // bug 219829
+          PRInt32 yValue = values[5].GetIntValue();
+          if (!(yValue & BG_CTB)) {
+            // The second keyword can only be 'center', 'top', or 'bottom'
+            return PR_FALSE;
+          }
+          values[5] = BackgroundPositionMaskToCSSValue(yValue, PR_FALSE);
+          // end bug
         }
       }
     }
@@ -4270,8 +4331,8 @@ PRBool CSSParserImpl::ParseBackgroundPosition(PRInt32& aErrorCode,
                                               nsCSSDeclaration* aDeclaration,
                                               nsChangeHint& aChangeHint)
 {
-  // First try a number or a length value
-  nsCSSValue  xValue;
+  // First try a number or percentage or a length value
+  nsCSSValue  xValue, yValue;
   if (ParseVariant(aErrorCode, xValue, VARIANT_HLP, nsnull)) {
     if (eCSSUnit_Inherit == xValue.GetUnit() ||
         eCSSUnit_Initial == xValue.GetUnit()) {  // both are inherited or both are set to initial
@@ -4282,8 +4343,8 @@ PRBool CSSParserImpl::ParseBackgroundPosition(PRInt32& aErrorCode,
       }
       return PR_FALSE;
     }
-    // We have one number/length. Get the optional second number/length.
-    nsCSSValue yValue;
+    // We have one number/percentage/length. Get the optional second number/length.
+    //nsCSSValue yValue;
     if (ParseVariant(aErrorCode, yValue, VARIANT_LP, nsnull)) {
       // We have two numbers
       if (ExpectEndProperty(aErrorCode, PR_TRUE)) {
@@ -4296,6 +4357,23 @@ PRBool CSSParserImpl::ParseBackgroundPosition(PRInt32& aErrorCode,
 
     // We have one number which is the x position. Create an value for
     // the vertical position which is of value 50%
+    // NO! bug 219829:
+    if (ParseEnum(aErrorCode, yValue, kBackgroundXYPositionKTable)) {
+      PRInt32 yVal = yValue.GetIntValue();
+      if (!(yVal & BG_CTB)) {
+        // The second keyword can only be 'center', 'top', or 'bottom'
+        return PR_FALSE;
+      }
+      if (ExpectEndProperty(aErrorCode, PR_TRUE)) {
+        yValue = BackgroundPositionMaskToCSSValue(yVal, PR_FALSE);
+        AppendValue(aDeclaration, eCSSProperty_background_x_position, xValue, aChangeHint);
+        AppendValue(aDeclaration, eCSSProperty_background_y_position, yValue, aChangeHint);
+        return PR_TRUE;
+      }
+      return PR_FALSE;
+    } // end bug
+    // If only one percentage or length value is given, it sets the
+    // horizontal position only, and the vertical position will be 50%.
     if (ExpectEndProperty(aErrorCode, PR_TRUE)) {
       AppendValue(aDeclaration, eCSSProperty_background_x_position, xValue, aChangeHint);
       AppendValue(aDeclaration, eCSSProperty_background_y_position, nsCSSValue(0.5f, eCSSUnit_Percent), aChangeHint);
@@ -4311,6 +4389,8 @@ PRBool CSSParserImpl::ParseBackgroundPosition(PRInt32& aErrorCode,
   // any duplicate keywords other than center. We try to get two
   // keywords but it's okay if there is only one.
   PRInt32 mask = 0;
+// bug 219829
+#if (0)
   PRInt32 centerBit = BG_CENTER1;
   for (PRInt32 i = 0; i < 2; i++) {
     if (PR_FALSE == ParseEnum(aErrorCode, xValue, kBackgroundXYPositionKTable)) {
@@ -4326,7 +4406,34 @@ PRBool CSSParserImpl::ParseBackgroundPosition(PRInt32& aErrorCode,
       // no duplicate values allowed (other than center)
       return PR_FALSE;
     }
+#endif
+  if (ParseEnum(aErrorCode, xValue, kBackgroundXYPositionKTable)) {
+    PRInt32 bit = xValue.GetIntValue();
     mask |= bit;
+    if (ParseEnum(aErrorCode, xValue, kBackgroundXYPositionKTable)) {
+      bit = xValue.GetIntValue();
+      if (mask & (bit & ~BG_CENTER)) {
+        // Only the 'center' keyword can be duplicated.
+        return PR_FALSE;
+      }
+      mask |= bit;
+    } else {
+      // Only one keyword.  See if we have a length or percentage.
+      if (ParseVariant(aErrorCode, yValue, VARIANT_LP, nsnull)) {
+        if (!(mask & BG_CLR)) {
+          // The first keyword can only be 'center', 'left', or 'right'
+          return PR_FALSE;
+        }
+        if (ExpectEndProperty(aErrorCode, PR_TRUE)) {
+          xValue = BackgroundPositionMaskToCSSValue(mask, PR_TRUE);
+          AppendValue(aDeclaration, eCSSProperty_background_x_position, xValue, aChangeHint);
+          AppendValue(aDeclaration, eCSSProperty_background_y_position, yValue, aChangeHint);
+          return PR_TRUE;
+        }
+        return PR_FALSE;
+      }
+    }
+// end bug      
   }
 
   // Check for bad input. Bad input consists of no matching keywords,
@@ -4336,6 +4443,8 @@ PRBool CSSParserImpl::ParseBackgroundPosition(PRInt32& aErrorCode,
     return PR_FALSE;
   }
 
+// bug 219829
+#if(0)
   // Map good input
   PRInt32 xEnumValue = 50;
   if ((mask & (BG_LEFT | BG_RIGHT)) != 0) {
@@ -4347,11 +4456,16 @@ PRBool CSSParserImpl::ParseBackgroundPosition(PRInt32& aErrorCode,
     // We have a y value
     yEnumValue = ((mask & BG_TOP) != 0) ? 0 : 100;
   }
-
+#endif
   if (ExpectEndProperty(aErrorCode, PR_TRUE)) {
     // Create style values
-    AppendValue(aDeclaration, eCSSProperty_background_x_position, nsCSSValue(xEnumValue, eCSSUnit_Enumerated), aChangeHint);
-    AppendValue(aDeclaration, eCSSProperty_background_y_position, nsCSSValue(yEnumValue, eCSSUnit_Enumerated), aChangeHint);
+    //AppendValue(aDeclaration, eCSSProperty_background_x_position, nsCSSValue(xEnumValue, eCSSUnit_Enumerated), aChangeHint);
+    //AppendValue(aDeclaration, eCSSProperty_background_y_position, nsCSSValue(yEnumValue, eCSSUnit_Enumerated), aChangeHint);
+    xValue = BackgroundPositionMaskToCSSValue(mask, PR_TRUE);
+    yValue = BackgroundPositionMaskToCSSValue(mask, PR_FALSE);
+    AppendValue(aDeclaration, eCSSProperty_background_x_position, xValue, aChangeHint);
+    AppendValue(aDeclaration, eCSSProperty_background_y_position, yValue, aChangeHint);
+    // end bug
     return PR_TRUE;
   }
   return PR_FALSE;

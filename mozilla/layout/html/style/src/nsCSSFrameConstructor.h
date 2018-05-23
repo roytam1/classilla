@@ -686,6 +686,9 @@ protected:
   nsIFrame* GetFloaterContainingBlock(nsIPresContext* aPresContext,
                                       nsIFrame*       aFrame);
 
+  nsIContent* PropagateScrollToViewport(nsIPresContext* aPresContext,
+                                        nsIPresShell*   aPresShell); // modified for 1.3 234851
+
 
   // Build a scroll frame: 
   //  Calls BeginBuildingScrollFrame, InitAndRestoreFrame, and then FinishBuildingScrollFrame
@@ -700,6 +703,10 @@ protected:
                    nsIStyleContext*         aContentStyle,
                    nsIFrame*                aScrolledFrame,
                    nsIFrame*                aParentFrame,
+                   
+                   // bug 186754
+                   nsIFrame* aContentParentFrame,
+                   
                    nsIFrame*&               aNewFrame,
                    nsIStyleContext*&        aScrolledChildStyle,
                    nsIFrame*                aScrollPort = nsnull);
@@ -714,6 +721,10 @@ protected:
                            nsIContent*              aContent,
                            nsIStyleContext*         aContentStyle,
                            nsIFrame*                aParentFrame,
+                           
+                           // bug 186754
+                           nsIFrame* aContentParentFrame,
+                           
                            nsIAtom*                 aScrolledPseudo,
                            nsIDocument*             aDocument,
                            PRBool                   aIsRoot,
@@ -742,6 +753,10 @@ protected:
                       nsIContent*              aContent,
                       nsIDocument*             aDocument,
                       nsIFrame*                aParentFrame,
+                      
+                      // bug 186754
+                      nsIFrame* aContentParentFrame,
+                      
                       nsIStyleContext*         aStyleContext,
                       PRBool                   aIsRoot,
                       nsIFrame*&               aNewFrame,
@@ -822,17 +837,19 @@ protected:
   PRBool ShouldCreateFirstLetterFrame(nsIPresContext* aPresContext,
                                       nsIContent*     aContent,
                                       nsIFrame*       aFrame);
-
+// |aContentParentFrame| should be null if it's really the same as
+// |aParentFrame|. bug 210873
   nsresult ConstructBlock(nsIPresShell*            aPresShell, 
                           nsIPresContext*          aPresContext,
                           nsFrameConstructorState& aState,
                           const nsStyleDisplay*    aDisplay,
                           nsIContent*              aContent,
                           nsIFrame*                aParentFrame,
+                          nsIFrame*                aContentParentFrame, // bug 210873
                           nsIStyleContext*         aStyleContext,
                           nsIFrame*                aNewFrame,
                           PRBool                   aRelPos);
-
+#if(0)
   nsresult ProcessBlockChildren(nsIPresShell*            aPresShell, 
                                 nsIPresContext*          aPresContext,
                                 nsFrameConstructorState& aState,
@@ -841,7 +858,7 @@ protected:
                                 PRBool                   aCanHaveGeneratedContent,
                                 nsFrameItems&            aFrameItems,
                                 PRBool                   aParentIsBlock);
-
+#endif
   nsresult ConstructInline(nsIPresShell*            aPresShell, 
                            nsIPresContext*          aPresContext,
                            nsFrameConstructorState& aState,

@@ -46,6 +46,12 @@ interface nsIDirIndex;
  */
 [scriptable, uuid(fae4e9a8-1dd1-11b2-b53c-8f3aa1bbf8f5)]
 interface nsIDirIndexListener : nsISupports {
+
+/* this is not a good way to write an idl, but I'm lazy and this isn't scriptable. */
+%{C++
+  NS_IMETHOD OnCommentAvailable(nsIRequest *aRequest, nsISupports *aCtxt, const char *buf) = 0;
+%}
+                          
     /**
      * Called for each directory entry
      *

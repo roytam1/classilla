@@ -325,6 +325,7 @@ public:
   NS_IMETHOD SetCaseSensitive(PRBool aCaseSensitive);
   NS_IMETHOD SetCompatibilityMode(nsCompatibility aCompatMode);
   NS_IMETHOD SetPreferredSheet(const nsAString& aTitle);
+  NS_IMETHOD GetPreferredSheet(nsAString& aTitle); // bug 32732
 
   NS_IMETHOD GetParserFor(nsICSSStyleSheet* aSheet,
                           nsICSSParser** aParser);
@@ -627,6 +628,15 @@ CSSLoaderImpl::SetPreferredSheet(const nsAString& aTitle)
   mPendingDatas.Enumerate(StartNonAlternates, this);
   return NS_OK;
 }
+
+// bug 32732
+NS_IMETHODIMP
+CSSLoaderImpl::GetPreferredSheet(nsAString& aTitle)
+{
+  aTitle.Assign(mPreferredSheet);
+  return NS_OK;
+}
+// end bug
 
 NS_IMETHODIMP
 CSSLoaderImpl::GetParserFor(nsICSSStyleSheet* aSheet, 

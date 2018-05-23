@@ -114,6 +114,7 @@
 #include "nsCSSRendering.h"
 #include "nsISelectElement.h"
 #include "nsLayoutErrors.h"
+#include "nsIDOMHTMLDocument.h" // for bug 234851 in 1.3
 
 static NS_DEFINE_CID(kTextNodeCID,   NS_TEXTNODE_CID);
 static NS_DEFINE_CID(kHTMLElementFactoryCID,   NS_HTML_ELEMENT_FACTORY_CID);
@@ -984,7 +985,18 @@ AdjustOutOfFlowFrameParentPtrs(nsIPresContext*          aPresContext,
       // XXX_kin: and is also parented to it.
     }
     else if (NS_STYLE_FLOAT_NONE != display->mFloats) {
-      outOfFlowFrame->SetParent(aState->mFloatedItems.containingBlock);
+
+// bug 213781, modified for 1.3
+      //outOfFlowFrame->SetParent(aState->mFloatedItems.containingBlock);
+      nsIFrame *parent = aState->mFloatedItems.containingBlock;
+      nsFrameState state;
+      outOfFlowFrame->SetParent(parent);
+      outOfFlowFrame->GetFrameState(&state);
+      if (state & (NS_FRAME_HAS_VIEW | NS_FRAME_HAS_CHILD_WITH_VIEW)) {
+        parent->SetFrameState(state | NS_FRAME_HAS_CHILD_WITH_VIEW);
+      }
+// end bug
+
     }
 
     // XXX_kin: We'll need to remove the return below when we support
@@ -2693,7 +2705,8 @@ nsCSSFrameConstructor::ConstructTableRowGroupFrame(nsIPresShell*            aPre
   if (IsScrollable(aPresContext, styleDisplay)) {
     // Create an area container for the frame
     BuildScrollFrame(aPresShell, aPresContext, aState, aContent, aStyleContext, 
-                     aNewFrame, parentFrame, scrollFrame, aStyleContext);
+//                     aNewFrame, parentFrame, scrollFrame, aStyleContext); bug 186754
+                     aNewFrame, parentFrame, nsnull, scrollFrame, aStyleContext);
 
   } 
   else {
@@ -3329,6 +3342,116 @@ nsCSSFrameConstructor::ConstructDocElementTableFrame(nsIPresShell*        aPresS
   return NS_OK;
 }
 
+#if(1)
+// bug 234851 heavily! modified for Mozilla 1.3
+// this is left currently vestigial. I haven't finished it yet for Classilla 9.0
+// because I can't figure out where to hook SetViewportOverflowOverride up to.
+// reexamine for 9.0.4. instead, we'll use bug 93520 as kind of a stopgap. -- Cameron
+/**
+ * This checks the root element and the HTML BODY, if any, for an "overflow" property
+ * that should be applied to the viewport. If one is found then we return the
+ * element that we took the overflow from (which should then be treated as
+ * "overflow:visible"), and we store the overflow style in the prescontext.
+ * @param aDocElement is mDocument->GetRootContent()
+ * @param aIsScrollable if nonnull, is set to indicate whether scrolling is desired
+ * on the viewport at all
+ */
+nsIContent*
+nsCSSFrameConstructor::PropagateScrollToViewport(nsIPresContext* aPresContext, 
+                                                 nsIPresShell*        aPresShell)
+{
+  // Set default
+  // all ::SetViewportOverflowOverride( functions have been commented out
+  //aPresContext->SetViewportOverflowOverride(NS_STYLE_OVERFLOW_AUTO);
+
+  // We never mess with the viewport scroll state
+  // when printing or in print preview
+  //if (aPresContext->IsPaginated()) {
+  PRBool isPaginated;
+  aPresContext->IsPaginated(&isPaginated);
+  if (isPaginated) {
+    return nsnull;
+  }
+
+  //nsIContent* docElement = mDocument->GetRootContent();
+  nsCOMPtr<nsIContent> docElement;
+  mDocument->GetRootContent(getter_AddRefs(docElement));
+  if (!docElement) {
+    // wanna assertion?
+    return nsnull;
+  }
+
+  // Check the style on the document root element
+  //nsStyleSet *styleSet = aPresContext->PresShell()->StyleSet();
+  nsCOMPtr<nsIStyleSet> styleSet;
+  aPresShell->GetStyleSet(getter_AddRefs(styleSet));
+  if (!styleSet) {
+  	// wanna assertion?
+  	return nsnull;
+  }
+  //nsRefPtr<nsStyleContext> styleContext;
+  nsIStyleContext *styleContext;
+  //styleContext = styleSet->ResolveStyleFor(docElement, nsnull);
+  styleContext = styleSet->ResolveStyleFor(aPresContext, docElement, nsnull);
+  if (!styleContext) {
+    // no assertion in patch, so this must not be fatal (??)
+    return nsnull;
+  }
+  //const nsStyleDisplay* display = styleContext->GetStyleDisplay();
+  const nsStyleDisplay *display = (nsStyleDisplay *)styleContext->GetStyleData(eStyleStruct_Display);
+  if (display->mOverflow != NS_STYLE_OVERFLOW_VISIBLE) {
+    //aPresContext->SetViewportOverflowOverride(display->mOverflow);
+    // tell caller we stole the overflow style from the root element
+    return docElement;
+  }
+  
+  // Don't look in the BODY for non-HTML documents or HTML documents
+  // with non-HTML roots
+  // XXX this should be earlier; we shouldn't even look at the document root
+  // for non-HTML documents. Fix this once we support explicit CSS styling
+  // of the viewport
+  // XXX what about XHTML?
+  nsCOMPtr<nsIDOMHTMLDocument> htmlDoc(do_QueryInterface(mDocument));
+  if (!htmlDoc || !docElement->IsContentOfType(nsIContent::eHTML)) {
+    return nsnull;
+  }
+  
+  nsCOMPtr<nsIDOMHTMLElement> body;
+  htmlDoc->GetBody(getter_AddRefs(body));
+  nsCOMPtr<nsIContent> bodyElement = do_QueryInterface(body);
+  if (!bodyElement) { // need to move this here because of GetNodeInfo()
+    // The body is not a <body> tag, it's a <frameset>.
+    return nsnull;
+  }
+  //      !bodyElement->GetNodeInfo()->Equals(nsHTMLAtoms::body)) {
+  nsINodeInfo *nodeInfo;
+  bodyElement->GetNodeInfo(nodeInfo);
+  if (!nodeInfo || !nodeInfo->Equals(nsHTMLAtoms::body)) {
+    // The body is not a <body> tag, it's a <frameset>.
+    return nsnull;
+  }
+
+  //nsRefPtr<nsStyleContext> bodyContext;
+  nsCOMPtr<nsIStyleContext> bodyContext;
+  //bodyContext = styleSet->ResolveStyleFor(bodyElement, styleContext);
+  bodyContext = styleSet->ResolveStyleFor(aPresContext, bodyElement, styleContext);
+  if (!bodyContext) {
+    return nsnull;
+  }
+
+  //display = bodyContext->GetStyleDisplay();
+  display = (nsStyleDisplay *)bodyContext->GetStyleData(eStyleStruct_Display);
+  if (display->mOverflow != NS_STYLE_OVERFLOW_VISIBLE) {
+    //aPresContext->SetViewportOverflowOverride(display->mOverflow);
+    // tell caller we stole the overflow style from the body element
+    return bodyElement;
+  }
+
+  return nsnull;
+}
+// end bug
+#endif
+
 /**
  * New one
  */
@@ -3448,15 +3571,27 @@ nsCSSFrameConstructor::ConstructDocElementFrame(nsIPresShell*        aPresShell,
 
   // --------- IF SCROLLABLE WRAP IN SCROLLFRAME --------
 
+// bug 234851 modified for 1.3
+#if(0)
   PRBool isScrollable = IsScrollable(aPresContext, display);
+  nsCOMPtr<nsIPrintPreviewContext> printPreviewContext(do_QueryInterface(aPresContext));
+#endif
+  // The document root should not be scrollable in any paginated context,
+  // even in print preview.
   PRBool isPaginated = PR_FALSE;
   aPresContext->IsPaginated(&isPaginated);
-  nsCOMPtr<nsIPrintPreviewContext> printPreviewContext(do_QueryInterface(aPresContext));
+  PRBool propagatedScrollToViewport =
+         (PropagateScrollToViewport(aPresContext, aPresShell) == aDocElement);
+  PRBool isScrollable = IsScrollable(aPresContext, display)
+                        && isPaginated
+                        && !propagatedScrollToViewport;
+// end bug
 
   nsIFrame* scrollFrame = nsnull;
 
   // build a scrollframe
-  if ((!isPaginated || (isPaginated && printPreviewContext)) && isScrollable) {
+//  if ((!isPaginated || (isPaginated && printPreviewContext)) && isScrollable) {
+  if (isScrollable) {
     nsIFrame* newScrollFrame = nsnull;
     nsCOMPtr<nsIStyleContext> newContext;
 
@@ -3465,6 +3600,7 @@ nsCSSFrameConstructor::ConstructDocElementFrame(nsIPresShell*        aPresShell,
                               aDocElement,
                               styleContext,
                               aParentFrame,
+                              nsnull, // bug 186754
                               nsCSSAnonBoxes::scrolledContent,
                               mDocument,
                               PR_FALSE,
@@ -3754,13 +3890,23 @@ nsCSSFrameConstructor::ConstructRootFrame(nsIPresShell*        aPresShell,
   // Currently OVERFLOW_SCROLL isn't honored, as
   // scrollportview::SetScrollPref is not implemented.
 
+// bug 93520 modified for 1.3 (backed out while I try to consider what I want)
+#if(1)
   PRBool isHTML = aDocElement->IsContentOfType(nsIContent::eHTML);
   PRBool isXUL = PR_FALSE;
-
   if (!isHTML) {
     isXUL = aDocElement->IsContentOfType(nsIContent::eXUL);
   }
-
+#else
+  PRInt32 nameSpaceID;
+  aDocElement->GetNameSpaceID(nameSpaceID);
+  // our kludge here is to make HTML and XHTML equivalent for 1.3, which I think
+  // they essentially should be. -- Cameron
+  // for justification, see nsGenericHTMLElement.cpp
+  PRBool isHTML = (nameSpaceID == kNameSpaceID_XHTML); // kNameSpaceID_HTML);
+  PRBool isXUL = (nameSpaceID == kNameSpaceID_XUL); // nsXULAtoms::nameSpaceID);
+// end bug
+#endif
   // Never create scrollbars for XUL documents
 #ifdef INCLUDE_XUL
   if (isXUL) {
@@ -3800,6 +3946,9 @@ nsCSSFrameConstructor::ConstructRootFrame(nsIPresShell*        aPresShell,
     }
   }
 
+// superseded by bug 234851
+#if(0)
+  // bug 93520
   // if scrolling is still supported, check for the style data on the HTML and BODY
   // NOTE: the docElement in HTML will have a BODY child, and we have to check for
   //       no scrolling on that element as well as the docElement. Outside of HTML,
@@ -3866,6 +4015,13 @@ nsCSSFrameConstructor::ConstructRootFrame(nsIPresShell*        aPresShell,
       }
     }
   }
+#endif
+  // We no longer need to do overflow propagation here. It's taken care of
+  // when we construct frames for the element whose overflow might be
+  // propagated
+  NS_ASSERTION(!isScrollable || !isXUL,
+               "XUL documents should never be scrollable - see above");
+// end bug
 
   nsIFrame* newFrame = rootFrame;
   nsCOMPtr<nsIStyleContext> rootPseudoStyle;
@@ -3905,6 +4061,7 @@ nsCSSFrameConstructor::ConstructRootFrame(nsIPresShell*        aPresShell,
                                 aDocElement,
                                 styleContext,
                                 viewportFrame,
+                                nsnull, // bug 186754
                                 rootPseudo,
                                 mDocument,
                                 PR_TRUE,
@@ -4562,8 +4719,15 @@ nsCSSFrameConstructor::InitializeSelectFrame(nsIPresShell*        aPresShell,
     // Process children
     nsFrameConstructorSaveState absoluteSaveState;
     nsFrameItems                childItems;
-    PRBool                      isPositionedContainingBlock = aIsAbsolutelyPositioned ||
-                                                              aIsFixedPositioned;
+// bug 214844 modified for 1.3
+//    PRBool                      isPositionedContainingBlock = isAbsolutelyPositioned ||
+//                                                              isFixedPositioned;
+    const nsStyleDisplay* display = (const nsStyleDisplay *)aStyleContext->GetStyleData(
+                                       eStyleStruct_Display);
+    // aStyleContext->GetStyleDisplay()
+    PRBool isPositionedContainingBlock = aIsAbsolutelyPositioned ||
+                                         aIsFixedPositioned ||
+                                         display->mPosition == NS_STYLE_POSITION_RELATIVE;
 
     if (isPositionedContainingBlock) {
       // The area frame becomes a container for child frames that are
@@ -4681,8 +4845,15 @@ nsCSSFrameConstructor::ConstructFieldSetFrame(nsIPresShell*            aPresShel
     // Process children
     nsFrameConstructorSaveState absoluteSaveState;
     nsFrameItems                childItems;
-    PRBool                      isPositionedContainingBlock = aIsAbsolutelyPositioned ||
-                                                              aIsFixedPositioned;
+// bug 214844 modified for 1.3
+//    PRBool                      isPositionedContainingBlock = isAbsolutelyPositioned ||
+//                                                              isFixedPositioned;
+    const nsStyleDisplay* display = (const nsStyleDisplay *)aStyleContext->GetStyleData(
+                                       eStyleStruct_Display);
+    // aStyleContext->GetStyleDisplay()
+    PRBool isPositionedContainingBlock = aIsAbsolutelyPositioned ||
+                                         aIsFixedPositioned ||
+                                         display->mPosition == NS_STYLE_POSITION_RELATIVE;
 
     if (isPositionedContainingBlock) {
       // The area frame becomes a container for child frames that are
@@ -5041,7 +5212,7 @@ nsCSSFrameConstructor::ConstructHTMLFrame(nsIPresShell*            aPresShell,
     if (!aState.mPseudoFrames.IsEmpty()) { // process pending pseudo frames
       ProcessPseudoFrames(aPresContext, aState.mPseudoFrames, aFrameItems);
     }
-    isReplaced = PR_TRUE;
+    isReplaced = PR_FALSE; // PR_TRUE; // bug 342531
     rv = NS_NewIsIndexFrame(aPresShell, &newFrame);
   }
 
@@ -5458,7 +5629,9 @@ nsCSSFrameConstructor::ConstructXULFrame(nsIPresShell*            aPresShell,
         if (IsScrollable(aPresContext, display)) {
 
           // set the top to be the newly created scrollframe
-          BuildScrollFrame(aPresShell, aPresContext, aState, aContent, aStyleContext, newFrame, aParentFrame,
+          BuildScrollFrame(aPresShell, aPresContext, aState, aContent, 
+                           aStyleContext, newFrame, aParentFrame,
+                           nsnull, // bug 186754
                            topFrame, aStyleContext);
 
           // we have a scrollframe so the parent becomes the scroll frame.
@@ -5480,7 +5653,9 @@ nsCSSFrameConstructor::ConstructXULFrame(nsIPresShell*            aPresShell,
         if (IsScrollable(aPresContext, display)) {
 
           // set the top to be the newly created scrollframe
-          BuildScrollFrame(aPresShell, aPresContext, aState, aContent, aStyleContext, newFrame, aParentFrame,
+          BuildScrollFrame(aPresShell, aPresContext, aState, aContent,
+                           aStyleContext, newFrame, aParentFrame,
+                           nsnull, // bug 186754
                            topFrame, aStyleContext);
 
           // we have a scrollframe so the parent becomes the scroll frame.
@@ -5504,7 +5679,9 @@ nsCSSFrameConstructor::ConstructXULFrame(nsIPresShell*            aPresShell,
         if (IsScrollable(aPresContext, display)) {
 
           // set the top to be the newly created scrollframe
-          BuildScrollFrame(aPresShell, aPresContext, aState, aContent, aStyleContext, newFrame, aParentFrame,
+          BuildScrollFrame(aPresShell, aPresContext, aState, aContent, 
+                           aStyleContext, newFrame, aParentFrame,
+                           nsnull, // bug 186754
                            topFrame, aStyleContext);
 
           // we have a scrollframe so the parent becomes the scroll frame.
@@ -5527,7 +5704,9 @@ nsCSSFrameConstructor::ConstructXULFrame(nsIPresShell*            aPresShell,
         if (IsScrollable(aPresContext, display)) {
 
           // set the top to be the newly created scrollframe
-          BuildScrollFrame(aPresShell, aPresContext, aState, aContent, aStyleContext, newFrame, aParentFrame,
+          BuildScrollFrame(aPresShell, aPresContext, aState, aContent, 
+                           aStyleContext, newFrame, aParentFrame,
+                           nsnull, // bug 186754
                            topFrame, aStyleContext);
 
           // we have a scrollframe so the parent becomes the scroll frame.
@@ -5692,7 +5871,9 @@ nsCSSFrameConstructor::ConstructXULFrame(nsIPresShell*            aPresShell,
         if (IsScrollable(aPresContext, display)) {
 
           // set the top to be the newly created scrollframe
-          BuildScrollFrame(aPresShell, aPresContext, aState, aContent, aStyleContext, newFrame, aParentFrame,
+          BuildScrollFrame(aPresShell, aPresContext, aState, aContent, 
+                           aStyleContext, newFrame, aParentFrame,
+                           nsnull, // bug 186754
                            topFrame, aStyleContext);
 
           // we have a scrollframe so the parent becomes the scroll frame.
@@ -5719,7 +5900,9 @@ nsCSSFrameConstructor::ConstructXULFrame(nsIPresShell*            aPresShell,
         if (IsScrollable(aPresContext, display)) {
 
           // set the top to be the newly created scrollframe
-          BuildScrollFrame(aPresShell, aPresContext, aState, aContent, aStyleContext, newFrame, aParentFrame,
+          BuildScrollFrame(aPresShell, aPresContext, aState, aContent, 
+                           aStyleContext, newFrame, aParentFrame,
+                           nsnull, // bug 186754
                            topFrame, aStyleContext);
 
           // we have a scrollframe so the parent becomes the scroll frame.
@@ -5765,6 +5948,7 @@ nsCSSFrameConstructor::ConstructXULFrame(nsIPresShell*            aPresShell,
           }
           // set the top to be the newly created scrollframe
           BuildScrollFrame(aPresShell, aPresContext, aState, aContent, aStyleContext, newFrame, aParentFrame,
+                           nsnull, // bug 186754
                            topFrame, aStyleContext, scrollPort);
 
           // we have a scrollframe so the parent becomes the scroll frame.
@@ -5797,6 +5981,7 @@ nsCSSFrameConstructor::ConstructXULFrame(nsIPresShell*            aPresShell,
 
           // set the top to be the newly created scrollframe
           BuildScrollFrame(aPresShell, aPresContext, aState, aContent, aStyleContext, newFrame, aParentFrame,
+                           nsnull, // bug 186754
                            topFrame, aStyleContext);
 
           // we have a scrollframe so the parent becomes the scroll frame.
@@ -5826,6 +6011,7 @@ nsCSSFrameConstructor::ConstructXULFrame(nsIPresShell*            aPresShell,
 
           // set the top to be the newly created scrollframe
           BuildScrollFrame(aPresShell, aPresContext, aState, aContent, aStyleContext, newFrame, aParentFrame,
+                           nsnull, // bug 186754
                            topFrame, aStyleContext);
 
           // we have a scrollframe so the parent becomes the scroll frame.
@@ -5849,6 +6035,7 @@ nsCSSFrameConstructor::ConstructXULFrame(nsIPresShell*            aPresShell,
 
           // set the top to be the newly created scrollframe
           BuildScrollFrame(aPresShell, aPresContext, aState, aContent, aStyleContext, newFrame, aParentFrame,
+                           nsnull, // bug 186754
                            topFrame, aStyleContext);
 
           // we have a scrollframe so the parent becomes the scroll frame.
@@ -6052,6 +6239,10 @@ nsCSSFrameConstructor::BeginBuildingScrollFrame(nsIPresShell* aPresShell,
                                                nsIContent*              aContent,
                                                nsIStyleContext*         aContentStyle,
                                                nsIFrame*                aParentFrame,
+                                               
+                                               // bug 186754
+                                               nsIFrame*                aContentParentFrame,
+                                               
                                                nsIAtom*                 aScrolledPseudo,
                                                nsIDocument*             aDocument,
                                                PRBool                   aIsRoot,
@@ -6089,6 +6280,7 @@ nsCSSFrameConstructor::BeginBuildingScrollFrame(nsIPresShell* aPresShell,
   if (isGfx) {
   
     BuildGfxScrollFrame(aPresShell, aPresContext, aState, aContent, aDocument, aParentFrame,
+                        aContentParentFrame, // bug 186754
                         contentStyle, aIsRoot, gfxScrollFrame, anonymousItems, aScrollPortFrame);
 
     scrollFrame = anonymousItems.childList; // get the scrollport from the anonymous list
@@ -6107,11 +6299,42 @@ nsCSSFrameConstructor::BeginBuildingScrollFrame(nsIPresShell* aPresShell,
                         parentFrame, contentStyle, nsnull, scrollFrame);
 
   } else {
+    // native scrollbars
     NS_NewScrollFrame(aPresShell, &scrollFrame);
     aNewFrame = scrollFrame;
     parentFrame = aParentFrame;
     InitAndRestoreFrame(aPresContext, aState, aContent, 
                         parentFrame, contentStyle, nsnull, scrollFrame);
+ 
+
+// bug 186754
+  if (nsnull != aContentParentFrame) {
+  	nsIView* view = nsnull;
+  	scrollFrame->GetView(aPresContext, &view);
+  	if (view) {
+  	  nsCOMPtr<nsIViewManager> vm;
+  	  view->GetViewManager(*getter_AddRefs(vm));
+  	  nsIView* parentView;
+  	  view->GetParent(parentView);
+  	  
+  	  nsIView* zParentView = parentView;
+  	  aContentParentFrame->GetView(aPresContext, &zParentView);
+  	  
+  	  if (nsnull == zParentView) {
+  	    nsIFrame* zParentFrame = nsnull;
+  	    
+  	    aContentParentFrame->GetParentWithView(aPresContext, &zParentFrame);
+  	    NS_ASSERTION(zParentFrame, "GetParentWithView failed!");
+  	    zParentFrame->GetView(aPresContext, &zParentView);
+  	    NS_ASSERTION(zParentView, "no parent with view!");
+  	  }
+  	  if (zParentView != parentView) {
+  	    vm->InsertZPlaceholder(zParentView, view, nsnull, PR_TRUE);
+  	  }
+  	}
+  }
+// end bug
+
   }
 
   // initialize the scrolled frame
@@ -6220,6 +6443,10 @@ nsCSSFrameConstructor::BuildScrollFrame       (nsIPresShell* aPresShell,
                                                nsIStyleContext*         aContentStyle,
                                                nsIFrame*                aScrolledFrame,
                                                nsIFrame*                aParentFrame,
+                                               
+                                               // bug 186754
+                                               nsIFrame*                aContentParentFrame,
+                                               
                                                nsIFrame*&               aNewFrame, 
                                                nsIStyleContext*&        aScrolledContentStyle,
                                                nsIFrame*                aScrollPortFrame)                                                                                                                                          
@@ -6250,6 +6477,7 @@ nsCSSFrameConstructor::BuildScrollFrame       (nsIPresShell* aPresShell,
                      aContent,
                      aContentStyle,
                      aParentFrame,
+                     aContentParentFrame, // bug 186754
                      nsCSSAnonBoxes::scrolledContent,
                      mDocument,
                      PR_FALSE,
@@ -6291,6 +6519,10 @@ nsCSSFrameConstructor::BuildGfxScrollFrame (nsIPresShell* aPresShell,
                                              nsIContent*              aContent,
                                              nsIDocument*             aDocument,
                                              nsIFrame*                aParentFrame,
+                                             
+                                             // bug 186754
+                                             nsIFrame*                aContentParentFrame,
+                                             
                                              nsIStyleContext*         aStyleContext,
                                              PRBool                   aIsRoot,
                                              nsIFrame*&               aNewFrame,
@@ -6305,7 +6537,9 @@ nsCSSFrameConstructor::BuildGfxScrollFrame (nsIPresShell* aPresShell,
 
   // Create a view
   nsHTMLContainerFrame::CreateViewForFrame(aPresContext, aNewFrame,
-                                             aStyleContext, nsnull, PR_FALSE);
+                                             //aStyleContext, nsnull, PR_FALSE);
+                                             aStyleContext, aContentParentFrame, PR_FALSE);
+                                             // bug 186754
 
   
   if (!aScrollPortFrame)
@@ -6337,8 +6571,9 @@ nsCSSFrameConstructor::ConstructFrameByDisplayType(nsIPresShell*            aPre
   PRBool    primaryFrameSet = PR_FALSE;
   PRBool    isAbsolutelyPositioned = PR_FALSE;
   PRBool    isFixedPositioned = PR_FALSE;
-  PRBool    isFloating = PR_FALSE;
-  PRBool    isBlock = aDisplay->IsBlockLevel();
+// bug 210873
+//  PRBool    isFloating = PR_FALSE;
+//  PRBool    isBlock = aDisplay->IsBlockLevel();
   nsIFrame* newFrame = nsnull;  // the frame we construct
   nsIFrame* newBlock = nsnull;
   nsIFrame* nextInline = nsnull;
@@ -6348,6 +6583,8 @@ nsCSSFrameConstructor::ConstructFrameByDisplayType(nsIPresShell*            aPre
   nsresult  rv = NS_OK;
   PRBool    addNewFrameToChildList = PR_TRUE; 
 
+// bug 210873
+#if(0)
   // The frame is also a block if it's an inline frame that's floated or
   // absolutely positioned
   if (NS_STYLE_FLOAT_NONE != aDisplay->mFloats) {
@@ -6357,6 +6594,13 @@ nsCSSFrameConstructor::ConstructFrameByDisplayType(nsIPresShell*            aPre
       (isFloating || aDisplay->IsAbsolutelyPositioned())) {
     isBlock = PR_TRUE;
   }
+#endif
+  // The style system ensures floated/positioned frames are block-level.
+  NS_ASSERTION(!(aDisplay->IsFloating() ||
+                 aDisplay->IsAbsolutelyPositioned()) ||
+                 aDisplay->IsBlockLevel(),
+                   "Style system did not apply CSS2.1 section 9.7 fixups");
+// end bug
 
   nsIFrame* adjParentFrame = aParentFrame;
   // if the new frame is not table related and the parent is a table, row group, or row,
@@ -6378,11 +6622,32 @@ nsCSSFrameConstructor::ConstructFrameByDisplayType(nsIPresShell*            aPre
     }
   }
 
+// bug 234851 modified for 1.3
+  // If this is "body", try propagating its scroll style to the viewport
+  // Note that we need to do this even if the body is NOT scrollable;
+  // it might have dynamically changed from scrollable to not scrollable,
+  // and that might need to be propagated.
+  PRBool propagatedScrollToViewport = PR_FALSE;
+  //if (aContent->GetNodeInfo()->Equals(nsHTMLAtoms::body)) {
+  nsINodeInfo *nodeInfo;
+  aContent->GetNodeInfo(nodeInfo);
+  if (nodeInfo && nodeInfo->Equals(nsHTMLAtoms::body) &&
+      aContent->IsContentOfType(nsIContent::eHTML)) {
+    propagatedScrollToViewport =
+      (PropagateScrollToViewport(aPresContext, aPresShell) == aContent);
+  }
+// end bug
+
   // If the frame is a block-level frame and is scrollable, then wrap it
   // in a scroll frame.
   // XXX Ignore tables for the time being
-  if ((isBlock && (aDisplay->mDisplay != NS_STYLE_DISPLAY_TABLE)) &&
-      IsScrollable(aPresContext, aDisplay)) {
+// bug 210873
+//  if ((isBlock && (aDisplay->mDisplay != NS_STYLE_DISPLAY_TABLE)) &&
+  if (aDisplay->IsBlockLevel() &&
+      aDisplay->mDisplay != NS_STYLE_DISPLAY_TABLE &&
+//      IsScrollable(aPresContext, aDisplay)) { // bug 234851
+      IsScrollable(aPresContext, aDisplay) &&
+      !propagatedScrollToViewport) {
 
     if (!pseudoParent && !aState.mPseudoFrames.IsEmpty()) { // process pending pseudo frames
       ProcessPseudoFrames(aPresContext, aState.mPseudoFrames, aFrameItems); 
@@ -6411,7 +6676,11 @@ nsCSSFrameConstructor::ConstructFrameByDisplayType(nsIPresShell*            aPre
 
     nsIStyleContext* newStyle = nsnull;
     // Build the scrollframe it
-    BuildScrollFrame(aPresShell, aPresContext, aState, aContent, aStyleContext, scrolledFrame, geometricParent,
+    // it what? IT WHAT?!?!?! TELL ME NOW!!!!
+    
+    BuildScrollFrame(aPresShell, aPresContext, aState, aContent, aStyleContext, 
+                     scrolledFrame, geometricParent,
+                     adjParentFrame, // bug 186754
                      newFrame, newStyle);
 
     // buildscrollframe sets the primary frame.
@@ -6431,8 +6700,16 @@ nsCSSFrameConstructor::ConstructFrameByDisplayType(nsIPresShell*            aPre
     // Process children
     nsFrameConstructorSaveState absoluteSaveState;
     nsFrameItems                childItems;
-    PRBool                      isPositionedContainingBlock = isAbsolutelyPositioned ||
-                                                              isFixedPositioned;
+// bug 214844 modified for 1.3
+//    PRBool                      isPositionedContainingBlock = isAbsolutelyPositioned ||
+//                                                              isFixedPositioned;
+    const nsStyleDisplay* display = (const nsStyleDisplay *)aStyleContext->GetStyleData(
+                                       eStyleStruct_Display);
+    // aStyleContext->GetStyleDisplay()
+    PRBool isPositionedContainingBlock = isAbsolutelyPositioned ||
+                                         isFixedPositioned ||
+                                         display->mPosition == NS_STYLE_POSITION_RELATIVE;
+                                         
 
     if (isPositionedContainingBlock) {
       // The area frame becomes a container for child frames that are
@@ -6526,7 +6803,9 @@ nsCSSFrameConstructor::ConstructFrameByDisplayType(nsIPresShell*            aPre
     }
   }
   // See if the frame is floated, and it's a block or inline frame
-  else if (isFloating &&
+// bug 210873
+//  else if (isFloating &&
+  else if (aDisplay->IsFloating() &&
            ((NS_STYLE_DISPLAY_BLOCK == aDisplay->mDisplay) ||
             (NS_STYLE_DISPLAY_INLINE == aDisplay->mDisplay) ||
             (NS_STYLE_DISPLAY_LIST_ITEM == aDisplay->mDisplay))) {
@@ -6536,6 +6815,8 @@ nsCSSFrameConstructor::ConstructFrameByDisplayType(nsIPresShell*            aPre
     // Create an area frame
     NS_NewFloatingItemWrapperFrame(aPresShell, &newFrame);
 
+// bug 210873
+#if(0)
     // Initialize the frame
     InitAndRestoreFrame(aPresContext, aState, aContent, 
                         aState.mFloatedItems.containingBlock, 
@@ -6572,6 +6853,12 @@ nsCSSFrameConstructor::ConstructFrameByDisplayType(nsIPresShell*            aPre
                                     nsLayoutAtoms::floaterList,
                                     aState.mFloatedItems.childList);
     }
+#endif
+    ConstructBlock(aPresShell, aPresContext, aState, aDisplay, aContent,
+                   aState.mFloatedItems.containingBlock, adjParentFrame,
+                   aStyleContext, newFrame,
+                   aDisplay->mPosition == NS_STYLE_POSITION_RELATIVE);
+// end bug
   }
   // See if it's relatively positioned
   else if ((NS_STYLE_POSITION_RELATIVE == aDisplay->mPosition) &&
@@ -6582,15 +6869,17 @@ nsCSSFrameConstructor::ConstructFrameByDisplayType(nsIPresShell*            aPre
       ProcessPseudoFrames(aPresContext, aState.mPseudoFrames, aFrameItems); 
     }
     // Is it block-level or inline-level?
-    PRBool isBlockFrame = PR_FALSE;
+//    PRBool isBlockFrame = PR_FALSE; // bug 210873
     if ((NS_STYLE_DISPLAY_BLOCK == aDisplay->mDisplay) ||
         (NS_STYLE_DISPLAY_LIST_ITEM == aDisplay->mDisplay)) {
       // Create a wrapper frame. No space manager, though
       NS_NewRelativeItemWrapperFrame(aPresShell, &newFrame);
-      isBlockFrame = PR_TRUE;
+//      isBlockFrame = PR_TRUE; // bug 210873
 
       ConstructBlock(aPresShell, aPresContext, aState, aDisplay, aContent,
-                     adjParentFrame, aStyleContext, newFrame, PR_TRUE);
+                     adjParentFrame, 
+                     nsnull, // bug 210873
+                     aStyleContext, newFrame, PR_TRUE);
     } else {
       // Create a positioned inline frame
       NS_NewPositionedInlineFrame(aPresShell, &newFrame);
@@ -6614,7 +6903,9 @@ nsCSSFrameConstructor::ConstructFrameByDisplayType(nsIPresShell*            aPre
       nsPseudoFrames savePseudo;
       aState.mPseudoFrames.Reset(&savePseudo);
       rv = ConstructBlock(aPresShell, aPresContext, aState, aDisplay, aContent,
-                          adjParentFrame, aStyleContext, newFrame, PR_FALSE);
+                          adjParentFrame, 
+                          nsnull, // bug 210873
+                          aStyleContext, newFrame, PR_FALSE);
       if (!aState.mPseudoFrames.IsEmpty()) { // process pending pseudo frames
         ProcessPseudoFrames(aPresContext, aState.mPseudoFrames, aFrameItems); 
       }
@@ -6677,7 +6968,8 @@ nsCSSFrameConstructor::ConstructFrameByDisplayType(nsIPresShell*            aPre
         isFixedPositioned = PR_TRUE;
         geometricParent   = aState.mFixedItems.containingBlock;
       } 
-      else if (isFloating && aState.mFloatedItems.containingBlock) {
+//      else if (isFloating && aState.mFloatedItems.containingBlock) { // bug 210873
+      else if (aDisplay->IsFloating() && aState.mFloatedItems.containingBlock) {
         geometricParent = aState.mFloatedItems.containingBlock;
       }
       nsIFrame* innerTable;
@@ -6795,7 +7087,8 @@ nsCSSFrameConstructor::ConstructFrameByDisplayType(nsIPresShell*            aPre
     // Add the placeholder frame to the flow
     frameItems.AddChild(placeholderFrame);
 
-  } else if (isFloating) {
+//  } else if (isFloating) { // bug 210873
+  } else if (aDisplay->IsFloating()) {
     nsIFrame* placeholderFrame;
     CreatePlaceholderFrameFor(aPresShell, aPresContext, aState.mFrameManager, aContent, newFrame,
                               aStyleContext, adjParentFrame, &placeholderFrame);
@@ -13417,6 +13710,7 @@ nsCSSFrameConstructor::ConstructBlock(nsIPresShell*            aPresShell,
                                       const nsStyleDisplay*    aDisplay,
                                       nsIContent*              aContent,
                                       nsIFrame*                aParentFrame,
+                                      nsIFrame*                aContentParentFrame, // bug 210873
                                       nsIStyleContext*         aStyleContext,
                                       nsIFrame*                aNewFrame,
                                       PRBool                   aRelPos)
@@ -13426,7 +13720,10 @@ nsCSSFrameConstructor::ConstructBlock(nsIPresShell*            aPresShell,
 
   // See if we need to create a view, e.g. the frame is absolutely positioned
   nsHTMLContainerFrame::CreateViewForFrame(aPresContext, aNewFrame,
-                                           aStyleContext, nsnull, PR_FALSE);
+                                           aStyleContext, 
+                                           // nsnull, // bug 210873
+                                           aContentParentFrame,
+                                           PR_FALSE);
 
   // If we're the first block to be created (e.g., because we're
   // contained inside a XUL document), then make sure that we've got a
@@ -13456,7 +13753,9 @@ nsCSSFrameConstructor::ConstructBlock(nsIPresShell*            aPresShell,
   aState.PushFloaterContainingBlock(aNewFrame, floaterSaveState,
                                     haveFirstLetterStyle,
                                     haveFirstLineStyle);
-  nsresult rv = ProcessBlockChildren(aPresShell, aPresContext, aState, aContent, aNewFrame,
+//  nsresult rv = ProcessBlockChildren(aPresShell, aPresContext, aState, aContent, aNewFrame,
+// bug 210873
+  nsresult rv = ProcessChildren(aPresShell, aPresContext, aState, aContent, aNewFrame,
                                      PR_TRUE, childItems, PR_TRUE);
 
   nsCOMPtr<nsIAtom> tag;
@@ -13482,6 +13781,8 @@ nsCSSFrameConstructor::ConstructBlock(nsIPresShell*            aPresShell,
   return rv;
 }
 
+// bug 210873
+#if (0)
 nsresult
 nsCSSFrameConstructor::ProcessBlockChildren(nsIPresShell* aPresShell, 
                                             nsIPresContext*          aPresContext,
@@ -13547,7 +13848,7 @@ nsCSSFrameConstructor::ProcessBlockChildren(nsIPresShell* aPresShell,
 
   return rv;
 }
-
+#endif
 
 PRBool
 nsCSSFrameConstructor::AreAllKidsInline(nsIFrame* aFrameList)

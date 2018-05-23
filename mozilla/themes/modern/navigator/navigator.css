@@ -567,3 +567,8 @@ toolbox {
 #popupIcon {
   list-style-image: url("chrome://navigator/skin/icons/popup-blocked.png");
 }
+
+#cssIcon {
+  list-style-image: url("chrome://navigator/skin/icons/csson.png");
+}
+

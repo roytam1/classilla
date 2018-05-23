@@ -912,8 +912,10 @@ NS_METHOD nsTableCellFrame::Reflow(nsIPresContext*          aPresContext,
   }
 
   nsHTMLReflowState kidReflowState(aPresContext, aReflowState, firstKid, availSize, reason);
-  // mIPercentHeightObserver is for non table related frames inside cells
-  kidReflowState.mPercentHeightObserver = (nsIPercentHeightObserver *)this;
+  // mIPercentHeightObserver is for non table related frames inside cells in quirks mode
+  // bug 305975
+  kidReflowState.mPercentHeightObserver = (eCompatibility_NavQuirks == compatMode) ?
+    (nsIPercentHeightObserver *)this : nsnull;
 
   // Assume the inner child will stay positioned exactly where it is. Later in
   // VerticallyAlignChild() we'll move it if it turns out to be wrong. This

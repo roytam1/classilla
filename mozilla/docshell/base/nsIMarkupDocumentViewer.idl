@@ -49,6 +49,9 @@ interface nsIMarkupDocumentViewer : nsISupports
 
 	/** The amount by which to scale all text. Default is 1.0. */
 	attribute float textZoom;
+	
+	/** Disable entire author style level (including HTML presentation hints) bug 32372 */
+	attribute boolean authorStyleDisabled;
 
 	/*
 	XXX Comment here!

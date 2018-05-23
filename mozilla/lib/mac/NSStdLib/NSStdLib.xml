@@ -3590,7 +3590,7 @@
                         <SETTING><NAME>IgnoredByMake</NAME><VALUE>false</VALUE></SETTING>
                     </SETTING>
                     <SETTING>
-                        <SETTING><NAME>FileType</NAME><VALUE>MMPr</VALUE></SETTING>
+                        <SETTING><NAME>FileType</NAME><VALUE>TEXT</VALUE></SETTING>
                         <SETTING><NAME>FileExtension</NAME><VALUE>.exp</VALUE></SETTING>
                         <SETTING><NAME>Compiler</NAME><VALUE>RunTSScript</VALUE></SETTING>
                         <SETTING><NAME>EditLanguage</NAME><VALUE></VALUE></SETTING>

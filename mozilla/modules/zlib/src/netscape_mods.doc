@@ -1,3 +1,14 @@
+Classilla modifications to zlib 1.2.3 for Mac OS:
+
+enum changed to ZLENS and ZCODES for clashing defs
+typedefs added back to zutil.h
+#define SLOW (sigh)
+
+This was disgusting and I am ashamed of myself. Please do not judge my worth as
+a programmer based on what you see in this directory.
+
+Cameron Kaiser, disgusting hacker
+
 
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*-
  *

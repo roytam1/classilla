@@ -308,15 +308,19 @@ static int do_lzw(gif_struct *gs, const PRUint8 *q)
   PRUint8 *rowp     = gs->rowp;
   PRUint8 *rowend   = gs->rowend;
   PRUintn rows_remaining = gs->rows_remaining;
-  PRUint8 max_index;
+// bug 208622
+//  PRUint8 max_index;
 
   if (rowp == rowend)
     return 0;
 
+// bug 208622
+#if(0)
   if (gs->is_local_colormap_defined)
     max_index = gs->local_colormap_size - 1;
   else
     max_index = gs->global_colormap_size - 1;
+#endif
 
 #define OUTPUT_ROW(gs)                                                  \
   PR_BEGIN_MACRO                                                        \
@@ -355,10 +359,15 @@ static int do_lzw(gif_struct *gs, const PRUint8 *q)
         return 0;
 
       if (oldcode == -1) {
+// bug 208622
+#if(0)
         *rowp = suffix[code];
         if (*rowp > max_index)
           *rowp = 0;
         rowp++;
+#endif
+        *rowp++ = suffix[code];
+// end bug
 
         if (rowp == rowend)
           OUTPUT_ROW(gs);
@@ -376,6 +385,12 @@ static int do_lzw(gif_struct *gs, const PRUint8 *q)
         /* the first code is always < avail */
         *stackp++ = firstchar;
         code = oldcode;
+        
+// bug 209079
+        if (stackp == stack + MAX_BITS)
+          return -1;
+// end bug
+
       }
 
       int code2 = 0;
@@ -387,6 +402,11 @@ static int do_lzw(gif_struct *gs, const PRUint8 *q)
 
         *stackp++ = suffix[code];
         code = prefix[code];
+        
+// bug 209079
+        if (stackp == stack + MAX_BITS)
+          return -1;
+// end bug
 
         if (code2 == prefix[code])
           return -1;
@@ -413,10 +433,15 @@ static int do_lzw(gif_struct *gs, const PRUint8 *q)
 
         /* Copy the decoded data out to the scanline buffer. */
       do {
+// bug 208622
+#if(0)
         *rowp = *--stackp;
         if (*rowp > max_index)
           *rowp = 0;
         rowp++;
+#endif
+        *rowp++ = *--stackp;
+// end bug
 
         if (rowp == rowend) {
           OUTPUT_ROW(gs);

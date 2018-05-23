@@ -372,7 +372,7 @@ NS_IMETHODIMP nsImageFrame::OnStartContainer(imgIRequest *aRequest, nsIPresConte
     if (NS_SUCCEEDED(rv))
       aImage->SetAnimationMode(animateMode);
   }
-
+  
   nscoord w, h;
   aImage->GetWidth(&w);
   aImage->GetHeight(&h);

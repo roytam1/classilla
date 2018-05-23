@@ -60,11 +60,15 @@ nsBlockReflowState::nsBlockReflowState(const nsHTMLReflowState& aReflowState,
                                        nsIPresContext* aPresContext,
                                        nsBlockFrame* aFrame,
                                        const nsHTMLReflowMetrics& aMetrics,
-                                       PRBool aBlockMarginRoot)
+                                       PRBool aTopMarginRoot,
+                                       PRBool aBottomMarginRoot)
+//                                       PRBool aBlockMarginRoot) // bug 209694
+
   : mBlock(aFrame),
     mPresContext(aPresContext),
     mReflowState(aReflowState),
-    mLastFloaterY(0),
+// bug 196919
+//    mLastFloaterY(0),
     mPrevBottomMargin(),
     mLineNumber(0),
     mFlags(0),
@@ -72,14 +76,20 @@ nsBlockReflowState::nsBlockReflowState(const nsHTMLReflowState& aReflowState,
 {
   const nsMargin& borderPadding = BorderPadding();
 
+// bug 209694
+#if(0)
   if (aBlockMarginRoot) {
     SetFlag(BRS_ISTOPMARGINROOT, PR_TRUE);
     SetFlag(BRS_ISBOTTOMMARGINROOT, PR_TRUE);
   }
   if (0 != aReflowState.mComputedBorderPadding.top) {
+#endif
+  if (aTopMarginRoot || 0 != aReflowState.mComputedBorderPadding.top) {
+  
     SetFlag(BRS_ISTOPMARGINROOT, PR_TRUE);
   }
-  if (0 != aReflowState.mComputedBorderPadding.bottom) {
+//  if (0 != aReflowState.mComputedBorderPadding.bottom) { // bug 209694
+  if (aTopMarginRoot || 0 != aReflowState.mComputedBorderPadding.top) {
     SetFlag(BRS_ISBOTTOMMARGINROOT, PR_TRUE);
   }
   if (GetFlag(BRS_ISTOPMARGINROOT)) {
@@ -235,6 +245,9 @@ nsBlockReflowState::ComputeBlockAvailSpace(nsIFrame* aFrame,
 
   /* bug 18445: treat elements mapped to display: block such as text controls
    * just like normal blocks   */
+   
+// bug 342531 modified for 1.3
+#if (0)   
   PRBool treatAsNotSplittable=PR_FALSE;
   nsCOMPtr<nsIAtom>frameType;
   aFrame->GetFrameType(getter_AddRefs(frameType));
@@ -249,6 +262,15 @@ nsBlockReflowState::ComputeBlockAvailSpace(nsIFrame* aFrame,
       NS_FRAME_NOT_SPLITTABLE == aSplitType ||                // things like images mapped to display: block
       PR_TRUE == treatAsNotSplittable)                        // text input controls mapped to display: block (special case)
   {
+#endif
+  nsFrameState frameState;
+  aFrame->GetFrameState(&frameState); // aFrame->GetStateBits()
+  if ((NS_FRAME_SPLITTABLE_NON_RECTANGULAR == aSplitType ||    // normal blocks
+       NS_FRAME_NOT_SPLITTABLE == aSplitType) &&               // things like images mapped to display: block
+       !(frameState & NS_FRAME_REPLACED_ELEMENT))   // but not replaced elements
+  {
+// end bug
+
     if (mBand.GetFloaterCount()) {
       // Use the float-edge property to determine how the child block
       // will interact with the floater.
@@ -367,8 +389,10 @@ nsBlockReflowState::GetAvailableSpace(nscoord aY)
 #endif
 }
 
+// bug 209694
+#if(0)
 PRBool
-nsBlockReflowState::ClearPastFloaters(PRUint8 aBreakType)
+nsBlockReflowState::ClearPastFloaters(PRUint8 aBreakType) // later was ::ClearPastFloats
 {
   nscoord saveY, deltaY;
 
@@ -428,6 +452,7 @@ nsBlockReflowState::ClearPastFloaters(PRUint8 aBreakType)
   }
   return applyTopMargin;
 }
+#endif
 
 /*
  * Reconstruct the vertical margin before the line |aLine| in order to
@@ -519,7 +544,8 @@ nsBlockReflowState::RecoverFloaters(nsLineList::iterator aLine,
       }
 #endif
       mSpaceManager->AddRectRegion(floater, fc->mRegion);
-      mLastFloaterY = fc->mRegion.y;
+// bug 196919
+//      mLastFloaterY = fc->mRegion.y;
       fc = fc->Next();
     }
   } else if (aLine->IsBlock()) {
@@ -859,20 +885,29 @@ nsBlockReflowState::FlowAndPlaceFloater(nsFloaterCache* aFloaterCache,
   floater->GetRect(oldRegion);
   oldRegion.Inflate(aFloaterCache->mMargins);
 
+// bug 196919
+#if(0)
   // Advance mY to mLastFloaterY (if it's not past it already) to
   // enforce 9.5.1 rule [2]; i.e., make sure that a float isn't
   // ``above'' another float that preceded it in the flow.
   mY = NS_MAX(mLastFloaterY, mY);
+#endif
+  // Enforce CSS2 9.5.1 rule[2], i.e., make sure a float isn't
+  // above another float that preceded it in the flow.
+  //mY = NS_MAX(mSpaceManager->GetLowestRegionTop(), mY); // bug 209694 has:
+  mY = NS_MAX(mSpaceManager->GetLowestRegionTop() + BorderPadding().top, mY);
+// end bug
 
   // See if the floater should clear any preceeding floaters...
   if (NS_STYLE_CLEAR_NONE != floaterDisplay->mBreakType) {
     // XXXldb Does this handle vertical margins correctly?
-    ClearFloaters(mY, floaterDisplay->mBreakType);
+//    ClearFloaters(mY, floaterDisplay->mBreakType); // bug 209694
+    mY = ClearFloats(mY, floaterDisplay->mBreakType);
   }
-  else {
+//  else { // bug 209694
     // Get the band of available space
     GetAvailableSpace();
-  }
+//  } // bug 209694
 
   // Reflow the floater
   mBlock->ReflowFloater(*this, placeholder, aFloaterCache->mCombinedArea,
@@ -1102,6 +1137,25 @@ nsBlockReflowState::FlowAndPlaceFloater(nsFloaterCache* aFloaterCache,
   // Position the floater and make sure and views are properly
   // positioned. We need to explicitly position its child views as
   // well, since we're moving the floater after flowing it.
+
+#if(0)
+// bug 6976
+  if (x < 0) {
+    //const nsStyleDisplay *disp = aKidFrame->GetStyleDisplay();
+    //const nsStyleDisplay *disp;
+    //aKidFrame->GetStyleData(eStyleStruct_Display, (const nsStyleStruct*&)disp);
+    // we're using floater here. but we don't need it.
+    //if (disp->mOverflowX != NS_STYLE_OVERFLOW_HIDDEN) { CSS 3
+    if (floaterDisplay->mOverflow != NS_STYLE_OVERFLOW_HIDDEN) { 
+    // see nsStyleStruct.h for this
+      // avoids a floater overflowing into the left of the window,
+      // because this frame has scrolled area horizontally.
+      x = 0;
+    }
+  }
+// end bug
+#endif
+
   floater->MoveTo(mPresContext, x, y);
   nsContainerFrame::PositionFrameView(mPresContext, floater);
   nsContainerFrame::PositionChildViews(mPresContext, floater);
@@ -1127,8 +1181,11 @@ nsBlockReflowState::FlowAndPlaceFloater(nsFloaterCache* aFloaterCache,
     SetFlag(BRS_NEEDRESIZEREFLOW, PR_TRUE);
   }
 
+// bug 196919
+#if (0)
   // Remember the y-coordinate of the floater we've just placed
   mLastFloaterY = mY;
+#endif
 
   // Now restore mY
   mY = saveY;
@@ -1153,6 +1210,11 @@ nsBlockReflowState::PlaceBelowCurrentLineFloaters(nsFloaterCacheList& aList)
 {
   nsFloaterCache* fc = aList.Head();
   while (fc) {
+// bug 196919
+	NS_ASSERTION(!fc->mIsCurrentLineFloater,
+		"A cl floater crept into the bcl floater list. Crapola.");
+// end slightly modified bug
+
     if (!fc->mIsCurrentLineFloater) {
 #ifdef DEBUG
       if (nsBlockFrame::gNoisyReflow) {
@@ -1184,14 +1246,17 @@ nsBlockReflowState::PlaceBelowCurrentLineFloaters(nsFloaterCacheList& aList)
   return PR_TRUE;
 }
 
-void
-nsBlockReflowState::ClearFloaters(nscoord aY, PRUint8 aBreakType)
+// bug 209694 modified for 1.3
+//void
+//nsBlockReflowState::ClearFloaters(nscoord aY, PRUint8 aBreakType)
+nscoord
+ nsBlockReflowState::ClearFloats(nscoord aY, PRUint8 aBreakType)
 {
 #ifdef DEBUG
   if (nsBlockFrame::gNoisyReflow) {
     nsFrame::IndentBy(stdout, nsBlockFrame::gNoiseIndent);
-    printf("clear floaters: in: mY=%d aY=%d(%d)\n",
-           mY, aY, aY - BorderPadding().top);
+    printf("clear floats: in: aY=%d(%d)\n",
+           aY, aY - BorderPadding().top);
   }
 #endif
 
@@ -1201,15 +1266,22 @@ nsBlockReflowState::ClearFloaters(nscoord aY, PRUint8 aBreakType)
   mSpaceManager->List(stdout);
 #endif
   const nsMargin& bp = BorderPadding();
-  nscoord newY = mBand.ClearFloaters(aY - bp.top, aBreakType);
+//  nscoord newY = mBand.ClearFloaters(aY - bp.top, aBreakType); // bug 148994
+  nscoord newY = mSpaceManager->ClearFloats(aY - bp.top, aBreakType); // bug 148994
+// bug 209694
+#if (0)
   mY = newY + bp.top;
   GetAvailableSpace();
+#endif
+  newY += bp.top;
 
 #ifdef DEBUG
   if (nsBlockFrame::gNoisyReflow) {
     nsFrame::IndentBy(stdout, nsBlockFrame::gNoiseIndent);
-    printf("clear floaters: out: mY=%d(%d)\n", mY, mY - bp.top);
+    printf("clear floats: out: y=%d(%d)\n", newY, newY - bp.top);
   }
 #endif
+
+ return newY; // bug 209694
 }
 

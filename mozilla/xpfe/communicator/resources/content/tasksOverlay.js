@@ -190,7 +190,8 @@ function ShowUpdateFromResource( node )
 	var url = node.getAttribute('url');
         // hack until I get a new interface on xpiflash to do a 
         // look up on the name/url pair.
-	OpenTaskURL( "http://www.mozilla.org/binaries.html");
+	//OpenTaskURL( "http://www.mozilla.org/binaries.html");
+	OpenTaskURL( "http://www.classilla.org/releases/");
 }
 
 function checkFocusedWindow()

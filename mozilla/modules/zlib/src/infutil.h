@@ -13,12 +13,12 @@
 
 typedef enum {
       TYPE,     /* get type bits (3, including end bit) */
-      LENS,     /* get lengths for stored */
+      ZLENS,     /* get lengths for stored */
       STORED,   /* processing stored block */
       TABLE,    /* get table lengths */
       BTREE,    /* get bit lengths tree for a dynamic block */
       DTREE,    /* get length, distance trees for a dynamic block */
-      CODES,    /* processing fixed or dynamic block */
+      ZCODES,    /* processing fixed or dynamic block */
       DRY,      /* output remaining window bytes */
       DONE,     /* finished last block, done */
       BAD}      /* got a data error--stuck here */

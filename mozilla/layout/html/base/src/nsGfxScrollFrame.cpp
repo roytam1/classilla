@@ -322,6 +322,10 @@ nsGfxScrollFrame::ScrollTo(nsIPresContext* aContext, nscoord aX, nscoord aY, PRU
 NS_IMETHODIMP
 nsGfxScrollFrame::GetScrollPreference(nsIPresContext* aPresContext, nsScrollPref* aScrollPreference) const
 {
+// backbugs from bug 234851 were not incorporated into this function
+// (it's the nearest equivalent to ::GetScrollbarStyles()), so it is
+// still 1.3 -- Cameron
+   
   const nsStyleDisplay* styleDisplay = nsnull;
 
   GetStyleData(eStyleStruct_Display,

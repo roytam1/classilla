@@ -11,6 +11,8 @@ toolkit.jar:
         content/global/commonDialog.js              (resources/content/commonDialog.js) 
         content/global/strres.js                    (resources/content/strres.js) 
         content/global/logo.gif                     (resources/content/logo.gif) 
+        content/global/sluggo.jpg                   (resources/content/sluggo.jpg)
+        content/global/sluggo.xhtml                 (resources/content/sluggo.xhtml)
         content/global/about.xul                    (resources/content/about.xul) 
         content/global/about.js                     (resources/content/about.js) 
         content/global/config.xul                   (resources/content/config.xul) 

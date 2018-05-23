@@ -8,6 +8,8 @@
 <!ENTITY navigator.accesskey         "r">
 
 <!ENTITY enableJavaScript.label          "Enable JavaScript for">
+<!ENTITY NoScriptconfig.label            "Configure Allowed Sites...">
+<!ENTITY NoScriptconfig.desc			 "This setting is the master switch. You must enable JavaScript for sites that you trust. To do so, click the S in the lower right of the current browser window.">
 <!ENTITY allowScripts.label              "Allow scripts to:">
 <!ENTITY allowWindowOpen.label           "Open unrequested windows">
 <!ENTITY allowWindowMoveResize.label     "Move or resize existing windows">

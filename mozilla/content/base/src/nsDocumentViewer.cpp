@@ -1405,7 +1405,9 @@ DocumentViewerImpl::Show(void)
 
     nsRect tbounds;
     mParentWidget->GetBounds(tbounds);
-
+    
+// bug 180921
+#if(0)
     float p2t;
     mPresContext->GetPixelsToTwips(&p2t);
     tbounds *= p2t;
@@ -1417,9 +1419,15 @@ DocumentViewerImpl::Show(void)
     // Initialize the view manager with an offset. This allows the
     // viewmanager to manage a coordinate space offset from (0,0)
     rv = mViewManager->Init(mDeviceContext);
+#endif
+    rv = MakeWindow(mParentWidget, tbounds);
+// end bug
+
     if (NS_FAILED(rv))
       return rv;
 
+// bug 180921
+#if(0)
     rv = mViewManager->SetWindowOffset(tbounds.x, tbounds.y);
     if (NS_FAILED(rv))
       return rv;
@@ -1454,6 +1462,7 @@ DocumentViewerImpl::Show(void)
     mViewManager->SetRootView(view);
 
     view->GetWidget(*getter_AddRefs(mWindow));
+#endif
 
     if (mPresContext && mContainer) {
       nsCOMPtr<nsILinkHandler> linkHandler(do_GetInterface(mContainer));
@@ -1899,7 +1908,8 @@ DocumentViewerImpl::MakeWindow(nsIWidget* aParentWidget,
   rv = view->CreateWidget(kWidgetCID, nsnull,
                           containerView != nsnull ? nsnull : aParentWidget->GetNativeData(NS_NATIVE_WIDGET),
                           PR_TRUE, PR_FALSE);
-  if (rv != NS_OK)
+  // if (rv != NS_OK) bug 180921
+  if (NS_FAILED(rv))
     return rv;
 
   // Setup hierarchical relationship in view manager
@@ -2320,6 +2330,33 @@ NS_IMETHODIMP DocumentViewerImpl::GetTextZoom(float* aTextZoom)
   *aTextZoom = 1.0;
   return NS_OK;
 }
+
+// bug 32372
+static void
+SetChildAuthorStyleDisabled(nsIMarkupDocumentViewer* aChild, void* aClosure)
+{
+  PRBool styleDisabled  = *NS_STATIC_CAST(PRBool*, aClosure);
+  aChild->SetAuthorStyleDisabled(styleDisabled);
+}
+NS_IMETHODIMP
+DocumentViewerImpl::SetAuthorStyleDisabled(PRBool aStyleDisabled)
+{
+  if (mPresShell) {
+    nsresult rv = mPresShell->SetAuthorStyleDisabled(aStyleDisabled);
+    if (NS_FAILED(rv)) return rv;
+  }
+  return CallChildren(SetChildAuthorStyleDisabled, &aStyleDisabled);
+}
+NS_IMETHODIMP
+DocumentViewerImpl::GetAuthorStyleDisabled(PRBool* aStyleDisabled)
+{
+  *aStyleDisabled = PR_FALSE;
+  if (mPresShell) {
+    return mPresShell->GetAuthorStyleDisabled(aStyleDisabled);
+  }
+  return NS_OK;
+}
+// end bug
 
 // XXX: SEMANTIC CHANGE!
 //      returns a copy of the string.  Caller is responsible for freeing result

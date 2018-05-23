@@ -74,7 +74,7 @@ uLongf *c;
     *c = s->check;
   if (s->mode == BTREE || s->mode == DTREE)
     ZFREE(z, s->sub.trees.blens);
-  if (s->mode == CODES)
+  if (s->mode == ZCODES)
     inflate_codes_free(s->sub.decode.codes, z);
   s->mode = TYPE;
   s->bitk = 0;
@@ -148,7 +148,7 @@ int r;
           DUMPBITS(3)
           t = k & 7;                    /* go to byte boundary */
           DUMPBITS(t)
-          s->mode = LENS;               /* get length of stored block */
+          s->mode = ZLENS;               /* get length of stored block */
           break;
         case 1:                         /* fixed */
           Tracev((stderr, "inflate:     fixed codes block%s\n",
@@ -166,7 +166,7 @@ int r;
             }
           }
           DUMPBITS(3)
-          s->mode = CODES;
+          s->mode = ZCODES;
           break;
         case 2:                         /* dynamic */
           Tracev((stderr, "inflate:     dynamic codes block%s\n",
@@ -182,7 +182,7 @@ int r;
           LEAVE
       }
       break;
-    case LENS:
+    case ZLENS:
       NEEDBITS(32)
       if ((((~b) >> 16) & 0xffff) != (b & 0xffff))
       {
@@ -334,8 +334,8 @@ int r;
         s->sub.decode.codes = c;
       }
       ZFREE(z, s->sub.trees.blens);
-      s->mode = CODES;
-    case CODES:
+      s->mode = ZCODES;
+    case ZCODES:
       UPDATE
       if ((r = inflate_codes(s, z, r)) != Z_STREAM_END)
         return inflate_flush(s, z, r);
@@ -399,5 +399,5 @@ uInt  n;
 int inflate_blocks_sync_point(s)
 inflate_blocks_statef *s;
 {
-  return s->mode == LENS;
+  return s->mode == ZLENS;
 }

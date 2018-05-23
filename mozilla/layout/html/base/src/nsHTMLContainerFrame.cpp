@@ -699,10 +699,13 @@ nsHTMLContainerFrame::CreateViewForFrame(nsIPresContext* aPresContext,
 }
 
 void
-nsHTMLContainerFrame::CheckInvalidateBorder(nsIPresContext* aPresContext,
+//nsHTMLContainerFrame::CheckInvalidateBorder(nsIPresContext* aPresContext, // bug 197065
+nsHTMLContainerFrame::CheckInvalidateSizeChange(nsIPresContext* aPresContext,
                                             nsHTMLReflowMetrics& aDesiredSize,
                                             const nsHTMLReflowState& aReflowState)
 {
+// bug 197065
+#if(0)
   // XXX This method ought to deal with padding as well
   // If this is a style change reflow targeted at this frame, we must repaint
   // everything (well, we really just have to repaint the borders but we're
@@ -727,9 +730,32 @@ nsHTMLContainerFrame::CheckInvalidateBorder(nsIPresContext* aPresContext,
 
         return;
       }
+#endif
+// begin bug
+    if (aDesiredSize.width == mRect.width
+        && aDesiredSize.height == mRect.height)
+    return;
+    // invalidate entire old frame area if it is determined to be stale
+    const nsStyleOutline* outline;
+    
+    ::GetStyleData(this, &outline);
+    PRUint8 outlineStyle = outline->GetOutlineStyle();
+    if (outlineStyle != NS_STYLE_BORDER_STYLE_NONE
+        && outlineStyle != NS_STYLE_BORDER_STYLE_HIDDEN) {
+      nscoord width;
+      outline->GetOutlineWidth(width);
+      if (width > 0) {
+        nsRect r(0, 0, mRect.width, mRect.height);
+        r.Inflate(width, width);
+        Invalidate(aPresContext, r);
+        return;
+// end bug
+
     }
   }
 
+// bug 197065
+#if (0)
   // If we changed size, we must invalidate the parts of us that have changed
   // to make the border show up.
   if ((aReflowState.reason == eReflowReason_Incremental ||
@@ -794,5 +820,26 @@ nsHTMLContainerFrame::CheckInvalidateBorder(nsIPresContext* aPresContext,
         Invalidate(aPresContext, damageRect);
       }
     }
+#endif
+  // Invalidate the old frame if there are borders, as they can move in CSS2
+  const nsStyleBorder* border;
+  ::GetStyleData(this, &border);
+  if (border->IsBorderSideVisible(NS_SIDE_LEFT)
+      || border->IsBorderSideVisible(NS_SIDE_RIGHT)
+      || border->IsBorderSideVisible(NS_SIDE_TOP)
+      || border->IsBorderSideVisible(NS_SIDE_BOTTOM)) {
+    Invalidate(aPresContext, nsRect(0, 0, mRect.width, mRect.height));
+    return;
+  }
+  // Invalidate the old frame if the frame has a background
+  // whose position depends on the frame size
+  const nsStyleBackground* background;
+  ::GetStyleData(this, &background);
+  if (background->mBackgroundFlags &
+      (NS_STYLE_BG_X_POSITION_PERCENT | NS_STYLE_BG_Y_POSITION_PERCENT)) {
+    Invalidate(aPresContext, nsRect(0, 0, mRect.width, mRect.height));
+    return;
+// end bug
+    
   }
 }

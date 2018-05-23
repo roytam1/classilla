@@ -24,6 +24,8 @@
  *   Peter Annema <disttsc@bart.nl>
  *   Dean Tessman <dean_tessman@hotmail.com>
  *
+ * Changes for Classilla (C)2009 Cameron Kaiser
+ *
  * Alternatively, the contents of this file may be used under the terms of
  * either the GNU General Public License Version 2 or later (the "GPL"), or 
  * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -57,6 +59,7 @@ var gClickAtEndSelects = false;
 var gIgnoreFocus = false;
 var gIgnoreClick = false;
 var gURIFixup = null;
+var gCurrentStyleSheet = '';
 
 var pref = null;
 
@@ -1648,20 +1651,29 @@ function getAllStyleSheets(frameset)
 
 function stylesheetFillPopup(menuPopup)
 {
+/* bug 32732
   var itemNoOptStyles = menuPopup.firstChild;
   while (itemNoOptStyles.nextSibling)
     menuPopup.removeChild(itemNoOptStyles.nextSibling);
+*/
+  // bug 32732
+  var itemPersistentOnly = menuPopup.firstChild.nextSibling;
+  while (itemPersistentOnly.nextSibling)
+    menuPopup.removeChild(itemPersistentOnly.nextSibling);
 
-  var noOptionalStyles = true;
+//  var noOptionalStyles = true; // bug 32732
   var styleSheets = getAllStyleSheets(window._content);
   var currentStyleSheets = [];
+  var styleDisabled = getMarkupDocumentViewer().authorStyleDisabled; // bug 32732
+  var altStyleSelected = false; // bug 32732
 
   for (var i = 0; i < styleSheets.length; ++i) {
     var currentStyleSheet = styleSheets[i];
 
     if (currentStyleSheet.title) {
       if (!currentStyleSheet.disabled)
-        noOptionalStyles = false;
+        // noOptionalStyles = false;
+        altStyleSelected = true; // bug 32732
 
       var lastWithSameTitle = null;
       if (currentStyleSheet.title in currentStyleSheets)
@@ -1672,7 +1684,10 @@ function stylesheetFillPopup(menuPopup)
         menuItem.setAttribute("type", "radio");
         menuItem.setAttribute("label", currentStyleSheet.title);
         menuItem.setAttribute("data", currentStyleSheet.title);
-        menuItem.setAttribute("checked", !currentStyleSheet.disabled);
+        menuItem.setAttribute("checked", !currentStyleSheet.disabled 
+          && !styleDisabled); // bug 32732
+        if (!currentStyleSheet.disabled && !styleDisabled && (gCurrentStyleSheet.length == 0))
+        	gCurrentStyleSheet = currentStyleSheet.title;
         menuPopup.appendChild(menuItem);
         currentStyleSheets[currentStyleSheet.title] = menuItem;
       } else {
@@ -1681,7 +1696,11 @@ function stylesheetFillPopup(menuPopup)
       }
     }
   }
-  itemNoOptStyles.setAttribute("checked", noOptionalStyles);
+// bug 32732
+//  itemNoOptStyles.setAttribute("checked", noOptionalStyles);
+  menuPopup.firstChild.setAttribute("checked", styleDisabled);
+  itemPersistentOnly.setAttribute("checked", !altStyleSelected && !styleDisabled);
+  itemPersistentOnly.hidden = (window.content.document.preferredStylesheetSet) ? true : false;
 }
 
 function stylesheetInFrame(frame, title) {
@@ -1715,6 +1734,30 @@ function stylesheetSwitchAll(frameset, title) {
     stylesheetSwitchAll(frameset.frames[i], title);
   }
 }
+
+// bug 32732
+function setStyleDisabled(disabled) {
+  getMarkupDocumentViewer().authorStyleDisabled = disabled;
+}
+// end bug
+
+// for Classilla's CSS button (at some point)
+function classillaCSStoggle(what) {
+  if (getMarkupDocumentViewer().authorStyleDisabled == false) {
+  	what.setAttribute("list-style-image", "chrome://navigator/skin/icons/cssoff.png");
+  	what.setAttribute("tooltiptext", "&cssIcon.labeloff;");
+  	setStyleDisabled(true);
+  	stylesheetSwitchAll(window.content, '');
+  	return;
+  }
+  what.setAttribute("list-style-image", "chrome://navigator/skin/icons/csson.png");
+  what.setAttribute("tooltiptext", "&cssIcon.labelon;");
+  setStyleDisabled(false);
+  stylesheetSwitchAll(window.content, gCurrentStyleSheet);
+  return;
+}
+  
+ 	
 
 function applyTheme(themeName)
 {

@@ -181,7 +181,8 @@
 #include "nsIDOMNotation.h"
 #include "nsIDOMMouseEvent.h"
 #include "nsIDOMMutationEvent.h"
-#include "nsIDOMDocumentStyle.h"
+// #include "nsIDOMDocumentStyle.h" // bug 32732
+#include "nsIDOMNSDocumentStyle.h" // bug 32732
 #include "nsIDOMDocumentRange.h"
 #include "nsIDOMDocumentTraversal.h"
 #include "nsIDOMDocumentXBL.h"
@@ -1333,6 +1334,7 @@ nsDOMClassInfo::Init()
   DOM_CLASSINFO_MAP_END
 
   DOM_CLASSINFO_MAP_BEGIN(History, nsIDOMHistory)
+    DOM_CLASSINFO_MAP_ENTRY(nsIDOMHistory) // bug 163549
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMNSHistory)
   DOM_CLASSINFO_MAP_END
 
@@ -1346,6 +1348,7 @@ nsDOMClassInfo::Init()
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMNSDocument)
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentEvent)
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentStyle)
+    DOM_CLASSINFO_MAP_ENTRY(nsIDOMNSDocumentStyle) // bug 32732
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentView)
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentRange)
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentTraversal)
@@ -1450,6 +1453,7 @@ nsDOMClassInfo::Init()
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMNSDocument)
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentEvent)
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentStyle)
+    DOM_CLASSINFO_MAP_ENTRY(nsIDOMNSDocumentStyle) // bug 32732
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentView)
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentRange)
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentTraversal)
@@ -1888,6 +1892,7 @@ nsDOMClassInfo::Init()
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentView)
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentXBL)
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentStyle)
+    DOM_CLASSINFO_MAP_ENTRY(nsIDOMNSDocumentStyle) // bug 32732
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentRange)
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentTraversal)
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMEventTarget)
@@ -1977,6 +1982,7 @@ nsDOMClassInfo::Init()
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentView)
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentXBL)
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentStyle)
+    DOM_CLASSINFO_MAP_ENTRY(nsIDOMNSDocumentStyle) // bug 32732
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentRange)
   DOM_CLASSINFO_MAP_END_WITH_XPATH
 
@@ -2189,6 +2195,7 @@ nsDOMClassInfo::Init()
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMNSDocument)
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentEvent)
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentStyle)
+    DOM_CLASSINFO_MAP_ENTRY(nsIDOMNSDocumentStyle) // bug 32732
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentView)
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentRange)
     DOM_CLASSINFO_MAP_ENTRY(nsIDOMDocumentTraversal)
@@ -3926,6 +3933,8 @@ nsWindowSH::NewResolve(nsIXPConnectWrappedNative *wrapper, JSContext *cx,
                        JSObject *obj, jsval id, PRUint32 flags,
                        JSObject **objp, PRBool *_retval)
 {
+// bug 158049
+#if(0)
   JSBool did_resolve = JS_FALSE;
 
   if (!::JS_ResolveStandardClass(cx, obj, id, &did_resolve)) {
@@ -3943,6 +3952,7 @@ nsWindowSH::NewResolve(nsIXPConnectWrappedNative *wrapper, JSContext *cx,
   if (id == sConstructor_id && !(flags & JSRESOLVE_ASSIGNING)) {
     return ResolveConstructor(cx, obj, objp);
   }
+#endif
 
   if (JSVAL_IS_STRING(id)) {
     JSString *str = JSVAL_TO_STRING(id);
@@ -3967,6 +3977,31 @@ nsWindowSH::NewResolve(nsIXPConnectWrappedNative *wrapper, JSContext *cx,
     if (!(flags & JSRESOLVE_ASSIGNING)) {
       // If we're resolving for assignment it's not worth calling
       // GlobalResolve()
+// bug 158049
+      // We're resolving for assignment. It's not worth calling
+      // JS_ResolveStandardClass() or calling GlobalResolve() since
+      // only read-write properties are dealt with in those calls.
+
+      JSContext *my_cx = (JSContext *) my_context->GetNativeContext();
+      JSBool did_resolve = JS_FALSE;
+
+      // Resolve standard classes on my_context's JSContext, not on
+      // cx, in case the two contexts have different origins.  We want
+      // lazy standard class initialization to behave as if it were
+      // done eagerly, on each window's own context (not on some other
+      // window-caller's context).
+
+      if (!::JS_ResolveStandardClass(my_cx, obj, id, &did_resolve)) {
+        *_retval = JS_FALSE;
+
+        return NS_ERROR_UNEXPECTED;
+      }
+      if (did_resolve) {
+        *objp = obj;
+
+        return NS_OK;
+      }
+// end bug
       rv = GlobalResolve(native, cx, obj, str, flags, &did_resolve);
       NS_ENSURE_SUCCESS(rv, rv);
 
@@ -3977,14 +4012,17 @@ nsWindowSH::NewResolve(nsIXPConnectWrappedNative *wrapper, JSContext *cx,
 
         return NS_OK;
       }
-    }
+ // bug 158049
+      if (id == sConstructor_id) {
+        return ResolveConstructor(cx, obj, objp);
+      } // end bug
+   }
 
     // Hmm, we do an aweful lot of QI's here, maybe we should add a
     // method on an interface that would let us just call into the
     // window code directly...
 
     nsCOMPtr<nsIDocShell> docShell;
-
     sgo->GetDocShell(getter_AddRefs(docShell));
 
     nsCOMPtr<nsIDocShellTreeNode> dsn(do_QueryInterface(docShell));
@@ -4180,6 +4218,24 @@ nsWindowSH::NewResolve(nsIXPConnectWrappedNative *wrapper, JSContext *cx,
 
         return NS_OK;
       }
+      // bug 158049
+      // Do a security check when resolving upto-this-point unknown
+      // string properties on window objects to prevent detection of a
+      // property's existance across origins.
+      rv =
+        doCheckPropertyAccess(cx, obj, id, wrapper,
+                              nsIXPCSecurityManager::ACCESS_GET_PROPERTY,
+                              PR_TRUE);
+      if (NS_FAILED(rv)) {
+        // Security check failed. The security manager set a JS
+        // exception, we must make sure that exception is propagated, so
+        // return NS_OK here.
+
+        *_retval = PR_FALSE;
+
+        return NS_OK;
+      }
+// end bug
     }
 
     return nsEventRecieverSH::NewResolve(wrapper, cx, obj, id, flags, objp,
@@ -4906,6 +4962,7 @@ nsDocumentSH::NewResolve(nsIXPConnectWrappedNative *wrapper, JSContext *cx,
                          JSObject *obj, jsval id, PRUint32 flags,
                          JSObject **objp, PRBool *_retval)
 {
+  nsresult rv;
   if (id == sLocation_id) {
     // This must be done even if we're just getting the value of
     // document.location (i.e. no checking flags & JSRESOLVE_ASSIGNING
@@ -4921,7 +4978,7 @@ nsDocumentSH::NewResolve(nsIXPConnectWrappedNative *wrapper, JSContext *cx,
     NS_ENSURE_TRUE(doc, NS_ERROR_UNEXPECTED);
 
     nsCOMPtr<nsIDOMLocation> location;
-    nsresult rv = doc->GetLocation(getter_AddRefs(location));
+    rv = doc->GetLocation(getter_AddRefs(location));
     NS_ENSURE_SUCCESS(rv, rv);
 
     jsval v;
@@ -4945,6 +5002,25 @@ nsDocumentSH::NewResolve(nsIXPConnectWrappedNative *wrapper, JSContext *cx,
 
     return NS_OK;
   }
+// bug 158049  
+  // Do a security check when resolving upto-this-point unknown string
+  // properties on document objects to prevent detection of a
+  // property's existance across origins.
+  rv = doCheckPropertyAccess(cx, obj, id, wrapper,
+                             (flags & JSRESOLVE_ASSIGNING) ?
+                             nsIXPCSecurityManager::ACCESS_SET_PROPERTY :
+                             nsIXPCSecurityManager::ACCESS_GET_PROPERTY,
+                             PR_FALSE);
+  if (NS_FAILED(rv)) {
+    // Security check failed. The security manager set a JS exception,
+    // we must make sure that exception is propagated, so return NS_OK
+    // here.
+
+    *_retval = PR_FALSE;
+
+    return NS_OK;
+  }
+// end bug
 
   return nsNodeSH::NewResolve(wrapper, cx, obj, id, flags, objp, _retval);
 }

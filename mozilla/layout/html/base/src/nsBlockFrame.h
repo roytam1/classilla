@@ -59,6 +59,11 @@ class nsIntervalSet;
 #define NS_BLOCK_FRAME_ABSOLUTE_LIST_INDEX  2
 #define NS_BLOCK_FRAME_LAST_LIST_INDEX      NS_BLOCK_FRAME_ABSOLUTE_LIST_INDEX
 
+// bug 209694
+// Set on any block that has descendant blocks in the normal
+// flow with 'clear' set to something other than 'none'.
+#define NS_BLOCK_HAS_CLEAR_CHILDREN         0x10000000
+
 #define nsBlockFrameSuper nsHTMLContainerFrame
 
 #define NS_BLOCK_FRAME_CID \
@@ -183,6 +188,13 @@ public:
   virtual void DeleteNextInFlowChild(nsIPresContext* aPresContext,
                                      nsIFrame*       aNextInFlow);
 
+// bug 209694
+  // Determines whether the collapsed margin carried out of the last
+  // line includes the margin-top of a line with clearance (in which
+  // case we must avoid collapsing that margin with our bottom margin)
+  // modified for Mozilla 1.3
+  PRBool CheckForCollapsedBottomMarginFromClearanceLine(nsIPresContext* aPresContext);
+  
   /** return the topmost block child based on y-index.
     * almost always the first or second line, if there is one.
     * accounts for lines that hold only compressed white space, etc.

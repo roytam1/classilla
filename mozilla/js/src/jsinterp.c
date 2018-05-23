@@ -947,6 +947,21 @@ out:
     return ok;
 }
 
+// bug 92773
+JSBool
+js_InternalGetOrSet(JSContext *cx, JSObject *obj, jsid id, jsval fval,
+                    JSAccessMode mode, uintN argc, jsval *argv, jsval *rval)
+{
+  JS_ASSERT(mode == JSACC_READ || mode == JSACC_WRITE);
+  if (cx->runtime->checkObjectAccess &&
+      !cx->runtime->checkObjectAccess(cx, obj, ID_TO_VALUE(id), mode,
+                                      &fval)) {
+      return JS_FALSE;
+  }
+  return js_InternalCall(cx, obj, fval, argc, argv, rval);
+}
+// end bug
+
 JSBool
 js_Execute(JSContext *cx, JSObject *chain, JSScript *script,
            JSStackFrame *down, uintN special, jsval *result)

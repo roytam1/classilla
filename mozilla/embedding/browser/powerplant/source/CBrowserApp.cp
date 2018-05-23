@@ -118,7 +118,7 @@ int main()
     
     PP_PowerPlant::UQDGlobals::InitializeToolbox();
     
-#if defined(__MWERKS__) && !TARGET_CARBON
+#if defined(__MWERKS__) && !TARGET_CARBON && DEBUG
     ::InitializeSIOUX(false);
 #endif
 

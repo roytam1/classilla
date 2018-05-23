@@ -140,6 +140,10 @@ public:
     NS_DECL_NSISTREAMLISTENER
     
     NS_DECL_NSIDIRINDEXLISTENER
+    NS_IMETHODIMP
+    OnCommentAvailable(nsIRequest *aRequest,
+                                    nsISupports *aCtxt,
+                                    const char *buf);
     NS_DECL_NSIINTERFACEREQUESTOR
     NS_DECL_NSIFTPEVENTSINK
 

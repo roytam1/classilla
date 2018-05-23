@@ -271,8 +271,17 @@ BasicTableLayoutStrategy::BalanceColumnWidths(nsIPresContext*          aPresCont
     nscoord colMinWidth = colFrame->GetMinWidth();
     mTableFrame->SetColumnWidth(colX, colMinWidth);
     minTableWidth += colMinWidth;
+    
+// bug 194024
+#if(0)
     if ((colFrame->GetMinWidth() > 0) || (colFrame->GetFixWidth() > 0) ||
         (colFrame->GetPctWidth() > 0) || (colFrame->GetWidth(MIN_PRO) > 0)) {
+#endif
+    if ((colFrame->GetMinWidth() > 0) || (colFrame->GetDesWidth() > 0) ||
+        (colFrame->GetFixWidth() > 0) || (colFrame->GetPctWidth() > 0) || 
+        (colFrame->GetWidth(MIN_PRO) > 0)) {
+// end bug
+
       numNonZeroWidthCols++;
     }
     if (mTableFrame->GetNumCellsOriginatingInCol(colX) > 0) {

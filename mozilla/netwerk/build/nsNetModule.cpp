@@ -134,7 +134,7 @@ NS_GENERIC_FACTORY_CONSTRUCTOR(nsStreamListenerTee)
 
 NS_GENERIC_FACTORY_CONSTRUCTOR_INIT(nsHttpHandler, Init)
 NS_GENERIC_FACTORY_CONSTRUCTOR_INIT(nsHttpsHandler, Init)
-NS_GENERIC_FACTORY_CONSTRUCTOR_INIT(nsHttpAuthManager, Init)
+//NS_GENERIC_FACTORY_CONSTRUCTOR_INIT(nsHttpAuthManager, Init)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsHttpBasicAuth)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsHttpDigestAuth)
 
@@ -814,12 +814,12 @@ static const nsModuleComponentInfo gNetModuleInfo[] = {
       NS_HTTPDIGESTAUTH_CID,
       NS_HTTP_AUTHENTICATOR_CONTRACTID_PREFIX "digest",
       nsHttpDigestAuthConstructor },
-
+/*
     { NS_HTTPAUTHMANAGER_CLASSNAME,
       NS_HTTPAUTHMANAGER_CID,
       NS_HTTPAUTHMANAGER_CONTRACTID,
       nsHttpAuthManagerConstructor },
-      
+*/      
     // from netwerk/protocol/ftp:
     { NS_FTPPROTOCOLHANDLER_CLASSNAME,
       NS_FTPPROTOCOLHANDLER_CID,

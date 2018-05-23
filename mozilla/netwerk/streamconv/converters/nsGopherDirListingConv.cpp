@@ -18,6 +18,9 @@
  *
  * Contributor(s): 
  *  Bradley Baetz <bbaetz@student.usyd.edu.au>
+ *
+ * Modifications for the Gopher loving Classilla by Cameron Kaiser
+ * and check out Overbite for Firefox: http://gopher.floodgap.com/overbite/
  */
 
 /* This code is based on the ftp directory translation code */
@@ -379,6 +382,11 @@ nsGopherDirListingConv::DigestBufferLines(char* aBuffer, nsCAutoString& aString)
                 else
                     aString.Append("FILE");
                 aString.Append(char(nsCRT::LF));
+            } else {
+            	/* DAMN IT I WANT ITEM TYPE i and 3! -- Cameron Kaiser */
+            	aString.Append("101: ");
+            	aString.Append(desc);
+            	aString.Append(char(nsCRT::LF));
             }
         } else {
             NS_WARNING("Error parsing gopher directory response.\n");

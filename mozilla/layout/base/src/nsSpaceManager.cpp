@@ -107,6 +107,8 @@ MOZ_DECL_CTOR_COUNTER(nsSpaceManager)
 nsSpaceManager::nsSpaceManager(nsIPresShell* aPresShell, nsIFrame* aFrame)
   : mFrame(aFrame),
     mXMost(0),
+// bug 196919
+	mLowestTop(NSCOORD_MIN),
     mFloatDamage(PSArenaAllocCB, PSArenaFreeCB, aPresShell)
 {
   MOZ_COUNT_CTOR(nsSpaceManager);
@@ -816,7 +818,12 @@ nsSpaceManager::AddRectRegion(nsIFrame* aFrame, const nsRect& aUnavailableSpace)
   nscoord xmost = rect.XMost();
   if (xmost > mXMost)
     mXMost = xmost;
-
+    
+// bug 196919
+  if (rect.y > mLowestTop)
+  	mLowestTop = rect.y;
+// end bug
+  	
   // Create a frame info structure
   frameInfo = CreateFrameInfo(aFrame, rect);
   if (nsnull == frameInfo) {
@@ -824,7 +831,8 @@ nsSpaceManager::AddRectRegion(nsIFrame* aFrame, const nsRect& aUnavailableSpace)
   }
 
   // Is the rect empty?
-  if (aUnavailableSpace.IsEmpty()) {
+//  if (aUnavailableSpace.IsEmpty()) {
+  if (aUnavailableSpace.height <= 0) { // bug 391412
     // The rect doesn't consume any space, so don't add any band data
     return NS_OK;
   }
@@ -840,6 +848,9 @@ nsSpaceManager::AddRectRegion(nsIFrame* aFrame, const nsRect& aUnavailableSpace)
   return NS_OK;
 }
 
+
+// bug 196919
+#if (0)
 nsresult
 nsSpaceManager::ResizeRectRegion(nsIFrame*    aFrame,
                                  nscoord      aDeltaWidth,
@@ -891,6 +902,7 @@ nsSpaceManager::OffsetRegion(nsIFrame* aFrame, nscoord aDx, nscoord aDy)
   RemoveRegion(aFrame);
   return AddRectRegion(aFrame, rect);
 }
+#endif
 
 nsresult
 nsSpaceManager::RemoveRegion(nsIFrame* aFrame)
@@ -903,7 +915,8 @@ nsSpaceManager::RemoveRegion(nsIFrame* aFrame)
     return NS_ERROR_INVALID_ARG;
   }
 
-  if (!frameInfo->mRect.IsEmpty()) {
+//  if (!frameInfo->mRect.IsEmpty()) {
+  if (frameInfo->mRect.height > 0) { // bug 391412
     NS_ASSERTION(!mBandList.IsEmpty(), "no bands");
     BandRect* band = mBandList.Head();
     BandRect* prevBand = nsnull;
@@ -1001,6 +1014,7 @@ nsSpaceManager::ClearRegions()
 {
   ClearFrameInfo();
   mBandList.Clear();
+  mLowestTop = NSCOORD_MIN; // bug 198485
 }
 
 void
@@ -1038,6 +1052,7 @@ nsSpaceManager::PushState()
   state->mX = mX;
   state->mY = mY;
   state->mXMost = mXMost;
+  state->mLowestTop = mLowestTop; // bug 196919
 
   if (mFrameInfoMap) {
     state->mLastFrame = mFrameInfoMap->mFrame;
@@ -1082,6 +1097,7 @@ nsSpaceManager::PopState()
   mX = mSavedStates->mX;
   mY = mSavedStates->mY;
   mXMost = mSavedStates->mXMost;
+  mLowestTop = mSavedStates->mLowestTop; // bug 196919
 
   // Now that we've restored our state, pop the topmost
   // state and delete it.
@@ -1090,6 +1106,35 @@ nsSpaceManager::PopState()
   mSavedStates = mSavedStates->mNext;
   delete state;
 }
+
+// bug 209694 modified for Mozilla 1.3
+void
+nsSpaceManager::DiscardState()
+{
+  NS_ASSERTION(mSavedStates, "Invalid call to DiscardState()!");
+
+  if (!mSavedStates) {
+    return;
+  }
+
+  SpaceManagerState *state = mSavedStates;
+  mSavedStates = mSavedStates->mNext;
+  // there is no mAutoState
+  delete state;
+
+}
+
+
+
+// bug 196919
+nscoord
+nsSpaceManager::GetLowestRegionTop()
+{
+	if (mLowestTop == NSCOORD_MIN)
+		return mLowestTop;
+	return mLowestTop - mY;
+}
+// end bug
 
 #ifdef DEBUG
 void
@@ -1211,6 +1256,50 @@ nsSpaceManager::DestroyFrameInfo(FrameInfo* aFrameInfo)
 
   delete aFrameInfo;
 }
+
+static PRBool
+ShouldClearFrame(nsIFrame* aFrame, PRUint8 aBreakType)
+{
+  //PRUint8 floatType = aFrame->GetStyleDisplay()->mFloats;
+  const nsStyleDisplay *disp;
+  aFrame->GetStyleData(eStyleStruct_Display, (const nsStyleStruct *&)disp);
+  PRUint8 floatType = disp->mFloats;
+  
+  PRBool result;
+  switch (aBreakType) {
+    case NS_STYLE_CLEAR_LEFT_AND_RIGHT:
+      result = PR_TRUE;
+      break;
+    case NS_STYLE_CLEAR_LEFT:
+      result = floatType == NS_STYLE_FLOAT_LEFT;
+      break;
+    case NS_STYLE_CLEAR_RIGHT:
+      result = floatType == NS_STYLE_FLOAT_RIGHT;
+      break;
+    default:
+      result = PR_FALSE;
+  }
+  return result;
+}
+nscoord
+nsSpaceManager::ClearFloats(nscoord aY, PRUint8 aBreakType)
+{
+  nscoord bottom = aY + mY;
+
+  for (FrameInfo *frame = mFrameInfoMap; frame; frame = frame->mNext) {
+    if (ShouldClearFrame(frame->mFrame, aBreakType)) {
+      if (frame->mRect.YMost() > bottom) {
+        bottom = frame->mRect.YMost();
+      }
+    }
+  }
+
+  bottom -= mY;
+
+  return bottom;
+}
+
+
 
 /////////////////////////////////////////////////////////////////////////////
 // FrameInfo

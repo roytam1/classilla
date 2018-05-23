@@ -1448,6 +1448,14 @@ nsTableRowGroupFrame::AppendFrames(nsIPresContext* aPresContext,
       if (tableFrame->RowIsSpannedInto(rowIndex)) {
         tableFrame->SetNeedStrategyInit(PR_TRUE);
       }
+
+// bug 193257
+      else if (!tableFrame->IsAutoHeight()) {
+        // the table isn't autoheight, so we need a rebalance
+        tableFrame->SetNeedStrategyBalance(PR_TRUE);
+      }
+// end bug
+
     }
   }
 
@@ -1500,6 +1508,14 @@ nsTableRowGroupFrame::InsertFrames(nsIPresContext* aPresContext,
         tableFrame->RowHasSpanningCells(rowIndex + numRows - 1)) {
       tableFrame->SetNeedStrategyInit(PR_TRUE);
     }
+    
+// bug 193257
+    else if (!tableFrame->IsAutoHeight()) {
+      // the table isn't autoheight, so a rebalance is needed
+      tableFrame->SetNeedStrategyBalance(PR_TRUE);
+    }
+// end bug
+
   }
   return NS_OK;
 }

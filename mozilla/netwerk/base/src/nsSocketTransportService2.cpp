@@ -455,6 +455,7 @@ nsSocketTransportService::Init()
     if (mInitialized)
         return NS_OK;
 
+/*
     if (!mThreadEvent) {
         mThreadEvent = PR_NewPollableEvent();
         //
@@ -470,6 +471,7 @@ nsSocketTransportService::Init()
         NS_WARN_IF_FALSE(mThreadEvent,
                 "running socket transport thread without a pollable event");
     }
+*/
 
     nsresult rv = NS_NewThread(&mThread, this, 0, PR_JOINABLE_THREAD);
     if (NS_FAILED(rv)) return rv;

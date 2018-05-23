@@ -187,13 +187,15 @@ BreakTypeToString(PRUint8 aBreakType)
 char*
 nsLineBox::StateToString(char* aBuf, PRInt32 aBufSize) const
 {
-  PR_snprintf(aBuf, aBufSize, "%s,%s,%s,%s,%s,%s[0x%x]",
+  PR_snprintf(aBuf, aBufSize, "%s,%s,%s,%s,%s,before:%s,after:%s[0x%x]", // b:%,a bug 209694
               IsBlock() ? "block" : "inline",
               IsDirty() ? "dirty" : "clean",
               IsPreviousMarginDirty() ? "prevmargindirty" : "prevmarginclean",
               IsImpactedByFloater() ? "impacted" : "not impacted",
               IsLineWrapped() ? "wrapped" : "not wrapped",
-              BreakTypeToString(GetBreakType()),
+              //BreakTypeToString(GetBreakType()),
+              BreakTypeToString(GetBreakTypeBefore()), // bug 209694
+              BreakTypeToString(GetBreakTypeAfter()), // bug 209694
               mAllFlags);
   return aBuf;
 }
@@ -276,6 +278,8 @@ nsLineBox::IndexOf(nsIFrame* aFrame) const
   return -1;
 }
 
+// this is the compat IsEmpty, which may need to be replaced by the later
+// IsEmpty()
 nsresult
 nsLineBox::IsEmpty(nsCompatibility aCompatMode, PRBool aParentIsPre,
                    PRBool *aResult) const
@@ -648,7 +652,7 @@ nsLineIterator::GetLine(PRInt32 aLineNumber,
     flags |= NS_LINE_FLAG_IS_BLOCK;
   }
   else {
-    if (line->HasBreak())
+    if (line->HasBreakAfter()) // After from bug 209694
       flags |= NS_LINE_FLAG_ENDS_IN_BREAK;
   }
   *aLineFlags = flags;

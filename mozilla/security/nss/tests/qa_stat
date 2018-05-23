@@ -291,7 +291,8 @@ setQAsysvars()
             QA_SYS_OS=$QA_OS
         else
             QA_SYS_OS=`grep $SYSNAME $PLATFORMLIST |
-                sed -e 's///' | \
+                sed -e 's/
+//' | \
                 sort | uniq | sed  -e "s/$SYSNAME//" \
                 -e "s/^_//" | sort | uniq`
         fi

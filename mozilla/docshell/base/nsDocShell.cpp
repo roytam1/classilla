@@ -4628,6 +4628,7 @@ nsDocShell::SetupNewViewer(nsIContentViewer * aNewViewer)
     PRInt32 hintCharsetSource;
     nsXPIDLString prevDocCharset;
     float textZoom;
+    PRBool styleDisabled; // bug 32372
     // |newMUDV| also serves as a flag to set the data from the above vars
     nsCOMPtr<nsIMarkupDocumentViewer> newMUDV;
 
@@ -4667,6 +4668,9 @@ nsDocShell::SetupNewViewer(nsIContentViewer * aNewViewer)
                 NS_ENSURE_SUCCESS(oldMUDV->
                                   GetTextZoom(&textZoom),
                                   NS_ERROR_FAILURE);
+                NS_ENSURE_SUCCESS(oldMUDV->
+                                  GetAuthorStyleDisabled(&styleDisabled),
+                                  NS_ERROR_FAILURE); // bug 32372
                 NS_ENSURE_SUCCESS(oldMUDV->
                                   GetPrevDocCharacterSet(getter_Copies(prevDocCharset)),
                                   NS_ERROR_FAILURE);
@@ -4799,6 +4803,8 @@ nsDocShell::SetupNewViewer(nsIContentViewer * aNewViewer)
                           NS_ERROR_FAILURE);
         NS_ENSURE_SUCCESS(newMUDV->SetTextZoom(textZoom),
                           NS_ERROR_FAILURE);
+        NS_ENSURE_SUCCESS(newMUDV->SetAuthorStyleDisabled(styleDisabled),
+                          NS_ERROR_FAILURE); // bug 32372
     }
 
     // End copying block (Don't mess with the old content/document viewer

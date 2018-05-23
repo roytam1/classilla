@@ -215,8 +215,11 @@ nsDOMSOFactory::Observe(nsISupports *aSubject,
   if (!nsCRT::strcmp(aTopic, NS_XPCOM_SHUTDOWN_OBSERVER_ID)) {
     // Flush the XUL cache since it holds JS roots, and we're about to
     // start the final GC.
-    static NS_DEFINE_CID(kXULPrototypeCacheCID, NS_XULPROTOTYPECACHE_CID);
-    nsCOMPtr<nsIXULPrototypeCache> cache(do_GetService(kXULPrototypeCacheCID));
+//    static NS_DEFINE_CID(kXULPrototypeCacheCID, NS_XULPROTOTYPECACHE_CID);
+//    nsCOMPtr<nsIXULPrototypeCache> cache(do_GetService(kXULPrototypeCacheCID));
+// bug 202994
+    nsCOMPtr<nsIXULPrototypeCache> cache =
+      do_GetService("@mozilla.org/xul/xul-prototype-cache;1");
 
     if (cache)
       cache->Flush();

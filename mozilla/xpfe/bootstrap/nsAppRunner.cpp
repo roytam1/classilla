@@ -1376,7 +1376,7 @@ static nsresult DumpVersion(char *appname)
   nsresult rv = NS_OK;
   long buildID = NS_BUILD_ID;  // 10-digit number
 
-  printf("Mozilla %s, Copyright (c) 2003 mozilla.org", MOZILLA_VERSION);
+  printf("Classilla %s, Copyright (c) 2009 Contributors to Classilla", MOZILLA_VERSION);
 
   if(buildID) {
     printf(", build %u\n", (unsigned int)buildID);

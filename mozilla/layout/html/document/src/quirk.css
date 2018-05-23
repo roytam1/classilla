@@ -296,3 +296,7 @@ input:not([type=image]), textarea {
   -moz-box-sizing: border-box;
 }
 
+/* Quirk: give form margin for compat (b=41806) */
+form{
+ margin: 0 0 1em 0;
+}

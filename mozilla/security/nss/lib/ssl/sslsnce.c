@@ -1623,4 +1623,11 @@ SSL_SetMaxServerCacheLocks(PRUint32 maxLocks)
     return SECFailure;
 }
 
+SECStatus
+SSL_ShutdownServerSessionIDCache(void)
+{
+    SSL3_ShutdownServerCache();
+    return SECSuccess; // SSL_ShutdownServerSessionIDCacheInstance(&globalCache);
+}
+
 #endif /* XP_UNIX || XP_WIN32 */

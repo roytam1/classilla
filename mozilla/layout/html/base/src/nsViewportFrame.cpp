@@ -221,7 +221,8 @@ ViewportFrame::AdjustReflowStateForScrollbars(nsIPresContext*    aPresContext,
     }
   }
 }
-
+// bug 90270
+#if (0)
 // Called by Reflow() to reflow all of the fixed positioned child frames.
 // This is only done for 'initial', 'resize', and 'style change' reflow commands
 nsresult
@@ -236,6 +237,7 @@ ViewportFrame::ReflowFixedFrames(nsIPresContext*          aPresContext,
   return mFixedContainer.Reflow(this, aPresContext, reflowState, reflowState.mComputedWidth, 
                                 reflowState.mComputedHeight);
 }
+#endif
 
 NS_IMETHODIMP
 ViewportFrame::Reflow(nsIPresContext*          aPresContext,
@@ -251,6 +253,8 @@ ViewportFrame::Reflow(nsIPresContext*          aPresContext,
   // Initialize OUT parameters
   aStatus = NS_FRAME_COMPLETE;
 
+// bug 90270
+#if (0)
   nsresult rv = NS_OK;
   
   nsReflowType reflowType = eReflowType_ContentChanged;
@@ -276,9 +280,12 @@ ViewportFrame::Reflow(nsIPresContext*          aPresContext,
     rv = mFixedContainer.IncrementalReflow(this, aPresContext, reflowState, reflowState.mComputedWidth,
                                            reflowState.mComputedHeight, wasHandled);
   }
+#endif
 
   nsRect kidRect(0,0,aReflowState.availableWidth,aReflowState.availableHeight);
-
+// bug 90270 -- reflow main content first
+  nsresult rv = NS_OK;
+  
   if (mFrames.NotEmpty()) {
     // Deal with a non-incremental reflow or an incremental reflow
     // targeted at our one-and-only principal child frame.
@@ -302,12 +309,15 @@ ViewportFrame::Reflow(nsIPresContext*          aPresContext,
       FinishReflowChild(kidFrame, aPresContext, nsnull, kidDesiredSize, 0, 0, 0);
     }
   }
-
+  
+// bug 90270
+#if (0)
   if (eReflowReason_Incremental != aReflowState.reason) {
     // If it's anything but an incremental reflow, then reflow all the
     // fixed positioned child frames.
     rv = ReflowFixedFrames(aPresContext, aReflowState);
   }
+#endif
 
   // If we were flowed initially at both an unconstrained width and height, 
   // this is a hint that we should return our child's intrinsic size.
@@ -328,6 +338,35 @@ ViewportFrame::Reflow(nsIPresContext*          aPresContext,
     aDesiredSize.descent = 0;
   }
 
+// bug 90270
+  nsHTMLReflowState reflowState(aReflowState);
+  AdjustReflowStateForScrollbars(aPresContext, reflowState);
+  
+  nsReflowType reflowType = eReflowType_ContentChanged;
+  if (aReflowState.path) {
+  	// this forces the UserDefined reflow to be targetted in _this_ frame
+  	nsHTMLReflowCommand *command = aReflowState.path->mReflowCommand;
+  	if (command)
+  		command->GetType(reflowType);
+  }
+  PRBool wasHandled = PR_FALSE;
+  if (reflowType != eReflowType_UserDefined &&
+      aReflowState.reason == eReflowReason_Incremental) {
+  	// incremental reflow
+  	rv = mFixedContainer.IncrementalReflow(this, aPresContext, reflowState,
+  										   reflowState.mComputedWidth,
+  										   reflowState.mComputedHeight,
+  										   wasHandled);
+  }
+  if (!wasHandled) {
+  	// either initial reflow, or IncrementalReflow() blew it, so reflow fixed
+  	// position frames
+  	rv = mFixedContainer.Reflow(this, aPresContext, reflowState,
+  								reflowState.mComputedWidth,
+  								reflowState.mComputedHeight);
+  }
+// end bug
+  
   // If this is an initial reflow, resize reflow, or style change reflow
   // then do a repaint
   if ((eReflowReason_Initial == aReflowState.reason) ||

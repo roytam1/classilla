@@ -1911,7 +1911,10 @@ nsHTMLInputElement::StringToAttribute(nsIAtom* aAttribute,
       return NS_CONTENT_ATTR_HAS_VALUE;
     }
   }
-  else if (IsImage()) {
+// bug 214077
+//  else if (IsImage()) {
+   else {
+
     if (ParseImageAttribute(aAttribute, aValue, aResult)) {
       return NS_CONTENT_ATTR_HAS_VALUE;
     }
@@ -1951,7 +1954,11 @@ nsHTMLInputElement::AttributeToString(nsIAtom* aAttribute,
     aResult.Assign(NS_LITERAL_STRING("checked"));
     return NS_CONTENT_ATTR_HAS_VALUE;
   }
-  else if (IsImage() && ImageAttributeToString(aAttribute, aValue,
+// bug 214077
+
+  else if (
+   // IsImage() && 
+   ImageAttributeToString(aAttribute, aValue,
                                                aResult)) {
     return NS_CONTENT_ATTR_HAS_VALUE;
   }

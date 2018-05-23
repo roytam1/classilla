@@ -34,7 +34,7 @@
 /*
  * Certificate handling code
  *
- * $Id: certdb.c,v 1.46.2.3 2003/07/09 22:39:45 wtc%netscape.com Exp $
+ * $Id: certdb.c,v 1.46.2.2 2002/12/18 23:46:38 wtc%netscape.com Exp $
  */
 
 #include "nssilock.h"
@@ -2568,18 +2568,17 @@ CERT_FilterCertListByUsage(CERTCertList *certList, SECCertUsage usage,
     while ( !CERT_LIST_END(node, certList) ) {
 
 	bad = PR_FALSE;
-
-if (!node->cert)
-{
-  bad = PR_TRUE;
-}
-else
-{
+	if (!node->cert) {
+		bad = PR_TRUE;
+	} else {
+	
 	/* bad key usage */
 	if ( CERT_CheckKeyUsage(node->cert, requiredKeyUsage )
 	    != SECSuccess ) {
 	    bad = PR_TRUE;
 	}
+	}
+	
 	/* bad cert type */
 	if ( ca ) {
 	    /* This function returns a more comprehensive cert type that
@@ -2594,7 +2593,6 @@ else
 	if ( ! ( certType & requiredCertType ) ) {
 	    bad = PR_TRUE;
 	}
-}
 
 	if ( bad ) {
 	    /* remove the node if it is bad */
@@ -2613,8 +2611,7 @@ loser:
 
 PRBool CERT_IsUserCert(CERTCertificate* cert)
 {
-    if ( cert->trust &&
-        ((cert->trust->sslFlags & CERTDB_USER ) ||
+    if (cert->trust && ((cert->trust->sslFlags & CERTDB_USER ) ||
          (cert->trust->emailFlags & CERTDB_USER ) ||
          (cert->trust->objectSigningFlags & CERTDB_USER )) ) {
         return PR_TRUE;

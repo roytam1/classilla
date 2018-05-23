@@ -26,6 +26,8 @@
  *   Pierre Phaneuf           <pp@ludusdesign.com>
  *   Bradley Baetz            <bbaetz@cs.mcgill.ca>
  *
+ * Changes for Classilla (C)2009 Cameron Kaiser
+ *
  * Alternatively, the contents of this file may be used under the terms of
  * either of the GNU General Public License Version 2 or later (the "GPL"),
  * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -292,8 +294,8 @@ nsDirIndexParser::ParseData(nsIDirIndex *aIdx, char* aDataStr) {
                                                                 &result)) && (result)) {
           if (*result) {
             aIdx->SetLocation(filename.get());
-            if (!mHasDescription)
-              aIdx->SetDescription(result);
+            if (!mHasDescription) // but see FIELD_DESCRIPTION below. might need to dupe that here too. CK
+              aIdx->SetDescription(result); // MacRoman?
             success = PR_TRUE;
           }
           Recycle(result);
@@ -316,7 +318,11 @@ nsDirIndexParser::ParseData(nsIDirIndex *aIdx, char* aDataStr) {
       break;
     case FIELD_DESCRIPTION:
       nsUnescape(value);
-      aIdx->SetDescription(NS_ConvertUTF8toUCS2(value).get());
+      // This broke with non-UTF8 encodings such as MacRoman (important in Classilla!)
+      // so we try to give it a backup if we get a null string.
+      // -- Cameron Kaiser
+      const wchar_t *attempt = NS_ConvertUTF8toUCS2(value).get();
+      aIdx->SetDescription((*attempt == '\0') ? NS_ConvertASCIItoUCS2(value).get() : attempt);
       break;
     case FIELD_CONTENTLENGTH:
       {
@@ -418,6 +424,8 @@ nsDirIndexParser::ProcessData(nsIRequest *aRequest, nsISupports *aCtxt) {
           } else if (buf[2] == '1' && buf[3] == ':') {
             // 101. Human-readable information line.
             mComment.Append(buf + 4);
+            // Cameron Kaiser: but we also need to flag the listener in this version.
+            mListener->OnCommentAvailable(aRequest, aCtxt, (const char *)nsUnescape((char *)(buf + 4)));
           } else if (buf[2] == '2' && buf[3] == ':') {
             // 102. Human-readable information line, HTML.
             mComment.Append(buf + 4);

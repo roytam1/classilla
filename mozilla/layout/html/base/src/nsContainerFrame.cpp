@@ -1053,6 +1053,24 @@ nsContainerFrame::FinishReflowChild(nsIFrame*                 aKidFrame,
   nsRect  bounds(aX, aY, aDesiredSize.width, aDesiredSize.height);
 
   aKidFrame->GetOrigin(curOrigin);
+
+#if(0)  
+// bug 6976
+  if (aX < 0) {
+    //const nsStyleDisplay *disp = aKidFrame->GetStyleDisplay();
+    const nsStyleDisplay *disp;
+    aKidFrame->GetStyleData(eStyleStruct_Display, (const nsStyleStruct*&)disp);
+    //if (disp->mOverflowX != NS_STYLE_OVERFLOW_HIDDEN) { CSS 3
+    if (disp->mOverflow != NS_STYLE_OVERFLOW_HIDDEN) { 
+    // see nsStyleStruct.h for this
+      // avoids a floater overflowing into the left of the window,
+      // because this frame has scrolled area horizontally.
+      aX = 0;
+    }
+  }
+// end bug
+#endif
+
   aKidFrame->SetRect(aPresContext, bounds);
 
   nsIView*  view;

@@ -981,6 +981,7 @@ void CPlugin::AddMimeTypeToList(StringPtr cTypeString)
 {
 	if (sRunningOnOSX)
 	{
+#if TARGET_API_MAC_CARBON
 		CFStringRef		pluginKey	= CFSTR("DefaultPluginSeenTypes"); // don't release this
 		CFStringRef		mimeType	= ::CFStringCreateWithPascalString(kCFAllocatorDefault, cTypeString, kCFStringEncodingASCII);
 		CFArrayRef		prefsList	= (CFArrayRef)::CFPreferencesCopyAppValue(pluginKey, kCFPreferencesCurrentApplication);
@@ -1030,6 +1031,7 @@ void CPlugin::AddMimeTypeToList(StringPtr cTypeString)
 			::CFRelease(prefsList);
 		}
 		::CFRelease(mimeType);
+#endif
 	}
 	else
 	{
@@ -1104,6 +1106,7 @@ Boolean CPlugin::CheckMimeTypes()
 
 	if (sRunningOnOSX)
 	{
+#if TARGET_API_MAC_CARBON
 		CFStringRef		pluginKey = CFSTR("DefaultPluginSeenTypes"); // don't release this
 		CFStringRef		mimeType  = ::CFStringCreateWithCString(kCFAllocatorDefault, fType, kCFStringEncodingASCII);
 		CFArrayRef		prefsList = (CFArrayRef)::CFPreferencesCopyAppValue(pluginKey, kCFPreferencesCurrentApplication);
@@ -1128,6 +1131,7 @@ Boolean CPlugin::CheckMimeTypes()
 			::CFRelease(prefsList);
 		}
 		::CFRelease(mimeType);
+#endif
 	}
 	else
 	{

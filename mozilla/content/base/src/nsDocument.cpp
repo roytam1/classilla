@@ -630,6 +630,8 @@ NS_INTERFACE_MAP_BEGIN(nsDocument)
   NS_INTERFACE_MAP_ENTRY(nsIDOMDocumentEvent)
   NS_INTERFACE_MAP_ENTRY(nsIDOM3DocumentEvent)
   NS_INTERFACE_MAP_ENTRY(nsIDOMDocumentStyle)
+  // bug 32732
+  NS_INTERFACE_MAP_ENTRY(nsIDOMNSDocumentStyle)
   NS_INTERFACE_MAP_ENTRY(nsIDOMDocumentView)
   NS_INTERFACE_MAP_ENTRY(nsIDOMDocumentRange)
   NS_INTERFACE_MAP_ENTRY(nsIDOMDocumentTraversal)
@@ -2530,6 +2532,20 @@ nsDocument::GetStyleSheets(nsIDOMStyleSheetList** aStyleSheets)
   return NS_OK;
 }
 
+// bug 32732
+NS_IMETHODIMP
+nsDocument::GetPreferredStylesheetSet(nsAString& aStyleTitle)
+{
+  if (mCSSLoader) {
+    mCSSLoader->GetPreferredSheet(aStyleTitle);
+  }
+  else {
+    aStyleTitle.Truncate();
+  }
+  return NS_OK;
+}
+// end bug
+
 NS_IMETHODIMP    
 nsDocument::GetCharacterSet(nsAString& aCharacterSet)
 {
@@ -3838,6 +3854,35 @@ nsDocument::GetScriptEventManager(nsIScriptEventManager **aResult)
 
   return NS_OK;
 }
+
+// moved from nsDocumentEncoder.cpp by bug 77296
+// note: function is NOT entirely the same
+NS_IMETHODIMP_(PRBool)
+nsDocument::IsScriptEnabled()
+{
+  nsCOMPtr<nsIScriptSecurityManager> sm(do_GetService(NS_SCRIPTSECURITYMANAGER_CONTRACTID));
+  NS_ENSURE_TRUE(sm, PR_TRUE);
+
+  nsCOMPtr<nsIPrincipal> principal;
+  GetPrincipal(getter_AddRefs(principal));
+  NS_ENSURE_TRUE(principal, PR_TRUE);
+
+  nsCOMPtr<nsIScriptGlobalObject> globalObject;
+  GetScriptGlobalObject(getter_AddRefs(globalObject));
+  NS_ENSURE_TRUE(globalObject, PR_TRUE);
+
+  nsCOMPtr<nsIScriptContext> scriptContext;
+  globalObject->GetContext(getter_AddRefs(scriptContext));
+  NS_ENSURE_TRUE(scriptContext, PR_TRUE);
+
+  JSContext* cx = (JSContext *) scriptContext->GetNativeContext();
+  NS_ENSURE_TRUE(cx, PR_TRUE);
+
+  PRBool enabled = PR_TRUE;
+  sm->CanExecuteScripts(cx, principal, &enabled);
+  return enabled;
+}
+
 nsresult
 nsDocument::GetRadioGroup(const nsAString& aName,
                           nsRadioGroupStruct **aRadioGroup)
@@ -3952,3 +3997,4 @@ nsDocument::SetBidiEnabled(PRBool aBidiEnabled)
   mBidiEnabled = aBidiEnabled;
   return NS_OK;
 }
+

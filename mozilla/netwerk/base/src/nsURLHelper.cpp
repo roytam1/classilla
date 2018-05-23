@@ -219,6 +219,45 @@ net_CoalesceDirsRel(char* io_Path)
      */
     char *fwdPtr = io_Path;
     char *urlPtr = io_Path;
+
+// bug 213012
+    /* replace all %2E or %2e with . in the path */ 
+    for(; (*fwdPtr != '\0') && 
+            (*fwdPtr != '?') && 
+            (*fwdPtr != '#'); ++fwdPtr)
+    {
+#if defined(XP_WIN)
+        // At first, If this is DBCS character, it skips next character.
+        if (::IsDBCSLeadByte(*fwdPtr) && *(fwdPtr+1) != '\0') 
+        {
+            *urlPtr++ = *fwdPtr++;
+            *urlPtr++ = *fwdPtr;
+            continue;
+        }
+#endif
+        if (*fwdPtr == '%' && *(fwdPtr+1) == '2' && 
+            (*(fwdPtr+2) == 'E' || *(fwdPtr+2) == 'e'))
+        {
+            *urlPtr++ = '.';
+            ++fwdPtr;
+            ++fwdPtr;
+        } 
+        else 
+        {
+            *urlPtr++ = *fwdPtr;
+        }
+    }
+    // Copy remaining stuff past the #?;
+    for (; *fwdPtr != '\0'; ++fwdPtr)
+    {
+        *urlPtr++ = *fwdPtr;
+    }
+    *urlPtr = '\0';  // terminate the url 
+
+    // start again, this time for real 
+    fwdPtr = io_Path; // modified for 1.3
+    urlPtr = io_Path; // modified for 1.3
+// end bug
     
     for(; (*fwdPtr != '\0') && 
             (*fwdPtr != '?') && 

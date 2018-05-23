@@ -1303,7 +1303,8 @@ nsPositionedInlineFrame::Reflow(nsIPresContext*          aPresContext,
 
       // XXX Although this seems like the correct thing to do the line layout
       // code seems to reset the NS_FRAME_OUTSIDE_CHILDREN and so it is ignored
-#if 0
+      // ... until bug 235778
+#if 1
       // Factor the absolutely positioned child bounds into the overflow area
       nsRect childBounds;
       mAbsoluteContainer.CalculateChildBounds(aPresContext, childBounds);
@@ -1350,7 +1351,8 @@ nsPositionedInlineFrame::Reflow(nsIPresContext*          aPresContext,
     
     // XXX Although this seems like the correct thing to do the line layout
     // code seems to reset the NS_FRAME_OUTSIDE_CHILDREN and so it is ignored
-#if 0
+    // ... until bug 235778
+#if 1
     // Factor the absolutely positioned child bounds into the overflow area
     aDesiredSize.mOverflowArea.UnionRect(aDesiredSize.mOverflowArea, childBounds);
 

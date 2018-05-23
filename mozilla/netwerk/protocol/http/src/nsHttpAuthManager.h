@@ -39,6 +39,7 @@
 #define nsHttpAuthManager_h__
 
 #include "nsHttpAuthCache.h"
+/*
 #include "nsIHttpAuthManager.h"
 
 class nsHttpAuthManager : public nsIHttpAuthManager
@@ -54,5 +55,6 @@ public:
 protected:
   nsHttpAuthCache *mAuthCache;
 };
+*/
 
 #endif // nsHttpAuthManager_h__

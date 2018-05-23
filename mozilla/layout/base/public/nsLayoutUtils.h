@@ -77,6 +77,11 @@ public:
    *  finds a "Page" frame.
    */
   static nsIFrame* GetPageFrame(nsIFrame* aFrame);
+  
+  // bug 209694
+  // Combine aNewBreakType with aOrigBreakType, but limit the break types
+  // to NS_STYLE_CLEAR_LEFT, RIGHT, LEFT_AND_RIGHT.
+  static PRUint8 CombineBreakType(unsigned char aOrigBreakType, unsigned char aNewBreakType);
 };
 
 #endif // nsLayoutUtils_h__

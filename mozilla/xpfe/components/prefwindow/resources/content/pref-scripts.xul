@@ -39,6 +39,7 @@
 <?xul-overlay href="chrome://communicator/content/communicatorOverlay.xul"?>
 
 <!DOCTYPE page SYSTEM "chrome://communicator/locale/pref/pref-scripts.dtd">
+<!-- mozilla:xpfe:components:prefwindow:resources:locale:en-US:pref-scripts.dtd -->
 
 <page id="scriptsAndWindowPanel" xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
       onload="parent.initPanel('chrome://communicator/content/pref/pref-scripts.xul');"
@@ -64,7 +65,9 @@
     <checkbox id="javascriptAllowNavigator" label="&navigator.label;" accesskey="&navigator.accesskey;"
                   pref="true" preftype="bool" prefstring="javascript.enabled"
                   prefattribute="checked" oncommand="javascriptEnabledChange();"/>
- 
+ 	<!-- button id="javascriptCallNoScript" label="&NoScriptconfig.label;"
+ 			oncommand="javascriptCallNoScript();" -->
+ 	<description>&NoScriptconfig.desc;</description>
     <separator/>
   
     <label id="allowScripts" value="&allowScripts.label;"/>

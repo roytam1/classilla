@@ -121,9 +121,11 @@ public:
 #endif
 
 protected:
+/* bug 90270 */
+/*
   nsresult ReflowFixedFrames(nsIPresContext*          aPresContext,
                              const nsHTMLReflowState& aReflowState);
-
+*/
   void AdjustReflowStateForScrollbars(nsIPresContext*    aPresContext,
                                       nsHTMLReflowState& aReflowState) const;
 

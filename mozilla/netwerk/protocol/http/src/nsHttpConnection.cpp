@@ -276,6 +276,18 @@ nsHttpConnection::OnHeadersAvailable(nsAHttpTransaction *trans,
         return NS_OK;
     }
 
+// bug 248827
+    // If the server issued an explicit timeout, then we need to close down the
+    // socket transport.  We pass an error code of NS_ERROR_NET_RESET to
+    // trigger the transactions 'restart' mechanism.  We tell it to reset its
+    // response headers so that it will be ready to receive the new response.
+    if (responseHead->Status() == 408) {
+      Close(NS_ERROR_NET_RESET);
+      *reset = PR_TRUE;
+      return NS_OK;
+    }
+// end bug
+
     // inspect the connection headers for keep-alive info provided the
     // transaction completed successfully.
     const char *val = responseHead->PeekHeader(nsHttp::Connection);

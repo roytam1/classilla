@@ -568,7 +568,7 @@ void SetUpQD(void)
 	OSErr err = Gestalt(gestaltCFMAttr, &response);
 	Boolean hasCFM = BitTst(&response, 31-gestaltCFMPresent);
 
-	ProcessInfoRec infoRec;
+	//ProcessInfoRec infoRec;
 	if (hasCFM)
 	{
 		//
@@ -596,7 +596,7 @@ void SetUpQD(void)
 		//
 		result = -1;		
 		
-	CFragConnectionID connID;
+	//CFragConnectionID connID;
 	if (result == noErr)
 	{
 		//

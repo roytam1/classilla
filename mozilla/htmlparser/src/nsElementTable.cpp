@@ -108,9 +108,12 @@ TagList  gPreKids={2,{eHTMLTag_hr,eHTMLTag_center}};  //note that CENTER is here
 
 TagList  gTableKids={9,{eHTMLTag_caption,eHTMLTag_col,eHTMLTag_colgroup,eHTMLTag_form,
                      eHTMLTag_thead,eHTMLTag_tbody,eHTMLTag_tfoot,
-                     eHTMLTag_map,eHTMLTag_script}};// Removed INPUT - Ref. Bug 20087, 25382
+                     //eHTMLTag_map, // bug 147446
+                     eHTMLTag_script}};// Removed INPUT - Ref. Bug 20087, 25382
   
-TagList  gTableElemKids={7,{eHTMLTag_form,eHTMLTag_map,eHTMLTag_noscript,eHTMLTag_script,eHTMLTag_td,eHTMLTag_th,eHTMLTag_tr}};
+TagList  gTableElemKids={7,{eHTMLTag_form,
+                         //eHTMLTag_map, // bug 147446
+                         eHTMLTag_noscript,eHTMLTag_script,eHTMLTag_td,eHTMLTag_th,eHTMLTag_tr}};
 TagList  gTRKids={4,{eHTMLTag_td,eHTMLTag_th,eHTMLTag_form,eHTMLTag_script}};// Removed INPUT - Ref. Bug 20087, 25382 |  Removed MAP to fix 58942
 TagList  gTBodyKids={2,{eHTMLTag_tr,eHTMLTag_form}}; // Removed INPUT - Ref. Bug 20087, 25382
 TagList  gULKids={2,{eHTMLTag_li,eHTMLTag_p}};

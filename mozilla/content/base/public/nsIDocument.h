@@ -460,7 +460,12 @@ public:
   NS_IMETHOD GetContainer(nsISupports **aContainer) = 0;
 
   NS_IMETHOD GetScriptEventManager(nsIScriptEventManager **aResult) = 0;
+  
+  // bug 77296
+  NS_IMETHOD_(PRBool) IsScriptEnabled() = 0;
+    
 };
+
 
 
 // XXX These belong somewhere else

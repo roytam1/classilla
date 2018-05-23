@@ -266,6 +266,8 @@ NS_IMETHODIMP
 nsXPInstallManager::ConfirmInstall(nsIDOMWindow *aParent, const PRUnichar **aPackageList, PRUint32 aCount, PRBool *aRetval)
 {
     *aRetval = PR_FALSE;
+    return NS_OK; // this is temporary. Classilla cxp
+#if(0)
 
     nsCOMPtr<nsIDOMWindowInternal> parentWindow( do_QueryInterface(aParent) );
     nsCOMPtr<nsIDialogParamBlock> params;
@@ -299,6 +301,7 @@ nsXPInstallManager::ConfirmInstall(nsIDOMWindow *aParent, const PRUnichar **aPac
     }
 
     return rv;
+#endif
 }
 
 PRBool nsXPInstallManager::ConfirmChromeInstall(nsIDOMWindowInternal* aParentWindow, const PRUnichar **aPackage)
@@ -738,7 +741,7 @@ nsXPInstallManager::GetDestinationFile(nsString& url, nsILocalFile* *file)
                                        getter_AddRefs(temp));
             if (NS_SUCCEEDED(rv))
             { 
-                temp->AppendNative(NS_LITERAL_CSTRING("tmp.xpi"));
+                temp->AppendNative(NS_LITERAL_CSTRING("tmp.cxp")); // cxp -> xpi for Classilla
                 temp->CreateUnique(nsIFile::NORMAL_FILE_TYPE, 0644);
                 *file = temp;
                 NS_IF_ADDREF(*file);

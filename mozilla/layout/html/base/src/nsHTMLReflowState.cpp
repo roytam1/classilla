@@ -133,7 +133,9 @@ nsHTMLReflowState::nsHTMLReflowState(nsIPresContext*      aPresContext,
   mFlags.mSpecialHeightReflow = PR_FALSE;
   mFlags.mTableDerivedComputedWidth = PR_FALSE;
   mFlags.mIsTopOfPage = PR_FALSE;
+  mFlags.mHasClearance = PR_FALSE; // bug 209694
   mFlags.mUnused = 0;
+  mDiscoveredClearance = nsnull; // bug 209694
   mPercentHeightObserver = nsnull;
   mPercentHeightReflowInitiator = nsnull;
   Init(aPresContext);
@@ -166,7 +168,9 @@ nsHTMLReflowState::nsHTMLReflowState(nsIPresContext*      aPresContext,
   mFlags.mSpecialHeightReflow = PR_FALSE;
   mFlags.mTableDerivedComputedWidth = PR_FALSE;
   mFlags.mIsTopOfPage = PR_FALSE;
+  mFlags.mHasClearance = PR_FALSE; // bug 209694
   mFlags.mUnused = 0;
+  mDiscoveredClearance = nsnull; // bug 209694
   mPercentHeightObserver = nsnull;
   mPercentHeightReflowInitiator = nsnull;
   Init(aPresContext);
@@ -208,6 +212,9 @@ nsHTMLReflowState::nsHTMLReflowState(nsIPresContext*          aPresContext,
   mSpaceManager = aParentReflowState.mSpaceManager;
   mLineLayout = aParentReflowState.mLineLayout;
   mFlags.mIsTopOfPage = aParentReflowState.mFlags.mIsTopOfPage;
+  // bug 209694
+  mFlags.mHasClearance = PR_FALSE;
+  mDiscoveredClearance = nsnull;
   mPercentHeightObserver = (aParentReflowState.mPercentHeightObserver && 
                             aParentReflowState.mPercentHeightObserver->NeedsToObserve(*this)) 
                            ? aParentReflowState.mPercentHeightObserver : nsnull;
@@ -253,6 +260,9 @@ nsHTMLReflowState::nsHTMLReflowState(nsIPresContext*          aPresContext,
   mSpaceManager = aParentReflowState.mSpaceManager;
   mLineLayout = aParentReflowState.mLineLayout;
   mFlags.mIsTopOfPage = aParentReflowState.mFlags.mIsTopOfPage;
+  // bug 209694
+  mFlags.mHasClearance = PR_FALSE;
+  mDiscoveredClearance = nsnull;
   mPercentHeightObserver = (aParentReflowState.mPercentHeightObserver && 
                             aParentReflowState.mPercentHeightObserver->NeedsToObserve(*this)) 
                            ? aParentReflowState.mPercentHeightObserver : nsnull;
@@ -298,6 +308,9 @@ nsHTMLReflowState::nsHTMLReflowState(nsIPresContext*          aPresContext,
   mSpaceManager = aParentReflowState.mSpaceManager;
   mLineLayout = aParentReflowState.mLineLayout;
   mFlags.mIsTopOfPage = aParentReflowState.mFlags.mIsTopOfPage;
+  // bug 209694
+  mFlags.mHasClearance = PR_FALSE;
+  mDiscoveredClearance = nsnull;
   mPercentHeightObserver = (aParentReflowState.mPercentHeightObserver && 
                             aParentReflowState.mPercentHeightObserver->NeedsToObserve(*this)) 
                            ? aParentReflowState.mPercentHeightObserver : nsnull;
@@ -592,6 +605,7 @@ nsHTMLReflowState::ComputeRelativeOffsets(const nsHTMLReflowState* cbrs,
 static nsIFrame*
 GetNearestContainingBlock(nsIFrame* aFrame, nsMargin& aContentArea)
 {
+// bug 253479 does not apply here
   aFrame->GetParent(&aFrame);
   while (aFrame) {
     nsIAtom*  frameType;
@@ -855,11 +869,16 @@ nsHTMLReflowState::CalculateHypotheticalBox(nsIPresContext*    aPresContext,
   GetPlaceholderOffset(aPlaceholderFrame, aBlockFrame, placeholderOffset);
 
   // First, determine the hypothetical box's mTop
-  if (aBlockFrame) {
+  // bug 253479 modified for 1.3
+  //if (aBlockFrame) {
+  nsBlockFrame *blockFrame;
+  if (NS_SUCCEEDED(aBlockFrame->QueryInterface(kBlockFrameCID,
+      NS_REINTERPRET_CAST(void**, &blockFrame)))) { // end bug
     // We need the immediate child of the block frame, and that may not be
     // the placeholder frame
-    nsBlockFrame* blockFrame = NS_STATIC_CAST(nsBlockFrame*, aBlockFrame);
-    nsIFrame *blockChild = FindImmediateChildOf(aBlockFrame, aPlaceholderFrame);
+    //nsBlockFrame* blockFrame = NS_STATIC_CAST(nsBlockFrame*, aBlockFrame); //253479
+    //nsIFrame *blockChild = FindImmediateChildOf(aBlockFrame, aPlaceholderFrame);
+    nsIFrame *blockChild = FindImmediateChildOf(blockFrame, aPlaceholderFrame);
     nsBlockFrame::line_iterator lineBox = blockFrame->FindLineFor(blockChild);
 
     // How we determine the hypothetical box depends on whether the element
@@ -871,15 +890,55 @@ nsHTMLReflowState::CalculateHypotheticalBox(nsIPresContext*    aPresContext,
     } else {
       // The element would have been block-level which means it would be below
       // the line containing the placeholder frame
+      
+// bug 94468
+      // unless the frames before it are empty.
       if (lineBox != blockFrame->end_lines()) {
+#if(0)
         // The top of the hypothetical box is just below the line containing
         // the placeholder
         aHypotheticalBox.mTop = lineBox->mBounds.YMost();
+#endif
+        nsIFrame * firstFrame = lineBox->mFirstChild;
+        nsCompatibility mode;
+        aPresContext->GetCompatibilityMode(&mode);
+        while (firstFrame != aPlaceholderFrame) {
+          NS_ASSERTION(firstFrame, "Must reach our placeholder before end of list!");
+          if (!firstFrame)
+            break; // bug 223064
+          PRBool isEmpty;
+          const nsStyleText* styleText;
+          firstFrame->GetStyleData(eStyleStruct_Text,
+                                   (const nsStyleStruct *&)styleText);
+                                   // firstFrame->GetStyleText()                                   
+          firstFrame->IsEmpty(mode, styleText->WhiteSpaceIsSignificant(), &isEmpty);
+          if (!isEmpty) {
+            break;
+          }
+          firstFrame->GetNextSibling(&firstFrame); // firstFrame = firstFrame->GetNextSibling();
+        }
+        if (firstFrame == aPlaceholderFrame) {
+          // The top of the hypothetical box is the top of the line containing
+          // the placeholder, since there is nothing in the line before our
+          // placeholder except empty frames.
+          aHypotheticalBox.mTop = lineBox->mBounds.y;
+        } else {
+          // The top of the hypothetical box is just below the line containing
+          // the placeholder.
+          aHypotheticalBox.mTop = lineBox->mBounds.YMost();
+        }
+// end bug  
+        
       } else {
         // Just use the placeholder's y-offset
         aHypotheticalBox.mTop = placeholderOffset.y;
       }
     }
+  } else { // bug 253479
+    // The containing block is not a block, so it's probably something
+    // like a XUL box, etc.
+    // Just use the placeholder's y-offset
+    aHypotheticalBox.mTop = placeholderOffset.y;
   }
 
   // Second, determine the hypothetical box's mLeft & mRight
@@ -930,6 +989,7 @@ nsHTMLReflowState::CalculateHypotheticalBox(nsIPresContext*    aPresContext,
 
   // The current coordinate space is that of the nearest block to the placeholder.
   // Convert to the coordinate space of the absolute containing block
+  // this does not include backbugs from 253479; maybe it should
   if (aBlockFrame != aAbsoluteContainingBlockFrame) {
     nsIFrame* parent = aBlockFrame;
     do {
@@ -2154,6 +2214,14 @@ void
 nsHTMLReflowState::CalculateBlockSideMargins(nscoord aAvailWidth,
                                              nscoord aComputedWidth)
 {
+// bug 185411
+// Because of the ugly way we do intrinsic sizing within Reflow, this method
+// doesn't necessarily produce the right results.  The results will be
+// adjusted in nsBlockReflowContext::AlignBlockHorizontally after reflow.
+// The code for tables is particularly sensitive to regressions; the
+// numerous |isTable| checks are technically incorrect, but necessary
+// for basic testcases.
+
   // We can only provide values for auto side margins in a constrained
   // reflow. For unconstrained reflow there is no effective width to
   // compute against...
@@ -2171,6 +2239,8 @@ nsHTMLReflowState::CalculateBlockSideMargins(nscoord aAvailWidth,
 
   // Determine the left and right margin values. The width value
   // remains constant while we do this.
+// bug 185411
+#if(0)
   PRBool isAutoLeftMargin =
     eStyleUnit_Auto == mStyleMargin->mMargin.GetLeftUnit();
   PRBool isAutoRightMargin =
@@ -2179,7 +2249,6 @@ nsHTMLReflowState::CalculateBlockSideMargins(nscoord aAvailWidth,
   // Calculate how much space is available for margins
   nscoord availMarginSpace = aAvailWidth - aComputedWidth -
     mComputedBorderPadding.left - mComputedBorderPadding.right;
-
   if ((mStyleDisplay->mDisplay == NS_STYLE_DISPLAY_TABLE) ||
       (mStyleDisplay->mDisplay == NS_STYLE_DISPLAY_TABLE_CAPTION))  {
     // Special rules for tables. In general, tables will stick to the
@@ -2188,24 +2257,53 @@ nsHTMLReflowState::CalculateBlockSideMargins(nscoord aAvailWidth,
 
     // the borderpadding should not influence the margin relative to the 
     // outertable frame  
+#endif
+
+  PRBool isTable = mStyleDisplay->mDisplay == NS_STYLE_DISPLAY_TABLE ||
+                   mStyleDisplay->mDisplay == NS_STYLE_DISPLAY_TABLE_CAPTION;
+  // Calculate how much space is available for margins
+  nscoord availMarginSpace = aAvailWidth - sum;
+  
+  // XXXldb Should this be quirks-mode only?  And why captions?
+  if (isTable)
+    // XXXldb Why does this break things so badly if this is changed to
+    // availMarginSpace += mComputedBorderPadding.left +
+    //                     mComputedBorderPadding.right;
     availMarginSpace = aAvailWidth - aComputedWidth;
 
+#if(0)
     if (availMarginSpace < 0) {
       // Whoops - the TABLE element is too large for the available
       // space. In this case use the "direction" property to pin the
       // element to the left or right side. Note that we look at the
       // parent's direction since the parent will be placing this
       // element.
+#endif
+  // If the available margin space is negative, then don't follow the
+  // usual overconstraint rules.
+  if (availMarginSpace < 0) {
+    if (!isTable) {
+      if (mStyleVisibility->mDirection == NS_STYLE_DIRECTION_LTR) {
+        mComputedMargin.right += availMarginSpace;
+      } else {
+        mComputedMargin.left += availMarginSpace;
+      }
+    } else {
       mComputedMargin.left = 0;
       mComputedMargin.right = 0;
+#if(0)
       const nsHTMLReflowState* prs = (const nsHTMLReflowState*)
         parentReflowState;
       if (prs && (NS_STYLE_DIRECTION_RTL == prs->mStyleVisibility->mDirection)) {
+#endif
+      if (mStyleVisibility->mDirection == NS_STYLE_DIRECTION_RTL) {
         mComputedMargin.left = availMarginSpace;
       }
-      isAutoLeftMargin = isAutoRightMargin = PR_FALSE;
+//      isAutoLeftMargin = isAutoRightMargin = PR_FALSE;
     }
+    return;
   }
+#if(0)
   else {
     // The css2 spec clearly defines how block elements should be have
     // in section 10.3.3.
@@ -2239,6 +2337,34 @@ nsHTMLReflowState::CalculateBlockSideMargins(nscoord aAvailWidth,
         // No parent reflow state -- assume direction is ltr
         isAutoRightMargin = PR_TRUE;
       }
+#endif
+  // The css2 spec clearly defines how block elements should be have
+  // in section 10.3.3.
+  PRBool isAutoLeftMargin =
+    eStyleUnit_Auto == mStyleMargin->mMargin.GetLeftUnit();
+  PRBool isAutoRightMargin =
+    eStyleUnit_Auto == mStyleMargin->mMargin.GetRightUnit();
+  if (!isAutoLeftMargin && !isAutoRightMargin && !isTable) {
+    // Neither margin is 'auto' so we're over constrained. Use the
+    // 'direction' property of the parent to tell which margin to
+    // ignore
+    // First check if there is an HTML alignment that we should honor
+    const nsHTMLReflowState* prs = parentReflowState;
+    if (prs &&
+        (prs->mStyleText->mTextAlign == NS_STYLE_TEXT_ALIGN_MOZ_CENTER ||
+         prs->mStyleText->mTextAlign == NS_STYLE_TEXT_ALIGN_MOZ_RIGHT)) {
+      isAutoLeftMargin = PR_TRUE;
+      isAutoRightMargin =
+        prs->mStyleText->mTextAlign == NS_STYLE_TEXT_ALIGN_MOZ_CENTER;
+    }
+    // Otherwise apply the CSS rules, and ignore one margin by forcing
+    // it to 'auto', depending on 'direction'.
+    else if (NS_STYLE_DIRECTION_LTR == mStyleVisibility->mDirection) {
+      isAutoRightMargin = PR_TRUE;
+    }
+    else {
+      isAutoLeftMargin = PR_TRUE;
+
     }
   }
 
@@ -2249,12 +2375,13 @@ nsHTMLReflowState::CalculateBlockSideMargins(nscoord aAvailWidth,
       mComputedMargin.left = availMarginSpace / 2;
       mComputedMargin.right = availMarginSpace - mComputedMargin.left;
     } else {
-      mComputedMargin.left = availMarginSpace - mComputedMargin.right;
+      mComputedMargin.left = availMarginSpace; // - mComputedMargin.right;
     }
   } else if (isAutoRightMargin) {
-    mComputedMargin.right = availMarginSpace - mComputedMargin.left;
+    mComputedMargin.right = availMarginSpace; // - mComputedMargin.left;
   }
 }
+// end bug
 
 PRBool
 nsHTMLReflowState::UseComputedHeight()
@@ -2533,14 +2660,17 @@ nsHTMLReflowState::ComputeMargin(nscoord aContainingBlockWidth,
       }
     }
     else {
+    // bug 209066
       // According to the CSS2 spec, margin percentages are
       // calculated with respect to the *width* of the containing
       // block, even for margin-top and margin-bottom.
+#if(0)
       if (NS_UNCONSTRAINEDSIZE == aContainingBlockWidth) {
         mComputedMargin.top = 0;
         mComputedMargin.bottom = 0;
 
       } else {
+#endif
         if (eStyleUnit_Inherit == mStyleMargin->mMargin.GetTopUnit()) {
           mComputedMargin.top = aContainingBlockRS->mComputedMargin.top;
         } else {
@@ -2556,7 +2686,7 @@ nsHTMLReflowState::ComputeMargin(nscoord aContainingBlockWidth,
                                  mStyleMargin->mMargin.GetBottomUnit(),
                                  mStyleMargin->mMargin.GetBottom(bottom),
                                  mComputedMargin.bottom);
-        }
+//        }
       }
     }
   }

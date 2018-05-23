@@ -146,16 +146,21 @@ static void EnsureBlockDisplay(PRUint8& display)
 {
   // see if the display value is already a block
   switch (display) {
+  
+  // commented out breaks are bug 210873
+  
   case NS_STYLE_DISPLAY_NONE :
     // never change display:none *ever*
-    break;
+//    break;
 
   case NS_STYLE_DISPLAY_TABLE :
   case NS_STYLE_DISPLAY_BLOCK :
     // do not muck with these at all - already blocks
-    break;
+//    break;
 
   case NS_STYLE_DISPLAY_LIST_ITEM :
+// bug 210873
+#if(0)
     // do not change list items to blocks - retain the bullet/numbering
     break;
 
@@ -168,6 +173,8 @@ static void EnsureBlockDisplay(PRUint8& display)
   case NS_STYLE_DISPLAY_TABLE_CELL :
   case NS_STYLE_DISPLAY_TABLE_CAPTION :
     // special cases: don't do anything since these cannot really be floated anyway
+#endif
+    // the three cases above fall to this point
     break;
 
   case NS_STYLE_DISPLAY_INLINE_TABLE :

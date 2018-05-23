@@ -1884,7 +1884,7 @@ NS_IMETHODIMP nsWindow::Scroll(PRInt32 aDx, PRInt32 aDy, nsRect *aClipRect)
 	  // If the clipping region is non-rectangular, just force a full update, sorry.
     // XXX ?
 	  if (!IsRegionRectangular(mWindowRegion)) {
-		  Invalidate(PR_TRUE);
+		  Invalidate(PR_FALSE); // PR_TRUE); // modified bug 289353
 		  goto scrollChildren;
 	  }
 
@@ -1897,7 +1897,7 @@ NS_IMETHODIMP nsWindow::Scroll(PRInt32 aDx, PRInt32 aDy, nsRect *aClipRect)
 		  scrollRect = mBounds;
 		  scrollRect.x = scrollRect.y = 0;
 	  }
-
+      
 	  Rect macRect;
 	  nsRectToMacRect(scrollRect, macRect);
 

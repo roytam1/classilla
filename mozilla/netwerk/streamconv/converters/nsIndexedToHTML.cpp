@@ -459,6 +459,47 @@ nsIndexedToHTML::OnDataAvailable(nsIRequest *aRequest,
 // splitting this up makes things faster, by helping layout
 #define ROWS_PER_TABLE 250
 
+// Cameron Kaiser: added for the new Gopher i-type support
+// virtual method:
+// see nsIDirIndexListener.idl, nsIDirIndexListener.h
+// and nsIndexedToHTML.h
+NS_IMETHODIMP
+nsIndexedToHTML::OnCommentAvailable(nsIRequest *aRequest,
+                                    nsISupports *aCtxt,
+                                    const char *buf) {
+    
+    nsString pushBuffer;
+ 
+    if (!buf)
+      return NS_ERROR_NULL_POINTER;
+    pushBuffer.Append(NS_LITERAL_STRING("<tr>\n <td>"));
+    /* a slightly modified version of nsEscapeHTML. We'll use it again below. */
+    for (; *buf != '\0'; buf++) {
+    	switch(*buf) {
+    		case '<':
+    			pushBuffer.Append(NS_LITERAL_STRING("&lt;"));
+    			break;
+    		case '>':
+    			pushBuffer.Append(NS_LITERAL_STRING("&gt;"));
+    			break;
+    		case '&':
+    			pushBuffer.Append(NS_LITERAL_STRING("&amp;"));
+    			break;
+    		case '"':
+    			pushBuffer.Append(NS_LITERAL_STRING("&quot;"));
+    			break;
+    		case ' ':
+    			pushBuffer.Append(NS_LITERAL_STRING("&nbsp;"));
+    			break;
+    		default:
+				pushBuffer.Append((wchar_t)*buf);
+    	}
+    }
+    pushBuffer.Append(NS_LITERAL_STRING("</td>\n <td></td>\n <td></td>\n <td></td>\n</tr>\n"));      
+    
+    return FormatInputStream(aRequest, aCtxt, pushBuffer);
+}
+                                    
 NS_IMETHODIMP
 nsIndexedToHTML::OnIndexAvailable(nsIRequest *aRequest,
                                   nsISupports *aCtxt,
@@ -534,10 +575,41 @@ nsIndexedToHTML::OnIndexAvailable(nsIRequest *aRequest,
 
     nsXPIDLString tmp;
     aIndex->GetDescription(getter_Copies(tmp));
+    
+// Modified using the above in a slightly different
+// version. -- Cameron Kaiser
+#if(0)
     PRUnichar* escaped = nsEscapeHTML2(tmp.get(), tmp.Length());
-    pushBuffer.Append(escaped);
+    if(*escaped == '\0') {
+    	pushBuffer.Append(NS_LITERAL_STRING("well, suck"));
+    } else {
+    	pushBuffer.Append(escaped);
+    }
     nsMemory::Free(escaped);
-
+#else
+	const wchar_t *buf = tmp.get(); //nsUnescape((char *)tmp.get());
+    for (; *buf != '\0'; buf++) {
+    	switch(*buf) {
+    		case '<':
+    			pushBuffer.Append(NS_LITERAL_STRING("&lt;"));
+    			break;
+    		case '>':
+    			pushBuffer.Append(NS_LITERAL_STRING("&gt;"));
+    			break;
+    		case '&':
+    			pushBuffer.Append(NS_LITERAL_STRING("&amp;"));
+    			break;
+    		case '"':
+    			pushBuffer.Append(NS_LITERAL_STRING("&quot;"));
+    			break;
+    		case ' ':
+    			pushBuffer.Append(NS_LITERAL_STRING("&nbsp;"));
+    			break;
+    		default:
+				pushBuffer.Append(*buf);
+    	}
+    }
+#endif
     pushBuffer.Append(NS_LITERAL_STRING("</a></td>\n <td>"));
 
     PRUint32 size;

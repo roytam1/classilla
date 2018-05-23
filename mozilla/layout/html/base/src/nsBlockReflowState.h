@@ -53,7 +53,8 @@ public:
                      nsIPresContext* aPresContext,
                      nsBlockFrame* aFrame,
                      const nsHTMLReflowMetrics& aMetrics,
-                     PRBool aBlockMarginRoot);
+                     //PRBool aBlockMarginRoot); // bug 209694
+                     PRBool aTopMarginRoot, PRBool aBottomMarginRoot);
 
   ~nsBlockReflowState();
 
@@ -85,9 +86,16 @@ public:
 
   PRBool PlaceBelowCurrentLineFloaters(nsFloaterCacheList& aFloaters);
 
+// bug 209694
+#if(0)
   void ClearFloaters(nscoord aY, PRUint8 aBreakType);
 
   PRBool ClearPastFloaters(PRUint8 aBreakType);
+#endif
+  // Returns the first coordinate >= aY that clears the
+  // indicated floats.
+  nscoord ClearFloats(nscoord aY, PRUint8 aBreakType);
+// end bug
 
   PRBool IsAdjacentWithTop() const {
     return mY == mReflowState.mComputedBorderPadding.top;
@@ -188,9 +196,12 @@ public:
   // The combined area of all floaters placed so far
   nsRect mFloaterCombinedArea;
 
+// bug 196919
+#if (0)
   // The y-coordinate of the last floater placed. We keep this around
   // to enforce 9.5.1 rule [2]
   nscoord mLastFloaterY;
+#endif
 
   nsFloaterCacheFreeList mFloaterCacheFreeList;
 

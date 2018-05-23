@@ -1558,7 +1558,9 @@ nsHttpChannel::ProcessRedirection(PRUint32 redirectType)
              do_GetService(NS_SCRIPTSECURITYMANAGER_CONTRACTID);
     if (securityManager) {
         rv = securityManager->CheckLoadURI(mURI, newURI,
-                                           nsIScriptSecurityManager::DISALLOW_FROM_MAIL);
+                                           nsIScriptSecurityManager::DISALLOW_FROM_MAIL |
+                                           nsIScriptSecurityManager::DISALLOW_JAVASCRIPT);
+                                           // bug 195201
         if (NS_FAILED(rv)) return rv;
     }
 
@@ -2446,6 +2448,23 @@ nsHttpChannel::AsyncOpen(nsIStreamListener *listener, nsISupports *context)
     if (NS_FAILED(rv))
         return rv;
 
+// do we want to add the cookie backbugs from 321999?
+
+    // bug 321999
+    // Adjust mCaps according to our request headers:
+    //  - If "Connection: close" is set as a request header, then do not bother
+    //    trying to establish a keep-alive connection.
+    const char *connHeader = mRequestHead.PeekHeader(nsHttp::Connection);
+    if (PL_strcasestr(connHeader, "close"))
+      mCaps &= ~(NS_HTTP_ALLOW_KEEPALIVE | NS_HTTP_ALLOW_PIPELINING);
+    // end bug
+    
+    // if this is a POST request, don't use KEEPALIVE or PIPELINING either.
+    // This is gross, but seems to be more reliable on certain servers.
+    // Cameron Kaiser
+    if (mRequestHead.Method() == nsHttp::Post)
+      mCaps &= ~(NS_HTTP_ALLOW_KEEPALIVE | NS_HTTP_ALLOW_PIPELINING);
+      
     // Notify nsIHttpNotify implementations
     rv = gHttpHandler->OnModifyRequest(this);
     NS_ASSERTION(NS_SUCCEEDED(rv), "OnModifyRequest failed");

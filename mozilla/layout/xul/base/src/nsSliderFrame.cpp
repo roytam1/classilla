@@ -133,7 +133,7 @@ nsSliderFrame::Init(nsIPresContext*  aPresContext,
   view->GetViewManager(*getter_AddRefs(vm));
   vm->SetViewContentTransparency(view, PR_TRUE);
   // XXX Hack
-  mPresContext = aPresContext;
+  mPresContext = aPresContext; 
   return rv;
 }
 
@@ -457,7 +457,7 @@ nsSliderFrame::HandleEvent(nsIPresContext* aPresContext,
   GetContentOf(scrollbarBox, getter_AddRefs(scrollbar));
   PRBool isHorizontal = IsHorizontal();
 
-  if (isDraggingThumb(aPresContext))
+  if (isDraggingThumb(aPresContext)) 
   {
       // we want to draw immediately if the user doing it directly with the
       // mouse that makes redrawing much faster.
@@ -633,7 +633,7 @@ nsSliderFrame::HandleEvent(nsIPresContext* aPresContext,
        // stop capturing
       //printf("stop capturing\n");
       AddListener();
-      DragThumb(aPresContext, PR_FALSE);
+      DragThumb(aPresContext, PR_FALSE); 
       mRedrawImmediate = PR_FALSE;//we MUST call nsFrame HandleEvent for mouse ups to maintain the selection state and capture state.
       return nsFrame::HandleEvent(aPresContext, aEvent, aEventStatus);
     }
@@ -695,7 +695,7 @@ nsSliderFrame::HandleEvent(nsIPresContext* aPresContext,
     }
 
     RemoveListener();
-    DragThumb(mPresContext, PR_TRUE);
+    DragThumb(mPresContext, PR_TRUE); 
     nsRect thumbRect;
     thumbFrame->GetRect(thumbRect);
 
@@ -887,7 +887,9 @@ NS_IMETHODIMP  nsSliderFrame::GetFrameForPoint(nsIPresContext* aPresContext,
   if ((aWhichLayer != NS_FRAME_PAINT_LAYER_FOREGROUND))
     return NS_ERROR_FAILURE;
 
-  if (isDraggingThumb(aPresContext))
+  // This is EVIL, we shouldn't be messing with GetFrameForPoint just to get
+  // thumb mouse drag events to arrive at the slider!
+  if (isDraggingThumb(aPresContext)) 
   {
     // XXX I assume it's better not to test for visibility here.
     *aFrame = this;
@@ -1024,7 +1026,7 @@ nsSliderFrame::MouseDown(nsIDOMEvent* aMouseEvent)
   }
 
   RemoveListener();
-  DragThumb(mPresContext, PR_TRUE);
+  DragThumb(mPresContext, PR_TRUE); 
   PRInt32 c = 0;
   if (isHorizontal)
      mouseEvent->GetClientX(&c);

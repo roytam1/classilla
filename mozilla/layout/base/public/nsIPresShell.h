@@ -161,6 +161,13 @@ public:
 
   NS_IMETHOD SelectAlternateStyleSheet(const nsString& aSheetTitle) = 0;
 
+  /* Enable/disable author style level. Disabling author style disables the entire
+   * author level of the cascade, including the HTML preshint level.
+   bug 32732 */
+  NS_IMETHOD SetAuthorStyleDisabled(PRBool aStyleDisabled) = 0;
+  NS_IMETHOD GetAuthorStyleDisabled(PRBool* aStyleDisabled) = 0;
+
+
   /*
    * Called when stylesheets are added/removed/enabled/disabled to rebuild
    * all style data for a given pres shell without necessarily reconstructing

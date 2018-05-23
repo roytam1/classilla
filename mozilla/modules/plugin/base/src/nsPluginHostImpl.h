@@ -387,6 +387,10 @@ public:
                      const char *aHeadersData = nsnull, 
                      PRUint32 aHeadersDataLen = 0);
 
+  nsresult
+  DoURLLoadSecurityCheck(nsIPluginInstance *aInstance,
+                         const char* aURL); // bug 59767
+
   NS_IMETHOD
   AddHeadersToChannel(const char *aHeadersData, PRUint32 aHeadersDataLen, 
                       nsIChannel *aGenericChannel);

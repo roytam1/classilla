@@ -610,6 +610,9 @@ sub ProcessJarManifests()
     {
       CreateJarFromManifest(":mozilla:extensions:venkman:resources:jar.mn", $chrome_dir, \%jars);
     }
+    if (1){ #$main::options{noscript}) {
+    	CreateJarFromManifest(":mozilla:extensions:noscript:jar.mn", $chrome_dir, \%jars);
+    }
     if ($main::options{typeaheadfind})
     {
       CreateJarFromManifest(":mozilla:extensions:typeaheadfind:resources:jar.mn", $chrome_dir, \%jars);
@@ -1712,7 +1715,7 @@ sub BuildCommonProjects()
     BuildOneProject(":mozilla:modules:libjar:macbuild:libjar.xml",              "libjar$D.$S", 1, $main::ALIAS_SYM_FILES, 1);
     BuildProject(":mozilla:modules:libjar:macbuild:libjar.xml",                 "libjar$D.Lib");
 
-    BuildOneProject(":mozilla:modules:oji:macbuild:oji.xml",                    "oji$D.$S", 1, $main::ALIAS_SYM_FILES, 1);
+    #BuildOneProject(":mozilla:modules:oji:macbuild:oji.xml",                    "oji$D.$S", 1, $main::ALIAS_SYM_FILES, 1);
     BuildOneProject(":mozilla:caps:macbuild:Caps.xml",                          "Caps$D.$S", 1, $main::ALIAS_SYM_FILES, 1);
     BuildOneProject(":mozilla:modules:libpref:macbuild:libpref.xml",            "libpref$D.$S", 1, $main::ALIAS_SYM_FILES, 1);
     BuildOneProject(":mozilla:js:macbuild:XPConnect.xml",                       "XPConnect$D.$S", 1, $main::ALIAS_SYM_FILES, 1);
@@ -2008,7 +2011,7 @@ sub BuildLayoutProjects()
     my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime;
     # localtime returns year minus 1900
     $year = $year + 1900;
-    printf(OUTPUT "#define PRODUCT_VERSION \"%04d%02d%02d wamcom.org\"\n", $year, 1+$mon, $mday);
+    printf(OUTPUT "#define PRODUCT_VERSION \"%04d%02d%02d Classilla/CFM\"\n", $year, 1+$mon, $mday);
     close(OUTPUT);
 
     #//
@@ -2606,8 +2609,9 @@ sub BuildProjects()
     }
 
     BuildXPIDLCompiler();
-    BuildIDLProjects();
+    BuildIDLProjects();    
     BuildStubs();
+    
     BuildRuntimeProjects();
     BuildCommonProjects();
     BuildImglibProjects();

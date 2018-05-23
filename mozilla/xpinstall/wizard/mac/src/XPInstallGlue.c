@@ -444,7 +444,7 @@ IsArchiveXPI(StringPtr archive)
 	long 	len = *archive;
 	char 	*extStart = (char*)(&archive[1] + len - 4); /* extension length of ".xpi" = 4 */
 	
-	if (strncmp(extStart, ".xpi", 4) == 0)
+	if (strncmp(extStart, ".cxp", 4) == 0) // xpi -> cxp for Classilla
 		return true;
 	
 	return false;

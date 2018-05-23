@@ -27,22 +27,22 @@
 
 // Version Numbers //
 
-#define		VERSION_MAJOR			1
-#define		VERSION_MINOR			0x30	// revision & fix in BCD
-#define		VERSION_KIND			final	// alpha, beta, or final
-#define		VERSION_MICRO			0		// internal stage: alpha or beta number
+#define		VERSION_MAJOR			9
+#define		VERSION_MINOR			0x00	// revision & fix in BCD
+#define		VERSION_KIND			alpha	// alpha, beta, or final
+#define		VERSION_MICRO			1		// internal stage: alpha or beta number
 
 
 // Version Strings (Finder's Get Info dialog box) //
 
-#define		VERSION_STRING			"1.3"
+#define		VERSION_STRING			"9.0"
 //#define 	VERSION_LANG			"en"	// e.g. en, ja, de, fr
 //#define 	VERSION_COUNTRY			"_US"	// e.g.,  _JP, _DE, _FR, _US
 //#define	VERSION_LOCALE			"[" VERSION_LANG "_" VERSION_COUNTRY "]"
 
-#define		COPYRIGHT_STRING		"© 1998-2003 The Mozilla Organization"
+#define		COPYRIGHT_STRING		"© 2009 Contributors to Classilla"
 #define		GETINFO_VERSION			VERSION_STRING ", " COPYRIGHT_STRING
-#define		PACKAGE_NAME			"Mozilla " VERSION_STRING
+#define		PACKAGE_NAME			"Classilla " VERSION_STRING
 
 
 // Resources definition
@@ -69,7 +69,7 @@ resource 'vers' (2, "Suite") {
 
 resource 'STR#' (1000, "CanRunStrings") {
   {
-    "You cannot run Ò" PACKAGE_NAME "Ó while another copy of Mozilla or Netscape is running. "
+    "You cannot run Ò" PACKAGE_NAME "Ó while another copy of Classilla, Mozilla or Netscape is running. "
     "Ò" PACKAGE_NAME "Ó will now quit."
   }
 };

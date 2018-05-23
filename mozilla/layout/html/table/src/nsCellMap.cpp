@@ -1233,6 +1233,13 @@ nsCellMap::AppendCell(nsTableCellMap&   aMap,
   // Setup CellData for this cell
   if (origData) {
     origData->Init(aCellFrame);
+    // bug 235535
+    // we are replacing a dead cell, increase the number of cells
+    // originating at this column
+    nsColInfo* colInfo = aMap.GetColInfoAt(startColIndex);
+    if (colInfo) {
+      colInfo->mNumCellsOrig++;
+    }
   }
   else {
     origData = (aMap.mBCInfo) ? new BCCellData(aCellFrame) : new CellData(aCellFrame); if (!origData) ABORT1(origData);
@@ -2397,9 +2404,12 @@ PRBool nsCellMap::ColHasSpanningCells(nsTableCellMap& aMap,
   for (PRInt32 rowIndex = 0; rowIndex < mRowCount; rowIndex++) {
     CellData* cd = GetDataAt(aMap, rowIndex, aColIndex, PR_TRUE);
     if (cd && (cd->IsOrig())) { // cell originates 
-      CellData* cd2 = GetDataAt(aMap, rowIndex + 1, aColIndex, PR_TRUE);
+// bug 207208 (both changes below)
+//      CellData* cd2 = GetDataAt(aMap, rowIndex + 1, aColIndex, PR_TRUE);
+      CellData* cd2 = GetDataAt(aMap, rowIndex, aColIndex +1, PR_TRUE);
       if (cd2 && cd2->IsColSpan()) { // cd2 is spanned by a col
-        if (cd->GetCellFrame() == GetCellFrame(rowIndex + 1, aColIndex, *cd2, PR_FALSE)) {
+//        if (cd->GetCellFrame() == GetCellFrame(rowIndex + 1, aColIndex, *cd2, PR_FALSE)) {
+        if (cd->GetCellFrame() == GetCellFrame(rowIndex , aColIndex + 1, *cd2, PR_FALSE)) {
           return PR_TRUE;
         }
       }

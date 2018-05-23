@@ -343,6 +343,8 @@ public:
     NS_IMETHOD SetContainer(nsISupports *aContainer);
     NS_IMETHOD GetContainer(nsISupports **aContainer);
     NS_IMETHOD GetScriptEventManager(nsIScriptEventManager **aResult);
+    // bug 77296 (in addition)
+    NS_IMETHODIMP_(PRBool) IsScriptEnabled();
 
     virtual void SetDisplaySelection(PRInt8 aToggle);
 

@@ -41,13 +41,13 @@
 pref("startup.homepage_override_url","chrome://navigator-region/locale/region.properties");
 pref("browser.chromeURL","chrome://navigator/content/navigator.xul");
 
-pref("network.search.url","http://cgi.netscape.com/cgi-bin/url_search.cgi?search=");
+pref("network.search.url","http://www.google.com/search?hl=en&q=");
 
 pref("keyword.URL", "http://keyword.netscape.com/keyword/");
 pref("keyword.enabled", false);
 pref("general.useragent.locale", "chrome://navigator/locale/navigator.properties");
 pref("general.useragent.contentlocale", "chrome://navigator-region/locale/region.properties");
-pref("general.useragent.misc", "rv:1.3.1");
+pref("general.useragent.misc", "rv:9.0");
 
 pref("general.startup.browser",             true);
 pref("general.startup.mail",                false);
@@ -222,14 +222,14 @@ pref("slider.snapMultiplier", 6);
 pref("application.use_ns_plugin_finder", false);
 
 // Smart Browsing prefs
-pref("browser.related.enabled", true);
+pref("browser.related.enabled", false);
 pref("browser.related.autoload", 1);  // 0 = Always, 1 = After first use, 2 = Never
 pref("browser.related.provider", "http://www-rl.netscape.com/wtgn?");
 pref("browser.related.disabledForDomains", "");
 pref("browser.goBrowsing.enabled", true);
 
 // URI fixup prefs
-pref("browser.fixup.alternate.enabled", true);
+pref("browser.fixup.alternate.enabled", false);
 pref("browser.fixup.alternate.prefix", "www.");
 pref("browser.fixup.alternate.suffix", ".com");
 
@@ -468,7 +468,7 @@ pref("javascript.options.showInConsole",    true);
 
 // advanced prefs
 pref("advanced.always_load_images",         true);
-pref("security.enable_java",                true);
+pref("security.enable_java",                false);
 pref("advanced.mailftp",                    false);
 pref("image.animation_mode",                "normal");
 
@@ -515,8 +515,8 @@ pref("network.http.use-cache", true);
 // HTTP traffic.  an empty value indicates the normal TCP/IP socket type.
 pref("network.http.default-socket-type", "");
 
-pref("network.http.keep-alive", true); // set it to false in case of problems
-pref("network.http.proxy.keep-alive", true);
+pref("network.http.keep-alive", false); // set it to false in case of problems
+pref("network.http.proxy.keep-alive", false);
 pref("network.http.keep-alive.timeout", 300);
 
 // limit the absolute number of http connections.

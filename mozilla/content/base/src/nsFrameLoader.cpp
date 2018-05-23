@@ -69,6 +69,18 @@
 
 // Bug 98158: Limit to the number of total docShells in one page.
 #define MAX_NUMBER_DOCSHELLS 100
+// bug 136580: Limit to the number of nested content frames that can have the
+//             same URL. This is to stop content that is recursively loading
+// bug 228829: limit it to 1, like IE
+#define MAX_SAME_URL_CONTENT_FRAMES 1
+// Bug 8065: Limit content frame depth to some reasonable level. This
+// does not count chrome frames when determining depth, nor does it
+// prevent chrome recursion.  Number is fairly arbitrary, but meant to
+// keep number of shells to a reasonable number on accidental recursion with a
+// small (but not 1) branching factor.  With large branching factors the number
+// of shells can rapidly become huge and run us out of memory.  To solve that,
+// we'd need to re-institute a fixed version of bug 98158.
+#define MAX_DEPTH_CONTENT_FRAMES 10
 
 class nsFrameLoader : public nsIFrameLoader
 {
@@ -220,6 +232,88 @@ nsFrameLoader::LoadFrame()
   if (NS_FAILED(rv)) {
     return rv; // We're not
   }
+
+  // added for 8065 1.3 compatibility
+  NS_PRECONDITION(mDocShell, "Must have docshell here");
+  nsCOMPtr<nsIDocShellTreeItem> treeItem = do_QueryInterface(mDocShell);
+  NS_ASSERTION(treeItem, "docshell must be a treeitem!");
+
+  // Bug 8065: Don't exceed some maximum depth in content frames
+  // (MAX_DEPTH_CONTENT_FRAMES)
+  nsCOMPtr<nsIDocShellTreeItem> parentAsItem;
+  treeItem->GetSameTypeParent(getter_AddRefs(parentAsItem));
+  PRInt32 depth = 0;
+  while (parentAsItem) {
+    ++depth;
+    
+    if (depth >= MAX_DEPTH_CONTENT_FRAMES) {
+      //mDepthTooGreat = PR_TRUE;
+      NS_WARNING("Too many nested content frames so giving up");
+
+      return NS_ERROR_UNEXPECTED; // Too deep, give up!  (silently?)
+    }
+
+    nsCOMPtr<nsIDocShellTreeItem> temp = parentAsItem; // no temp.swap()
+    temp->GetSameTypeParent(getter_AddRefs(parentAsItem));
+  }
+
+  // Bug 136580: Check for recursive frame loading
+  // pre-grab these for speed
+  // modified by bug 228829
+  nsCOMPtr<nsIURI> cloneURI;
+  rv = uri->Clone(getter_AddRefs(cloneURI)); // modified for 1.3
+  NS_ENSURE_SUCCESS(rv, rv);
+  // Bug 98158/193011: We need to ignore data after the #
+/*  nsCOMPtr<nsIURL> cloneURL(do_QueryInterface(cloneURI)); // QI can fail
+  if (cloneURL) {
+    rv = cloneURL->SetRef(EmptyCString());
+    NS_ENSURE_SUCCESS(rv,rv);
+  } */
+  // end 228829
+  PRInt32 matchCount = 0;
+  treeItem->GetSameTypeParent(getter_AddRefs(parentAsItem));
+  while (parentAsItem) {
+#if(0)
+    // Only interested in checking for recursion in content
+    PRInt32 parentType;
+    parentAsItem->GetItemType(&parentType);
+    if (parentType != nsIDocShellTreeItem::typeContent) {
+      break; // Not content
+    }
+#endif
+    // Check the parent URI with the URI we're loading
+    nsCOMPtr<nsIWebNavigation> parentAsNav(do_QueryInterface(parentAsItem));
+    if (parentAsNav) {
+      // Does the URI match the one we're about to load?
+      nsCOMPtr<nsIURI> parentURI;
+      parentAsNav->GetCurrentURI(getter_AddRefs(parentURI));
+      if (parentURI) {
+        // bug 228829
+        nsCOMPtr<nsIURI> parentClone;
+        rv = parentURI->Clone(getter_AddRefs(parentClone));
+        NS_ENSURE_SUCCESS(rv, rv);
+/*        nsCOMPtr<nsIURL> parentURL(do_QueryInterface(parentClone));
+        if (parentURL) {
+          rv = parentURL->SetRef(EmptyCString());
+          NS_ENSURE_SUCCESS(rv,rv);
+        } */
+        PRBool equal; // = PR_FALSE;
+        rv = cloneURI->Equals(parentClone, &equal);
+        NS_ENSURE_SUCCESS(rv, rv);
+        if (equal) {
+        // end bug
+          matchCount++;
+          if (matchCount >= MAX_SAME_URL_CONTENT_FRAMES) {
+            NS_WARNING("Too many nested content frames have the same url (recursion?) so giving up");
+            return NS_ERROR_UNEXPECTED;
+          }
+        }
+      }
+    }
+    nsCOMPtr<nsIDocShellTreeItem> temp = parentAsItem;
+    temp->GetSameTypeParent(getter_AddRefs(parentAsItem));
+  }
+
 
   // Kick off the load...
   rv = mDocShell->LoadURI(uri, loadInfo, nsIWebNavigation::LOAD_FLAGS_NONE,

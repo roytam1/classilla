@@ -3821,7 +3821,9 @@ nsTableFrame::CellChangedWidth(const nsTableCellFrame& aCellFrame,
   PRBool colMinGetsSmaller = (cellMin < colMin) && (colMin == aPrevCellMin);
 
   if (colMinGetsBigger || colMinGetsSmaller) {
-    if (ColIsSpannedInto(colIndex)) {
+    if (ColIsSpannedInto(colIndex)
+        || ColHasSpanningCells(colIndex) // bug 207208
+    ) {
       // bail out if a colspan is involved
       SetNeedStrategyInit(PR_TRUE);
       return PR_TRUE;
@@ -7351,6 +7353,20 @@ PRBool nsTableFrame::RowHasSpanningCells(PRInt32 aRowIndex)
   }
   return result;
 }
+
+// bug 207208
+PRBool nsTableFrame::ColHasSpanningCells(PRInt32 aColIndex)
+{
+  PRBool result = PR_FALSE;
+  nsTableCellMap* cellMap = GetCellMap();
+  NS_PRECONDITION (cellMap, "bad call, cellMap not yet allocated.");
+  if (cellMap) {
+    result = cellMap->ColHasSpanningCells(aColIndex);
+  }
+  return result;
+}
+// end bug
+
 
 PRBool nsTableFrame::RowIsSpannedInto(PRInt32 aRowIndex)
 {

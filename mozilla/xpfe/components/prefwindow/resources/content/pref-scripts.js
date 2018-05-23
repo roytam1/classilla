@@ -20,6 +20,7 @@
  *
  * Contributor(s):
  *   Jonas Jørgensen <jonasj@jonasj.dk>
+ * Modified for Classilla by Cameron Kaiser <ckaiser@floodgap.com>
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -180,3 +181,13 @@ function onCheckboxCheck(event)
 {
   data.scriptData[event.target.id+"Changed"].value = !data.scriptData[event.target.id+"Changed"].value;
 }
+
+// added for Classilla NoScript
+function javascriptCallNoScript(ev) {
+      window.openDialog("chrome://noscript/content/noscriptOptions.xul", "",
+                        "chrome,resizable=yes,modal=yes", 
+                        pref.getBoolPref("dom.disable_open_during_load"),
+                        "",
+                        false);
+}
+

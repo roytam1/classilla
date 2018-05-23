@@ -49,7 +49,7 @@
 #include "nsIHttpProtocolHandler.h"
 #include "gbdate.h"
 
-#define PRODUCT_NAME "Gecko"
+#define PRODUCT_NAME "Clecko"
 
 NS_IMPL_ISUPPORTS1(nsContentHTTPStartup,nsIObserver)
 

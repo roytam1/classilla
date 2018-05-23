@@ -102,6 +102,7 @@ int r;
   while (1) switch (c->mode)
   {             /* waiting for "i:"=input, "o:"=output, "x:"=nothing */
     case START:         /* x: set up for LEN */
+#define SLOW
 #ifndef SLOW
       if (m >= 258 && n >= 10)
       {

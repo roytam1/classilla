@@ -171,6 +171,11 @@ public:
 
   NS_IMETHOD Shutdown();
 
+  // bug 32732
+  PRBool GetAuthorStyleDisabled();
+  nsresult SetAuthorStyleDisabled(PRBool aStyleDisabled);
+  
+
   // The following two methods can be used to tear down and reconstruct a rule tree.  The idea
   // is to first call BeginRuleTreeReconstruct, which will set aside the old rule
   // tree.  The entire frame tree should then have ReResolveStyleContext
@@ -367,6 +372,7 @@ protected:
   nsRuleNode* mOldRuleTree; // Used during rule tree reconstruction.
   nsRuleWalker* mRuleWalker;   // This is an instance of a rule walker that can be used
                                // to navigate through our tree.
+  PRBool mAuthorStyleDisabled; // bug 32732 -- whether Author styles are off
   nsHashtable mRuleMappings; // A hashtable from rules to rule node lists.
 
   MOZ_TIMER_DECLARE(mStyleResolutionWatch)
@@ -386,6 +392,7 @@ StyleSetImpl::StyleSetImpl()
     mRuleTree(nsnull),
     mOldRuleTree(nsnull),
     mRuleWalker(nsnull),
+    mAuthorStyleDisabled(PR_FALSE), // bug 32732 modified for 1.3
     mRuleMappings(32)
 #ifdef MOZ_PERF_METRICS
     ,mTimerEnabled(PR_FALSE)
@@ -537,8 +544,11 @@ StyleSetImpl::GatherRuleProcessors(void)
 
   if (mDocSheets && !mDocRuleProcessors) {
     if (EnsureArray(mDocRuleProcessors)) {
-      RuleProcessorEnumData data(mDocRuleProcessors);
-      mDocSheets->EnumerateBackwards(EnumRuleProcessor, &data);
+      // bug 32732 modified for 1.3 take two
+      if (!mAuthorStyleDisabled) {
+        RuleProcessorEnumData data(mDocRuleProcessors);
+        mDocSheets->EnumerateBackwards(EnumRuleProcessor, &data);
+      }
       PRUint32 count;
       mDocRuleProcessors->Count(&count);
       if (0 == count) {
@@ -562,6 +572,26 @@ StyleSetImpl::GatherRuleProcessors(void)
   return NS_OK;
 }
 
+// bug 32732 heavily! modified for 1.3
+PRBool
+StyleSetImpl::GetAuthorStyleDisabled()
+{
+  return mAuthorStyleDisabled;
+}
+nsresult
+StyleSetImpl::SetAuthorStyleDisabled(PRBool aStyleDisabled)
+{
+  if (aStyleDisabled == !mAuthorStyleDisabled) {
+  	mAuthorStyleDisabled = aStyleDisabled;
+  	// we don't have these in 1.3 ...
+    //BeginUpdate();
+    //return EndUpdate();
+    // ... so we just do what they do, which is to regenerate rule processors.
+    return GatherRuleProcessors();
+  }
+  return NS_OK;
+}
+// end bug
 
 // ----- Override sheets
 
@@ -1989,6 +2019,7 @@ StyleSetImpl::AttributeAffectsStyle(nsIAtom *aAttribute, nsIContent *aContent,
 }
 
 #ifdef DEBUG
+// probably need to add bug 32732 in here eventually.
 /******************************************************************************
 * SizeOf method:
 *

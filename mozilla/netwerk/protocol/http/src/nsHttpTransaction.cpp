@@ -650,6 +650,8 @@ nsHttpTransaction::HandleContentStart()
             LOG(("resetting transaction's response head\n"));
             mHaveAllHeaders = PR_FALSE;
             mHaveStatusLine = PR_FALSE;
+            mReceivedData = PR_FALSE; // bug 248827
+            mSentData = PR_FALSE; // bug 248827
             mResponseHead->Reset();
             // wait to be called again...
             return NS_OK;

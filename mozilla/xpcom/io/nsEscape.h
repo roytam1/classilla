@@ -118,7 +118,9 @@ enum EscapeMask {
   esc_OnlyASCII      = PR_BIT(11), /* causes non-ascii octets to be skipped */
   esc_OnlyNonASCII   = PR_BIT(12), /* causes ascii octets to be skipped */
   esc_AlwaysCopy     = PR_BIT(13), /* copy input to result buf even if escaping is unnecessary */
-  esc_Colon          = PR_BIT(14)  /* force escape of colon */
+  esc_Colon          = PR_BIT(14),  /* force escape of colon */
+  // bug 228176
+  esc_ExcludeControl = PR_BIT(15)  /* excludes C0 and DEL from unescaping */
 };
 
 /**

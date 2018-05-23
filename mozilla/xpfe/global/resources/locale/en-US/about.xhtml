@@ -30,6 +30,8 @@
    -    Henrik Gemal <mozilla@gemal.dk>
    -    Daniel Veditz <dveditz@netscape.com>
    -    Alexey Chernyak <alexeyc@bigfoot.com>
+   -
+   - modified for Classilla by Cameron Kaiser
 -->
   
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -58,6 +60,17 @@ h1 {
 :link:active, :visited:active {
   color: #f00;
 }
+.scaps {
+  font-variant: small-caps;
+  //font-style: italic;
+  font-weight: bold;
+}
+
+#credblock {
+  margin: 30 30 30 30;
+  text-align: center;
+}
+
 </style>
 </head>
 <body>
@@ -76,8 +89,7 @@ h1 {
 <a id="mozlink" href="&releaseURL;">&brandShortName; </a>
 </h1>
 <h3>
-This is <a href="http://wamcom.org/">WaMCom</a> - the Web and Mail Communicator, a modified version of Mozilla,
-based on the version of Mozilla shown above.
+A free, open-source browser for the classic Macintosh OS 
 </h3>
 <script type="application/x-javascript">
   // using try..catch to handle empty useragents and other cases where the regex fails to apply
@@ -93,9 +105,28 @@ based on the version of Mozilla shown above.
 </tbody>
 </table>
 
+<div id="credblock">
+<span class="scaps">project lead</span><br/>
+Cameron Kaiser<br/>
+<br/>
+<span class="scaps">special thanks to</span><br/>
+Simon Fraser<br/>
+and our ancestor's maker, Kai Engert<br/>
+<br/>
+</div>
+
 <hr />
 
 <ul>
+<li>Copyright &copy; 2009 by Contributors to Classilla under the 
+<a href="chrome://global/content/MPL-1.1.html">
+Mozilla Public License</a> and <a href="chrome://global/content/NPL-1.1.html">
+Netscape Public License</a>.  All Rights Reserved.</li>
+<li>This software contains a modified version of <a
+href="http://www.noscript.net/">NoScript</a>. Copyright &copy; 2004-2009
+Giorgio Maone under the
+<a href="http://www.gnu.org/copyleft/gpl.html">GNU Public License</a>.
+All Rights Reserved.</li>
 <li>Copyright &copy; 1998-2003 by <a href="about:credits">Contributors</a> to 
 the Mozilla codebase under the <a href="chrome://global/content/MPL-1.1.html">
 Mozilla Public License</a> and <a href="chrome://global/content/NPL-1.1.html">
@@ -110,13 +141,20 @@ Center. All Rights Reserved.</li>
 </ul>
 
 <p>
+The Classilla <b>Neon Fossil</b> logo is Copyright &copy; 2009 Cameron Kaiser
+and appears under a Creative Commons USA 3.0 BY-NC-ND license. All rights
+reserved.
+</p>
+
+<p>
 U.S. GOVERNMENT END USERS. The Software is a &quot;commercial
 item,&quot; as that term is defined in 48 C.F.R. 2.101 (Oct. 1995), consisting
 of &quot;commercial computer software&quot; and &quot;commercial computer software 
 documentation,&quot; as such terms are used in 48 C.F.R. 12.212 (Sept. 1995). 
 Consistent with 48 C.F.R. 12.212 and 48 C.F.R. 227.7202-1 through 227.7202-4
 (June 1995), all U.S. Government End Users acquire the Software with only 
-those rights set forth herein.
+those rights set forth herein. And if there are any Mac OS 9 users left in
+the Federal Government, I would really enjoy hearing about it.
 </p>
 
 </body>

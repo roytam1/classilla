@@ -51,6 +51,7 @@
 #include "nsIDOMHTMLBodyElement.h"
 #include "nsLayoutAtoms.h"
 #include "nsCOMPtr.h"
+#include "nsLayoutUtils.h"
 
 #ifdef NS_DEBUG
 #undef  NOISY_MAX_ELEMENT_SIZE
@@ -80,6 +81,8 @@ nsBlockReflowContext::nsBlockReflowContext(nsIPresContext* aPresContext,
     mMetrics.mFlags |= NS_REFLOW_CALC_MAX_WIDTH;
 }
 
+// bug 209694
+#if(0)
 void
 nsBlockReflowContext::ComputeCollapsedTopMargin(nsIPresContext* aPresContext,
                                                 nsHTMLReflowState& aRS,
@@ -87,6 +90,15 @@ nsBlockReflowContext::ComputeCollapsedTopMargin(nsIPresContext* aPresContext,
 {
   // Get aFrame's top margin
   aMargin.Include(aRS.mComputedMargin.top);
+#endif
+PRBool
+nsBlockReflowContext::ComputeCollapsedTopMargin(nsIPresContext *aPresContext, // we still need this for 1.3
+  const nsHTMLReflowState& aRS,
+  nsCollapsingMargin* aMargin, nsIFrame* aClearanceFrame, PRBool* aMayNeedRetry) {
+  // Include frame's top margin
+  aMargin->Include(aRS.mComputedMargin.top);
+// end bug
+
 
   // The inclusion of the bottom margin when empty is done by the caller
   // since it doesn't need to be done by the top-level (non-recursive)
@@ -94,34 +106,63 @@ nsBlockReflowContext::ComputeCollapsedTopMargin(nsIPresContext* aPresContext,
 
 #ifdef NOISY_VERTICAL_MARGINS
   nsFrame::ListTag(stdout, aRS.frame);
-  printf(": %d => %d\n", aRS.mComputedMargin.top, aMargin.get());
+  printf(": %d => %d\n", aRS.mComputedMargin.top, aMargin->get()); // . to -> 209694
 #endif
 
+  PRBool dirtiedLine = PR_FALSE; // bug 209694
+  
   // Calculate aFrame's generational top-margin from its child
   // blocks. Note that if aFrame has a non-zero top-border or
   // top-padding then this step is skipped because it will be a margin
   // root.  It is also skipped if the frame is a margin root for other
   // reasons.
+  void *bf; // bug 209694
   nsFrameState state;
   if (0 == aRS.mComputedBorderPadding.top &&
-      (aRS.frame->GetFrameState(&state), !(state & NS_BLOCK_MARGIN_ROOT))) {
-    nsBlockFrame* bf;
-    if (NS_SUCCEEDED(aRS.frame->QueryInterface(kBlockFrameCID,
-                                       NS_REINTERPRET_CAST(void**, &bf)))) {
+      (aRS.frame->GetFrameState(&state), !(state & NS_BLOCK_MARGIN_ROOT)) &&
+      NS_SUCCEEDED(aRS.frame->QueryInterface(kBlockFrameCID, &bf))) { // ) { bug 209694
+    nsBlockFrame* block = NS_STATIC_CAST(nsBlockFrame*, aRS.frame);
+    //nsBlockFrame* bf; // moved above
+    //if (NS_SUCCEEDED(aRS.frame->QueryInterface(kBlockFrameCID,
+    //                                   NS_REINTERPRET_CAST(void**, &bf)))) {
+    
+    // this section replaces line->IsEmpty()
       nsCompatibility compat;
       aPresContext->GetCompatibilityMode(&compat);
-
       const nsStyleText* text;
-      ::GetStyleData(bf, &text);
+      ::GetStyleData(block, &text); // should this be bf?
       PRBool isPre = NS_STYLE_WHITESPACE_PRE == text->mWhiteSpace ||
                      NS_STYLE_WHITESPACE_MOZ_PRE_WRAP == text->mWhiteSpace;
+    // this is for isEmpty below.
 
-      for (nsBlockFrame::line_iterator line = bf->begin_lines(),
-                                   line_end = bf->end_lines();
+      for (nsBlockFrame::line_iterator line = block->begin_lines(), // bf -> block 209694
+                                   line_end = block->end_lines(); // bf -> block 209694
            line != line_end; ++line) {
+           
+        // bug 209694
+      if (!aClearanceFrame && line->HasClearance()) {
+        // If we don't have a clearance frame, then we're computing
+        // the collapsed margin in the first pass, assuming that all
+        // lines have no clearance. So clear their clearance flags.
+        line->ClearHasClearance();
+        line->MarkDirty();
+        dirtiedLine = PR_TRUE;
+      }
+        
+           
         PRBool isEmpty;
-        line->IsEmpty(compat, isPre, &isEmpty);
+        line->IsEmpty(compat, isPre, &isEmpty); // line->IsEmpty(), see isPre above
         if (line->IsBlock()) {
+
+// bug 209694
+        nsBlockFrame* kidBlock = NS_STATIC_CAST(nsBlockFrame*, line->mFirstChild);
+        if (kidBlock == aClearanceFrame) {
+          line->SetHasClearance();
+          line->MarkDirty();
+          dirtiedLine = PR_TRUE;
+          break;
+        }
+        
           // Here is where we recur. Now that we have determined that a
           // generational collapse is required we need to compute the
           // child blocks margin and so in so that we can look into
@@ -130,22 +171,42 @@ nsBlockReflowContext::ComputeCollapsedTopMargin(nsIPresContext* aPresContext,
           // arbitrarily make it a `resize' to avoid the path-plucking
           // behavior if we're in an incremental reflow.
           nsSize availSpace(aRS.mComputedWidth, aRS.mComputedHeight);
-          nsHTMLReflowState reflowState(aPresContext, aRS, line->mFirstChild,
+          
+// bug 209694 modified for 1.3
+//          nsHTMLReflowState reflowState(aPresContext, aRS, line->mFirstChild,
+        nsHTMLReflowState reflowState(aPresContext, // kidBlock->GetPresContext(), // this worries me
+                                      aRS, kidBlock,
+                                      
                                         availSpace, eReflowReason_Resize);
-          ComputeCollapsedTopMargin(aPresContext, reflowState, aMargin);
+//          ComputeCollapsedTopMargin(aPresContext, reflowState, aMargin);
+        // Record that we're being optimistic by assuming the kid
+        // has no clearance
+        const nsStyleDisplay *disp;
+        kidBlock->GetStyleData(eStyleStruct_Display, (const nsStyleStruct*&)disp);
+        //if (kidBlock->GetStyleDisplay()->mBreakType != NS_STYLE_CLEAR_NONE) {
+        if (disp->mBreakType != NS_STYLE_CLEAR_NONE) {
+          *aMayNeedRetry = PR_TRUE;
+        }
+        if (ComputeCollapsedTopMargin(aPresContext, reflowState, aMargin, aClearanceFrame, aMayNeedRetry)) {
+          line->MarkDirty();
+          dirtiedLine = PR_TRUE;
+        }
+// end bug
+
           if (isEmpty)
-            aMargin.Include(reflowState.mComputedMargin.bottom);
+            aMargin->Include(reflowState.mComputedMargin.bottom); // . to -> bug 209694
         }
         if (!isEmpty)
           break;
       }
     }
-  }
+  //}
 
 #ifdef NOISY_VERTICAL_MARGINS
   nsFrame::ListTag(stdout, aRS.frame);
   printf(": => %d\n", aMargin.get());
 #endif
+  return dirtiedLine; // bug 209694
 }
 
 struct nsBlockHorizontalAlign {
@@ -312,7 +373,8 @@ ComputeShrinkwrapMargins(const nsStyleMargin* aStyleMargin, nscoord aWidth, nsMa
 nsresult
 nsBlockReflowContext::ReflowBlock(const nsRect&       aSpace,
                                   PRBool              aApplyTopMargin,
-                                  nsCollapsingMargin& aPrevBottomMargin,
+                                  nsCollapsingMargin& aPrevMargin, // prevBottomMargin bug 209694
+                                  nscoord             aClearance, // bug 209694
                                   PRBool              aIsAdjacentWithTop,
                                   nsMargin&           aComputedOffsets,
                                   nsHTMLReflowState&  aFrameRS,
@@ -366,6 +428,8 @@ nsBlockReflowContext::ReflowBlock(const nsRect&       aSpace,
       aFrameRS.reason = eReflowReason_Dirty;
   }
 
+// bug 209694
+#if(0)
   /* We build a different reflow context based on the width attribute of the block,
    * if it's a floater.
    * Auto-width floaters need to have their containing-block size set explicitly,
@@ -377,8 +441,6 @@ nsBlockReflowContext::ReflowBlock(const nsRect&       aSpace,
   const nsStylePosition* position;
   mFrame->GetStyleData(eStyleStruct_Position, (const nsStyleStruct*&)position);
   nsStyleUnit widthUnit = position->mWidth.GetUnit();
-  const nsStyleDisplay* display;
-  mFrame->GetStyleData(eStyleStruct_Display, (const nsStyleStruct*&)display);
 
   if ((eStyleUnit_Auto == widthUnit) &&
       ((NS_STYLE_FLOAT_LEFT == display->mFloats) ||
@@ -393,6 +455,11 @@ nsBlockReflowContext::ReflowBlock(const nsRect&       aSpace,
     // absolutely positioned frame).
     aFrameRS.Init(mPresContext);
   }
+#endif
+// moved here
+  // mFrame->GetStyleDisplay()
+  const nsStyleDisplay* display;
+  mFrame->GetStyleData(eStyleStruct_Display, (const nsStyleStruct*&)display);
 
   aComputedOffsets = aFrameRS.mComputedOffsets;
   aFrameRS.mLineLayout = nsnull;
@@ -405,21 +472,23 @@ nsBlockReflowContext::ReflowBlock(const nsRect&       aSpace,
   if (aApplyTopMargin) {
     // Compute the childs collapsed top margin (its margin collpased
     // with its first childs top-margin -- recursively).
-    ComputeCollapsedTopMargin(mPresContext, aFrameRS, aPrevBottomMargin);
+ //   ComputeCollapsedTopMargin(mPresContext, aFrameRS, aPrevBottomMargin); // bug 209694
+    mTopMargin = aPrevMargin; // bug 209694
 
 #ifdef NOISY_VERTICAL_MARGINS
     nsFrame::ListTag(stdout, mOuterReflowState.frame);
     printf(": reflowing ");
     nsFrame::ListTag(stdout, mFrame);
-    printf(" margin => %d\n", aPrevBottomMargin.get());
+    // bug 209694
+    printf(" margin => %d, clearance => %d\n", mTopMargin.get(), aClearance); //aPrevBottomMargin.get());
 #endif
 
     // Adjust the available height if its constrained so that the
     // child frame doesn't think it can reflow into its margin area.
-    if (NS_UNCONSTRAINEDSIZE != aFrameRS.availableHeight) {
-      aFrameRS.availableHeight -= aPrevBottomMargin.get();
+    if (NS_UNCONSTRAINEDSIZE != aFrameRS.availableHeight) { // bug 209694
+      aFrameRS.availableHeight -= mTopMargin.get() + aClearance; // aPrevBottomMargin.get();
     }
-    mTopMargin = aPrevBottomMargin;
+//    mTopMargin = aPrevBottomMargin; // bug 209694
   }
 
   // Compute x/y coordinate where reflow will begin. Use the rules
@@ -430,7 +499,7 @@ nsBlockReflowContext::ReflowBlock(const nsRect&       aSpace,
   mStyleMargin = aFrameRS.mStyleMargin;
   mStylePadding = aFrameRS.mStylePadding;
   nscoord x;
-  nscoord y = mSpace.y + mTopMargin.get();
+  nscoord y = mSpace.y + mTopMargin.get() + aClearance; // aClearance added by bug 209694
 
   // If it's a right floated element, then calculate the x-offset
   // differently
@@ -653,6 +722,7 @@ nsBlockReflowContext::ReflowBlock(const nsRect&       aSpace,
 PRBool
 nsBlockReflowContext::PlaceBlock(const nsHTMLReflowState& aReflowState,
                                  PRBool                   aForceFit,
+                                 PRBool                   aHasClearance, // bug 209694
                                  const nsMargin&          aComputedOffsets,
                                  nsCollapsingMargin&      aBottomMarginResult,
                                  nsRect&                  aInFlowBounds,
@@ -666,6 +736,8 @@ nsBlockReflowContext::PlaceBlock(const nsHTMLReflowState& aReflowState,
   PRBool fits = PR_TRUE;
   nscoord x = mX;
   nscoord y = mY;
+// bug 209694 modified for 1.3
+#if(0)
   // When deciding whether it's empty we also need to take into
   // account the overflow area
 
@@ -675,6 +747,23 @@ nsBlockReflowContext::PlaceBlock(const nsHTMLReflowState& aReflowState,
   // 'overflow: hidden' (which doesn't currently affect mOverflowArea,
   // but probably should.
   if ((0 == mMetrics.height) && (0 == mMetrics.mOverflowArea.height)) 
+#endif
+  // Check whether the block's bottom margin collapses with its top
+  // margin. See CSS 2.1 section 8.3.1; those rules seem to match
+  // nsBlockFrame::IsEmpty(). Any such block must have zero height so
+  // check that first.
+  
+  //if (0 == mMetrics.height && !aHasClearance && mFrame->IsEmpty())
+  nsCompatibility mode;
+  mPresContext->GetCompatibilityMode(&mode);
+  const nsStyleText* styleText;
+  mFrame->GetStyleData(eStyleStruct_Text,
+                      (const nsStyleStruct *&)styleText);
+  PRBool isEmpty;
+  mFrame->IsEmpty(mode, styleText->WhiteSpaceIsSignificant(), &isEmpty);
+  if (0 == mMetrics.height && !aHasClearance && isEmpty)
+// end bug
+
   {
     // Collapse the bottom margin with the top margin that was already
     // applied.
@@ -745,16 +834,29 @@ nsBlockReflowContext::PlaceBlock(const nsHTMLReflowState& aReflowState,
 
       // Adjust the max-element-size in the metrics to take into
       // account the margins around the block element. Note that we
-      // use the collapsed top and bottom margin values.
+      // use the collapsed top and bottom margin values. ... until bug 217369
       if (mMetrics.mComputeMEW) {
-        nsMargin maxElemMargin = mMargin;
+        nsMargin maxElemMargin; // = mMargin; // 217369
+        // bug 217369
+        const nsStyleSides &styleMargin = mStyleMargin->mMargin;
+        nsStyleCoord coord;
+        
+        if (styleMargin.GetLeftUnit() == eStyleUnit_Coord)
+          maxElemMargin.left = styleMargin.GetLeft(coord).GetCoordValue();
+        else
+          maxElemMargin.left = 0;
+        if (styleMargin.GetRightUnit() == eStyleUnit_Coord)
+          maxElemMargin.right = styleMargin.GetRight(coord).GetCoordValue();
+        else
+          maxElemMargin.right = 0;
 
-        if (NS_SHRINKWRAPWIDTH == mComputedWidth) {
+
+        //if (NS_SHRINKWRAPWIDTH == mComputedWidth) {
           nscoord dummyXOffset;
           // Base the margins on the max-element size
           ComputeShrinkwrapMargins(mStyleMargin, mMetrics.mMaxElementWidth,
                                    maxElemMargin, dummyXOffset);
-        }
+        //}
 
         // Do not allow auto margins to impact the max-element size
         // since they are springy and don't really count!

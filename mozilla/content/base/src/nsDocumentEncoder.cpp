@@ -198,6 +198,8 @@ nsDocumentEncoder::~nsDocumentEncoder()
 {
 }
 
+// moved to nsDocument.cpp per bug 77296
+#if(0)
 static PRBool
 IsScriptEnabled(nsIDocument *aDoc)
 {
@@ -225,6 +227,7 @@ IsScriptEnabled(nsIDocument *aDoc)
   sm->CanExecuteScripts(cx, principal, &enabled);
   return enabled;
 }
+#endif
 
 NS_IMETHODIMP
 nsDocumentEncoder::Init(nsIDocument* aDocument,
@@ -1118,7 +1121,9 @@ nsHTMLCopyEncoder::Init(nsIDocument* aDocument,
   // (see related bugs #57296, #41924, #58646, #32768)
   mFlags = aFlags | OutputAbsoluteLinks;
 
-  if (!IsScriptEnabled(mDocument))
+// bug 77296
+//  if (!IsScriptEnabled(mDocument))
+  if (!mDocument->IsScriptEnabled())
     mFlags |= OutputNoScriptContent;
 
   return NS_OK;

@@ -53,6 +53,7 @@
 #include "nsPluginInstancePeer.h"
 #include "nsIPlugin.h"
 #include "nsIJVMPlugin.h"
+#include "nsIJVMPluginInstance.h"
 #include "nsIJVMManager.h"
 #include "nsIPluginStreamListener.h"
 #include "nsIHTTPHeaderListener.h" 
@@ -163,6 +164,7 @@
 #include "nsISupportsArray.h"
 #include "nsIDocShell.h"
 #include "nsPluginNativeWindow.h"
+#include "nsIScriptSecurityManager.h"
 
 #if defined(XP_MAC) && TARGET_CARBON
 #include "nsIClassicPluginFactory.h"
@@ -2895,6 +2897,19 @@ NS_IMETHODIMP nsPluginHostImpl::GetURLWithHeaders(nsISupports* pluginInst,
 
   if (NS_SUCCEEDED(rv))
   {
+
+// bug 59767
+    // if this is a Java plugin calling, we need to do a security check
+    nsresult rv2;
+    nsCOMPtr<nsIJVMPluginInstance> javaInstance(do_QueryInterface(instance, &rv2));
+    
+    if (NS_SUCCEEDED(rv2))
+      rv = DoURLLoadSecurityCheck(instance, url);
+  }
+  if (NS_SUCCEEDED(rv))
+  {
+// end bug
+
     if (nsnull != target)
     {
       nsCOMPtr<nsIPluginInstancePeer> peer;
@@ -2950,6 +2965,19 @@ NS_IMETHODIMP nsPluginHostImpl::PostURL(nsISupports* pluginInst,
    return NS_ERROR_ILLEGAL_VALUE;
   
   nsCOMPtr<nsIPluginInstance> instance = do_QueryInterface(pluginInst, &rv);
+
+// bug 59767
+  if (NS_SUCCEEDED(rv))
+  {
+    // if this is a Java plugin calling, we need to do a security check
+    nsresult rv2;
+    nsCOMPtr<nsIJVMPluginInstance> javaInstance(do_QueryInterface(instance, &rv2));
+    
+    if (NS_SUCCEEDED(rv2))
+      rv = DoURLLoadSecurityCheck(instance, url);
+  }
+// end bug
+  
   if (NS_SUCCEEDED(rv))
   {
       char *dataToPost;
@@ -5672,6 +5700,57 @@ NS_IMETHODIMP nsPluginHostImpl::NewPluginURLStream(const nsString& aURL,
   return rv;
 }
 
+// bug 59767
+nsresult
+nsPluginHostImpl::DoURLLoadSecurityCheck(nsIPluginInstance *aInstance,
+                                         const char* aURL)
+{
+  nsresult rv;
+
+  if (!aURL || *aURL == '\0')
+    return NS_OK;
+
+  // get the URL of the document that loaded the plugin
+  nsCOMPtr<nsIDocument> doc;
+  nsCOMPtr<nsIPluginInstancePeer> peer;
+  nsCOMPtr<nsIURI> sourceURL;
+  rv = aInstance->GetPeer(getter_AddRefs(peer));
+  if (NS_FAILED(rv) || !peer)
+    return NS_ERROR_FAILURE;
+
+  nsCOMPtr<nsPIPluginInstancePeer> privpeer(do_QueryInterface(peer));
+  nsCOMPtr<nsIPluginInstanceOwner> owner;
+  rv = privpeer->GetOwner(getter_AddRefs(owner));
+  if (!owner)
+    return NS_ERROR_FAILURE;
+
+  rv = owner->GetDocument(getter_AddRefs(doc));
+  if (!doc)
+    return NS_ERROR_FAILURE;
+
+  rv = doc->GetDocumentURL(getter_AddRefs(sourceURL));
+  if (!sourceURL)
+    return NS_ERROR_FAILURE;
+
+  // Create an absolute URL for the target in case the target is relative
+  nsCOMPtr<nsIURI> docBaseURL;
+  doc->GetBaseURL(*getter_AddRefs(docBaseURL));
+
+  nsCOMPtr<nsIURI> targetURL;
+  rv = NS_NewURI(getter_AddRefs(targetURL), aURL, docBaseURL);
+
+  if (!targetURL)
+    return NS_ERROR_FAILURE;
+
+  nsCOMPtr<nsIScriptSecurityManager> secMan(
+    do_GetService(NS_SCRIPTSECURITYMANAGER_CONTRACTID, &rv));
+  if (NS_FAILED(rv))
+    return rv;
+
+  return secMan->CheckLoadURI(sourceURL, targetURL, nsIScriptSecurityManager::STANDARD);
+
+}
+// end bug  
 
 ////////////////////////////////////////////////////////////////////////
 NS_IMETHODIMP

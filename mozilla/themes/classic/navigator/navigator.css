@@ -21,6 +21,8 @@
  * Contributor(s):
  *   Joe Hewitt (hewitt@netscape.com)
  *
+ * Changes for Classilla (C)2009 Cameron Kaiser
+ *
  * Alternatively, the contents of this file may be used under the terms of
  * either the GNU General Public License Version 2 or later (the "GPL"), or 
  * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -340,6 +342,10 @@
 
 #popupIcon {
   list-style-image: url("chrome://navigator/skin/icons/popup-blocked.png");
+}
+
+#cssIcon {
+  list-style-image: url("chrome://navigator/skin/icons/csson.png");
 }
 
 /* ::::: personal toolbar ::::: */

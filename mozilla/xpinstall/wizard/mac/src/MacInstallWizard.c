@@ -305,7 +305,7 @@ pascal void CheckIfXPI(const CInfoPBRec * const cpbPtr, Boolean *quitFlag, void 
         strncpy(cFilename, (char*)(cpbPtr->hFileInfo.ioNamePtr + 1), len);
         
         /* check suffix for ".xpi" */   
-        if (0 == strncmp(".xpi", cFilename+len-4, 4))
+        if (0 == strncmp(".cxp", cFilename+len-4, 4)) // changed xpi -> cxp for Classilla
         {
             currFSp = (FSSpecPtr) NewPtrClear(sizeof(FSSpec));
             if (!currFSp)

@@ -534,6 +534,23 @@ nsAbsoluteContainingBlock::ReflowAbsoluteFrame(nsIFrame*                aDelegat
   nsRect  rect(border.left + kidReflowState.mComputedOffsets.left + kidReflowState.mComputedMargin.left,
                border.top + kidReflowState.mComputedOffsets.top + kidReflowState.mComputedMargin.top,
                kidDesiredSize.width, kidDesiredSize.height);
+#if(0)               
+// bug 6976
+  if (rect.x < 0) {
+    //const nsStyleDisplay *disp = aKidFrame->GetStyleDisplay();
+    const nsStyleDisplay *disp;
+    aKidFrame->GetStyleData(eStyleStruct_Display, (const nsStyleStruct*&)disp);
+    //if (disp->mOverflowX != NS_STYLE_OVERFLOW_HIDDEN) { CSS 3
+    if (disp->mOverflow != NS_STYLE_OVERFLOW_HIDDEN) { 
+    // see nsStyleStruct.h for this
+      // avoids a floater overflowing into the left of the window,
+      // because this frame has scrolled area horizontally.
+      rect.x = 0;
+    }
+  }
+// end bug
+#endif
+
   aKidFrame->SetRect(aPresContext, rect);
 
   // Size and position the view and set its opacity, visibility, content

@@ -1204,6 +1204,14 @@ nsScriptSecurityManager::CheckLoadURI(nsIURI *aSourceURI, nsIURI *aTargetURI,
         return NS_OK;
     }
 
+// bug 195201
+    //-- Some callers do not allow loading javascript: or data: URLs
+    if ((aFlags & nsIScriptSecurityManager::DISALLOW_JAVASCRIPT) &&
+        (targetScheme.Equals("javascript") || targetScheme.Equals("data")))
+    {
+       return NS_ERROR_DOM_BAD_URI;
+    }
+
     //-- If the schemes don't match, the policy is specified in this table.
     enum Action { AllowProtocol, DenyProtocol, PrefControlled, ChromeProtocol };
     static const struct
@@ -2097,7 +2105,9 @@ nsScriptSecurityManager::IsCapabilityEnabled(const char *capability,
     if (!previousPrincipal)
     {
         // No principals on the stack, all native code.  Allow execution.
-        *result = PR_TRUE;
+        // bug 202994 if the subject principal is the system principal.
+        //*result = PR_TRUE;
+        return SubjectPrincipalIsSystem(result);
     }
     return NS_OK;
 }

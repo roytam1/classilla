@@ -1137,6 +1137,7 @@ cert_GetCertificateEmailAddresses(CERTCertificate *cert)
 	    PORT_Memcpy(pBuf, addrBuf, finalLen);
 	}
     }
+     
 loser:
     if (tmpArena)
 	PORT_FreeArena(tmpArena, PR_FALSE);

@@ -111,12 +111,13 @@ public:
   /**
    * Helper method to invalidate portions of a standard container frame if the
    * reflow state indicates that they have changed (specifically border and
-   * padding).
+   * background and outline), assuming it was invalidated by some other means (bug 197065)
    * @param aPresContext the presentation context
    * @param aDesiredSize the new size of the frame
    * @param aReflowState the reflow that was just done on this frame
    */
-  void CheckInvalidateBorder(nsIPresContext*          aPresContext,
+//  void CheckInvalidateBorder(nsIPresContext*          aPresContext,
+  void CheckInvalidateSizeChange(nsIPresContext*          aPresContext,
                              nsHTMLReflowMetrics&     aDesiredSize,
                              const nsHTMLReflowState& aReflowState);
 

@@ -46,7 +46,9 @@
 #include "nsIDOMDocumentView.h"
 #include "nsIDOMDocumentXBL.h"
 #include "nsIDOMNSDocument.h"
-#include "nsIDOMDocumentStyle.h"
+/* #include "nsIDOMDocumentStyle.h"
+bug 32732 */
+#include "nsIDOMNSDocumentStyle.h" 
 #include "nsIDOMDocumentRange.h"
 #include "nsIDOMDocumentTraversal.h"
 #include "nsIDocumentObserver.h"
@@ -260,7 +262,8 @@ class nsDocument : public nsIDocument,
                    public nsIDOMNSDocument,
                    public nsIDOMDocumentEvent,
                    public nsIDOM3DocumentEvent,
-                   public nsIDOMDocumentStyle,
+                   // public nsIDOMDocumentStyle, // bug 32732
+                   public nsIDOMNSDocumentStyle,
                    public nsIDOMDocumentView,
                    public nsIDOMDocumentRange,
                    public nsIDOMDocumentTraversal,
@@ -532,6 +535,9 @@ public:
   NS_IMETHOD GetContainer(nsISupports **aContainer);
   NS_IMETHOD GetScriptEventManager(nsIScriptEventManager **aResult);
 
+  // bug 77296
+  NS_IMETHOD_(PRBool) IsScriptEnabled();
+  
   // nsIRadioGroupContainer
   NS_IMETHOD WalkRadioGroup(const nsAString& aName,
                             nsIRadioVisitor* aVisitor);
@@ -571,6 +577,9 @@ public:
 
   // nsIDOMDocumentStyle
   NS_DECL_NSIDOMDOCUMENTSTYLE
+
+  // nsIDOMNSDocumentStyle bug 32732
+  NS_DECL_NSIDOMNSDOCUMENTSTYLE
 
   // nsIDOMDocumentView
   NS_DECL_NSIDOMDOCUMENTVIEW

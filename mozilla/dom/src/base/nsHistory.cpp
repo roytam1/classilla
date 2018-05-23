@@ -67,7 +67,8 @@ HistoryImpl::~HistoryImpl()
 
 // QueryInterface implementation for HistoryImpl
 NS_INTERFACE_MAP_BEGIN(HistoryImpl)
-  NS_INTERFACE_MAP_ENTRY(nsISupports)
+//  NS_INTERFACE_MAP_ENTRY(nsISupports)
+  NS_INTERFACE_MAP_ENTRY_AMBIGUOUS(nsISupports, nsIDOMHistory) // bug 163549
   NS_INTERFACE_MAP_ENTRY(nsIDOMHistory)
   NS_INTERFACE_MAP_ENTRY(nsIDOMNSHistory)
   NS_DOM_INTERFACE_MAP_ENTRY_CLASSINFO(History)
@@ -215,7 +216,7 @@ HistoryImpl::Forward()
 }
 
 NS_IMETHODIMP
-HistoryImpl::GoIndex(PRInt32 aDelta)
+HistoryImpl::Go(PRInt32 aDelta) // not GoIndex
 {
   nsCOMPtr<nsISHistory> session_history;
 
@@ -240,6 +241,8 @@ HistoryImpl::GoIndex(PRInt32 aDelta)
   return NS_OK;
 }
 
+// bug 163549
+#if (0)
 NS_IMETHODIMP
 HistoryImpl::GoUri(const nsAString& aUriSubstring)
 {
@@ -290,6 +293,7 @@ HistoryImpl::GoUri(const nsAString& aUriSubstring)
 
   return rv;
 }
+#endif
 
 NS_IMETHODIMP
 HistoryImpl::Go()
@@ -319,22 +323,31 @@ HistoryImpl::Go()
   ncc->GetArgvPtr(&argv);
   NS_ENSURE_TRUE(argv, NS_ERROR_UNEXPECTED);
 
+// bug 163549
+#if(0)
   JSContext *cx = nsnull;
 
   rv = ncc->GetJSContext(&cx);
   NS_ENSURE_SUCCESS(rv, rv);
-
   if (JSVAL_IS_INT(argv[0])) {
     PRInt32 delta = JSVAL_TO_INT(argv[0]);
  
     return GoIndex(delta);
   }
+#endif
+  if (!JSVAL_IS_INT(argv[0])) {
+    return NS_OK;
+  }
 
+#if(0)
   JSString* jsstr = JS_ValueToString(cx, argv[0]);
 
   return GoUri(nsDependentString(NS_REINTERPRET_CAST(const PRUnichar *,
                                                    ::JS_GetStringChars(jsstr)),
                                ::JS_GetStringLength(jsstr)));
+#endif
+  PRInt32 delta = JSVAL_TO_INT(argv[0]);
+  return Go(delta);
 }
 
 NS_IMETHODIMP

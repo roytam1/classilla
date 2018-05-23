@@ -250,6 +250,8 @@ public:
   nsresult AddRectRegion(nsIFrame*     aFrame,
                          const nsRect& aUnavailableSpace);
 
+// bug 196919
+#if (0)
   /**
    * Resize the rectangular region associated with aFrame by the specified
    * deltas. The height change always applies to the bottom edge or the existing
@@ -271,6 +273,7 @@ public:
    * tagged with aFrame
    */
   nsresult OffsetRegion(nsIFrame* aFrame, nscoord dx, nscoord dy);
+#endif
 
   /**
    * Remove the region associated with aFrane.
@@ -278,11 +281,13 @@ public:
    * Returns NS_OK if successful and NS_ERROR_INVALID_ARG if there is no region
    * tagged with aFrame
    */
+protected: /* hmm ... 196919, seems dubious */
   nsresult RemoveRegion(nsIFrame* aFrame);
 
   /**
    * Clears the list of regions representing the unavailable space.
    */
+public: /* 196919 */
   void ClearRegions();
 
   /**
@@ -315,6 +320,22 @@ public:
    */
   void PopState();
 
+  /**
+   * Pops the state off the stack without restoring it. Useful for speculative
+   * reflow where we're not sure if we're going to keep the result. bug 209694
+   */
+  void DiscardState();
+
+/* bug 196919 */
+  nscoord GetLowestRegionTop();
+
+/* bug 148994 */
+  /**
+   * Return the coordinate of the lowest float matching aBreakType in this
+   * space manager. Returns aY if there are no matching floats.
+   */
+  nscoord ClearFloats(nscoord aY, PRUint8 aBreakType);
+  
 #ifdef DEBUG
   /**
    * Dump the state of the spacemanager out to a file
@@ -344,6 +365,7 @@ protected:
     nscoord mX, mY;
     nsIFrame *mLastFrame;
     nscoord mXMost;
+    nscoord mLowestTop; /* bug 196919 */
     SpaceManagerState *mNext;
 
     SpaceManagerState() : mX(0), mY(0), mLastFrame(nsnull), mNext(nsnull) {}
@@ -355,7 +377,9 @@ public:
   struct BandRect : PRCListStr {
     nscoord   mLeft, mTop;
     nscoord   mRight, mBottom;
-    PRIntn    mNumFrames;    // number of frames occupying this rect
+/*    PRIntn    mNumFrames;    */// number of frames occupying this rect
+    PRInt32   mNumFrames;    // number of frames occupying this rect bug 196919
+
     union {
       nsIFrame*    mFrame;   // single frame occupying the space
       nsVoidArray* mFrames;  // list of frames occupying the space
@@ -419,6 +443,8 @@ protected:
   nscoord         mX, mY;     // translation from local to global coordinate space
   BandList        mBandList;  // header/sentinel for circular linked list of band rects
   nscoord         mXMost;
+/* bug 196919 */
+  nscoord mLowestTop; // the lowest top
   FrameInfo*      mFrameInfoMap;
   nsIntervalSet   mFloatDamage;
 

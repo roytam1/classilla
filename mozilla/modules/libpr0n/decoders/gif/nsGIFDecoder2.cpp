@@ -518,9 +518,12 @@ int HaveDecodedRow(
         
     switch (format) {
     case gfxIFormats::RGB:
+    case gfxIFormats::BGR: // bug 208622
       {
           if (cmap) {// cmap could have null value if the global color table flag is 0
               while (rowBufIndex != decoder->mGIFStruct->rowend) {
+              // I did not land all of 208622 here, since I'm OS 9 only.
+              // if this ever gets used for something else, the rest must land.
               #if defined(XP_MAC) || defined(XP_MACOSX)
                   *rgbRowIndex++ = 0; // Mac is always 32bits per pixel, this is pad
               #endif
@@ -538,6 +541,9 @@ int HaveDecodedRow(
                                              bpr, (aRowNumber+i)*bpr);
       }
       break;
+
+// bug 208622
+#if (0)
     case gfxIFormats::BGR:
       {
         if (cmap) {// cmap could have null value if the global color table flag is 0
@@ -556,6 +562,8 @@ int HaveDecodedRow(
                                              bpr, (aRowNumber+i)*bpr);
       }
       break;
+#endif
+
     case gfxIFormats::RGB_A1:
     case gfxIFormats::BGR_A1:
       {

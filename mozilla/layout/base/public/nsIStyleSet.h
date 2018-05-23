@@ -147,6 +147,9 @@ public:
   // returns NS_FAILURE if none is found, otherwise NS_OK
   NS_IMETHOD EnableQuirkStyleSheet(PRBool aEnable) = 0;
 
+  // bug 32732
+  virtual PRBool GetAuthorStyleDisabled() = 0;
+  virtual nsresult SetAuthorStyleDisabled(PRBool aStyleDisabled) = 0 ;
   
   NS_IMETHOD NotifyStyleSheetStateChanged(PRBool aApplicable) = 0;
 

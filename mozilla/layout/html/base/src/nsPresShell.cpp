@@ -1038,6 +1038,9 @@ public:
   NS_IMETHOD GetActiveAlternateStyleSheet(nsString& aSheetTitle);
   NS_IMETHOD SelectAlternateStyleSheet(const nsString& aSheetTitle);
   NS_IMETHOD ListAlternateStyleSheets(nsStringArray& aTitleList);
+  NS_IMETHOD GetAuthorStyleDisabled(PRBool* aStyleDisabled); // bug 32732
+  NS_IMETHOD SetAuthorStyleDisabled(PRBool aStyleDisabled); // bug 32732
+
   NS_IMETHOD ReconstructStyleData(PRBool aRebuildRuleTree);
   NS_IMETHOD SetPreferenceStyleRules(PRBool aForceReflow);
   NS_IMETHOD EnablePrefStyleRules(PRBool aEnable, PRUint8 aPrefType=0xFF);
@@ -1282,6 +1285,8 @@ protected:
   nsresult SetPrefColorRules(void);
   nsresult SetPrefLinkRules(void);
   nsresult SetPrefFocusRules(void);
+  // bug 77296
+  nsresult SetPrefNoXXXRules();
 
   nsresult SelectRange(nsIDOMRange *aRange);
 
@@ -2054,6 +2059,24 @@ PresShell::ListAlternateStyleSheets(nsStringArray& aTitleList)
   return NS_OK;
 }
 
+// bug 32732 modified for 1.3
+NS_IMETHODIMP
+PresShell::SetAuthorStyleDisabled(PRBool aStyleDisabled)
+{
+  if (aStyleDisabled != mStyleSet->GetAuthorStyleDisabled()) {
+    nsresult rv = mStyleSet->SetAuthorStyleDisabled(aStyleDisabled);
+    if (NS_FAILED(rv)) return rv;
+    return ReconstructStyleData(PR_TRUE); // not () -- we must redo the tree.
+  }
+  return NS_OK;
+}
+NS_IMETHODIMP
+PresShell::GetAuthorStyleDisabled(PRBool* aStyleDisabled)
+{
+  *aStyleDisabled = mStyleSet->GetAuthorStyleDisabled();
+  return NS_OK;
+}
+// end bug
 
 NS_IMETHODIMP 
 PresShell::EnablePrefStyleRules(PRBool aEnable, PRUint8 aPrefType/*=0xFF*/)
@@ -2168,7 +2191,11 @@ PresShell::SetPreferenceStyleRules(PRBool aForceReflow)
       if (NS_SUCCEEDED(result)) {
         result = SetPrefFocusRules();
       }
- 
+// bug 77296
+      if (NS_SUCCEEDED(result)) {
+        result = SetPrefNoXXXRules();
+      }
+// end bug
 
       // update the styleset now that we are done inserting our rules
       if (NS_SUCCEEDED(result)) {
@@ -2317,6 +2344,30 @@ nsresult PresShell::SetPrefColorRules(void)
     return NS_ERROR_FAILURE;
   }
 }
+
+// bug 77296
+nsresult
+PresShell::SetPrefNoXXXRules()
+{
+  // If script is disabled, change noscript from display: none to display: block
+  if (!mDocument->IsScriptEnabled()) {
+    if (!mPrefStyleSheet) {
+      nsresult rv = CreatePreferenceStyleSheet();
+      NS_ENSURE_SUCCESS(rv, rv);
+    }
+    nsresult rv;
+    
+    // get the DOM interface to the stylesheet
+    nsCOMPtr<nsIDOMCSSStyleSheet> sheet(do_QueryInterface(mPrefStyleSheet,&rv));
+    NS_ENSURE_SUCCESS(rv, rv);
+    PRUint32 index = 0;
+    rv = sheet->InsertRule(NS_LITERAL_STRING("noscript{display:block}"), 0, &index);
+    NS_ENSURE_SUCCESS(rv, rv);
+  }
+  return NS_OK;
+}
+// end bug
+
 
 nsresult PresShell::SetPrefLinkRules(void)
 {

@@ -23,8 +23,8 @@
 
 <!-- extracted from content/viewSource.xul -->
 
-<!ENTITY mainWindow.title "Mozilla"> 
-<!ENTITY mainWindow.titlemodifier "Mozilla"> 
+<!ENTITY mainWindow.title "Classilla"> 
+<!ENTITY mainWindow.titlemodifier "Classilla"> 
 <!ENTITY mainWindow.titlemodifierseparator " - ">
 <!ENTITY mainWindow.preface "Source of: ">
 <!ENTITY fileMenu.label "File">

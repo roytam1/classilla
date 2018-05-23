@@ -844,7 +844,7 @@ nsMsgAttachmentHandler::SnarfAttachment(nsMsgCompFields *compFields)
       //
       //  Setup all the need information on the apple double encoder.
       //
-      ap_encode_init(&(obj->ap_encode_obj), escapedFilename.get(), separator);
+      ap_encode_init(&(obj->ap_encode_obj), (char *)escapedFilename.get(), separator);
 
       PRInt32 count;
 

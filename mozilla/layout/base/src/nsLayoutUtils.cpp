@@ -35,6 +35,10 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+
+// needed for PRUint8, PRUint16, PRUint32, etc. added for 1.3
+#include "prtypes.h"
+
 #include "nsLayoutUtils.h"
 #include "nsIFrame.h"
 #include "nsIPresContext.h"
@@ -176,4 +180,35 @@ nsLayoutUtils::GetPageFrame(nsIFrame* aFrame)
     frame->GetParent(&frame);
   }
   return nsnull;
+}
+
+// bug 209694
+// Combine aNewBreakType with aOrigBreakType, but limit the break types
+// to NS_STYLE_CLEAR_LEFT, RIGHT, LEFT_AND_RIGHT.
+PRUint8
+nsLayoutUtils::CombineBreakType(PRUint8 aOrigBreakType, 
+                                PRUint8 aNewBreakType)
+{
+  PRUint8 breakType = aOrigBreakType;
+  switch(breakType) {
+  case NS_STYLE_CLEAR_LEFT:
+    if ((NS_STYLE_CLEAR_RIGHT          == aNewBreakType) || 
+        (NS_STYLE_CLEAR_LEFT_AND_RIGHT == aNewBreakType)) {
+      breakType = NS_STYLE_CLEAR_LEFT_AND_RIGHT;
+    }
+    break;
+  case NS_STYLE_CLEAR_RIGHT:
+    if ((NS_STYLE_CLEAR_LEFT           == aNewBreakType) || 
+        (NS_STYLE_CLEAR_LEFT_AND_RIGHT == aNewBreakType)) {
+      breakType = NS_STYLE_CLEAR_LEFT_AND_RIGHT;
+    }
+    break;
+  case NS_STYLE_CLEAR_NONE:
+    if ((NS_STYLE_CLEAR_LEFT           == aNewBreakType) ||
+        (NS_STYLE_CLEAR_RIGHT          == aNewBreakType) ||    
+        (NS_STYLE_CLEAR_LEFT_AND_RIGHT == aNewBreakType)) {
+      breakType = aNewBreakType;
+    }
+  }
+  return breakType;
 }

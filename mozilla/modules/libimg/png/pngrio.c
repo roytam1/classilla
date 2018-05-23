@@ -1,9 +1,9 @@
 
 /* pngrio.c - functions for data input
  *
- * libpng 1.2.5 - October 2, 2002
+ * Last changed in libpng 1.2.36 [May 7, 2009]
  * For conditions of distribution and use, see copyright notice in png.h
- * Copyright (c) 1998-2002 Glenn Randers-Pehrson
+ * Copyright (c) 1998-2009 Glenn Randers-Pehrson
  * (Version 0.96 Copyright (c) 1996, 1997 Andreas Dilger)
  * (Version 0.88 Copyright (c) 1995, 1996 Guy Eric Schalnat, Group 42, Inc.)
  *
@@ -17,6 +17,7 @@
 
 #define PNG_INTERNAL
 #include "png.h"
+#if defined(PNG_READ_SUPPORTED)
 
 /* Read the data from whatever input you are using.  The default routine
    reads from a file pointer.  Note that this routine sometimes gets called
@@ -26,7 +27,7 @@
 void /* PRIVATE */
 png_read_data(png_structp png_ptr, png_bytep data, png_size_t length)
 {
-   png_debug1(4,"reading %d bytes\n", (int)length);
+   png_debug1(4, "reading %d bytes", (int)length);
    if (png_ptr->read_data_fn != NULL)
       (*(png_ptr->read_data_fn))(png_ptr, data, length);
    else
@@ -44,6 +45,7 @@ png_default_read_data(png_structp png_ptr, png_bytep data, png_size_t length)
 {
    png_size_t check;
 
+   if (png_ptr == NULL) return;
    /* fread() returns 0 on error, so it is OK to store this in a png_size_t
     * instead of an int, which is what fread() actually returns.
     */
@@ -67,13 +69,14 @@ png_default_read_data(png_structp png_ptr, png_bytep data, png_size_t length)
 #define NEAR_BUF_SIZE 1024
 #define MIN(a,b) (a <= b ? a : b)
 
-static void /* PRIVATE */
+static void PNGAPI
 png_default_read_data(png_structp png_ptr, png_bytep data, png_size_t length)
 {
    int check;
    png_byte *n_data;
    png_FILE_p io_ptr;
 
+   if (png_ptr == NULL) return;
    /* Check if data really is near. If so, use usual code. */
    n_data = (png_byte *)CVT_PTR_NOCHECK(data);
    io_ptr = (png_FILE_p)CVT_PTR(png_ptr->io_ptr);
@@ -102,7 +105,7 @@ png_default_read_data(png_structp png_ptr, png_bytep data, png_size_t length)
          err = fread(buf, (png_size_t)1, read, io_ptr);
 #endif
          png_memcpy(data, buf, read); /* copy far buffer to near buffer */
-         if(err != read)
+         if (err != read)
             break;
          else
             check += err;
@@ -129,11 +132,14 @@ png_default_read_data(png_structp png_ptr, png_bytep data, png_size_t length)
                   a location where input data can be stored, and a 32-bit
                   unsigned int that is the number of bytes to be read.
                   To exit and output any fatal error messages the new write
-                  function should call png_error(png_ptr, "Error msg"). */
+                  function should call png_error(png_ptr, "Error msg").
+                  May be NULL, in which case libpng's default function will
+                  be used. */
 void PNGAPI
 png_set_read_fn(png_structp png_ptr, png_voidp io_ptr,
    png_rw_ptr read_data_fn)
 {
+   if (png_ptr == NULL) return;
    png_ptr->io_ptr = io_ptr;
 
 #if !defined(PNG_NO_STDIO)
@@ -159,3 +165,4 @@ png_set_read_fn(png_structp png_ptr, png_voidp io_ptr,
    png_ptr->output_flush_fn = NULL;
 #endif
 }
+#endif /* PNG_READ_SUPPORTED */
