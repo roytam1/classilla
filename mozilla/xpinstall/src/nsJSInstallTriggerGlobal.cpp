@@ -47,6 +47,15 @@
 #include "nsInstallTrigger.h"
 #include "nsXPITriggerInfo.h"
 
+// for Classilla issue 110
+#include "nsIStringBundle.h"
+static NS_DEFINE_CID(kStringBundleServiceCID, NS_STRINGBUNDLESERVICE_CID);
+static NS_DEFINE_IID(kIStringBundleServiceIID, NS_ISTRINGBUNDLESERVICE_IID);
+#include "nsIPromptService.h"
+#include "nsInstall.h"
+#include "nsIDOMWindowInternal.h"
+// end issue
+
 #include "nsIComponentManager.h"
 
 #include "nsSoftwareUpdateIIDs.h"
@@ -282,9 +291,54 @@ InstallTriggerGlobalInstallChrome(JSContext *cx, JSObject *obj, uintN argc, jsva
   // make sure XPInstall is enabled, return if not
   PRBool enabled = PR_FALSE;
   nativeThis->UpdateEnabled(&enabled);
-  if (!enabled)
+  if (!enabled) {
+  	// tell the user to get with it
+  	nsresult rv;
+  	nsCOMPtr<nsIStringBundle> xpiBundle;
+    nsCOMPtr<nsIStringBundleService> bundleSvc =
+             do_GetService( kStringBundleServiceCID, &rv );
+    if (NS_SUCCEEDED(rv) && bundleSvc)
+    {
+        rv = bundleSvc->CreateBundle( XPINSTALL_BUNDLE_URL,
+                                      getter_AddRefs(xpiBundle) );
+        if (NS_SUCCEEDED(rv) && xpiBundle)
+        {
+        	nsXPIDLString youBlewIt;
+        	//char *CyouBlewIt;
+        	nsXPIDLString youBlewItTitle;
+        	//char *CyouBlewItTitle;
+        	
+        	xpiBundle->GetStringFromName(
+        		NS_LITERAL_STRING("YouBlewItSkippy").get(),
+        		getter_Copies(youBlewIt));
+        	xpiBundle->GetStringFromName(
+        		NS_LITERAL_STRING("YouBlewItSkippyTitle").get(),
+        		getter_Copies(youBlewItTitle));
+        		
+        	nsCOMPtr<nsIPromptService> dlgService(do_GetService("@mozilla.org/embedcomp/prompt-service;1"));
+        	if (dlgService) {
+        	/* Jumping jehosephat. this is ridiculous. -- Cameron */
+        		        nsCOMPtr<nsIScriptContext> scriptContext = (nsIScriptContext*) JS_GetContextPrivate(cx);
+        				if (scriptContext) {
+            				nsCOMPtr<nsIScriptGlobalObject> globalObject;
+            				scriptContext->GetGlobalObject(getter_AddRefs(globalObject));
+            				if (globalObject) {
+            					nsCOMPtr<nsIDOMWindowInternal> theWindow;
+            					theWindow = do_QueryInterface(globalObject);
+            					dlgService->Alert(theWindow, youBlewItTitle.get(), youBlewIt.get());
+            					//CyouBlewIt = ToNewCString(youBlewIt);
+            					//CyouBlewItTitle = ToNewCString(youBlewItTitle);
+            					//dlgService->Alert(theWindow, (const wchar_t *)CyouBlewItTitle, (const wchar_t *)CyouBlewIt);
+            					//nsCRT::free(CyouBlewIt);
+            					//nsCRT::free(CyouBlewItTitle);
+            				}
+            			}
+            }
+         }
+      }
       return JS_TRUE;
-
+  }
+  // end issue
 
   // get window.location to construct relative URLs
   JSObject* global = JS_GetGlobalObject(cx);

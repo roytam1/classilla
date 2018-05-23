@@ -3185,6 +3185,17 @@ nsRuleNode::ComputeDisplayData(nsStyleStruct* aStartStruct,
   }
 
   // overflow: enum, auto, inherit
+
+#if(1)
+// Classilla issue 96
+  if (display->mFloats != NS_STYLE_FLOAT_NONE) {
+  	display->mOverflow = NS_STYLE_OVERFLOW_VISIBLE;
+  }
+  else
+// end issue
+#endif
+// See compromise on slow scrolling in Widget.
+
   if (eCSSUnit_Enumerated == displayData.mOverflow.GetUnit()) {
     display->mOverflow = displayData.mOverflow.GetIntValue();
   }

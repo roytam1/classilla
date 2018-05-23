@@ -5345,6 +5345,13 @@ nsPluginHostImpl::WritePluginInfo()
 nsresult
 nsPluginHostImpl::ReadPluginInfo()
 {
+
+// This is a workaround for Classilla issue 113: we pretend like pluginreg.dat doesn't
+// even exist. Nasty, but works. Mostly for SIDPlay and certain other badly behaved
+// Classic plugins. Cameron
+#if(1)
+  return NS_OK;
+#else
   nsresult rv;
 
   nsCOMPtr<nsIProperties> directoryService(do_GetService(NS_DIRECTORY_SERVICE_CONTRACTID,&rv));
@@ -5524,6 +5531,8 @@ nsPluginHostImpl::ReadPluginInfo()
     
   }
   return NS_OK;
+#endif
+// end issue
 }
 
 nsPluginTag *

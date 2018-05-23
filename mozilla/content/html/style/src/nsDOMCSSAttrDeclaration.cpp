@@ -343,11 +343,18 @@ nsDOMCSSAttributeDeclaration::GetCSSParsingEnvironment(//nsIContent* aContent, /
   if (NS_FAILED(result)) {
     return result;
   }
+  
+// bug 211634
+#if(0)
   nsCOMPtr<nsIDocument> doc;
   result = nodeInfo->GetDocument(*getter_AddRefs(doc));
   if (NS_FAILED(result)) {
     return result;
   }
+#else
+  // XXXbz GetOwnerDocument
+  nsIDocument* doc = nodeInfo->GetDocument();
+#endif
   
   if (doc) {
     doc->GetBaseURL(*aBaseURI);

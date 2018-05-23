@@ -1035,6 +1035,9 @@ nsHTMLTableElement::StringToAttribute(nsIAtom* aAttribute,
       return NS_CONTENT_ATTR_HAS_VALUE;
     }
   }
+// bug 211634/bug 211440 modified for Classilla plus backbugs merged
+// BACKED OUT: this does not compile for some reason (see also nsHTMLFontElement)
+#if(0)
   else if (aAttribute == nsHTMLAtoms::bgcolor) {
     if (aResult.ParseColor(aValue, mDocument)) {
       return NS_CONTENT_ATTR_HAS_VALUE;
@@ -1045,6 +1048,16 @@ nsHTMLTableElement::StringToAttribute(nsIAtom* aAttribute,
       return NS_CONTENT_ATTR_HAS_VALUE;
     }
   }
+#else
+  else if (aAttribute == nsHTMLAtoms::bgcolor ||
+           aAttribute == nsHTMLAtoms::bordercolor) {
+    if (aResult.ParseColor(aValue,
+                           nsGenericHTMLContainerElement::GetOwnerDocument())) {
+      return NS_CONTENT_ATTR_HAS_VALUE;
+    }
+  }
+#endif
+// end bug
   else if (aAttribute == nsHTMLAtoms::frame) {
     if (aResult.ParseEnumValue(aValue, kFrameTable)) {
       return NS_CONTENT_ATTR_HAS_VALUE;

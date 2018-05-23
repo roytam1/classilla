@@ -188,7 +188,10 @@ nsHTMLFontElement::StringToAttribute(nsIAtom* aAttribute,
     }
   }
   else if (aAttribute == nsHTMLAtoms::color) {
-    if (aResult.ParseColor(aValue, mDocument)) {
+// bug 211634/bug 211440 merge
+    if (aResult.ParseColor(aValue,
+                           nsGenericHTMLContainerElement::GetOwnerDocument())) {
+// end bugs
       return NS_CONTENT_ATTR_HAS_VALUE;
     }
   }

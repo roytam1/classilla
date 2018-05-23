@@ -69,7 +69,8 @@ public:
                          const nsAString& aNamespaceURI,
                          nsINodeInfo*& aNodeInfo); 
 
-  NS_IMETHOD GetDocument(nsIDocument*& aDocument);
+  //NS_IMETHOD GetDocument(nsIDocument*& aDocument);
+  virtual nsIDocument* GetDocument() const; // bug 211634
   NS_IMETHOD GetDocumentPrincipal(nsIPrincipal** aPrincipal);
   NS_IMETHOD SetDocumentPrincipal(nsIPrincipal* aPrincipal);
   NS_IMETHOD GetNodeInfoArray(nsISupportsArray** aArray);

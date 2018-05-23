@@ -1291,7 +1291,10 @@ NS_IMETHODIMP
 nsGenericElement::GetOwnerDocument(nsIDOMDocument** aOwnerDocument)
 {
   NS_ENSURE_ARG_POINTER(aOwnerDocument);
+  *aOwnerDocument = nsnull;
 
+// bug 211634
+#if(0)
   nsCOMPtr<nsIDocument> doc(mDocument);
 
   if (!doc) {
@@ -1299,13 +1302,28 @@ nsGenericElement::GetOwnerDocument(nsIDOMDocument** aOwnerDocument)
     // can get at the document
     mNodeInfo->GetDocument(*getter_AddRefs(doc));
   }
+#else
+  nsIDocument* doc = GetOwnerDocument();
+#endif
+// end bug
+
+// THIS CAN MAKE US CRASH. DON'T USE IT
+#if(0)
+  if (!doc) {
+  	// hmm, see if we can get the parent's
+  	nsCOMPtr<nsIDocument> dubbldoc;
+	mParent->GetDocument(*getter_AddRefs(dubbldoc));
+	if (dubbldoc) {
+		return CallQueryInterface(dubbldoc, aOwnerDocument);
+	}
+  }
+#endif
 
   if (doc) {
     return CallQueryInterface(doc, aOwnerDocument);
   }
 
   // No document, return nsnull
-  *aOwnerDocument = nsnull;
   return NS_OK;
 }
 
@@ -1940,9 +1958,15 @@ nsGenericElement::SetDocument(nsIDocument* aDocument, PRBool aDeep,
     if (aDocument) {
       // check the document on the nodeinfo to see whether we need a
       // new nodeinfo
+// bug 211634
+#if(0)
       nsCOMPtr<nsIDocument> nodeinfoDoc;
       mNodeInfo->GetDocument(*getter_AddRefs(nodeinfoDoc));
       if (aDocument != nodeinfoDoc) {
+#else
+      if (aDocument != mNodeInfo->GetDocument()) {
+#endif
+// end bug
         // get a new nodeinfo
         nsCOMPtr<nsIAtom> name;
         mNodeInfo->GetNameAtom(*getter_AddRefs(name));
@@ -2779,7 +2803,7 @@ nsGenericElement::doInsertBefore(nsIDOMNode* aNewChild,
   }
 
   nsCOMPtr<nsIDocument> old_doc;
-  newContent->GetDocument(*getter_AddRefs(old_doc));
+  newContent->GetDocument(*getter_AddRefs(old_doc)); // XXX?
   if (old_doc && old_doc != mDocument &&
       !nsContentUtils::CanCallerAccess(aNewChild)) {
     return NS_ERROR_DOM_SECURITY_ERR;

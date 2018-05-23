@@ -6398,6 +6398,12 @@ PresShell::HandleEventInternal(nsEvent* aEvent, nsIView *aView, PRUint32 aFlags,
       }
 
       //Continue with second dispatch to system event handlers.
+      // Stopping propagation in the default group does not affect
+      // propagation in the system event group.
+      // (see also section 1.2.2.6 of the DOM3 Events Working Draft)
+
+      aEvent->flags &= ~NS_EVENT_FLAG_STOP_DISPATCH; // bug 216237
+
       // Need to null check mCurrentEventContent and mCurrentEventFrame
       // since the previous dispatch could have nuked them.
       if (mCurrentEventContent) {

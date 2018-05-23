@@ -217,6 +217,19 @@
 #define JS_BITMASK(n)   (JS_BIT(n) - 1)
 
 /***********************************************************************
+** MACROS:      JS_PTR_TO_INT32
+**              JS_PTR_TO_UINT32
+**              JS_INT32_TO_PTR
+**              JS_UINT32_TO_PTR
+** DESCRIPTION:
+** Integer to pointer and pointer to integer conversion macros.
+***********************************************************************/
+#define JS_PTR_TO_INT32(x)  ((jsint)((char *)(x) - (char *)0))
+#define JS_PTR_TO_UINT32(x) ((jsuint)((char *)(x) - (char *)0))
+#define JS_INT32_TO_PTR(x)  ((void *)((char *)0 + (jsint)(x)))
+#define JS_UINT32_TO_PTR(x) ((void *)((char *)0 + (jsuint)(x)))
+
+/***********************************************************************
 ** MACROS:      JS_HOWMANY
 **              JS_ROUNDUP
 **              JS_MIN
@@ -234,6 +247,7 @@
 #elif defined(XP_UNIX) || defined(XP_BEOS) || defined(XP_OS2) || defined(CROSS_COMPILE)
 #    include "jsautocfg.h"       /* Use auto-detected configuration */
 #    include "jsosdep.h"         /* ...and platform-specific flags */
+/* This will cause an error, on purpose. we should never see it */
 #else
 #    error "Must define one of XP_PC, XP_MAC or XP_UNIX"
 #endif
@@ -366,7 +380,12 @@ typedef ptrdiff_t JSPtrdiff;
 **  A type for pointer difference. Variables of this type are suitable
 **      for storing a pointer or pointer sutraction. 
 ************************************************************************/
+#if JS_BYTES_PER_WORD == 8 && JS_BYTES_PER_LONG != 8
+typedef JSUint64 JSUptrdiff;
+#else
 typedef unsigned long JSUptrdiff;
+#endif
+
 
 /************************************************************************
 ** TYPES:       JSBool
@@ -391,10 +410,64 @@ typedef JSUint8 JSPackedBool;
 /*
 ** A JSWord is an integer that is the same size as a void*
 */
+#if JS_BYTES_PER_WORD == 8 && JS_BYTES_PER_LONG != 8
+typedef JSInt64 JSWord;
+typedef JSUint64 JSUword;
+#else
 typedef long JSWord;
 typedef unsigned long JSUword;
+#endif
+
 
 #include "jsotypes.h"
+
+/***********************************************************************
+** MACROS:      JS_LIKELY
+**              JS_UNLIKELY
+** DESCRIPTION:
+**      These macros allow you to give a hint to the compiler about branch
+**      probability so that it can better optimize.  Use them like this:
+**
+**      if (JS_LIKELY(v == 1)) {
+**          ... expected code path ...
+**      }
+**
+**      if (JS_UNLIKELY(v == 0)) {
+**          ... non-expected code path ...
+**      }
+**
+***********************************************************************/
+#if defined(__GNUC__) && (__GNUC__ > 2)
+
+# define JS_LIKELY(x)   (__builtin_expect((x), 1))
+# define JS_UNLIKELY(x) (__builtin_expect((x), 0))
+
+#else
+
+# define JS_LIKELY(x)   (x)
+# define JS_UNLIKELY(x) (x)
+
+#endif
+
+/***********************************************************************
+** MACROS:      JS_ARRAY_LENGTH
+**              JS_ARRAY_END
+** DESCRIPTION:
+**      Macros to get the number of elements and the pointer to one past the
+**      last element of a C array. Use them like this:
+**
+**      jschar buf[10], *s;
+**      JSString *str;
+**      ...
+**      for (s = buf; s != JS_ARRAY_END(buf); ++s) *s = ...;
+**      ...
+**      str = JS_NewStringCopyN(cx, buf, JS_ARRAY_LENGTH(buf));
+**      ...
+**
+***********************************************************************/
+
+#define JS_ARRAY_LENGTH(array) (sizeof (array) / sizeof (array)[0])
+#define JS_ARRAY_END(array)    ((array) + JS_ARRAY_LENGTH(array))
 
 JS_END_EXTERN_C
 

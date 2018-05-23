@@ -309,11 +309,21 @@ nsNodeInfo::PrefixChanged(nsIAtom *aPrefix, nsINodeInfo*& aResult)
                                     aResult);
 }
 
+// bug 211634
+#if(0)
 NS_IMETHODIMP
 nsNodeInfo::GetDocument(nsIDocument*& aDocument) const
 {
   return mOwnerManager->GetDocument(aDocument);
 }
+#else
+nsIDocument*
+nsNodeInfo::GetDocument() const
+{
+  return mOwnerManager->GetDocument();
+}
+#endif
+// end bug
 
 NS_IMETHODIMP
 nsNodeInfo::GetDocumentPrincipal(nsIPrincipal** aPrincipal) const

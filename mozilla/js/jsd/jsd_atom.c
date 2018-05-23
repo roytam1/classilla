@@ -117,6 +117,12 @@ jsd_DestroyAtomTable(JSDContext* jsdc)
     }
 }
 
+/* sigh ... Cameron */
+#ifdef XP_MAC
+extern char* strdup(const char* str);
+#endif
+
+
 JSDAtom*
 jsd_AddAtom(JSDContext* jsdc, const char* str)
 {

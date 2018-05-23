@@ -237,7 +237,10 @@ nsHTMLFrameElement::StringToAttribute(nsIAtom* aAttribute,
                                       nsHTMLValue& aResult)
 {
   if (aAttribute == nsHTMLAtoms::bordercolor) {
-    if (aResult.ParseColor(aValue, mDocument)) {
+// bug 211634/bug 211440 merged
+    if (aResult.ParseColor(aValue,
+                           nsGenericHTMLLeafElement::GetOwnerDocument())) {
+// end bugs
       return NS_CONTENT_ATTR_HAS_VALUE;
     }
   }

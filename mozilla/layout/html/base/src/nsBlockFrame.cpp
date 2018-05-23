@@ -2649,8 +2649,9 @@ nsBlockFrame::ReflowDirtyLines(nsBlockReflowState& aState)
       
       
   /* TIGHTEN THIS LOOP UP BIG TIME! */
-      
-  for ( ; line != line_end; ++line, aState.AdvanceToNextLine()) {
+  // Classilla issue 62
+  PRInt32 iters = 1; 
+  for ( ; line != line_end; ++line,  aState.AdvanceToNextLine()) {
   
   // Classilla issue 62
   // This doesn't fix our reflow problem, but it gives us an escape hatch.
@@ -2658,6 +2659,8 @@ nsBlockFrame::ReflowDirtyLines(nsBlockReflowState& aState)
   // Cmd-. combination down, allowing reflow to gracefully slide to an incomplete
   // but stable halt. This is the best we can do until I can fix layout definitively
   // (or update it to a later Mozilla).
+  // Since this is expensive to run, only do this on every fourth line.
+  if ((iters & 3) == 0) {
     KeyMap keymap;
     GetKeys(keymap);
     if (keymap[1] == 8421376) {
@@ -2671,6 +2674,7 @@ nsBlockFrame::ReflowDirtyLines(nsBlockReflowState& aState)
     	foundAnyClears = PR_FALSE;
     	goto skip_it_all; // at the bottom of the line iterator
     }
+  }
     // end issue
 
 #ifdef DEBUG
@@ -3258,12 +3262,19 @@ nsBlockFrame::ReflowLine(nsBlockReflowState& aState,
                          PRBool aDamageDirtyArea)
 {
   nsresult rv = NS_OK;
-
   NS_ABORT_IF_FALSE(aLine->GetChildCount(), "reflowing empty line");
 
   // Setup the line-layout for the new line
   aState.mCurrentLine = aLine;
   aLine->ClearDirty();
+  
+  // more Classilla issue 62
+   KeyMap keymap;
+    GetKeys(keymap);
+    if (keymap[1] == 8421376) {
+		return rv;
+	}
+	
 
 /* moved down by 1.7
   // Now that we know what kind of line we have, reflow it

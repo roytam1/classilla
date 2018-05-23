@@ -459,7 +459,6 @@ JSClass JavaArray_class = {
 
 extern JS_IMPORT_DATA(JSObjectOps) js_ObjectOps;
 
-
 /* Initialize the JS JavaArray class */
 JSBool
 jsj_init_JavaArray(JSContext *cx, JSObject *global_obj)

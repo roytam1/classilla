@@ -75,6 +75,7 @@ function editType()
 const xmlSinkObserver = {
   onBeginLoad: function(aSink)
   {
+  	//alert("roadgin");
   },
   onInterrupt: function(aSink)
   {
@@ -85,6 +86,7 @@ const xmlSinkObserver = {
   // This is called when the RDF data source has finished loading.
   onEndLoad: function(aSink)
   {
+  	//alert("me done");
     // Unhook observer.
     aSink.removeXMLSinkObserver(this);
 
@@ -129,12 +131,14 @@ const xmlSinkObserver = {
       this.createNewEntry(newEntry, newEntries[newEntry]);
     }
     
+    //alert("me finished");
     // Don't need these any more!
     try { prefBranch.clearUserPref("saveToDisk"); } catch(e) {}
     try { prefBranch.clearUserPref("openFile"); } catch(e) {}
   },
   onError: function(aSink, aStatus, aMsg)
   {
+  	//alert("error: "+aMsg);
   },
   createNewEntry: function(mimeType, action)
   {
@@ -180,7 +184,8 @@ function Startup()
   var ioService = Components.classes["@mozilla.org/network/io-service;1"].getService(Components.interfaces.nsIIOService);
   var fileHandler = ioService.getProtocolHandler("file").QueryInterface(Components.interfaces.nsIFileProtocolHandler);
   gDS = gRDF.GetDataSource(fileHandler.getURLSpecFromFile(file));
-
+  //gDS.QueryInterface(Components.interfaces.nsIRDFRemoteDataSource).Refresh(false);
+  
   // intialize the listbox
   gList.database.AddDataSource(gDS);
   gList.setAttribute("ref", "urn:mimetypes");
@@ -188,8 +193,10 @@ function Startup()
   // Test whether the data source is already loaded.
   if (gDS.QueryInterface(Components.interfaces.nsIRDFRemoteDataSource).loaded) {
     // Do it now.
+    //alert("I is loaded");
     xmlSinkObserver.onEndLoad(gDS.QueryInterface(Components.interfaces.nsIRDFXMLSink));
   } else {
+  	//alert("I is not loaded");
     // Add observer that will kick in when data source load completes.
     gDS.QueryInterface(Components.interfaces.nsIRDFXMLSink).addXMLSinkObserver( xmlSinkObserver );
   }

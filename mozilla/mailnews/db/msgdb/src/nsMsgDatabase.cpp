@@ -766,6 +766,13 @@ nsMsgDatabase::~nsMsgDatabase()
 		DumpCache();
 	}
 #endif
+// bug 218725
+	// if the db folder info refers to the mdb db, we must clear it because
+	// the reference will be a dangling one soon.
+	if (m_dbFolderInfo) 
+		m_dbFolderInfo->ReleaseExternalReferences();
+// end bug
+
 	NS_IF_RELEASE(m_dbFolderInfo);
 	if (m_HeaderParser)
 	{

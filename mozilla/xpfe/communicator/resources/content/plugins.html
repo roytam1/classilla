@@ -22,6 +22,9 @@
     Frank Tang <ftang@netscape.com>
     Mike Connelly <mozilla@shepherdstown.com>
     Robert Kaiser <kairo@kairo.at>
+    
+  Modified for Classilla by Cameron Kaiser
+  
  -->
 
 <html>
@@ -56,6 +59,7 @@
   else
     document.writeln("<div id=\"noplugs\">" + pluginsbundle.GetStringFromName("nopluginsareinstalled_label") + "<\/div>");
 
+if(0) { // I'll do something with this later. Cameron Kaiser
   document.writeln("<div id=\"findmore\">" + pluginsbundle.GetStringFromName("findmore_label") + " ");
   document.writeln("<a href=\"" + regionbundle.GetStringFromName("more_plugins_url") + "\">" + regionbundle.GetStringFromName("more_plugins_label") + "<\/a>.");
   document.writeln("<\/div>");
@@ -63,6 +67,7 @@
   document.writeln("<div id=\"installhelp\">" + pluginsbundle.GetStringFromName("installhelp_label") + " ");
   document.writeln("<a href=\"" + regionbundle.GetStringFromName("plugindoc_url") + "\">" + regionbundle.GetStringFromName("plugindoc_label") + "<\/a>.");
   document.writeln("<\/div><hr>");
+}
 
   for (var i = 0; i < numPlugins; i++)
   {

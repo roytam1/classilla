@@ -152,6 +152,13 @@ NS_NewHTMLAnchorElement(nsIHTMLContent** aInstancePtrResult,
   }
 
   nsresult rv = it->Init(aNodeInfo);
+  
+#if(0)
+  // REMOVE ME
+  if (!aNodeInfo->GetDocument()) {
+  	return NS_ERROR_FAILURE;
+  }
+#endif
 
   if (NS_FAILED(rv)) {
     delete it;
@@ -418,10 +425,19 @@ nsHTMLAnchorElement::GetProtocol(nsAString& aProtocol)
   if (NS_FAILED(rv))
     return rv;
 
+// bug 211634
+#if(0)
   nsCOMPtr<nsIDocument> doc;
   mNodeInfo->GetDocument(*getter_AddRefs(doc));
 
   return GetProtocolFromHrefString(href, aProtocol, doc);
+#else
+  // XXX this should really use GetHrefURI and not do so much string stuff
+  return GetProtocolFromHrefString(href, aProtocol,
+                                   nsGenericHTMLContainerElement::GetOwnerDocument());
+#endif
+// end bug
+
 }
 
 NS_IMETHODIMP

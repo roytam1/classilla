@@ -610,7 +610,10 @@ nsHTMLBodyElement::StringToAttribute(nsIAtom* aAttribute,
       (aAttribute == nsHTMLAtoms::link) ||
       (aAttribute == nsHTMLAtoms::alink) ||
       (aAttribute == nsHTMLAtoms::vlink)) {
-    if (aResult.ParseColor(aValue, mDocument)) {
+// bug 211634/bug 211440 merged
+    if (aResult.ParseColor(aValue,
+                           nsGenericHTMLContainerElement::GetOwnerDocument())) {
+// end bugs
       return NS_CONTENT_ATTR_HAS_VALUE;
     }
   }

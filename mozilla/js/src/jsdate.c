@@ -1,36 +1,42 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*-
+ * vim: set ts=8 sw=4 et tw=78:
  *
- * The contents of this file are subject to the Netscape Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/NPL/
+ * ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
  *
  * The Original Code is Mozilla Communicator client code, released
  * March 31, 1998.
  *
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are
- * Copyright (C) 1998 Netscape Communications Corporation. All
- * Rights Reserved.
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998
+ * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
  *
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU Public License (the "GPL"), in which case the
- * provisions of the GPL are applicable instead of those above.
- * If you wish to allow use of your version of this file only
- * under the terms of the GPL and not to allow others to use your
- * version of this file under the NPL, indicate your decision by
- * deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL.  If you do not delete
- * the provisions above, a recipient may use your version of this
- * file under either the NPL or the GPL.
- */
+ * Alternatively, the contents of this file may be used under the terms of
+ * either of the GNU General Public License Version 2 or later (the "GPL"),
+ * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 /*
  * JS date methods.
@@ -47,6 +53,7 @@
 
 #include "jsstddef.h"
 #include <ctype.h>
+#include <locale.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -148,7 +155,7 @@
 #define SecondsPerHour  (MinutesPerHour * SecondsPerMinute)
 #define SecondsPerMinute 60.0
 
-#ifdef XP_PC
+#if defined(XP_WIN) || defined(XP_OS2)
 /* Work around msvc double optimization bug by making these runtime values; if
  * they're available at compile time, msvc optimizes division by them by
  * computing the reciprocal and multiplying instead of dividing - this loses
@@ -173,18 +180,18 @@ TimeWithinDay(jsdouble t)
     jsdouble result;
     result = fmod(t, msPerDay);
     if (result < 0)
-	result += msPerDay;
+        result += msPerDay;
     return result;
 }
 
 #define DaysInYear(y)   ((y) % 4 == 0 && ((y) % 100 || ((y) % 400 == 0))  \
-			 ? 366 : 365)
+                         ? 366 : 365)
 
 /* math here has to be f.p, because we need
  *  floor((1968 - 1969) / 4) == -1
  */
 #define DayFromYear(y)  (365 * ((y)-1970) + floor(((y)-1969)/4.0)            \
-			 - floor(((y)-1901)/100.0) + floor(((y)-1601)/400.0))
+                         - floor(((y)-1901)/100.0) + floor(((y)-1601)/400.0))
 #define TimeFromYear(y) (DayFromYear(y) * msPerDay)
 
 static jsint
@@ -225,28 +232,28 @@ MonthFromTime(jsdouble t)
     d = DayWithinYear(t, year);
 
     if (d < (step = 31))
-	return 0;
+        return 0;
     step += (InLeapYear(t) ? 29 : 28);
     if (d < step)
-	return 1;
+        return 1;
     if (d < (step += 31))
-	return 2;
+        return 2;
     if (d < (step += 30))
-	return 3;
+        return 3;
     if (d < (step += 31))
-	return 4;
+        return 4;
     if (d < (step += 30))
-	return 5;
+        return 5;
     if (d < (step += 31))
-	return 6;
+        return 6;
     if (d < (step += 31))
-	return 7;
+        return 7;
     if (d < (step += 30))
-	return 8;
+        return 8;
     if (d < (step += 31))
-	return 9;
+        return 9;
     if (d < (step += 30))
-	return 10;
+        return 10;
     return 11;
 }
 
@@ -258,38 +265,38 @@ DateFromTime(jsdouble t)
     d = DayWithinYear(t, year);
 
     if (d <= (next = 30))
-	return d + 1;
+        return d + 1;
     step = next;
     next += (InLeapYear(t) ? 29 : 28);
     if (d <= next)
-	return d - step;
+        return d - step;
     step = next;
     if (d <= (next += 31))
-	return d - step;
+        return d - step;
     step = next;
     if (d <= (next += 30))
-	return d - step;
+        return d - step;
     step = next;
     if (d <= (next += 31))
-	return d - step;
+        return d - step;
     step = next;
     if (d <= (next += 30))
-	return d - step;
+        return d - step;
     step = next;
     if (d <= (next += 31))
-	return d - step;
+        return d - step;
     step = next;
     if (d <= (next += 31))
-	return d - step;
+        return d - step;
     step = next;
     if (d <= (next += 30))
-	return d - step;
+        return d - step;
     step = next;
     if (d <= (next += 31))
-	return d - step;
+        return d - step;
     step = next;
     if (d <= (next += 30))
-	return d - step;
+        return d - step;
     step = next;
     return d - step;
 }
@@ -301,8 +308,71 @@ WeekDay(jsdouble t)
     result = (jsint) Day(t) + 4;
     result = result % 7;
     if (result < 0)
-	result += 7;
+        result += 7;
     return (intN) result;
+}
+
+#define MakeTime(hour, min, sec, ms) \
+((((hour) * MinutesPerHour + (min)) * SecondsPerMinute + (sec)) * msPerSecond + (ms))
+
+static jsdouble
+MakeDay(jsdouble year, jsdouble month, jsdouble date)
+{
+    JSBool leap;
+    jsdouble yearday;
+    jsdouble monthday;
+
+    year += floor(month / 12);
+
+    month = fmod(month, 12.0);
+    if (month < 0)
+        month += 12;
+
+    leap = (DaysInYear((jsint) year) == 366);
+
+    yearday = floor(TimeFromYear(year) / msPerDay);
+    monthday = DayFromMonth(month, leap);
+
+    return yearday + monthday + date - 1;
+}
+
+#define MakeDate(day, time) ((day) * msPerDay + (time))
+
+/*
+ * Years and leap years on which Jan 1 is a Sunday, Monday, etc.
+ *
+ * yearStartingWith[0][i] is an example non-leap year where
+ * Jan 1 appears on Sunday (i == 0), Monday (i == 1), etc.
+ *
+ * yearStartingWith[1][i] is an example leap year where
+ * Jan 1 appears on Sunday (i == 0), Monday (i == 1), etc.
+ */
+static jsint yearStartingWith[2][7] = {
+    {1978, 1973, 1974, 1975, 1981, 1971, 1977},
+    {1984, 1996, 1980, 1992, 1976, 1988, 1972}
+};
+
+/*
+ * Find a year for which any given date will fall on the same weekday.
+ *
+ * This function should be used with caution when used other than
+ * for determining DST; it hasn't been proven not to produce an
+ * incorrect year for times near year boundaries.
+ */
+static jsint
+EquivalentYearForDST(jsint year)
+{
+    jsint day;
+    JSBool isLeapYear;
+
+    day = (jsint) DayFromYear(year) + 4;
+    day = day % 7;
+    if (day < 0)
+        day += 7;
+
+    isLeapYear = (DaysInYear(year) == 366);
+
+    return yearStartingWith[isLeapYear][day];
 }
 
 /* LocalTZA gets set by js_InitDateClass() */
@@ -318,7 +388,20 @@ DaylightSavingTA(jsdouble t)
 
     /* abort if NaN */
     if (JSDOUBLE_IS_NaN(t))
-	return t;
+        return t;
+
+    /*
+     * If earlier than 1970 or after 2038, potentially beyond the ken of
+     * many OSes, map it to an equivalent year before asking.
+     */
+    if (t < 0.0 || t > 2145916800000.0) {
+        jsint year;
+        jsdouble day;
+
+        year = EquivalentYearForDST(YearFromTime(t));
+        day = MakeDay(year, MonthFromTime(t), DateFromTime(t));
+        t = MakeDate(day, TimeWithinDay(t));
+    }
 
     /* put our t in an LL, and map it to usec for prtime */
     JSLL_D2L(PR_t, t);
@@ -348,7 +431,7 @@ HourFromTime(jsdouble t)
 {
     intN result = (intN) fmod(floor(t/msPerHour), HoursPerDay);
     if (result < 0)
-	result += (intN)HoursPerDay;
+        result += (intN)HoursPerDay;
     return result;
 }
 
@@ -357,7 +440,7 @@ MinFromTime(jsdouble t)
 {
     intN result = (intN) fmod(floor(t / msPerMinute), MinutesPerHour);
     if (result < 0)
-	result += (intN)MinutesPerHour;
+        result += (intN)MinutesPerHour;
     return result;
 }
 
@@ -366,7 +449,7 @@ SecFromTime(jsdouble t)
 {
     intN result = (intN) fmod(floor(t / msPerSecond), SecondsPerMinute);
     if (result < 0)
-	result += (intN)SecondsPerMinute;
+        result += (intN)SecondsPerMinute;
     return result;
 }
 
@@ -375,43 +458,13 @@ msFromTime(jsdouble t)
 {
     intN result = (intN) fmod(t, msPerSecond);
     if (result < 0)
-	result += (intN)msPerSecond;
+        result += (intN)msPerSecond;
     return result;
 }
-
-#define MakeTime(hour, min, sec, ms) \
-(((hour * MinutesPerHour + min) * SecondsPerMinute + sec) * msPerSecond + ms)
-
-static jsdouble
-MakeDay(jsdouble year, jsdouble month, jsdouble date)
-{
-    jsdouble result;
-    JSBool leap;
-    jsdouble yearday;
-    jsdouble monthday;
-
-    year += floor(month / 12);
-
-    month = fmod(month, 12.0);
-    if (month < 0)
-	month += 12;
-
-    leap = (DaysInYear((jsint) year) == 366);
-
-    yearday = floor(TimeFromYear(year) / msPerDay);
-    monthday = DayFromMonth(month, leap);
-
-    result = yearday
-	     + monthday
-	     + date - 1;
-    return result;
-}
-
-#define MakeDate(day, time) (day * msPerDay + time)
 
 #define TIMECLIP(d) ((JSDOUBLE_IS_FINITE(d) \
-		      && !((d < 0 ? -d : d) > HalfTimeDomain)) \
-		     ? js_DoubleToInteger(d + (+0.)) : *cx->runtime->jsNaN)
+                      && !((d < 0 ? -d : d) > HalfTimeDomain)) \
+                     ? js_DoubleToInteger(d + (+0.)) : *cx->runtime->jsNaN)
 
 /**
  * end of ECMA 'support' functions
@@ -421,9 +474,19 @@ MakeDay(jsdouble year, jsdouble month, jsdouble date)
  * Other Support routines and definitions
  */
 
-static JSClass date_class = {
+/*
+ * We use the first reseved slot to store UTC time, and the second for caching
+ * the local time. The initial value of the cache entry is NaN.
+ */
+#define JSSLOT_UTC_TIME         JSSLOT_PRIVATE
+#define JSSLOT_LOCAL_TIME       (JSSLOT_PRIVATE + 1)
+
+#define DATE_RESERVED_SLOTS     2
+
+JSClass js_DateClass = {
     js_Date_str,
-    JSCLASS_HAS_PRIVATE,
+    JSCLASS_HAS_RESERVED_SLOTS(DATE_RESERVED_SLOTS) |
+    JSCLASS_HAS_CACHED_PROTO(JSProto_Date),
     JS_PropertyStub,  JS_PropertyStub,  JS_PropertyStub,  JS_PropertyStub,
     JS_EnumerateStub, JS_ResolveStub,   JS_ConvertStub,   JS_FinalizeStub,
     JSCLASS_NO_OPTIONAL_MEMBERS
@@ -431,7 +494,7 @@ static JSClass date_class = {
 
 /* for use by date_parse */
 
-static char* wtb[] = {
+static const char* wtb[] = {
     "am", "pm",
     "monday", "tuesday", "wednesday", "thursday", "friday",
     "saturday", "sunday",
@@ -458,28 +521,28 @@ static int ttb[] = {
 /* helper for date_parse */
 static JSBool
 date_regionMatches(const char* s1, int s1off, const jschar* s2, int s2off,
-		   int count, int ignoreCase)
+                   int count, int ignoreCase)
 {
     JSBool result = JS_FALSE;
     /* return true if matches, otherwise, false */
 
     while (count > 0 && s1[s1off] && s2[s2off]) {
-	if (ignoreCase) {
-	    if (JS_TOLOWER((jschar)s1[s1off]) != JS_TOLOWER(s2[s2off])) {
-		break;
-	    }
-	} else {
-	    if ((jschar)s1[s1off] != s2[s2off]) {
-		break;
-	    }
-	}
-	s1off++;
-	s2off++;
-	count--;
+        if (ignoreCase) {
+            if (JS_TOLOWER((jschar)s1[s1off]) != JS_TOLOWER(s2[s2off])) {
+                break;
+            }
+        } else {
+            if ((jschar)s1[s1off] != s2[s2off]) {
+                break;
+            }
+        }
+        s1off++;
+        s2off++;
+        count--;
     }
 
     if (count == 0) {
-	result = JS_TRUE;
+        result = JS_TRUE;
     }
 
     return result;
@@ -488,7 +551,7 @@ date_regionMatches(const char* s1, int s1off, const jschar* s2, int s2off,
 /* find UTC time from given date... no 1900 correction! */
 static jsdouble
 date_msecFromDate(jsdouble year, jsdouble mon, jsdouble mday, jsdouble hour,
-		  jsdouble min, jsdouble sec, jsdouble msec)
+                  jsdouble min, jsdouble sec, jsdouble msec)
 {
     jsdouble day;
     jsdouble msec_time;
@@ -499,48 +562,63 @@ date_msecFromDate(jsdouble year, jsdouble mon, jsdouble mday, jsdouble hour,
     result = MakeDate(day, msec_time);
     return result;
 }
-
-/*
- * See ECMA 15.9.4.[3-10];
- */
-/* XXX this function must be above date_parseString to avoid a
-   horrid bug in the Win16 1.52 compiler */
+
+/* compute the time in msec (unclipped) from the given args */
 #define MAXARGS        7
+
 static JSBool
-date_UTC(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+date_msecFromArgs(JSContext *cx, uintN argc, jsval *argv, jsdouble *rval)
 {
-    jsdouble array[MAXARGS];
     uintN loop;
+    jsdouble array[MAXARGS];
     jsdouble d;
+    jsdouble msec_time;
 
     for (loop = 0; loop < MAXARGS; loop++) {
-	if (loop < argc) {
-	    if (!js_ValueToNumber(cx, argv[loop], &d))
-		return JS_FALSE;
-	    /* return NaN if any arg is NaN */
-	    if (!JSDOUBLE_IS_FINITE(d)) {
-		return js_NewNumberValue(cx, d, rval);
-	    }
-	    array[loop] = floor(d);
-	} else {
-	    array[loop] = 0;
-	}
+        if (loop < argc) {
+            d = js_ValueToNumber(cx, &argv[loop]);
+            if (JSVAL_IS_NULL(argv[loop]))
+                return JS_FALSE;
+            /* return NaN if any arg is not finite */
+            if (!JSDOUBLE_IS_FINITE(d)) {
+                *rval = *cx->runtime->jsNaN;
+                return JS_TRUE;
+            }
+            array[loop] = js_DoubleToInteger(d);
+        } else {
+            if (loop == 2) {
+                array[loop] = 1; /* Default the date argument to 1. */
+            } else {
+                array[loop] = 0;
+            }
+        }
     }
 
     /* adjust 2-digit years into the 20th century */
     if (array[0] >= 0 && array[0] <= 99)
-	array[0] += 1900;
+        array[0] += 1900;
 
-    /* if we got a 0 for 'date' (which is out of range)
-     * pretend it's a 1.  (So Date.UTC(1972, 5) works) */
-    if (array[2] < 1)
-	array[2] = 1;
+    msec_time = date_msecFromDate(array[0], array[1], array[2],
+                                  array[3], array[4], array[5], array[6]);
+    *rval = msec_time;
+    return JS_TRUE;
+}
 
-    d = date_msecFromDate(array[0], array[1], array[2],
-			      array[3], array[4], array[5], array[6]);
-    d = TIMECLIP(d);
+
+/*
+ * See ECMA 15.9.4.[3-10];
+ */
+static JSBool
+date_UTC(JSContext *cx, uintN argc, jsval *vp)
+{
+    jsdouble msec_time;
 
-    return js_NewNumberValue(cx, d, rval);
+    if (!date_msecFromArgs(cx, argc, vp + 2, &msec_time))
+        return JS_FALSE;
+
+    msec_time = TIMECLIP(msec_time);
+
+    return js_NewNumberInRootedValue(cx, msec_time, vp);
 }
 
 static JSBool
@@ -548,8 +626,8 @@ date_parseString(JSString *str, jsdouble *result)
 {
     jsdouble msec;
 
-    const jschar *s = JSSTRING_CHARS(str);
-    size_t limit = JSSTRING_LENGTH(str);
+    const jschar *s;
+    size_t limit;
     size_t i = 0;
     int year = -1;
     int mon = -1;
@@ -559,118 +637,124 @@ date_parseString(JSString *str, jsdouble *result)
     int sec = -1;
     int c = -1;
     int n = -1;
-    jsdouble tzoffset = -1;  /* was an int, overflowed on win16!!! */
+    int tzoffset = -1;
     int prevc = 0;
     JSBool seenplusminus = JS_FALSE;
+    int temp;
+    JSBool seenmonthname = JS_FALSE;
 
+    JSSTRING_CHARS_AND_LENGTH(str, s, limit);
     if (limit == 0)
-	goto syntax;
+        goto syntax;
     while (i < limit) {
-	c = s[i];
-	i++;
-	if (c <= ' ' || c == ',' || c == '-') {
-	    if (c == '-' && '0' <= s[i] && s[i] <= '9') {
-	      prevc = c;
-	    }
-	    continue;
-	}
-	if (c == '(') { /* comments) */
-	    int depth = 1;
-	    while (i < limit) {
-		c = s[i];
-		i++;
-		if (c == '(') depth++;
-		else if (c == ')')
-		    if (--depth <= 0)
-			break;
-	    }
-	    continue;
-	}
-	if ('0' <= c && c <= '9') {
-	    n = c - '0';
-	    while (i < limit && '0' <= (c = s[i]) && c <= '9') {
-		n = n * 10 + c - '0';
-		i++;
-	    }
+        c = s[i];
+        i++;
+        if (c <= ' ' || c == ',' || c == '-') {
+            if (c == '-' && '0' <= s[i] && s[i] <= '9') {
+              prevc = c;
+            }
+            continue;
+        }
+        if (c == '(') { /* comments) */
+            int depth = 1;
+            while (i < limit) {
+                c = s[i];
+                i++;
+                if (c == '(') depth++;
+                else if (c == ')')
+                    if (--depth <= 0)
+                        break;
+            }
+            continue;
+        }
+        if ('0' <= c && c <= '9') {
+            n = c - '0';
+            while (i < limit && '0' <= (c = s[i]) && c <= '9') {
+                n = n * 10 + c - '0';
+                i++;
+            }
 
-	    /* allow TZA before the year, so
-	     * 'Wed Nov 05 21:49:11 GMT-0800 1997'
-	     * works */
+            /* allow TZA before the year, so
+             * 'Wed Nov 05 21:49:11 GMT-0800 1997'
+             * works */
 
-	    /* uses of seenplusminus allow : in TZA, so Java
-	     * no-timezone style of GMT+4:30 works
-	     */
+            /* uses of seenplusminus allow : in TZA, so Java
+             * no-timezone style of GMT+4:30 works
+             */
 
-	    if ((prevc == '+' || prevc == '-')/*  && year>=0 */) {
-		/* make ':' case below change tzoffset */
-		seenplusminus = JS_TRUE;
+            if ((prevc == '+' || prevc == '-')/*  && year>=0 */) {
+                /* make ':' case below change tzoffset */
+                seenplusminus = JS_TRUE;
 
-		/* offset */
-		if (n < 24)
-		    n = n * 60; /* EG. "GMT-3" */
-		else
-		    n = n % 100 + n / 100 * 60; /* eg "GMT-0430" */
-		if (prevc == '+')       /* plus means east of GMT */
-		    n = -n;
-		if (tzoffset != 0 && tzoffset != -1)
-		    goto syntax;
-		tzoffset = n;
-	    } else if (n >= 70 ||
-		       (prevc == '/' && mon >= 0 && mday >= 0 && year < 0)) {
-		if (year >= 0)
-		    goto syntax;
-		else if (c <= ' ' || c == ',' || c == '/' || i >= limit)
-		    year = n < 100 ? n + 1900 : n;
-		else
-		    goto syntax;
-	    } else if (c == ':') {
-		if (hour < 0)
-		    hour = /*byte*/ n;
-		else if (min < 0)
-		    min = /*byte*/ n;
-		else
-		    goto syntax;
-	    } else if (c == '/') {
-		if (mon < 0)
-		    mon = /*byte*/ n-1;
-		else if (mday < 0)
-		    mday = /*byte*/ n;
-		else
-		    goto syntax;
-	    } else if (i < limit && c != ',' && c > ' ' && c != '-') {
-		goto syntax;
-	    } else if (seenplusminus && n < 60) {  /* handle GMT-3:30 */
-		if (tzoffset < 0)
-		    tzoffset -= n;
-		else
-		    tzoffset += n;
-	    } else if (hour >= 0 && min < 0) {
-		min = /*byte*/ n;
-	    } else if (min >= 0 && sec < 0) {
-		sec = /*byte*/ n;
-	    } else if (mday < 0) {
-		mday = /*byte*/ n;
-	    } else {
-		goto syntax;
-	    }
-	    prevc = 0;
-	} else if (c == '/' || c == ':' || c == '+' || c == '-') {
-	    prevc = c;
-	} else {
-	    size_t st = i - 1;
-	    int k;
-	    while (i < limit) {
-		c = s[i];
-		if (!(('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z')))
-		    break;
-		i++;
-	    }
-	    if (i <= st + 1)
-		goto syntax;
-	    for (k = (sizeof(wtb)/sizeof(char*)); --k >= 0;)
-		if (date_regionMatches(wtb[k], 0, s, st, i-st, 1)) {
-		    int action = ttb[k];
-		    if (action != 0) {
+                /* offset */
+                if (n < 24)
+                    n = n * 60; /* EG. "GMT-3" */
+                else
+                    n = n % 100 + n / 100 * 60; /* eg "GMT-0430" */
+                if (prevc == '+')       /* plus means east of GMT */
+                    n = -n;
+                if (tzoffset != 0 && tzoffset != -1)
+                    goto syntax;
+                tzoffset = n;
+            } else if (prevc == '/' && mon >= 0 && mday >= 0 && year < 0) {
+                if (c <= ' ' || c == ',' || c == '/' || i >= limit)
+                    year = n;
+                else
+                    goto syntax;
+            } else if (c == ':') {
+                if (hour < 0)
+                    hour = /*byte*/ n;
+                else if (min < 0)
+                    min = /*byte*/ n;
+                else
+                    goto syntax;
+            } else if (c == '/') {
+                /* until it is determined that mon is the actual
+                   month, keep it as 1-based rather than 0-based */
+                if (mon < 0)
+                    mon = /*byte*/ n;
+                else if (mday < 0)
+                    mday = /*byte*/ n;
+                else
+                    goto syntax;
+            } else if (i < limit && c != ',' && c > ' ' && c != '-' && c != '(') {
+                goto syntax;
+            } else if (seenplusminus && n < 60) {  /* handle GMT-3:30 */
+                if (tzoffset < 0)
+                    tzoffset -= n;
+                else
+                    tzoffset += n;
+            } else if (hour >= 0 && min < 0) {
+                min = /*byte*/ n;
+            } else if (prevc == ':' && min >= 0 && sec < 0) {
+                sec = /*byte*/ n;
+            } else if (mon < 0) {
+                mon = /*byte*/n;
+            } else if (mon >= 0 && mday < 0) {
+                mday = /*byte*/ n;
+            } else if (mon >= 0 && mday >= 0 && year < 0) {
+                year = n;
+            } else {
+                goto syntax;
+            }
+            prevc = 0;
+        } else if (c == '/' || c == ':' || c == '+' || c == '-') {
+            prevc = c;
+        } else {
+            size_t st = i - 1;
+            int k;
+            while (i < limit) {
+                c = s[i];
+                if (!(('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z')))
+                    break;
+                i++;
+            }
+            if (i <= st + 1)
+                goto syntax;
+            for (k = JS_ARRAY_LENGTH(wtb); --k >= 0;)
+                if (date_regionMatches(wtb[k], 0, s, st, i-st, 1)) {
+                    int action = ttb[k];
+                    if (action != 0) {
                         if (action < 0) {
                             /*
                              * AM/PM. Count 12:30 AM as 00:30, 12:30 PM as
@@ -686,37 +770,113 @@ date_parseString(JSString *str, jsdouble *result)
                                     hour += 12;
                                 }
                             }
-			} else if (action <= 13) { /* month! */
-			    if (mon < 0) {
-				mon = /*byte*/ (action - 2);
-			    } else {
-				goto syntax;
-			    }
-			} else {
-			    tzoffset = action - 10000;
-			}
-		    }
-		    break;
-		}
-	    if (k < 0)
-		goto syntax;
-	    prevc = 0;
-	}
+                        } else if (action <= 13) { /* month! */
+                            /* Adjust mon to be 1-based until the final values
+                               for mon, mday and year are adjusted below */
+                            if (seenmonthname) {
+                                goto syntax;
+                            }
+                            seenmonthname = JS_TRUE;
+                            temp = /*byte*/ (action - 2) + 1;
+
+                            if (mon < 0) {
+                                mon = temp;
+                            } else if (mday < 0) {
+                                mday = mon;
+                                mon = temp;
+                            } else if (year < 0) {
+                                year = mon;
+                                mon = temp;
+                            } else {
+                                goto syntax;
+                            }
+                        } else {
+                            tzoffset = action - 10000;
+                        }
+                    }
+                    break;
+                }
+            if (k < 0)
+                goto syntax;
+            prevc = 0;
+        }
     }
     if (year < 0 || mon < 0 || mday < 0)
-	goto syntax;
+        goto syntax;
+    /*
+      Case 1. The input string contains an English month name.
+              The form of the string can be month f l, or f month l, or
+              f l month which each evaluate to the same date.
+              If f and l are both greater than or equal to 70, or
+              both less than 70, the date is invalid.
+              The year is taken to be the greater of the values f, l.
+              If the year is greater than or equal to 70 and less than 100,
+              it is considered to be the number of years after 1900.
+      Case 2. The input string is of the form "f/m/l" where f, m and l are
+              integers, e.g. 7/16/45.
+              Adjust the mon, mday and year values to achieve 100% MSIE
+              compatibility.
+              a. If 0 <= f < 70, f/m/l is interpreted as month/day/year.
+                 i.  If year < 100, it is the number of years after 1900
+                 ii. If year >= 100, it is the number of years after 0.
+              b. If 70 <= f < 100
+                 i.  If m < 70, f/m/l is interpreted as
+                     year/month/day where year is the number of years after
+                     1900.
+                 ii. If m >= 70, the date is invalid.
+              c. If f >= 100
+                 i.  If m < 70, f/m/l is interpreted as
+                     year/month/day where year is the number of years after 0.
+                 ii. If m >= 70, the date is invalid.
+    */
+    if (seenmonthname) {
+        if ((mday >= 70 && year >= 70) || (mday < 70 && year < 70)) {
+            goto syntax;
+        }
+        if (mday > year) {
+            temp = year;
+            year = mday;
+            mday = temp;
+        }
+        if (year >= 70 && year < 100) {
+            year += 1900;
+        }
+    } else if (mon < 70) { /* (a) month/day/year */
+        if (year < 100) {
+            year += 1900;
+        }
+    } else if (mon < 100) { /* (b) year/month/day */
+        if (mday < 70) {
+            temp = year;
+            year = mon + 1900;
+            mon = mday;
+            mday = temp;
+        } else {
+            goto syntax;
+        }
+    } else { /* (c) year/month/day */
+        if (mday < 70) {
+            temp = year;
+            year = mon;
+            mon = mday;
+            mday = temp;
+        } else {
+            goto syntax;
+        }
+    }
+    mon -= 1; /* convert month to 0-based */
     if (sec < 0)
-	sec = 0;
+        sec = 0;
     if (min < 0)
-	min = 0;
+        min = 0;
     if (hour < 0)
-	hour = 0;
+        hour = 0;
     if (tzoffset == -1) { /* no time zone specified, have to use local */
-	jsdouble msec_time;
-	msec_time = date_msecFromDate(year, mon, mday, hour, min, sec, 0);
+        jsdouble msec_time;
+        msec_time = date_msecFromDate(year, mon, mday, hour, min, sec, 0);
 
-	*result = UTC(msec_time);
-	return JS_TRUE;
+        *result = UTC(msec_time);
+        return JS_TRUE;
     }
 
     msec = date_msecFromDate(year, mon, mday, hour, min, sec, 0);
@@ -731,25 +891,25 @@ syntax:
 }
 
 static JSBool
-date_parse(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+date_parse(JSContext *cx, uintN argc, jsval *vp)
 {
     JSString *str;
     jsdouble result;
 
-    str = js_ValueToString(cx, argv[0]);
+    str = js_ValueToString(cx, vp[2]);
     if (!str)
-	return JS_FALSE;
+        return JS_FALSE;
     if (!date_parseString(str, &result)) {
-	*rval = DOUBLE_TO_JSVAL(cx->runtime->jsNaN);
-	return JS_TRUE;
+        *vp = DOUBLE_TO_JSVAL(cx->runtime->jsNaN);
+        return JS_TRUE;
     }
 
     result = TIMECLIP(result);
-    return js_NewNumberValue(cx, result, rval);
+    return js_NewNumberInRootedValue(cx, result, vp);
 }
 
 static JSBool
-date_now(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+date_now(JSContext *cx, uintN argc, jsval *vp)
 {
     int64 us, ms, us2ms;
     jsdouble msec_time;
@@ -759,351 +919,361 @@ date_now(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
     JSLL_DIV(ms, us, us2ms);
     JSLL_L2D(msec_time, ms);
 
-    return js_NewDoubleValue(cx, msec_time, rval);
+    return js_NewDoubleInRootedValue(cx, msec_time, vp);
 }
 
 /*
- * Check that obj is an object of class Date, and get the date value.
- * Return NULL on failure.
+ * Get UTC time from the date object. Returns false if the object is not
+ * Date type.
  */
-static jsdouble *
-date_getProlog(JSContext *cx, JSObject *obj, jsval *argv)
+static JSBool
+GetUTCTime(JSContext *cx, JSObject *obj, jsval *vp, jsdouble *dp)
 {
-    if (!JS_InstanceOf(cx, obj, &date_class, argv))
-	return NULL;
-    return JSVAL_TO_DOUBLE(OBJ_GET_SLOT(cx, obj, JSSLOT_PRIVATE));
+    if (!JS_InstanceOf(cx, obj, &js_DateClass, vp ? vp + 2 : NULL))
+        return JS_FALSE;
+    *dp = *JSVAL_TO_DOUBLE(obj->fslots[JSSLOT_UTC_TIME]);
+    return JS_TRUE;
+}
+
+/*
+ * Set UTC time slot with a pointer pointing to a jsdouble. This function is
+ * used only for setting UTC time to some predefined values, such as NaN.
+ *
+ * It also invalidates cached local time.
+ */
+static JSBool
+SetUTCTimePtr(JSContext *cx, JSObject *obj, jsval *vp, jsdouble *dp)
+{
+    if (vp && !JS_InstanceOf(cx, obj, &js_DateClass, vp + 2))
+        return JS_FALSE;
+    JS_ASSERT_IF(!vp, STOBJ_GET_CLASS(obj) == &js_DateClass);
+
+    /* Invalidate local time cache. */
+    obj->fslots[JSSLOT_LOCAL_TIME] = DOUBLE_TO_JSVAL(cx->runtime->jsNaN);
+    obj->fslots[JSSLOT_UTC_TIME] = DOUBLE_TO_JSVAL(dp);
+    return JS_TRUE;
+}
+
+/*
+ * Set UTC time to a given time.
+ */
+static JSBool
+SetUTCTime(JSContext *cx, JSObject *obj, jsval *vp, jsdouble t)
+{
+    jsdouble *dp = js_NewWeaklyRootedDouble(cx, t);
+    if (!dp)
+        return JS_FALSE;
+    return SetUTCTimePtr(cx, obj, vp, dp);
+}
+
+/*
+ * Get the local time, cache it if necessary. If UTC time is not finite
+ * (e.g., NaN), the local time slot is set to the UTC time without conversion.
+ */
+static JSBool
+GetAndCacheLocalTime(JSContext *cx, JSObject *obj, jsval *vp, jsdouble *dp)
+{
+    jsval v;
+    jsdouble result;
+    jsdouble *cached;
+
+    if (!obj || !JS_InstanceOf(cx, obj, &js_DateClass, vp ? vp + 2 : NULL))
+        return JS_FALSE;
+    v = obj->fslots[JSSLOT_LOCAL_TIME];
+
+    result = *JSVAL_TO_DOUBLE(v);
+
+    if (JSDOUBLE_IS_NaN(result)) {
+        if (!GetUTCTime(cx, obj, vp, &result))
+            return JS_FALSE;
+
+        /* if result is NaN, it couldn't be finite. */
+        if (JSDOUBLE_IS_FINITE(result))
+            result = LocalTime(result);
+
+        cached = js_NewWeaklyRootedDouble(cx, result);
+        if (!cached)
+            return JS_FALSE;
+
+        obj->fslots[JSSLOT_LOCAL_TIME] = DOUBLE_TO_JSVAL(cached);
+    }
+
+    *dp = result;
+    return JS_TRUE;
 }
 
 /*
  * See ECMA 15.9.5.4 thru 15.9.5.23
  */
 static JSBool
-date_getTime(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+date_getTime(JSContext *cx, uintN argc, jsval *vp)
 {
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
+    jsdouble result;
 
-    return js_NewNumberValue(cx, *date, rval);
+    return GetUTCTime(cx, JS_THIS_OBJECT(cx, vp), vp, &result) &&
+           js_NewNumberInRootedValue(cx, result, vp);
 }
 
 static JSBool
-date_getYear(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+GetYear(JSContext *cx, JSBool fullyear, jsval *vp)
 {
     jsdouble result;
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
-    result = *date;
 
-    if (!JSDOUBLE_IS_FINITE(result))
-	return js_NewNumberValue(cx, result, rval);
+    if (!GetAndCacheLocalTime(cx, JS_THIS_OBJECT(cx, vp), vp, &result))
+        return JS_FALSE;
 
-    result = YearFromTime(LocalTime(result));
+    if (JSDOUBLE_IS_FINITE(result)) {
+        result = YearFromTime(result);
 
-    /*
-     * During the great date rewrite of 1.3, we tried to track the evolving ECMA
-     * standard, which then had a definition of getYear which always subtracted
-     * 1900.  Which we implemented, not realizing that it was incompatible with
-     * the old behavior...  now, rather than thrash the behavior yet again,
-     * we've decided to leave it with the - 1900 behavior and point people to
-     * the getFullYear method.  But we try to protect existing scripts that
-     * have specified a version...
-     */
-    if (cx->version == JSVERSION_1_0 ||
-        cx->version == JSVERSION_1_1 ||
-        cx->version == JSVERSION_1_2)
-    {
-        if (result >= 1900 && result < 2000)
+        /* Follow ECMA-262 to the letter, contrary to IE JScript. */
+        if (!fullyear)
             result -= 1900;
-    } else {
-        result -= 1900;
     }
-    return js_NewNumberValue(cx, result, rval);
+
+    return js_NewNumberInRootedValue(cx, result, vp);
 }
 
 static JSBool
-date_getFullYear(JSContext *cx, JSObject *obj, uintN argc, jsval *argv,
-		 jsval *rval)
+date_getYear(JSContext *cx, uintN argc, jsval *vp)
 {
-    jsdouble result;
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
-    result = *date;
-
-    if (!JSDOUBLE_IS_FINITE(result))
-	return js_NewNumberValue(cx, result, rval);
-
-    result = YearFromTime(LocalTime(result));
-    return js_NewNumberValue(cx, result, rval);
+    return GetYear(cx, JS_FALSE, vp);
 }
 
 static JSBool
-date_getUTCFullYear(JSContext *cx, JSObject *obj, uintN argc, jsval *argv,
-		    jsval *rval)
+date_getFullYear(JSContext *cx, uintN argc, jsval *vp)
 {
-    jsdouble result;
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
-    result = *date;
-
-    if (!JSDOUBLE_IS_FINITE(result))
-	return js_NewNumberValue(cx, result, rval);
-
-    result = YearFromTime(result);
-    return js_NewNumberValue(cx, result, rval);
+    return GetYear(cx, JS_TRUE, vp);
 }
 
 static JSBool
-date_getMonth(JSContext *cx, JSObject *obj, uintN argc, jsval *argv,
-	      jsval *rval)
+date_getUTCFullYear(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble result;
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
-    result = *date;
 
-    if (!JSDOUBLE_IS_FINITE(result))
-	return js_NewNumberValue(cx, result, rval);
+    if (!GetUTCTime(cx, JS_THIS_OBJECT(cx, vp), vp, &result))
+        return JS_FALSE;
 
-    result = MonthFromTime(LocalTime(result));
-    return js_NewNumberValue(cx, result, rval);
+    if (JSDOUBLE_IS_FINITE(result))
+        result = YearFromTime(result);
+
+    return js_NewNumberInRootedValue(cx, result, vp);
 }
 
 static JSBool
-date_getUTCMonth(JSContext *cx, JSObject *obj, uintN argc, jsval *argv,
-		 jsval *rval)
+date_getMonth(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble result;
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
-    result = *date;
 
-    if (!JSDOUBLE_IS_FINITE(result))
-	return js_NewNumberValue(cx, result, rval);
+    if (!GetAndCacheLocalTime(cx, JS_THIS_OBJECT(cx, vp), vp, &result))
+        return JS_FALSE;
 
-    result = MonthFromTime(result);
-    return js_NewNumberValue(cx, result, rval);
+    if (JSDOUBLE_IS_FINITE(result))
+        result = MonthFromTime(result);
+
+    return js_NewNumberInRootedValue(cx, result, vp);
 }
 
 static JSBool
-date_getDate(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+date_getUTCMonth(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble result;
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
-    result = *date;
 
-    if (!JSDOUBLE_IS_FINITE(result))
-	return js_NewNumberValue(cx, result, rval);
+    if (!GetUTCTime(cx, JS_THIS_OBJECT(cx, vp), vp, &result))
+        return JS_FALSE;
 
-    result = LocalTime(result);
-    result = DateFromTime(result);
-    return js_NewNumberValue(cx, result, rval);
+    if (JSDOUBLE_IS_FINITE(result))
+        result = MonthFromTime(result);
+
+    return js_NewNumberInRootedValue(cx, result, vp);
 }
 
 static JSBool
-date_getUTCDate(JSContext *cx, JSObject *obj, uintN argc, jsval *argv,
-		jsval *rval)
+date_getDate(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble result;
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
-    result = *date;
 
-    if (!JSDOUBLE_IS_FINITE(result))
-	return js_NewNumberValue(cx, result, rval);
+    if (!GetAndCacheLocalTime(cx, JS_THIS_OBJECT(cx, vp), vp, &result))
+        return JS_FALSE;
 
-    result = DateFromTime(result);
-    return js_NewNumberValue(cx, result, rval);
+    if (JSDOUBLE_IS_FINITE(result))
+        result = DateFromTime(result);
+
+    return js_NewNumberInRootedValue(cx, result, vp);
 }
 
 static JSBool
-date_getDay(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+date_getUTCDate(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble result;
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
-    result = *date;
 
-    if (!JSDOUBLE_IS_FINITE(result))
-	return js_NewNumberValue(cx, result, rval);
+    if (!GetUTCTime(cx, JS_THIS_OBJECT(cx, vp), vp, &result))
+        return JS_FALSE;
 
-    result = LocalTime(result);
-    result = WeekDay(result);
-    return js_NewNumberValue(cx, result, rval);
+    if (JSDOUBLE_IS_FINITE(result))
+        result = DateFromTime(result);
+
+    return js_NewNumberInRootedValue(cx, result, vp);
 }
 
 static JSBool
-date_getUTCDay(JSContext *cx, JSObject *obj, uintN argc, jsval *argv,
-	       jsval *rval)
+date_getDay(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble result;
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
-    result = *date;
 
-    if (!JSDOUBLE_IS_FINITE(result))
-	return js_NewNumberValue(cx, result, rval);
+    if (!GetAndCacheLocalTime(cx, JS_THIS_OBJECT(cx, vp), vp, &result))
+        return JS_FALSE;
 
-    result = WeekDay(result);
-    return js_NewNumberValue(cx, result, rval);
+    if (JSDOUBLE_IS_FINITE(result))
+        result = WeekDay(result);
+
+    return js_NewNumberInRootedValue(cx, result, vp);
 }
 
 static JSBool
-date_getHours(JSContext *cx, JSObject *obj, uintN argc, jsval *argv,
-	      jsval *rval)
+date_getUTCDay(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble result;
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
-    result = *date;
 
-    if (!JSDOUBLE_IS_FINITE(result))
-	return js_NewNumberValue(cx, result, rval);
+    if (!GetUTCTime(cx, JS_THIS_OBJECT(cx, vp), vp, &result))
+        return JS_FALSE;
 
-    result = HourFromTime(LocalTime(result));
-    return js_NewNumberValue(cx, result, rval);
+    if (JSDOUBLE_IS_FINITE(result))
+        result = WeekDay(result);
+
+    return js_NewNumberInRootedValue(cx, result, vp);
 }
 
 static JSBool
-date_getUTCHours(JSContext *cx, JSObject *obj, uintN argc, jsval *argv,
-		 jsval *rval)
+date_getHours(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble result;
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
-    result = *date;
 
-    if (!JSDOUBLE_IS_FINITE(result))
-	return js_NewNumberValue(cx, result, rval);
+    if (!GetAndCacheLocalTime(cx, JS_THIS_OBJECT(cx, vp), vp, &result))
+        return JS_FALSE;
 
-    result = HourFromTime(result);
-    return js_NewNumberValue(cx, result, rval);
+    if (JSDOUBLE_IS_FINITE(result))
+        result = HourFromTime(result);
+
+    return js_NewNumberInRootedValue(cx, result, vp);
 }
 
 static JSBool
-date_getMinutes(JSContext *cx, JSObject *obj, uintN argc, jsval *argv,
-		jsval *rval)
+date_getUTCHours(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble result;
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
-    result = *date;
 
-    if (!JSDOUBLE_IS_FINITE(result))
-	return js_NewNumberValue(cx, result, rval);
+    if (!GetUTCTime(cx, JS_THIS_OBJECT(cx, vp), vp, &result))
+        return JS_FALSE;
 
-    result = MinFromTime(LocalTime(result));
-    return js_NewNumberValue(cx, result, rval);
+    if (JSDOUBLE_IS_FINITE(result))
+        result = HourFromTime(result);
+
+    return js_NewNumberInRootedValue(cx, result, vp);
 }
 
 static JSBool
-date_getUTCMinutes(JSContext *cx, JSObject *obj, uintN argc, jsval *argv,
-		   jsval *rval)
+date_getMinutes(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble result;
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
-    result = *date;
 
-    if (!JSDOUBLE_IS_FINITE(result))
-	return js_NewNumberValue(cx, result, rval);
+    if (!GetAndCacheLocalTime(cx, JS_THIS_OBJECT(cx, vp), vp, &result))
+        return JS_FALSE;
 
-    result = MinFromTime(result);
-    return js_NewNumberValue(cx, result, rval);
+    if (JSDOUBLE_IS_FINITE(result))
+        result = MinFromTime(result);
+
+    return js_NewNumberInRootedValue(cx, result, vp);
+}
+
+static JSBool
+date_getUTCMinutes(JSContext *cx, uintN argc, jsval *vp)
+{
+    jsdouble result;
+
+    if (!GetUTCTime(cx, JS_THIS_OBJECT(cx, vp), vp, &result))
+        return JS_FALSE;
+
+    if (JSDOUBLE_IS_FINITE(result))
+        result = MinFromTime(result);
+
+    return js_NewNumberInRootedValue(cx, result, vp);
 }
 
 /* Date.getSeconds is mapped to getUTCSeconds */
 
 static JSBool
-date_getUTCSeconds(JSContext *cx, JSObject *obj, uintN argc, jsval *argv,
-		jsval *rval)
+date_getUTCSeconds(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble result;
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
-    result = *date;
 
-    if (!JSDOUBLE_IS_FINITE(result))
-	return js_NewNumberValue(cx, result, rval);
+    if (!GetUTCTime(cx, JS_THIS_OBJECT(cx, vp), vp, &result))
+        return JS_FALSE;
 
-    result = SecFromTime(result);
-    return js_NewNumberValue(cx, result, rval);
+    if (JSDOUBLE_IS_FINITE(result))
+        result = SecFromTime(result);
+
+    return js_NewNumberInRootedValue(cx, result, vp);
 }
 
 /* Date.getMilliseconds is mapped to getUTCMilliseconds */
 
 static JSBool
-date_getUTCMilliseconds(JSContext *cx, JSObject *obj, uintN argc, jsval *argv,
-		     jsval *rval)
+date_getUTCMilliseconds(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble result;
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
-    result = *date;
 
-    if (!JSDOUBLE_IS_FINITE(result))
-	return js_NewNumberValue(cx, result, rval);
+    if (!GetUTCTime(cx, JS_THIS_OBJECT(cx, vp), vp, &result))
+        return JS_FALSE;
 
-    result = msFromTime(result);
-    return js_NewNumberValue(cx, result, rval);
+    if (JSDOUBLE_IS_FINITE(result))
+        result = msFromTime(result);
+
+    return js_NewNumberInRootedValue(cx, result, vp);
 }
 
 static JSBool
-date_getTimezoneOffset(JSContext *cx, JSObject *obj, uintN argc, jsval *argv,
-		       jsval *rval)
+date_getTimezoneOffset(JSContext *cx, uintN argc, jsval *vp)
 {
-    jsdouble result;
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
-    result = *date;
+    JSObject *obj;
+    jsdouble utctime, localtime, result;
+
+    obj = JS_THIS_OBJECT(cx, vp);
+    if (!GetUTCTime(cx, obj, vp, &utctime))
+        return JS_FALSE;
+    if (!GetAndCacheLocalTime(cx, obj, NULL, &localtime))
+        return JS_FALSE;
 
     /*
-     * Return the time zone offset in minutes for the current locale
-     * that is appropriate for this time. This value would be a
-     * constant except for daylight savings time.
+     * Return the time zone offset in minutes for the current locale that is
+     * appropriate for this time. This value would be a constant except for
+     * daylight savings time.
      */
-    result = (result - LocalTime(result)) / msPerMinute;
-    return js_NewNumberValue(cx, result, rval);
+    result = (utctime - localtime) / msPerMinute;
+    return js_NewNumberInRootedValue(cx, result, vp);
 }
 
 static JSBool
-date_setTime(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+date_setTime(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble result;
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
 
-    if (!js_ValueToNumber(cx, argv[0], &result))
-	return JS_FALSE;
+    result = js_ValueToNumber(cx, &vp[2]);
+    if (JSVAL_IS_NULL(vp[2]))
+        return JS_FALSE;
 
     result = TIMECLIP(result);
 
-    *date = result;
-    return js_NewNumberValue(cx, result, rval);
+    if (!SetUTCTime(cx, JS_THIS_OBJECT(cx, vp), vp, result))
+        return JS_FALSE;
+
+    return js_NewNumberInRootedValue(cx, result, vp);
 }
 
 static JSBool
-date_makeTime(JSContext *cx, JSObject *obj, uintN argc, jsval *argv,
-	      uintN maxargs, JSBool local, jsval *rval)
+date_makeTime(JSContext *cx, uintN maxargs, JSBool local, uintN argc, jsval *vp)
 {
+    JSObject *obj;
+    jsval *argv;
     uintN i;
     jsdouble args[4], *argp, *stop;
     jsdouble hour, min, sec, msec;
@@ -1112,17 +1282,16 @@ date_makeTime(JSContext *cx, JSObject *obj, uintN argc, jsval *argv,
     jsdouble msec_time;
     jsdouble result;
 
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
-
-    result = *date;
+    obj = JS_THIS_OBJECT(cx, vp);
+    if (!GetUTCTime(cx, obj, vp, &result))
+        return JS_FALSE;
 
     /* just return NaN if the date is already NaN */
     if (!JSDOUBLE_IS_FINITE(result))
-	return js_NewNumberValue(cx, result, rval);
+        return js_NewNumberInRootedValue(cx, result, vp);
 
-    /* Satisfy the ECMA rule that if a function is called with
+    /*
+     * Satisfy the ECMA rule that if a function is called with
      * fewer arguments than the specified formal arguments, the
      * remaining arguments are set to undefined.  Seems like all
      * the Date.setWhatever functions in ECMA are only varargs
@@ -1131,46 +1300,51 @@ date_makeTime(JSContext *cx, JSObject *obj, uintN argc, jsval *argv,
      * d.setMilliseconds()" returns NaN.  Blech.
      */
     if (argc == 0)
-	argc = 1;   /* should be safe, because length of all settors is 1 */
+        argc = 1;   /* should be safe, because length of all setters is 1 */
     else if (argc > maxargs)
-	argc = maxargs;  /* clamp argc */
+        argc = maxargs;  /* clamp argc */
+    JS_ASSERT(1 <= argc && argc <= 4);
 
+    argv = vp + 2;
     for (i = 0; i < argc; i++) {
-	if (!js_ValueToNumber(cx, argv[i], &args[i]))
-	    return JS_FALSE;
-	if (!JSDOUBLE_IS_FINITE(args[i])) {
-	    *date = *cx->runtime->jsNaN;
-	    return js_NewNumberValue(cx, *date, rval);
-	}
-	args[i] = js_DoubleToInteger(args[i]);
+        args[i] = js_ValueToNumber(cx, &argv[i]);
+        if (JSVAL_IS_NULL(argv[i]))
+            return JS_FALSE;
+        if (!JSDOUBLE_IS_FINITE(args[i])) {
+            if (!SetUTCTimePtr(cx, obj, NULL, cx->runtime->jsNaN))
+                return JS_FALSE;
+            *vp = DOUBLE_TO_JSVAL(cx->runtime->jsNaN);
+            return JS_TRUE;
+        }
+        args[i] = js_DoubleToInteger(args[i]);
     }
 
     if (local)
-	lorutime = LocalTime(result);
+        lorutime = LocalTime(result);
     else
-	lorutime = result;
+        lorutime = result;
 
     argp = args;
     stop = argp + argc;
     if (maxargs >= 4 && argp < stop)
-	hour = *argp++;
+        hour = *argp++;
     else
-	hour = HourFromTime(lorutime);
+        hour = HourFromTime(lorutime);
 
     if (maxargs >= 3 && argp < stop)
-	min = *argp++;
+        min = *argp++;
     else
-	min = MinFromTime(lorutime);
+        min = MinFromTime(lorutime);
 
     if (maxargs >= 2 && argp < stop)
-	sec = *argp++;
+        sec = *argp++;
     else
-	sec = SecFromTime(lorutime);
+        sec = SecFromTime(lorutime);
 
     if (maxargs >= 1 && argp < stop)
-	msec = *argp;
+        msec = *argp;
     else
-	msec = msFromTime(lorutime);
+        msec = msFromTime(lorutime);
 
     msec_time = MakeTime(hour, min, sec, msec);
     result = MakeDate(Day(lorutime), msec_time);
@@ -1178,224 +1352,219 @@ date_makeTime(JSContext *cx, JSObject *obj, uintN argc, jsval *argv,
 /*     fprintf(stderr, "%f\n", result); */
 
     if (local)
-	result = UTC(result);
+        result = UTC(result);
 
 /*     fprintf(stderr, "%f\n", result); */
 
-    *date = TIMECLIP(result);
-    return js_NewNumberValue(cx, *date, rval);
+    result = TIMECLIP(result);
+    if (!SetUTCTime(cx, obj, NULL, result))
+        return JS_FALSE;
+
+    return js_NewNumberInRootedValue(cx, result, vp);
 }
 
 static JSBool
-date_setMilliseconds(JSContext *cx, JSObject *obj, uintN argc,
-		     jsval *argv, jsval *rval)
+date_setMilliseconds(JSContext *cx, uintN argc, jsval *vp)
 {
-    return date_makeTime(cx, obj, argc, argv, 1, JS_TRUE, rval);
+    return date_makeTime(cx, 1, JS_TRUE, argc, vp);
 }
 
 static JSBool
-date_setUTCMilliseconds(JSContext *cx, JSObject *obj, uintN argc,
-			jsval *argv, jsval *rval)
+date_setUTCMilliseconds(JSContext *cx, uintN argc, jsval *vp)
 {
-    return date_makeTime(cx, obj, argc, argv, 1, JS_FALSE, rval);
+    return date_makeTime(cx, 1, JS_FALSE, argc, vp);
 }
 
 static JSBool
-date_setSeconds(JSContext *cx, JSObject *obj, uintN argc,
-		jsval *argv, jsval *rval)
+date_setSeconds(JSContext *cx, uintN argc, jsval *vp)
 {
-    return date_makeTime(cx, obj, argc, argv, 2, JS_TRUE, rval);
+    return date_makeTime(cx, 2, JS_TRUE, argc, vp);
 }
 
 static JSBool
-date_setUTCSeconds(JSContext *cx, JSObject *obj, uintN argc,
-		   jsval *argv, jsval *rval)
+date_setUTCSeconds(JSContext *cx, uintN argc, jsval *vp)
 {
-    return date_makeTime(cx, obj, argc, argv, 2, JS_FALSE, rval);
+    return date_makeTime(cx, 2, JS_FALSE, argc, vp);
 }
 
 static JSBool
-date_setMinutes(JSContext *cx, JSObject *obj, uintN argc,
-		jsval *argv, jsval *rval)
+date_setMinutes(JSContext *cx, uintN argc, jsval *vp)
 {
-    return date_makeTime(cx, obj, argc, argv, 3, JS_TRUE, rval);
+    return date_makeTime(cx, 3, JS_TRUE, argc, vp);
 }
 
 static JSBool
-date_setUTCMinutes(JSContext *cx, JSObject *obj, uintN argc,
-		   jsval *argv, jsval *rval)
+date_setUTCMinutes(JSContext *cx, uintN argc, jsval *vp)
 {
-    return date_makeTime(cx, obj, argc, argv, 3, JS_FALSE, rval);
+    return date_makeTime(cx, 3, JS_FALSE, argc, vp);
 }
 
 static JSBool
-date_setHours(JSContext *cx, JSObject *obj, uintN argc,
-	      jsval *argv, jsval *rval)
+date_setHours(JSContext *cx, uintN argc, jsval *vp)
 {
-    return date_makeTime(cx, obj, argc, argv, 4, JS_TRUE, rval);
+    return date_makeTime(cx, 4, JS_TRUE, argc, vp);
 }
 
 static JSBool
-date_setUTCHours(JSContext *cx, JSObject *obj, uintN argc,
-		 jsval *argv, jsval *rval)
+date_setUTCHours(JSContext *cx, uintN argc, jsval *vp)
 {
-    return date_makeTime(cx, obj, argc, argv, 4, JS_FALSE, rval);
+    return date_makeTime(cx, 4, JS_FALSE, argc, vp);
 }
 
 static JSBool
-date_makeDate(JSContext *cx, JSObject *obj, uintN argc,
-	      jsval *argv, uintN maxargs, JSBool local, jsval *rval)
+date_makeDate(JSContext *cx, uintN maxargs, JSBool local, uintN argc, jsval *vp)
 {
+    JSObject *obj;
+    jsval *argv;
     uintN i;
     jsdouble lorutime; /* local or UTC version of *date */
     jsdouble args[3], *argp, *stop;
     jsdouble year, month, day;
     jsdouble result;
 
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
-
-    result = *date;
+    obj = JS_THIS_OBJECT(cx, vp);
+    if (!GetUTCTime(cx, obj, vp, &result))
+        return JS_FALSE;
 
     /* see complaint about ECMA in date_MakeTime */
     if (argc == 0)
-	argc = 1;   /* should be safe, because length of all settors is 1 */
+        argc = 1;   /* should be safe, because length of all setters is 1 */
     else if (argc > maxargs)
-	argc = maxargs;   /* clamp argc */
+        argc = maxargs;   /* clamp argc */
+    JS_ASSERT(1 <= argc && argc <= 3);
 
+    argv = vp + 2;
     for (i = 0; i < argc; i++) {
-	if (!js_ValueToNumber(cx, argv[i], &args[i]))
-	    return JS_FALSE;
-	if (!JSDOUBLE_IS_FINITE(args[i])) {
-	    *date = *cx->runtime->jsNaN;
-	    return js_NewNumberValue(cx, *date, rval);
-	}
-	args[i] = js_DoubleToInteger(args[i]);
+        args[i] = js_ValueToNumber(cx, &argv[i]);
+        if (JSVAL_IS_NULL(argv[i]))
+            return JS_FALSE;
+        if (!JSDOUBLE_IS_FINITE(args[i])) {
+            if (!SetUTCTimePtr(cx, obj, NULL, cx->runtime->jsNaN))
+                return JS_FALSE;
+            *vp = DOUBLE_TO_JSVAL(cx->runtime->jsNaN);
+            return JS_TRUE;
+        }
+        args[i] = js_DoubleToInteger(args[i]);
     }
 
     /* return NaN if date is NaN and we're not setting the year,
      * If we are, use 0 as the time. */
     if (!(JSDOUBLE_IS_FINITE(result))) {
-	if (argc < 3)
-	    return js_NewNumberValue(cx, result, rval);
-	else
-	    lorutime = +0.;
+        if (maxargs < 3)
+            return js_NewNumberInRootedValue(cx, result, vp);
+        lorutime = +0.;
     } else {
-	if (local)
-	    lorutime = LocalTime(result);
-	else
-	    lorutime = result;
+        lorutime = local ? LocalTime(result) : result;
     }
 
     argp = args;
     stop = argp + argc;
     if (maxargs >= 3 && argp < stop)
-	year = *argp++;
+        year = *argp++;
     else
-	year = YearFromTime(lorutime);
+        year = YearFromTime(lorutime);
 
     if (maxargs >= 2 && argp < stop)
-	month = *argp++;
+        month = *argp++;
     else
-	month = MonthFromTime(lorutime);
+        month = MonthFromTime(lorutime);
 
     if (maxargs >= 1 && argp < stop)
-	day = *argp++;
+        day = *argp++;
     else
-	day = DateFromTime(lorutime);
+        day = DateFromTime(lorutime);
 
     day = MakeDay(year, month, day); /* day within year */
     result = MakeDate(day, TimeWithinDay(lorutime));
 
     if (local)
-	result = UTC(result);
+        result = UTC(result);
 
-    *date = TIMECLIP(result);
-    return js_NewNumberValue(cx, *date, rval);
+    result = TIMECLIP(result);
+    if (!SetUTCTime(cx, obj, NULL, result))
+        return JS_FALSE;
+
+    return js_NewNumberInRootedValue(cx, result, vp);
 }
 
 static JSBool
-date_setDate(JSContext *cx, JSObject *obj, uintN argc,
-	     jsval *argv, jsval *rval)
+date_setDate(JSContext *cx, uintN argc, jsval *vp)
 {
-    return date_makeDate(cx, obj, argc, argv, 1, JS_TRUE, rval);
+    return date_makeDate(cx, 1, JS_TRUE, argc, vp);
 }
 
 static JSBool
-date_setUTCDate(JSContext *cx, JSObject *obj, uintN argc,
-		jsval *argv, jsval *rval)
+date_setUTCDate(JSContext *cx, uintN argc, jsval *vp)
 {
-    return date_makeDate(cx, obj, argc, argv, 1, JS_FALSE, rval);
+    return date_makeDate(cx, 1, JS_FALSE, argc, vp);
 }
 
 static JSBool
-date_setMonth(JSContext *cx, JSObject *obj, uintN argc,
-	      jsval *argv, jsval *rval)
+date_setMonth(JSContext *cx, uintN argc, jsval *vp)
 {
-    return date_makeDate(cx, obj, argc, argv, 2, JS_TRUE, rval);
+    return date_makeDate(cx, 2, JS_TRUE, argc, vp);
 }
 
 static JSBool
-date_setUTCMonth(JSContext *cx, JSObject *obj, uintN argc,
-		 jsval *argv, jsval *rval)
+date_setUTCMonth(JSContext *cx, uintN argc, jsval *vp)
 {
-    return date_makeDate(cx, obj, argc, argv, 2, JS_FALSE, rval);
+    return date_makeDate(cx, 2, JS_FALSE, argc, vp);
 }
 
 static JSBool
-date_setFullYear(JSContext *cx, JSObject *obj, uintN argc,
-		 jsval *argv, jsval *rval)
+date_setFullYear(JSContext *cx, uintN argc, jsval *vp)
 {
-    return date_makeDate(cx, obj, argc, argv, 3, JS_TRUE, rval);
+    return date_makeDate(cx, 3, JS_TRUE, argc, vp);
 }
 
 static JSBool
-date_setUTCFullYear(JSContext *cx, JSObject *obj, uintN argc,
-		    jsval *argv, jsval *rval)
+date_setUTCFullYear(JSContext *cx, uintN argc, jsval *vp)
 {
-    return date_makeDate(cx, obj, argc, argv, 3, JS_FALSE, rval);
+    return date_makeDate(cx, 3, JS_FALSE, argc, vp);
 }
 
 static JSBool
-date_setYear(JSContext *cx, JSObject *obj, uintN argc,
-	     jsval *argv, jsval *rval)
+date_setYear(JSContext *cx, uintN argc, jsval *vp)
 {
+    JSObject *obj;
     jsdouble t;
     jsdouble year;
     jsdouble day;
     jsdouble result;
 
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
+    obj = JS_THIS_OBJECT(cx, vp);
+    if (!GetUTCTime(cx, obj, vp, &result))
+        return JS_FALSE;
 
-    result = *date;
-
-    if (!js_ValueToNumber(cx, argv[0], &year))
-	return JS_FALSE;
+    year = js_ValueToNumber(cx, &vp[2]);
+    if (JSVAL_IS_NULL(vp[2]))
+        return JS_FALSE;
     if (!JSDOUBLE_IS_FINITE(year)) {
-	*date = *cx->runtime->jsNaN;
-	return js_NewNumberValue(cx, *date, rval);
+        if (!SetUTCTimePtr(cx, obj, NULL, cx->runtime->jsNaN))
+            return JS_FALSE;
+        return js_NewNumberInRootedValue(cx, *cx->runtime->jsNaN, vp);
     }
 
     year = js_DoubleToInteger(year);
 
     if (!JSDOUBLE_IS_FINITE(result)) {
-	t = +0.0;
+        t = +0.0;
     } else {
-	t = LocalTime(result);
+        t = LocalTime(result);
     }
 
     if (year >= 0 && year <= 99)
-	year += 1900;
+        year += 1900;
 
     day = MakeDay(year, MonthFromTime(t), DateFromTime(t));
     result = MakeDate(day, TimeWithinDay(t));
     result = UTC(result);
 
-    *date = TIMECLIP(result);
-    return js_NewNumberValue(cx, *date, rval);
+    result = TIMECLIP(result);
+    if (!SetUTCTime(cx, obj, NULL, result))
+        return JS_FALSE;
+
+    return js_NewNumberInRootedValue(cx, result, vp);
 }
 
 /* constants for toString, toUTCString */
@@ -1410,68 +1579,43 @@ static const char* months[] =
 };
 
 static JSBool
-date_toGMTString(JSContext *cx, JSObject *obj, uintN argc,
-		 jsval *argv, jsval *rval)
+date_toGMTString(JSContext *cx, uintN argc, jsval *vp)
 {
     char buf[100];
     JSString *str;
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
+    jsdouble utctime;
 
-    if (!JSDOUBLE_IS_FINITE(*date)) {
-	JS_snprintf(buf, sizeof buf, js_NaN_date_str);
+    if (!GetUTCTime(cx, JS_THIS_OBJECT(cx, vp), vp, &utctime))
+        return JS_FALSE;
+
+    if (!JSDOUBLE_IS_FINITE(utctime)) {
+        JS_snprintf(buf, sizeof buf, js_NaN_date_str);
     } else {
-	jsdouble temp = *date;
-
-	/* Avoid dependence on PRMJ_FormatTimeUSEnglish, because it
-	 * requires a PRMJTime... which only has 16-bit years.  Sub-ECMA.
-	 */
-	JS_snprintf(buf, sizeof buf, "%s, %.2d %s %.4d %.2d:%.2d:%.2d GMT",
-		    days[WeekDay(temp)],
-		    DateFromTime(temp),
-		    months[MonthFromTime(temp)],
-		    YearFromTime(temp),
-		    HourFromTime(temp),
-		    MinFromTime(temp),
-		    SecFromTime(temp));
+        /* Avoid dependence on PRMJ_FormatTimeUSEnglish, because it
+         * requires a PRMJTime... which only has 16-bit years.  Sub-ECMA.
+         */
+        JS_snprintf(buf, sizeof buf, "%s, %.2d %s %.4d %.2d:%.2d:%.2d GMT",
+                    days[WeekDay(utctime)],
+                    DateFromTime(utctime),
+                    months[MonthFromTime(utctime)],
+                    YearFromTime(utctime),
+                    HourFromTime(utctime),
+                    MinFromTime(utctime),
+                    SecFromTime(utctime));
     }
     str = JS_NewStringCopyZ(cx, buf);
     if (!str)
-	return JS_FALSE;
-    *rval = STRING_TO_JSVAL(str);
+        return JS_FALSE;
+    *vp = STRING_TO_JSVAL(str);
     return JS_TRUE;
 }
 
 /* for Date.toLocaleString; interface to PRMJTime date struct.
- * If findEquivalent is true, then try to map the year to an equivalent year
- * that's in range.
  */
 static void
-new_explode(jsdouble timeval, PRMJTime *split, JSBool findEquivalent)
+new_explode(jsdouble timeval, PRMJTime *split)
 {
     jsint year = YearFromTime(timeval);
-    int16 adjustedYear;
-
-    /* If the year doesn't fit in a PRMJTime, find something to do about it. */
-    if (year > 32767 || year < -32768) {
-	if (findEquivalent) {
-	    /* We're really just trying to get a timezone string; map the year
-	     * to some equivalent year in the range 0 to 2800.  Borrowed from
-	     * A. D. Olsen.
-	     */
-	    jsint cycles;
-#define CYCLE_YEARS 2800L
-	    cycles = (year >= 0) ? year / CYCLE_YEARS
-				 : -1 - (-1 - year) / CYCLE_YEARS;
-	    adjustedYear = (int16)(year - cycles * CYCLE_YEARS);
-	} else {
-	    /* Clamp it to the nearest representable year. */
-	    adjustedYear = (int16)((year > 0) ? 32767 : - 32768);
-	}
-    } else {
-	adjustedYear = (int16)year;
-    }
 
     split->tm_usec = (int32) msFromTime(timeval) * 1000;
     split->tm_sec = (int8) SecFromTime(timeval);
@@ -1480,7 +1624,7 @@ new_explode(jsdouble timeval, PRMJTime *split, JSBool findEquivalent)
     split->tm_mday = (int8) DateFromTime(timeval);
     split->tm_mon = (int8) MonthFromTime(timeval);
     split->tm_wday = (int8) WeekDay(timeval);
-    split->tm_year = (int16) adjustedYear;
+    split->tm_year = year;
     split->tm_yday = (int16) DayWithinYear(timeval, year);
 
     /* not sure how this affects things, but it doesn't seem
@@ -1504,29 +1648,29 @@ date_format(JSContext *cx, jsdouble date, formatspec format, jsval *rval)
     PRMJTime split;
 
     if (!JSDOUBLE_IS_FINITE(date)) {
-	JS_snprintf(buf, sizeof buf, js_NaN_date_str);
+        JS_snprintf(buf, sizeof buf, js_NaN_date_str);
     } else {
-	jsdouble local = LocalTime(date);
+        jsdouble local = LocalTime(date);
 
-	/* offset from GMT in minutes.  The offset includes daylight savings,
-	   if it applies. */
-	jsint minutes = (jsint) floor(AdjustTime(date) / msPerMinute);
+        /* offset from GMT in minutes.  The offset includes daylight savings,
+           if it applies. */
+        jsint minutes = (jsint) floor(AdjustTime(date) / msPerMinute);
 
-	/* map 510 minutes to 0830 hours */
-	intN offset = (minutes / 60) * 100 + minutes % 60;
+        /* map 510 minutes to 0830 hours */
+        intN offset = (minutes / 60) * 100 + minutes % 60;
 
-	/* print as "Wed Nov 05 19:38:03 GMT-0800 (PST) 1997" The TZA is
-	 * printed as 'GMT-0800' rather than as 'PST' to avoid
-	 * operating-system dependence on strftime (which
-	 * PRMJ_FormatTimeUSEnglish calls, for %Z only.)  win32 prints
-	 * PST as 'Pacific Standard Time.'  This way we always know
-	 * what we're getting, and can parse it if we produce it.
-	 * The OS TZA string is included as a comment.
-	 */
+        /* print as "Wed Nov 05 19:38:03 GMT-0800 (PST) 1997" The TZA is
+         * printed as 'GMT-0800' rather than as 'PST' to avoid
+         * operating-system dependence on strftime (which
+         * PRMJ_FormatTimeUSEnglish calls, for %Z only.)  win32 prints
+         * PST as 'Pacific Standard Time.'  This way we always know
+         * what we're getting, and can parse it if we produce it.
+         * The OS TZA string is included as a comment.
+         */
 
-	/* get a timezone string from the OS to include as a
-	   comment. */
-	new_explode(date, &split, JS_TRUE);
+        /* get a timezone string from the OS to include as a
+           comment. */
+        new_explode(date, &split);
         if (PRMJ_FormatTime(tzbuf, sizeof tzbuf, "(%Z)", &split) != 0) {
 
             /* Decide whether to use the resulting timezone string.
@@ -1601,111 +1745,139 @@ date_format(JSContext *cx, jsdouble date, formatspec format, jsval *rval)
 
     str = JS_NewStringCopyZ(cx, buf);
     if (!str)
-	return JS_FALSE;
+        return JS_FALSE;
     *rval = STRING_TO_JSVAL(str);
     return JS_TRUE;
 }
 
 static JSBool
-date_toLocaleHelper(JSContext *cx, JSObject *obj, uintN argc,
-		    jsval *argv, jsval *rval, char *format)
+date_toLocaleHelper(JSContext *cx, const char *format, jsval *vp)
 {
+    JSObject *obj;
     char buf[100];
     JSString *str;
     PRMJTime split;
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
+    jsdouble utctime;
 
-    if (!JSDOUBLE_IS_FINITE(*date)) {
-	JS_snprintf(buf, sizeof buf, js_NaN_date_str);
+    obj = JS_THIS_OBJECT(cx, vp);
+    if (!GetUTCTime(cx, obj, vp, &utctime))
+        return JS_FALSE;
+
+    if (!JSDOUBLE_IS_FINITE(utctime)) {
+        JS_snprintf(buf, sizeof buf, js_NaN_date_str);
     } else {
-	intN result_len;
-	jsdouble local = LocalTime(*date);
-	new_explode(local, &split, JS_FALSE);
+        intN result_len;
+        jsdouble local = LocalTime(utctime);
+        new_explode(local, &split);
 
-	/* let PRMJTime format it.	 */
-	result_len = PRMJ_FormatTime(buf, sizeof buf, format, &split);
+        /* let PRMJTime format it.       */
+        result_len = PRMJ_FormatTime(buf, sizeof buf, format, &split);
 
-	/* If it failed, default to toString. */
-	if (result_len == 0)
-	    return date_format(cx, *date, FORMATSPEC_FULL, rval);
+        /* If it failed, default to toString. */
+        if (result_len == 0)
+            return date_format(cx, utctime, FORMATSPEC_FULL, vp);
 
         /* Hacked check against undesired 2-digit year 00/00/00 form. */
-        if (buf[result_len - 3] == '/' &&
-            isdigit(buf[result_len - 2]) && isdigit(buf[result_len - 1])) {
+        if (strcmp(format, "%x") == 0 && result_len >= 6 &&
+            /* Format %x means use OS settings, which may have 2-digit yr, so
+               hack end of 3/11/22 or 11.03.22 or 11Mar22 to use 4-digit yr...*/
+            !isdigit(buf[result_len - 3]) &&
+            isdigit(buf[result_len - 2]) && isdigit(buf[result_len - 1]) &&
+            /* ...but not if starts with 4-digit year, like 2022/3/11. */
+            !(isdigit(buf[0]) && isdigit(buf[1]) &&
+              isdigit(buf[2]) && isdigit(buf[3]))) {
             JS_snprintf(buf + (result_len - 2), (sizeof buf) - (result_len - 2),
                         "%d", js_DateGetYear(cx, obj));
         }
 
     }
 
+    if (cx->localeCallbacks && cx->localeCallbacks->localeToUnicode)
+        return cx->localeCallbacks->localeToUnicode(cx, buf, vp);
+
     str = JS_NewStringCopyZ(cx, buf);
     if (!str)
-	return JS_FALSE;
-    *rval = STRING_TO_JSVAL(str);
+        return JS_FALSE;
+    *vp = STRING_TO_JSVAL(str);
     return JS_TRUE;
 }
 
 static JSBool
-date_toLocaleString(JSContext *cx, JSObject *obj, uintN argc,
-		    jsval *argv, jsval *rval)
+date_toLocaleString(JSContext *cx, uintN argc, jsval *vp)
 {
     /* Use '%#c' for windows, because '%c' is
      * backward-compatible and non-y2k with msvc; '%#c' requests that a
      * full year be used in the result string.
      */
-    return date_toLocaleHelper(cx, obj, argc, argv, rval,
+    return date_toLocaleHelper(cx,
 #if defined(_WIN32) && !defined(__MWERKS__)
-				   "%#c"
+                                   "%#c"
 #else
-				   "%c"
+                                   "%c"
 #endif
-				   );
+                               , vp);
 }
 
 static JSBool
-date_toLocaleDateString(JSContext *cx, JSObject *obj, uintN argc,
-		    jsval *argv, jsval *rval)
+date_toLocaleDateString(JSContext *cx, uintN argc, jsval *vp)
 {
     /* Use '%#x' for windows, because '%x' is
      * backward-compatible and non-y2k with msvc; '%#x' requests that a
      * full year be used in the result string.
      */
-    return date_toLocaleHelper(cx, obj, argc, argv, rval,
+    return date_toLocaleHelper(cx,
 #if defined(_WIN32) && !defined(__MWERKS__)
-				   "%#x"
+                                   "%#x"
 #else
-				   "%x"
+                                   "%x"
 #endif
-				   );
+                               , vp);
 }
 
 static JSBool
-date_toLocaleTimeString(JSContext *cx, JSObject *obj, uintN argc,
-		    jsval *argv, jsval *rval)
+date_toLocaleTimeString(JSContext *cx, uintN argc, jsval *vp)
 {
-    return date_toLocaleHelper(cx, obj, argc, argv, rval, "%X");
+    return date_toLocaleHelper(cx, "%X", vp);
 }
 
 static JSBool
-date_toTimeString(JSContext *cx, JSObject *obj, uintN argc,
-		    jsval *argv, jsval *rval)
+date_toLocaleFormat(JSContext *cx, uintN argc, jsval *vp)
 {
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
-    return date_format(cx, *date, FORMATSPEC_TIME, rval);
+    JSString *fmt;
+    const char *fmtbytes;
+
+    if (argc == 0)
+        return date_toLocaleString(cx, argc, vp);
+
+    fmt = js_ValueToString(cx, vp[2]);
+    if (!fmt)
+        return JS_FALSE;
+    vp[2] = STRING_TO_JSVAL(fmt);
+    fmtbytes = js_GetStringBytes(cx, fmt);
+    if (!fmtbytes)
+        return JS_FALSE;
+
+    return date_toLocaleHelper(cx, fmtbytes, vp);
 }
 
 static JSBool
-date_toDateString(JSContext *cx, JSObject *obj, uintN argc,
-		    jsval *argv, jsval *rval)
+date_toTimeString(JSContext *cx, uintN argc, jsval *vp)
 {
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
-    return date_format(cx, *date, FORMATSPEC_DATE, rval);
+    jsdouble utctime;
+
+    if (!GetUTCTime(cx, JS_THIS_OBJECT(cx, vp), vp, &utctime))
+        return JS_FALSE;
+    return date_format(cx, utctime, FORMATSPEC_TIME, vp);
+}
+
+static JSBool
+date_toDateString(JSContext *cx, uintN argc, jsval *vp)
+{
+    jsdouble utctime;
+
+    if (!GetUTCTime(cx, JS_THIS_OBJECT(cx, vp), vp, &utctime))
+        return JS_FALSE;
+    return date_format(cx, utctime, FORMATSPEC_DATE, vp);
 }
 
 #if JS_HAS_TOSOURCE
@@ -1713,79 +1885,70 @@ date_toDateString(JSContext *cx, JSObject *obj, uintN argc,
 #include "jsdtoa.h"
 
 static JSBool
-date_toSource(JSContext *cx, JSObject *obj, uintN argc, jsval *argv,
-	      jsval *rval)
+date_toSource(JSContext *cx, uintN argc, jsval *vp)
 {
-    jsdouble *date;
+    jsdouble utctime;
     char buf[DTOSTR_STANDARD_BUFFER_SIZE], *numStr, *bytes;
     JSString *str;
 
-    date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
+    if (!GetUTCTime(cx, JS_THIS_OBJECT(cx, vp), vp, &utctime))
+        return JS_FALSE;
 
-    numStr = JS_dtostr(buf, sizeof buf, DTOSTR_STANDARD, 0, *date);
+    numStr = JS_dtostr(buf, sizeof buf, DTOSTR_STANDARD, 0, utctime);
     if (!numStr) {
-	JS_ReportOutOfMemory(cx);
-	return JS_FALSE;
+        JS_ReportOutOfMemory(cx);
+        return JS_FALSE;
     }
 
-    bytes = JS_smprintf("(new %s(%s))", date_class.name, numStr);
+    bytes = JS_smprintf("(new %s(%s))", js_Date_str, numStr);
     if (!bytes) {
-	JS_ReportOutOfMemory(cx);
-	return JS_FALSE;
+        JS_ReportOutOfMemory(cx);
+        return JS_FALSE;
     }
 
     str = JS_NewString(cx, bytes, strlen(bytes));
     if (!str) {
-	free(bytes);
-	return JS_FALSE;
+        free(bytes);
+        return JS_FALSE;
     }
-    *rval = STRING_TO_JSVAL(str);
+    *vp = STRING_TO_JSVAL(str);
     return JS_TRUE;
 }
 #endif
 
 static JSBool
-date_toString(JSContext *cx, JSObject *obj, uintN argc, jsval *argv,
-	      jsval *rval)
+date_toString(JSContext *cx, uintN argc, jsval *vp)
 {
-    jsdouble *date = date_getProlog(cx, obj, argv);
-    if (!date)
-	return JS_FALSE;
-    return date_format(cx, *date, FORMATSPEC_FULL, rval);
+    jsdouble utctime;
+
+    if (!GetUTCTime(cx, JS_THIS_OBJECT(cx, vp), vp, &utctime))
+        return JS_FALSE;
+    return date_format(cx, utctime, FORMATSPEC_FULL, vp);
 }
 
-#if JS_HAS_VALUEOF_HINT
 static JSBool
-date_valueOf(JSContext *cx, JSObject *obj, uintN argc, jsval *argv,
-	     jsval *rval)
+date_valueOf(JSContext *cx, uintN argc, jsval *vp)
 {
+    JSString *str, *str2;
+
     /* It is an error to call date_valueOf on a non-date object, but we don't
      * need to check for that explicitly here because every path calls
-     * date_getProlog, which does the check.
+     * GetUTCTime, which does the check.
      */
 
     /* If called directly with no arguments, convert to a time number. */
     if (argc == 0)
-	return date_getTime(cx, obj, argc, argv, rval);
+        return date_getTime(cx, argc, vp);
 
     /* Convert to number only if the hint was given, otherwise favor string. */
-    if (argc == 1) {
-	JSString *str, *str2;
-
-	str = js_ValueToString(cx, argv[0]);
-	if (!str)
-	    return JS_FALSE;
-	str2 = ATOM_TO_STRING(cx->runtime->atomState.typeAtoms[JSTYPE_NUMBER]);
-	if (!js_CompareStrings(str, str2))
-	    return date_getTime(cx, obj, argc, argv, rval);
-    }
-    return date_toString(cx, obj, argc, argv, rval);
+    str = js_ValueToString(cx, vp[2]);
+    if (!str)
+        return JS_FALSE;
+    str2 = ATOM_TO_STRING(cx->runtime->atomState.typeAtoms[JSTYPE_NUMBER]);
+    if (js_EqualStrings(str, str2))
+        return date_getTime(cx, argc, vp);
+    return date_toString(cx, argc, vp);
 }
-#else
-#define date_valueOf date_getTime
-#endif
 
 
 /*
@@ -1793,60 +1956,61 @@ date_valueOf(JSContext *cx, JSObject *obj, uintN argc, jsval *argv,
  */
 
 static JSFunctionSpec date_static_methods[] = {
-    {"UTC",               date_UTC,               MAXARGS,0,0 },
-    {"parse",             date_parse,             1,0,0 },
-    {"now",               date_now,               0,0,0 },
-    {0,0,0,0,0}
+    JS_FN("UTC",                 date_UTC,                2,MAXARGS,0),
+    JS_FN("parse",               date_parse,              1,1,0),
+    JS_FN("now",                 date_now,                0,0,0),
+    JS_FS_END
 };
 
 static JSFunctionSpec date_methods[] = {
-    {"getTime",             date_getTime,           0,0,0 },
-    {"getTimezoneOffset",   date_getTimezoneOffset, 0,0,0 },
-    {"getYear",             date_getYear,           0,0,0 },
-    {"getFullYear",         date_getFullYear,       0,0,0 },
-    {"getUTCFullYear",      date_getUTCFullYear,    0,0,0 },
-    {"getMonth",            date_getMonth,          0,0,0 },
-    {"getUTCMonth",         date_getUTCMonth,       0,0,0 },
-    {"getDate",             date_getDate,           0,0,0 },
-    {"getUTCDate",          date_getUTCDate,        0,0,0 },
-    {"getDay",              date_getDay,            0,0,0 },
-    {"getUTCDay",           date_getUTCDay,         0,0,0 },
-    {"getHours",            date_getHours,          0,0,0 },
-    {"getUTCHours",         date_getUTCHours,       0,0,0 },
-    {"getMinutes",          date_getMinutes,        0,0,0 },
-    {"getUTCMinutes",       date_getUTCMinutes,     0,0,0 },
-    {"getSeconds",          date_getUTCSeconds,     0,0,0 },
-    {"getUTCSeconds",       date_getUTCSeconds,     0,0,0 },
-    {"getMilliseconds",     date_getUTCMilliseconds,0,0,0 },
-    {"getUTCMilliseconds",  date_getUTCMilliseconds,0,0,0 },
-    {"setTime",             date_setTime,           1,0,0 },
-    {"setYear",             date_setYear,           1,0,0 },
-    {"setFullYear",         date_setFullYear,       3,0,0 },
-    {"setUTCFullYear",      date_setUTCFullYear,    3,0,0 },
-    {"setMonth",            date_setMonth,          2,0,0 },
-    {"setUTCMonth",         date_setUTCMonth,       2,0,0 },
-    {"setDate",             date_setDate,           1,0,0 },
-    {"setUTCDate",          date_setUTCDate,        1,0,0 },
-    {"setHours",            date_setHours,          4,0,0 },
-    {"setUTCHours",         date_setUTCHours,       4,0,0 },
-    {"setMinutes",          date_setMinutes,        3,0,0 },
-    {"setUTCMinutes",       date_setUTCMinutes,     3,0,0 },
-    {"setSeconds",          date_setSeconds,        2,0,0 },
-    {"setUTCSeconds",       date_setUTCSeconds,     2,0,0 },
-    {"setMilliseconds",     date_setMilliseconds,   1,0,0 },
-    {"setUTCMilliseconds",  date_setUTCMilliseconds,1,0,0 },
-    {"toUTCString",         date_toGMTString,       0,0,0 },
-    {js_toLocaleString_str, date_toLocaleString,    0,0,0 },
-    {"toLocaleDateString",  date_toLocaleDateString,0,0,0 },
-    {"toLocaleTimeString",  date_toLocaleTimeString,0,0,0 },
-    {"toDateString",        date_toDateString,      0,0,0 },
-    {"toTimeString",        date_toTimeString,      0,0,0 },
+    JS_FN("getTime",             date_getTime,            0,0,0),
+    JS_FN("getTimezoneOffset",   date_getTimezoneOffset,  0,0,0),
+    JS_FN("getYear",             date_getYear,            0,0,0),
+    JS_FN("getFullYear",         date_getFullYear,        0,0,0),
+    JS_FN("getUTCFullYear",      date_getUTCFullYear,     0,0,0),
+    JS_FN("getMonth",            date_getMonth,           0,0,0),
+    JS_FN("getUTCMonth",         date_getUTCMonth,        0,0,0),
+    JS_FN("getDate",             date_getDate,            0,0,0),
+    JS_FN("getUTCDate",          date_getUTCDate,         0,0,0),
+    JS_FN("getDay",              date_getDay,             0,0,0),
+    JS_FN("getUTCDay",           date_getUTCDay,          0,0,0),
+    JS_FN("getHours",            date_getHours,           0,0,0),
+    JS_FN("getUTCHours",         date_getUTCHours,        0,0,0),
+    JS_FN("getMinutes",          date_getMinutes,         0,0,0),
+    JS_FN("getUTCMinutes",       date_getUTCMinutes,      0,0,0),
+    JS_FN("getSeconds",          date_getUTCSeconds,      0,0,0),
+    JS_FN("getUTCSeconds",       date_getUTCSeconds,      0,0,0),
+    JS_FN("getMilliseconds",     date_getUTCMilliseconds, 0,0,0),
+    JS_FN("getUTCMilliseconds",  date_getUTCMilliseconds, 0,0,0),
+    JS_FN("setTime",             date_setTime,            1,1,0),
+    JS_FN("setYear",             date_setYear,            1,1,0),
+    JS_FN("setFullYear",         date_setFullYear,        1,3,0),
+    JS_FN("setUTCFullYear",      date_setUTCFullYear,     1,3,0),
+    JS_FN("setMonth",            date_setMonth,           1,2,0),
+    JS_FN("setUTCMonth",         date_setUTCMonth,        1,2,0),
+    JS_FN("setDate",             date_setDate,            1,1,0),
+    JS_FN("setUTCDate",          date_setUTCDate,         1,1,0),
+    JS_FN("setHours",            date_setHours,           1,4,0),
+    JS_FN("setUTCHours",         date_setUTCHours,        1,4,0),
+    JS_FN("setMinutes",          date_setMinutes,         1,3,0),
+    JS_FN("setUTCMinutes",       date_setUTCMinutes,      1,3,0),
+    JS_FN("setSeconds",          date_setSeconds,         1,2,0),
+    JS_FN("setUTCSeconds",       date_setUTCSeconds,      1,2,0),
+    JS_FN("setMilliseconds",     date_setMilliseconds,    1,1,0),
+    JS_FN("setUTCMilliseconds",  date_setUTCMilliseconds, 1,1,0),
+    JS_FN("toUTCString",         date_toGMTString,        0,0,0),
+    JS_FN(js_toLocaleString_str, date_toLocaleString,     0,0,0),
+    JS_FN("toLocaleDateString",  date_toLocaleDateString, 0,0,0),
+    JS_FN("toLocaleTimeString",  date_toLocaleTimeString, 0,0,0),
+    JS_FN("toLocaleFormat",      date_toLocaleFormat,     0,0,0),
+    JS_FN("toDateString",        date_toDateString,       0,0,0),
+    JS_FN("toTimeString",        date_toTimeString,       0,0,0),
 #if JS_HAS_TOSOURCE
-    {js_toSource_str,       date_toSource,          0,0,0 },
+    JS_FN(js_toSource_str,       date_toSource,           0,0,0),
 #endif
-    {js_toString_str,       date_toString,          0,0,0 },
-    {js_valueOf_str,        date_valueOf,           0,0,0 },
-    {0,0,0,0,0}
+    JS_FN(js_toString_str,       date_toString,           0,0,0),
+    JS_FN(js_valueOf_str,        date_valueOf,            0,0,0),
+    JS_FS_END
 };
 
 static jsdouble *
@@ -1854,10 +2018,12 @@ date_constructor(JSContext *cx, JSObject* obj)
 {
     jsdouble *date;
 
-    date = js_NewDouble(cx, 0.0);
+    date = js_NewWeaklyRootedDouble(cx, 0.0);
     if (!date)
-	return NULL;
-    OBJ_SET_SLOT(cx, obj, JSSLOT_PRIVATE, DOUBLE_TO_JSVAL(date));
+        return NULL;
+
+    obj->fslots[JSSLOT_UTC_TIME] = DOUBLE_TO_JSVAL(date);
+    obj->fslots[JSSLOT_LOCAL_TIME] = DOUBLE_TO_JSVAL(cx->runtime->jsNaN);
     return date;
 }
 
@@ -1868,103 +2034,78 @@ Date(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
     JSString *str;
     jsdouble d;
 
-    /* Date called as function */
+    /* Date called as function. */
     if (!(cx->fp->flags & JSFRAME_CONSTRUCTING)) {
-	int64 us, ms, us2ms;
-	jsdouble msec_time;
+        int64 us, ms, us2ms;
+        jsdouble msec_time;
 
-	/* NSPR 2.0 docs say 'We do not support PRMJ_NowMS and PRMJ_NowS',
-	 * so compute ms from PRMJ_Now.
-	 */
-	us = PRMJ_Now();
-	JSLL_UI2L(us2ms, PRMJ_USEC_PER_MSEC);
-	JSLL_DIV(ms, us, us2ms);
-	JSLL_L2D(msec_time, ms);
+        /* NSPR 2.0 docs say 'We do not support PRMJ_NowMS and PRMJ_NowS',
+         * so compute ms from PRMJ_Now.
+         */
+        us = PRMJ_Now();
+        JSLL_UI2L(us2ms, PRMJ_USEC_PER_MSEC);
+        JSLL_DIV(ms, us, us2ms);
+        JSLL_L2D(msec_time, ms);
 
-	return date_format(cx, msec_time, FORMATSPEC_FULL, rval);
+        return date_format(cx, msec_time, FORMATSPEC_FULL, rval);
     }
 
-    /* Date called as constructor */
+    /* Date called as constructor. */
     if (argc == 0) {
-	int64 us, ms, us2ms;
-	jsdouble msec_time;
+        int64 us, ms, us2ms;
+        jsdouble msec_time;
 
-	date = date_constructor(cx, obj);
-	if (!date)
-	    return JS_FALSE;
+        date = date_constructor(cx, obj);
+        if (!date)
+            return JS_FALSE;
 
-	us = PRMJ_Now();
-	JSLL_UI2L(us2ms, PRMJ_USEC_PER_MSEC);
-	JSLL_DIV(ms, us, us2ms);
-	JSLL_L2D(msec_time, ms);
+        us = PRMJ_Now();
+        JSLL_UI2L(us2ms, PRMJ_USEC_PER_MSEC);
+        JSLL_DIV(ms, us, us2ms);
+        JSLL_L2D(msec_time, ms);
 
-	*date = msec_time;
+        *date = msec_time;
     } else if (argc == 1) {
-	if (!JSVAL_IS_STRING(argv[0])) {
-	    /* the argument is a millisecond number */
-	    if (!js_ValueToNumber(cx, argv[0], &d))
-		    return JS_FALSE;
-	    date = date_constructor(cx, obj);
-	    if (!date)
-		return JS_FALSE;
-	    *date = TIMECLIP(d);
-	} else {
-	    /* the argument is a string; parse it. */
-	    date = date_constructor(cx, obj);
-	    if (!date)
-		return JS_FALSE;
+        if (!JSVAL_IS_STRING(argv[0])) {
+            /* the argument is a millisecond number */
+            d = js_ValueToNumber(cx, &argv[0]);
+            if (JSVAL_IS_NULL(argv[0]))
+                return JS_FALSE;
+            date = date_constructor(cx, obj);
+            if (!date)
+                return JS_FALSE;
+            *date = TIMECLIP(d);
+        } else {
+            /* the argument is a string; parse it. */
+            date = date_constructor(cx, obj);
+            if (!date)
+                return JS_FALSE;
 
-	    str = js_ValueToString(cx, argv[0]);
-	    if (!str)
-		return JS_FALSE;
+            str = js_ValueToString(cx, argv[0]);
+            if (!str)
+                return JS_FALSE;
 
-	    if (!date_parseString(str, date))
-		*date = *cx->runtime->jsNaN;
-	    *date = TIMECLIP(*date);
-	}
+            if (!date_parseString(str, date))
+                *date = *cx->runtime->jsNaN;
+            *date = TIMECLIP(*date);
+        }
     } else {
-	jsdouble array[MAXARGS];
-	uintN loop;
-	jsdouble double_arg;
-	jsdouble day;
-	jsdouble msec_time;
+        jsdouble *date;
+        jsdouble msec_time;
 
-	for (loop = 0; loop < MAXARGS; loop++) {
-	    if (loop < argc) {
-		if (!js_ValueToNumber(cx, argv[loop], &double_arg))
-		    return JS_FALSE;
-		/* if any arg is NaN, make a NaN date object
-		   and return */
-		if (!JSDOUBLE_IS_FINITE(double_arg)) {
-		    date = date_constructor(cx, obj);
-		    if (!date)
-			return JS_FALSE;
-		    *date = *cx->runtime->jsNaN;
-		    return JS_TRUE;
-		}
-		array[loop] = js_DoubleToInteger(double_arg);
-	    } else {
-                if (loop == 2) {
-                    array[loop] = 1; /* Default the date argument to 1. */
-                } else {
-                    array[loop] = 0;
-                }
-	    }
-	}
+        if (!date_msecFromArgs(cx, argc, argv, &msec_time))
+            return JS_FALSE;
 
-	date = date_constructor(cx, obj);
-	if (!date)
-	    return JS_FALSE;
+        date = date_constructor(cx, obj);
+        if (!date)
+            return JS_FALSE;
 
-	/* adjust 2-digit years into the 20th century */
-	if (array[0] >= 0 && array[0] <= 99)
-	    array[0] += 1900;
+        if (JSDOUBLE_IS_FINITE(msec_time)) {
+            msec_time = UTC(msec_time);
+            msec_time = TIMECLIP(msec_time);
+        }
 
-	day = MakeDay(array[0], array[1], array[2]);
-	msec_time = MakeTime(array[3], array[4], array[5], array[6]);
-	msec_time = MakeDate(day, msec_time);
-	msec_time = UTC(msec_time);
-	*date = TIMECLIP(msec_time);
+        *date = msec_time;
     }
     return JS_TRUE;
 }
@@ -1977,10 +2118,10 @@ js_InitDateClass(JSContext *cx, JSObject *obj)
 
     /* set static LocalTZA */
     LocalTZA = -(PRMJ_LocalGMTDifference() * msPerSecond);
-    proto = JS_InitClass(cx, obj, NULL, &date_class, Date, MAXARGS,
-			 NULL, date_methods, NULL, date_static_methods);
+    proto = JS_InitClass(cx, obj, NULL, &js_DateClass, Date, MAXARGS,
+                         NULL, date_methods, NULL, date_static_methods);
     if (!proto)
-	return NULL;
+        return NULL;
 
     /* Alias toUTCString with toGMTString.  (ECMA B.2.6) */
     if (!JS_AliasProperty(cx, proto, "toUTCString", "toGMTString"))
@@ -1989,7 +2130,7 @@ js_InitDateClass(JSContext *cx, JSObject *obj)
     /* Set the value of the Date.prototype date to NaN */
     proto_date = date_constructor(cx, proto);
     if (!proto_date)
-	return NULL;
+        return NULL;
     *proto_date = *cx->runtime->jsNaN;
 
     return proto;
@@ -2001,13 +2142,13 @@ js_NewDateObjectMsec(JSContext *cx, jsdouble msec_time)
     JSObject *obj;
     jsdouble *date;
 
-    obj = js_NewObject(cx, &date_class, NULL, NULL);
+    obj = js_NewObject(cx, &js_DateClass, NULL, NULL, 0);
     if (!obj)
-	return NULL;
+        return NULL;
 
     date = date_constructor(cx, obj);
     if (!date)
-	return NULL;
+        return NULL;
 
     *date = msec_time;
     return obj;
@@ -2020,6 +2161,7 @@ js_NewDateObject(JSContext* cx, int year, int mon, int mday,
     JSObject *obj;
     jsdouble msec_time;
 
+    JS_ASSERT(mon < 12);
     msec_time = date_msecFromDate(year, mon, mday, hour, min, sec, 0);
     obj = js_NewDateObjectMsec(cx, UTC(msec_time));
     return obj;
@@ -2028,202 +2170,221 @@ js_NewDateObject(JSContext* cx, int year, int mon, int mday,
 JS_FRIEND_API(JSBool)
 js_DateIsValid(JSContext *cx, JSObject* obj)
 {
-    jsdouble *date = date_getProlog(cx, obj, NULL);
-
-    if (!date || JSDOUBLE_IS_NaN(*date))
-        return JS_FALSE;
-    else
-        return JS_TRUE;
+    jsdouble utctime;
+    return GetUTCTime(cx, obj, NULL, &utctime) && !JSDOUBLE_IS_NaN(utctime);
 }
 
 JS_FRIEND_API(int)
 js_DateGetYear(JSContext *cx, JSObject* obj)
 {
-    jsdouble *date = date_getProlog(cx, obj, NULL);
+    jsdouble localtime;
 
     /* Preserve legacy API behavior of returning 0 for invalid dates. */
-    if (!date || JSDOUBLE_IS_NaN(*date))
-	return 0;
-    return (int) YearFromTime(LocalTime(*date));
+    if (!GetAndCacheLocalTime(cx, obj, NULL, &localtime) ||
+        JSDOUBLE_IS_NaN(localtime)) {
+        return 0;
+    }
+
+    return (int) YearFromTime(localtime);
 }
 
 JS_FRIEND_API(int)
 js_DateGetMonth(JSContext *cx, JSObject* obj)
 {
-    jsdouble *date = date_getProlog(cx, obj, NULL);
+    jsdouble localtime;
 
-    if (!date || JSDOUBLE_IS_NaN(*date))
-	return 0;
-    return (int) MonthFromTime(LocalTime(*date));
+    if (!GetAndCacheLocalTime(cx, obj, NULL, &localtime) ||
+        JSDOUBLE_IS_NaN(localtime)) {
+        return 0;
+    }
+
+    return (int) MonthFromTime(localtime);
 }
 
 JS_FRIEND_API(int)
 js_DateGetDate(JSContext *cx, JSObject* obj)
 {
-    jsdouble *date = date_getProlog(cx, obj, NULL);
+    jsdouble localtime;
 
-    if (!date || JSDOUBLE_IS_NaN(*date))
-	return 0;
-    return (int) DateFromTime(LocalTime(*date));
+    if (!GetAndCacheLocalTime(cx, obj, NULL, &localtime) ||
+        JSDOUBLE_IS_NaN(localtime)) {
+        return 0;
+    }
+
+    return (int) DateFromTime(localtime);
 }
 
 JS_FRIEND_API(int)
 js_DateGetHours(JSContext *cx, JSObject* obj)
 {
-    jsdouble *date = date_getProlog(cx, obj, NULL);
+    jsdouble localtime;
 
-    if (!date || JSDOUBLE_IS_NaN(*date))
-	return 0;
-    return (int) HourFromTime(LocalTime(*date));
+    if (!GetAndCacheLocalTime(cx, obj, NULL, &localtime) ||
+        JSDOUBLE_IS_NaN(localtime)) {
+        return 0;
+    }
+
+    return (int) HourFromTime(localtime);
 }
 
 JS_FRIEND_API(int)
 js_DateGetMinutes(JSContext *cx, JSObject* obj)
 {
-    jsdouble *date = date_getProlog(cx, obj, NULL);
+    jsdouble localtime;
 
-    if (!date || JSDOUBLE_IS_NaN(*date))
-	return 0;
-    return (int) MinFromTime(LocalTime(*date));
+    if (!GetAndCacheLocalTime(cx, obj, NULL, &localtime) ||
+        JSDOUBLE_IS_NaN(localtime)) {
+        return 0;
+    }
+
+    return (int) MinFromTime(localtime);
 }
 
 JS_FRIEND_API(int)
 js_DateGetSeconds(JSContext *cx, JSObject* obj)
 {
-    jsdouble *date = date_getProlog(cx, obj, NULL);
+    jsdouble utctime;
 
-    if (!date || JSDOUBLE_IS_NaN(*date))
-	return 0;
-    return (int) SecFromTime(*date);
+    if (!GetUTCTime(cx, obj, NULL, &utctime) || JSDOUBLE_IS_NaN(utctime))
+        return 0;
+
+    return (int) SecFromTime(utctime);
 }
 
 JS_FRIEND_API(void)
 js_DateSetYear(JSContext *cx, JSObject *obj, int year)
 {
     jsdouble local;
-    jsdouble *date = date_getProlog(cx, obj, NULL);
-    if (!date)
-	return;
-    local = LocalTime(*date);
+
+    if (!GetAndCacheLocalTime(cx, obj, NULL, &local))
+        return;
+
     /* reset date if it was NaN */
     if (JSDOUBLE_IS_NaN(local))
-	local = 0;
+        local = 0;
+
     local = date_msecFromDate(year,
-			      MonthFromTime(local),
-			      DateFromTime(local),
-			      HourFromTime(local),
-			      MinFromTime(local),
-			      SecFromTime(local),
-			      msFromTime(local));
-    *date = UTC(local);
+                              MonthFromTime(local),
+                              DateFromTime(local),
+                              HourFromTime(local),
+                              MinFromTime(local),
+                              SecFromTime(local),
+                              msFromTime(local));
+
+    /* SetUTCTime also invalidates local time cache. */
+    SetUTCTime(cx, obj, NULL, UTC(local));
 }
 
 JS_FRIEND_API(void)
 js_DateSetMonth(JSContext *cx, JSObject *obj, int month)
 {
     jsdouble local;
-    jsdouble *date = date_getProlog(cx, obj, NULL);
-    if (!date)
-	return;
-    local = LocalTime(*date);
+
+    JS_ASSERT(month < 12);
+
+    if (!GetAndCacheLocalTime(cx, obj, NULL, &local))
+        return;
+
     /* bail if date was NaN */
     if (JSDOUBLE_IS_NaN(local))
-	return;
+        return;
+
     local = date_msecFromDate(YearFromTime(local),
-			      month,
-			      DateFromTime(local),
-			      HourFromTime(local),
-			      MinFromTime(local),
-			      SecFromTime(local),
-			      msFromTime(local));
-    *date = UTC(local);
+                              month,
+                              DateFromTime(local),
+                              HourFromTime(local),
+                              MinFromTime(local),
+                              SecFromTime(local),
+                              msFromTime(local));
+    SetUTCTime(cx, obj, NULL, UTC(local));
 }
 
 JS_FRIEND_API(void)
 js_DateSetDate(JSContext *cx, JSObject *obj, int date)
 {
     jsdouble local;
-    jsdouble *datep = date_getProlog(cx, obj, NULL);
-    if (!datep)
-	return;
-    local = LocalTime(*datep);
+
+    if (!GetAndCacheLocalTime(cx, obj, NULL, &local))
+        return;
+
     if (JSDOUBLE_IS_NaN(local))
-	return;
+        return;
+
     local = date_msecFromDate(YearFromTime(local),
-			      MonthFromTime(local),
-			      date,
-			      HourFromTime(local),
-			      MinFromTime(local),
-			      SecFromTime(local),
-			      msFromTime(local));
-    *datep = UTC(local);
+                              MonthFromTime(local),
+                              date,
+                              HourFromTime(local),
+                              MinFromTime(local),
+                              SecFromTime(local),
+                              msFromTime(local));
+    SetUTCTime(cx, obj, NULL, UTC(local));
 }
 
 JS_FRIEND_API(void)
 js_DateSetHours(JSContext *cx, JSObject *obj, int hours)
 {
     jsdouble local;
-    jsdouble *date = date_getProlog(cx, obj, NULL);
-    if (!date)
-	return;
-    local = LocalTime(*date);
+
+    if (!GetAndCacheLocalTime(cx, obj, NULL, &local))
+        return;
+
     if (JSDOUBLE_IS_NaN(local))
-	return;
+        return;
     local = date_msecFromDate(YearFromTime(local),
-			      MonthFromTime(local),
-			      DateFromTime(local),
-			      hours,
-			      MinFromTime(local),
-			      SecFromTime(local),
-			      msFromTime(local));
-    *date = UTC(local);
+                              MonthFromTime(local),
+                              DateFromTime(local),
+                              hours,
+                              MinFromTime(local),
+                              SecFromTime(local),
+                              msFromTime(local));
+    SetUTCTime(cx, obj, NULL, UTC(local));
 }
 
 JS_FRIEND_API(void)
 js_DateSetMinutes(JSContext *cx, JSObject *obj, int minutes)
 {
     jsdouble local;
-    jsdouble *date = date_getProlog(cx, obj, NULL);
-    if (!date)
-	return;
-    local = LocalTime(*date);
+
+    if (!GetAndCacheLocalTime(cx, obj, NULL, &local))
+        return;
+
     if (JSDOUBLE_IS_NaN(local))
-	return;
+        return;
     local = date_msecFromDate(YearFromTime(local),
-			      MonthFromTime(local),
-			      DateFromTime(local),
-			      HourFromTime(local),
-			      minutes,
-			      SecFromTime(local),
-			      msFromTime(local));
-    *date = UTC(local);
+                              MonthFromTime(local),
+                              DateFromTime(local),
+                              HourFromTime(local),
+                              minutes,
+                              SecFromTime(local),
+                              msFromTime(local));
+    SetUTCTime(cx, obj, NULL, UTC(local));
 }
 
 JS_FRIEND_API(void)
 js_DateSetSeconds(JSContext *cx, JSObject *obj, int seconds)
 {
     jsdouble local;
-    jsdouble *date = date_getProlog(cx, obj, NULL);
-    if (!date)
-	return;
-    local = LocalTime(*date);
+
+    if (!GetAndCacheLocalTime(cx, obj, NULL, &local))
+        return;
+
     if (JSDOUBLE_IS_NaN(local))
-	return;
+        return;
     local = date_msecFromDate(YearFromTime(local),
-			      MonthFromTime(local),
-			      DateFromTime(local),
-			      HourFromTime(local),
-			      MinFromTime(local),
-			      seconds,
-			      msFromTime(local));
-    *date = UTC(local);
+                              MonthFromTime(local),
+                              DateFromTime(local),
+                              HourFromTime(local),
+                              MinFromTime(local),
+                              seconds,
+                              msFromTime(local));
+    SetUTCTime(cx, obj, NULL, UTC(local));
 }
 
 JS_FRIEND_API(jsdouble)
 js_DateGetMsecSinceEpoch(JSContext *cx, JSObject *obj)
 {
-    jsdouble *date = date_getProlog(cx, obj, NULL);
-    if (!date || JSDOUBLE_IS_NaN(*date))
+    jsdouble utctime;
+    if (!GetUTCTime(cx, obj, NULL, &utctime))
         return 0;
-    return (*date);
+    return utctime;
 }

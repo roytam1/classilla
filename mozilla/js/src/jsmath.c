@@ -1,36 +1,43 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*-
  *
- * The contents of this file are subject to the Netscape Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/NPL/
+ * ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
  *
  * The Original Code is Mozilla Communicator client code, released
  * March 31, 1998.
  *
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are
- * Copyright (C) 1998 Netscape Communications Corporation. All
- * Rights Reserved.
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998
+ * the Initial Developer. All Rights Reserved.
  *
- * Contributor(s): 
+ * Contributor(s):
  *
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU Public License (the "GPL"), in which case the
- * provisions of the GPL are applicable instead of those above.
- * If you wish to allow use of your version of this file only
- * under the terms of the GPL and not to allow others to use your
- * version of this file under the NPL, indicate your decision by
- * deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL.  If you do not delete
- * the provisions above, a recipient may use your version of this
- * file under either the NPL or the GPL.
- */
+ * Alternatively, the contents of this file may be used under the terms of
+ * either of the GNU General Public License Version 2 or later (the "GPL"),
+ * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
+
+/* Modified for Classilla by Cameron Kaiser */
 
 /*
  * JS math package.
@@ -51,28 +58,28 @@
 #include "jsobj.h"
 
 #ifndef M_E
-#define M_E		2.7182818284590452354
+#define M_E             2.7182818284590452354
 #endif
 #ifndef M_LOG2E
-#define M_LOG2E		1.4426950408889634074
+#define M_LOG2E         1.4426950408889634074
 #endif
 #ifndef M_LOG10E
-#define M_LOG10E	0.43429448190325182765
+#define M_LOG10E        0.43429448190325182765
 #endif
 #ifndef M_LN2
-#define M_LN2		0.69314718055994530942
+#define M_LN2           0.69314718055994530942
 #endif
 #ifndef M_LN10
-#define M_LN10		2.30258509299404568402
+#define M_LN10          2.30258509299404568402
 #endif
 #ifndef M_PI
-#define M_PI		3.14159265358979323846
+#define M_PI            3.14159265358979323846
 #endif
 #ifndef M_SQRT2
-#define M_SQRT2		1.41421356237309504880
+#define M_SQRT2         1.41421356237309504880
 #endif
 #ifndef M_SQRT1_2
-#define M_SQRT1_2	0.70710678118654752440
+#define M_SQRT1_2       0.70710678118654752440
 #endif
 
 static JSConstDoubleSpec math_constants[] = {
@@ -87,207 +94,289 @@ static JSConstDoubleSpec math_constants[] = {
     {0,0,0,{0,0,0}}
 };
 
-static JSClass math_class = {
-    "Math",
-    0,
+JSClass js_MathClass = {
+    js_Math_str,
+    JSCLASS_HAS_CACHED_PROTO(JSProto_Math),
     JS_PropertyStub,  JS_PropertyStub,  JS_PropertyStub,  JS_PropertyStub,
     JS_EnumerateStub, JS_ResolveStub,   JS_ConvertStub,   JS_FinalizeStub,
     JSCLASS_NO_OPTIONAL_MEMBERS
 };
 
 static JSBool
-math_abs(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+math_abs(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble x, z;
 
-    if (!js_ValueToNumber(cx, argv[0], &x))
+    x = js_ValueToNumber(cx, &vp[2]);
+    if (JSVAL_IS_NULL(vp[2]))
         return JS_FALSE;
     z = fd_fabs(x);
-    return js_NewNumberValue(cx, z, rval);
+    return js_NewNumberInRootedValue(cx, z, vp);
 }
 
 static JSBool
-math_acos(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+math_acos(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble x, z;
 
-    if (!js_ValueToNumber(cx, argv[0], &x))
+    x = js_ValueToNumber(cx, &vp[2]);
+    if (JSVAL_IS_NULL(vp[2]))
         return JS_FALSE;
+#if !JS_USE_FDLIBM_MATH && defined(SOLARIS) && defined(__GNUC__)
+    if (x < -1 || 1 < x) {
+        *vp = DOUBLE_TO_JSVAL(cx->runtime->jsNaN);
+        return JS_TRUE;
+    }
+#endif
     z = fd_acos(x);
-    return js_NewNumberValue(cx, z, rval);
+    return js_NewNumberInRootedValue(cx, z, vp);
 }
 
 static JSBool
-math_asin(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+math_asin(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble x, z;
 
-    if (!js_ValueToNumber(cx, argv[0], &x))
+    x = js_ValueToNumber(cx, &vp[2]);
+    if (JSVAL_IS_NULL(vp[2]))
         return JS_FALSE;
+#if !JS_USE_FDLIBM_MATH && defined(SOLARIS) && defined(__GNUC__)
+    if (x < -1 || 1 < x) {
+        *vp = DOUBLE_TO_JSVAL(cx->runtime->jsNaN);
+        return JS_TRUE;
+    }
+#endif
 #ifdef XP_MAC
-    if (x == 0)
-        return js_NewNumberValue(cx, x, rval);
-#endif    
+	if (x == 0)
+		return js_NewNumberInRootedValue(cx, x, vp);
+#endif
+
     z = fd_asin(x);
-    return js_NewNumberValue(cx, z, rval);
+    return js_NewNumberInRootedValue(cx, z, vp);
 }
 
 static JSBool
-math_atan(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+math_atan(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble x, z;
 
-    if (!js_ValueToNumber(cx, argv[0], &x))
+    x = js_ValueToNumber(cx, &vp[2]);
+    if (JSVAL_IS_NULL(vp[2]))
         return JS_FALSE;
 #ifdef XP_MAC
-    if (x == 0)
-        return js_NewNumberValue(cx, x, rval);
-#endif    
+	if (x == 0)
+		return js_NewNumberInRootedValue(cx, x, vp);
+#endif
+
     z = fd_atan(x);
-    return js_NewNumberValue(cx, z, rval);
+    return js_NewNumberInRootedValue(cx, z, vp);
 }
 
 static JSBool
-math_atan2(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+math_atan2(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble x, y, z;
 
-    if (!js_ValueToNumber(cx, argv[0], &x))
-	return JS_FALSE;
-    if (!js_ValueToNumber(cx, argv[1], &y))
-	return JS_FALSE;
+    x = js_ValueToNumber(cx, &vp[2]);
+    if (JSVAL_IS_NULL(vp[2]))
+        return JS_FALSE;
+    y = js_ValueToNumber(cx, &vp[3]);
+    if (JSVAL_IS_NULL(vp[3]))
+        return JS_FALSE;
+#if !JS_USE_FDLIBM_MATH && defined(_MSC_VER)
+    /*
+     * MSVC's atan2 does not yield the result demanded by ECMA when both x
+     * and y are infinite.
+     * - The result is a multiple of pi/4.
+     * - The sign of x determines the sign of the result.
+     * - The sign of y determines the multiplicator, 1 or 3.
+     */
+    if (JSDOUBLE_IS_INFINITE(x) && JSDOUBLE_IS_INFINITE(y)) {
+        z = fd_copysign(M_PI / 4, x);
+        if (y < 0)
+            z *= 3;
+        return js_NewDoubleInRootedValue(cx, z, vp);
+    }
+#endif
+
+#if !JS_USE_FDLIBM_MATH && defined(SOLARIS) && defined(__GNUC__)
+    if (x == 0) {
+        if (JSDOUBLE_IS_NEGZERO(y)) {
+            z = fd_copysign(M_PI, x);
+            return js_NewDoubleInRootedValue(cx, z, vp);
+        }
+        if (y == 0) {
+            z = x;
+            return js_NewDoubleInRootedValue(cx, z, vp);
+        }
+    }
+#endif
     z = fd_atan2(x, y);
-    return js_NewNumberValue(cx, z, rval);
+    return js_NewNumberInRootedValue(cx, z, vp);
 }
 
 static JSBool
-math_ceil(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+math_ceil(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble x, z;
 
-    if (!js_ValueToNumber(cx, argv[0], &x))
+    x = js_ValueToNumber(cx, &vp[2]);
+    if (JSVAL_IS_NULL(vp[2]))
         return JS_FALSE;
     z = fd_ceil(x);
-    return js_NewNumberValue(cx, z, rval);
+    return js_NewNumberInRootedValue(cx, z, vp);
 }
 
 static JSBool
-math_cos(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+math_cos(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble x, z;
 
-    if (!js_ValueToNumber(cx, argv[0], &x))
+    x = js_ValueToNumber(cx, &vp[2]);
+    if (JSVAL_IS_NULL(vp[2]))
         return JS_FALSE;
     z = fd_cos(x);
-    return js_NewNumberValue(cx, z, rval);
+    return js_NewNumberInRootedValue(cx, z, vp);
 }
 
 static JSBool
-math_exp(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+math_exp(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble x, z;
 
-    if (!js_ValueToNumber(cx, argv[0], &x))
+    x = js_ValueToNumber(cx, &vp[2]);
+    if (JSVAL_IS_NULL(vp[2]))
         return JS_FALSE;
 #ifdef _WIN32
     if (!JSDOUBLE_IS_NaN(x)) {
         if (x == *cx->runtime->jsPositiveInfinity) {
-            *rval = DOUBLE_TO_JSVAL(cx->runtime->jsPositiveInfinity);
+            *vp = DOUBLE_TO_JSVAL(cx->runtime->jsPositiveInfinity);
             return JS_TRUE;
         }
         if (x == *cx->runtime->jsNegativeInfinity) {
-            *rval = JSVAL_ZERO;
+            *vp = JSVAL_ZERO;
             return JS_TRUE;
         }
     }
 #endif
     z = fd_exp(x);
-    return js_NewNumberValue(cx, z, rval);
+    return js_NewNumberInRootedValue(cx, z, vp);
 }
 
 static JSBool
-math_floor(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+math_floor(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble x, z;
 
-    if (!js_ValueToNumber(cx, argv[0], &x))
+    x = js_ValueToNumber(cx, &vp[2]);
+    if (JSVAL_IS_NULL(vp[2]))
         return JS_FALSE;
     z = fd_floor(x);
-    return js_NewNumberValue(cx, z, rval);
+    return js_NewNumberInRootedValue(cx, z, vp);
 }
 
 static JSBool
-math_log(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+math_log(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble x, z;
 
-    if (!js_ValueToNumber(cx, argv[0], &x))
+    x = js_ValueToNumber(cx, &vp[2]);
+    if (JSVAL_IS_NULL(vp[2]))
         return JS_FALSE;
+#if !JS_USE_FDLIBM_MATH && defined(SOLARIS) && defined(__GNUC__)
+    if (x < 0) {
+        *vp = DOUBLE_TO_JSVAL(cx->runtime->jsNaN);
+        return JS_TRUE;
+    }
+#endif
     z = fd_log(x);
-    return js_NewNumberValue(cx, z, rval);
+    return js_NewNumberInRootedValue(cx, z, vp);
 }
 
 static JSBool
-math_max(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+math_max(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble x, z = *cx->runtime->jsNegativeInfinity;
+    jsval *argv;
     uintN i;
 
     if (argc == 0) {
-        *rval = DOUBLE_TO_JSVAL(cx->runtime->jsNegativeInfinity);
+        *vp = DOUBLE_TO_JSVAL(cx->runtime->jsNegativeInfinity);
         return JS_TRUE;
     }
+    argv = vp + 2;
     for (i = 0; i < argc; i++) {
-        if (!js_ValueToNumber(cx, argv[i], &x))
+        x = js_ValueToNumber(cx, &argv[i]);
+        if (JSVAL_IS_NULL(argv[i]))
             return JS_FALSE;
         if (JSDOUBLE_IS_NaN(x)) {
-            *rval = DOUBLE_TO_JSVAL(cx->runtime->jsNaN);
+            *vp = DOUBLE_TO_JSVAL(cx->runtime->jsNaN);
             return JS_TRUE;
         }
-        if ((x==0)&&(x==z)&&(fd_copysign(1.0,z)==-1))
+        if (x == 0 && x == z && fd_copysign(1.0, z) == -1)
             z = x;
         else
             z = (x > z) ? x : z;
     }
-    return js_NewNumberValue(cx, z, rval);
+    return js_NewNumberInRootedValue(cx, z, vp);
 }
 
 static JSBool
-math_min(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+math_min(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble x, z = *cx->runtime->jsPositiveInfinity;
+    jsval *argv;
     uintN i;
 
     if (argc == 0) {
-        *rval = DOUBLE_TO_JSVAL(cx->runtime->jsPositiveInfinity);
+        *vp = DOUBLE_TO_JSVAL(cx->runtime->jsPositiveInfinity);
         return JS_TRUE;
     }
+    argv = vp + 2;
     for (i = 0; i < argc; i++) {
-        if (!js_ValueToNumber(cx, argv[i], &x))
+        x = js_ValueToNumber(cx, &argv[i]);
+        if (JSVAL_IS_NULL(argv[i]))
             return JS_FALSE;
         if (JSDOUBLE_IS_NaN(x)) {
-            *rval = DOUBLE_TO_JSVAL(cx->runtime->jsNaN);
+            *vp = DOUBLE_TO_JSVAL(cx->runtime->jsNaN);
             return JS_TRUE;
         }
-        if ((x==0)&&(x==z)&&(fd_copysign(1.0,x)==-1))
+        if (x == 0 && x == z && fd_copysign(1.0,x) == -1)
             z = x;
         else
             z = (x < z) ? x : z;
     }
-    return js_NewNumberValue(cx, z, rval);
+    return js_NewNumberInRootedValue(cx, z, vp);
 }
 
 static JSBool
-math_pow(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+math_pow(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble x, y, z;
 
-    if (!js_ValueToNumber(cx, argv[0], &x))
-	return JS_FALSE;
-    if (!js_ValueToNumber(cx, argv[1], &y))
+    x = js_ValueToNumber(cx, &vp[2]);
+    if (JSVAL_IS_NULL(vp[2]))
         return JS_FALSE;
+    y = js_ValueToNumber(cx, &vp[3]);
+    if (JSVAL_IS_NULL(vp[3]))
+        return JS_FALSE;
+#if !JS_USE_FDLIBM_MATH
+    /*
+     * Because C99 and ECMA specify different behavior for pow(),
+     * we need to wrap the libm call to make it ECMA compliant.
+     */
+    if (!JSDOUBLE_IS_FINITE(y) && (x == 1.0 || x == -1.0)) {
+        *vp = DOUBLE_TO_JSVAL(cx->runtime->jsNaN);
+        return JS_TRUE;
+    }
+    /* pow(x, +-0) is always 1, even for x = NaN. */
+    if (y == 0) {
+        *vp = JSVAL_ONE;
+        return JS_TRUE;
+    }
+#endif
     z = fd_pow(x, y);
-    return js_NewNumberValue(cx, z, rval);
+    return js_NewNumberInRootedValue(cx, z, vp);
 }
 
 /*
@@ -311,12 +400,12 @@ random_init(JSRuntime *rt)
 
     /* Do at most once. */
     if (rt->rngInitialized)
-	return;
+        return;
     rt->rngInitialized = JS_TRUE;
 
     /* rt->rngMultiplier = 0x5DEECE66DL */
-    JSLL_ISHL(tmp, 0x5D, 32);
-    JSLL_UI2L(tmp2, 0xEECE66DL);
+    JSLL_ISHL(tmp, 0x5, 32);
+    JSLL_UI2L(tmp2, 0xDEECE66DL);
     JSLL_OR(rt->rngMultiplier, tmp, tmp2);
 
     /* rt->rngAddend = 0xBL */
@@ -327,8 +416,8 @@ random_init(JSRuntime *rt)
     JSLL_SHL(tmp2, tmp, 48);
     JSLL_SUB(rt->rngMask, tmp2, tmp);
 
-    /* rt->rngDscale = (jsdouble)(1L << 54) */
-    JSLL_SHL(tmp2, tmp, 54);
+    /* rt->rngDscale = (jsdouble)(1L << 53) */
+    JSLL_SHL(tmp2, tmp, 53);
     JSLL_L2D(rt->rngDscale, tmp2);
 
     /* Finally, set the seed from current time. */
@@ -356,7 +445,7 @@ random_nextDouble(JSRuntime *rt)
     int64 tmp, tmp2;
     jsdouble d;
 
-    JSLL_ISHL(tmp, random_next(rt, 27), 27);
+    JSLL_ISHL(tmp, random_next(rt, 26), 27);
     JSLL_UI2L(tmp2, random_next(rt, 27));
     JSLL_ADD(tmp, tmp, tmp2);
     JSLL_L2D(d, tmp);
@@ -364,7 +453,7 @@ random_nextDouble(JSRuntime *rt)
 }
 
 static JSBool
-math_random(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+math_random(JSContext *cx, uintN argc, jsval *vp)
 {
     JSRuntime *rt;
     jsdouble z;
@@ -374,94 +463,112 @@ math_random(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
     random_init(rt);
     z = random_nextDouble(rt);
     JS_UNLOCK_RUNTIME(rt);
-    return js_NewNumberValue(cx, z, rval);
+    return js_NewNumberInRootedValue(cx, z, vp);
 }
 
+#if defined _WIN32 && !defined WINCE && _MSC_VER < 1400
+/* Try to work around apparent _copysign bustage in VC6 and VC7. */
+double
+js_copysign(double x, double y)
+{
+    jsdpun xu, yu;
+
+    xu.d = x;
+    yu.d = y;
+    xu.s.hi &= ~JSDOUBLE_HI32_SIGNBIT;
+    xu.s.hi |= yu.s.hi & JSDOUBLE_HI32_SIGNBIT;
+    return xu.d;
+}
+#endif
+
 static JSBool
-math_round(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+math_round(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble x, z;
 
-    if (!js_ValueToNumber(cx, argv[0], &x))
+    x = js_ValueToNumber(cx, &vp[2]);
+    if (JSVAL_IS_NULL(vp[2]))
         return JS_FALSE;
     z = fd_copysign(fd_floor(x + 0.5), x);
-    return js_NewNumberValue(cx, z, rval);
+    return js_NewNumberInRootedValue(cx, z, vp);
 }
 
 static JSBool
-math_sin(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+math_sin(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble x, z;
 
-    if (!js_ValueToNumber(cx, argv[0], &x))
+    x = js_ValueToNumber(cx, &vp[2]);
+    if (JSVAL_IS_NULL(vp[2]))
         return JS_FALSE;
     z = fd_sin(x);
-    return js_NewNumberValue(cx, z, rval);
+    return js_NewNumberInRootedValue(cx, z, vp);
 }
 
 static JSBool
-math_sqrt(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+math_sqrt(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble x, z;
 
-    if (!js_ValueToNumber(cx, argv[0], &x))
+    x = js_ValueToNumber(cx, &vp[2]);
+    if (JSVAL_IS_NULL(vp[2]))
         return JS_FALSE;
     z = fd_sqrt(x);
-    return js_NewNumberValue(cx, z, rval);
+    return js_NewNumberInRootedValue(cx, z, vp);
 }
 
 static JSBool
-math_tan(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
+math_tan(JSContext *cx, uintN argc, jsval *vp)
 {
     jsdouble x, z;
 
-    if (!js_ValueToNumber(cx, argv[0], &x))
+    x = js_ValueToNumber(cx, &vp[2]);
+    if (JSVAL_IS_NULL(vp[2]))
         return JS_FALSE;
     z = fd_tan(x);
-    return js_NewNumberValue(cx, z, rval);
+    return js_NewNumberInRootedValue(cx, z, vp);
 }
 
 #if JS_HAS_TOSOURCE
 static JSBool
-math_toSource(JSContext *cx, JSObject *obj, uintN argc, jsval *argv,
-	      jsval *rval)
+math_toSource(JSContext *cx, uintN argc, jsval *vp)
 {
-    *rval = ATOM_KEY(cx->runtime->atomState.MathAtom);
+    *vp = ATOM_KEY(CLASS_ATOM(cx, Math));
     return JS_TRUE;
 }
 #endif
 
 static JSFunctionSpec math_static_methods[] = {
 #if JS_HAS_TOSOURCE
-    {js_toSource_str,   math_toSource,		0, 0, 0},
+    JS_FN(js_toSource_str,  math_toSource,      0, 0, 0),
 #endif
-    {"abs",		math_abs,		1, 0, 0},
-    {"acos",		math_acos,		1, 0, 0},
-    {"asin",		math_asin,		1, 0, 0},
-    {"atan",		math_atan,		1, 0, 0},
-    {"atan2",		math_atan2,		2, 0, 0},
-    {"ceil",		math_ceil,		1, 0, 0},
-    {"cos",		math_cos,		1, 0, 0},
-    {"exp",		math_exp,		1, 0, 0},
-    {"floor",		math_floor,		1, 0, 0},
-    {"log",		math_log,		1, 0, 0},
-    {"max",		math_max,		2, 0, 0},
-    {"min",		math_min,		2, 0, 0},
-    {"pow",		math_pow,		2, 0, 0},
-    {"random",		math_random,		0, 0, 0},
-    {"round",		math_round,		1, 0, 0},
-    {"sin",		math_sin,		1, 0, 0},
-    {"sqrt",		math_sqrt,		1, 0, 0},
-    {"tan",		math_tan,		1, 0, 0},
-    {0,0,0,0,0}
+    JS_FN("abs",            math_abs,           1, 1, 0),
+    JS_FN("acos",           math_acos,          1, 1, 0),
+    JS_FN("asin",           math_asin,          1, 1, 0),
+    JS_FN("atan",           math_atan,          1, 1, 0),
+    JS_FN("atan2",          math_atan2,         2, 2, 0),
+    JS_FN("ceil",           math_ceil,          1, 1, 0),
+    JS_FN("cos",            math_cos,           1, 1, 0),
+    JS_FN("exp",            math_exp,           1, 1, 0),
+    JS_FN("floor",          math_floor,         1, 1, 0),
+    JS_FN("log",            math_log,           1, 1, 0),
+    JS_FN("max",            math_max,           0, 2, 0),
+    JS_FN("min",            math_min,           0, 2, 0),
+    JS_FN("pow",            math_pow,           2, 2, 0),
+    JS_FN("random",         math_random,        0, 0, 0),
+    JS_FN("round",          math_round,         1, 1, 0),
+    JS_FN("sin",            math_sin,           1, 1, 0),
+    JS_FN("sqrt",           math_sqrt,          1, 1, 0),
+    JS_FN("tan",            math_tan,           1, 1, 0),
+    JS_FS_END
 };
 
 JSObject *
 js_InitMathClass(JSContext *cx, JSObject *obj)
 {
     JSObject *Math;
-    
-    Math = JS_DefineObject(cx, obj, "Math", &math_class, NULL, 0);
+
+    Math = JS_DefineObject(cx, obj, js_Math_str, &js_MathClass, NULL, 0);
     if (!Math)
         return NULL;
     if (!JS_DefineFunctions(cx, Math, math_static_methods))

@@ -87,6 +87,10 @@
 #include "nsIJVMManager.h"
 #include "nsILiveConnectManager.h"
 
+// for Cmd-. ( see issue 123)
+#include <Events.h>
+#include <ToolUtils.h>
+
 const size_t gStackSize = 8192;
 
 #ifdef PR_LOGGING
@@ -283,9 +287,14 @@ NS_ScriptErrorReporter(JSContext *cx,
   ::JS_ClearPendingException(cx);
 }
 
+#warning evaluate this for 9.3
+// Classilla issue 2 and issue 123
 #define MAYBE_GC_BRANCH_COUNT_MASK 0x00000fff // 4095
 #define MAYBE_STOP_BRANCH_COUNT_MASK 0x003fffff
 
+// We get a chance to intercept JavaScript execution here. -- Cameron
+// Classilla issue 123
+#warning add me back in 9.3
 JSBool JS_DLL_CALLBACK
 nsJSContext::DOMBranchCallback(JSContext *cx, JSScript *script)
 {
@@ -295,11 +304,62 @@ nsJSContext::DOMBranchCallback(JSContext *cx, JSScript *script)
     return JS_TRUE;
 
   // Filter out most of the calls to this callback
-  if (++ctx->mBranchCallbackCount & MAYBE_GC_BRANCH_COUNT_MASK)
+  if (++ctx->mBranchCallbackCount & MAYBE_GC_BRANCH_COUNT_MASK && ctx->mBranchCallbackCount != 1) // want to give keymap an immediate chance
     return JS_TRUE;
 
   // Run the GC if we get this far.
   JS_MaybeGC(cx);
+
+  // If the user is asking for all-stop, then stop! Classilla issue 123
+  // This is expensive to execute, so we don't always do it.
+  KeyMap keymap;
+  GetKeys(keymap);
+  if (keymap[1] == 8421376) { // Cmd-.
+  	// don't do this if we are in chrome code -- we will let the regular
+  	// fallback intercept us then. I copied this code here so that we don't
+  	// bog down normally fetching globalobjects and docshells we'll rarely
+  	// use. this is from the bottom, slightly modified.
+  	
+  	          nsresult rv;
+
+// if we fail to get a global or a docshell, something's wrong. die!
+  nsCOMPtr<nsIScriptGlobalObject> global;
+  ctx->GetGlobalObject(getter_AddRefs(global));
+  NS_ENSURE_TRUE(global, JS_FALSE);
+
+  nsCOMPtr<nsIDocShell> docShell;
+  global->GetDocShell(getter_AddRefs(docShell));
+  NS_ENSURE_TRUE(docShell, JS_FALSE);
+
+            nsCOMPtr<nsIDocShellTreeItem> docShellTI(do_QueryInterface(docShell, &rv));
+            if (NS_SUCCEEDED(rv) && docShellTI) {
+              PRInt32 docShellType;
+              rv = docShellTI->GetItemType(&docShellType);
+              if (NS_SUCCEEDED(rv)) {
+              
+                // At this point, if we are chrome, don't die
+                if (docShellType == nsIDocShellTreeItem::typeChrome)
+                	return JS_TRUE;
+                // We are not chrome. Signal NoScript to disable global JS if it is on,
+                // and die.
+// This doesn't work right. Never mind.
+#if(0)
+                nsCOMPtr<nsIPref> prefs(do_GetService(NS_PREF_CONTRACTID));
+                nsCOMPtr<nsIPrefBranch> prefBranch = do_GetService(NS_PREFSERVICE_CONTRACTID);
+                if (prefs && prefBranch) {
+                	prefBranch->SetCharPref("capability.policy.default.javascript.enabled", "noAccess");
+                	prefs->SavePrefFile(nsnull);
+                }
+#endif
+                return JS_FALSE;
+              }
+            }
+  	
+  	// can't figure out what we are. fail safely and die anyway.
+  	return JS_FALSE;
+  }
+  // end issue
+  
 
   // Filter out most of the calls to this callback that make it this far
   if (ctx->mBranchCallbackCount & MAYBE_STOP_BRANCH_COUNT_MASK)
@@ -324,12 +384,14 @@ nsJSContext::DOMBranchCallback(JSContext *cx, JSScript *script)
   ireq->GetInterface(NS_GET_IID(nsIPrompt), getter_AddRefs(prompt));
   NS_ENSURE_TRUE(prompt, JS_TRUE);
 
-  NS_NAMED_LITERAL_STRING(title, "Script warning");
+#warning This really should be localized!
+  NS_NAMED_LITERAL_STRING(title, "Script Warning");
   NS_NAMED_MULTILINE_LITERAL_STRING(msg,
-      NS_L("A script on this page is causing mozilla to ")
-      NS_L("run slowly. If it continues to run, your ")
-      NS_L("computer may become unresponsive.\n\nDo you ")
-      NS_L("want to abort the script?"));
+      NS_L("A script on this page is causing Classilla to ")
+      NS_L("run slowly. ")
+      NS_L("Do you ")
+      NS_L("want to abort the script?\n\n")
+      NS_L("You can always stop the browser with Cmd-Period."));
 
   JSBool ret = JS_TRUE;
 
@@ -713,6 +775,11 @@ nsJSContext::EvaluateString(const nsAString& aScript,
       return NS_ERROR_FAILURE;
     principal->GetJSPrincipals(&jsprin);
   }
+  
+  // this context can be deleted unexpectedly if the JS closes the
+  // owning window. pull up to 1.7
+  nsCOMPtr<nsIScriptContext> kungFuDeathGrip(this);
+
   // From here on, we must JSPRINCIPALS_DROP(jsprin) before returning...
 
   PRBool ok = PR_FALSE;
@@ -1105,10 +1172,11 @@ nsJSContext::CompileFunction(void* aTarget,
 
 NS_IMETHODIMP
 nsJSContext::CallEventHandler(void *aTarget, void *aHandler, PRUint32 argc,
-                              void *argv, PRBool *aBoolResult, PRBool aReverseReturnResult)
+                              void *argv, PRBool *aBoolResult) // , PRBool aReverseReturnResult) // bug 226462
 {
+  *aBoolResult = PR_TRUE; // bug 226462
   if (!mScriptsEnabled) {
-    *aBoolResult = !aReverseReturnResult;
+    //*aBoolResult = !aReverseReturnResult; // bug 226462
     return NS_OK;
   }
 
@@ -1137,22 +1205,63 @@ nsJSContext::CallEventHandler(void *aTarget, void *aHandler, PRUint32 argc,
   // check if the event handler can be run on the object in question
   rv = securityManager->CheckFunctionAccess(mContext, aHandler, aTarget);
 
+// bug 226462, bug 233142, backbugs, modified for Classilla. Very little of 233142 is actually here, mind you.
+#if(0)
   if (NS_SUCCEEDED(rv)) {
-    jsval val;
+    jsval val; // = JSVAL_VOID;
     jsval funval = OBJECT_TO_JSVAL(aHandler);
     PRBool ok = ::JS_CallFunctionValue(mContext, (JSObject *)aTarget, funval,
                                 argc, (jsval *)argv, &val);
+
     *aBoolResult = ok
                    ? !JSVAL_IS_BOOLEAN(val) || (aReverseReturnResult ? !JSVAL_TO_BOOLEAN(val) : JSVAL_TO_BOOLEAN(val))
                    : JS_TRUE;
 
     ScriptEvaluated(PR_TRUE);
+  } else {
+    *aBoolResult = !aReverseReturnResult; // bug 217562
   }
+#else
+  if (NS_SUCCEEDED(rv)) {
+    jsval val = JSVAL_VOID;
+    jsval funval = OBJECT_TO_JSVAL(aHandler);
+    PRBool ok = ::JS_CallFunctionValue(mContext, (JSObject *)aTarget, funval,
+                                       argc, (jsval *)argv, &val);
+    ScriptEvaluated(PR_TRUE);
+
+    if (ok) {
+      *aBoolResult = !JSVAL_IS_BOOLEAN(val) || JSVAL_TO_BOOLEAN(val);
+    } else {
+      // Tell XPConnect that something went wrong.
+      // Tell XPConnect about any pending exceptions. This is needed
+      // to avoid dropping JS exceptions in case we got here through
+      // nested calls through XPConnect. (bug 233142 plus backbugs)
+      //SetXPCExceptionWasThrown(); // we don't have this yet
+      nsCOMPtr<nsIXPConnect> xpc(do_GetService(nsIXPConnect::GetCID()));
+
+      if (xpc) {
+        nsCOMPtr<nsIXPCNativeCallContext> nccx;
+        xpc->GetCurrentNativeCallContext(getter_AddRefs(nccx));
+        if (nccx) {
+          nccx->SetExceptionWasThrown(PR_TRUE);
+        }
+      }
+
+      // Don't pass back results from failed calls.
+      //*rval = JSVAL_VOID;
+      // We don't handle this yet.
+      // Tell the caller that the handler threw an error.
+      //rv = NS_ERROR_FAILURE; // bug 233142
+      // We probably shouldn't do this either yet. -- Cameron
+    }
+  }
+#endif
+// end bugs
 
   if (NS_FAILED(stack->Pop(nsnull)))
     return NS_ERROR_FAILURE;
 
-  return NS_OK;
+  return rv; // bug 233142; // NS_OK;
 }
 
 NS_IMETHODIMP

@@ -119,6 +119,16 @@ JS_BEGIN_EXTERN_C
         ((jsdc->flags & JSD_COLLECT_PROFILE_DATA) &&                           \
          (!(((jsdc->flags & JSD_PROFILE_WHEN_SET) ? 1 : 0) ^                   \
             ((jsdscript->flags & JSD_SCRIPT_PROFILE_BIT) ? 1 : 0))))
+/* JS_FRIEND_DATA so that JSVAL_IS_FUNCTION is callable from outside */
+extern JS_FRIEND_DATA(JSClass) js_FunctionClass;
+
+/*
+ * NB: jsapi.h and jsobj.h must be included before any call to this macro.
+ */
+#define JSVAL_IS_FUNCTION(cx, v)                                              \
+    (JSVAL_IS_OBJECT(v) && JSVAL_TO_OBJECT(v) &&                              \
+     OBJ_GET_CLASS(cx, JSVAL_TO_OBJECT(v)) == &js_FunctionClass)
+
 
 
 /***************************************************************************/

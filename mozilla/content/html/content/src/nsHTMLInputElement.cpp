@@ -1723,6 +1723,8 @@ nsHTMLInputElement::HandleDOMEvent(nsIPresContext* aPresContext,
         {
           if (mForm && (oldType == NS_FORM_INPUT_SUBMIT ||
                         oldType == NS_FORM_INPUT_IMAGE)) {
+// bug 192170
+#if(0)
             if (mType == NS_FORM_INPUT_SUBMIT || mType == NS_FORM_INPUT_IMAGE) {
               // tell the form to forget a possible pending submission.
               // the reason is that the script returned true (the event was
@@ -1731,6 +1733,10 @@ nsHTMLInputElement::HandleDOMEvent(nsIPresContext* aPresContext,
               // to forget it and the form element will build a new one
               mForm->ForgetPendingSubmission();
             } else {
+#else
+			if (mType != NS_FORM_INPUT_SUBMIT && mType != NS_FORM_INPUT_IMAGE) {
+#endif
+// end bug
               // If the type has changed to a non-submit type, then we want to
               // flush the stored submission if there is one (as if the submit()
               // was allowed to succeed)

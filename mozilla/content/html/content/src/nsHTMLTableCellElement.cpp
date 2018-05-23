@@ -382,7 +382,11 @@ nsHTMLTableCellElement::StringToAttribute(nsIAtom* aAttribute,
     }
   }
   else if (aAttribute == nsHTMLAtoms::bgcolor) {
-    if (aResult.ParseColor(aValue, mDocument)) {
+// bug 211634
+    //if (aResult.ParseColor(aValue, mDocument)) {
+    if (aResult.ParseColor(aValue,
+                           nsGenericHTMLContainerElement::GetOwnerDocument())) {
+// end bug
       return NS_CONTENT_ATTR_HAS_VALUE;
     }
   }

@@ -86,8 +86,9 @@ nsJSRuntimeServiceImpl::FreeSingleton()
     NS_IF_RELEASE(gJSRuntimeService);
 }
 
-/* Classilla is very sensitive to low memory. 8MB should be safe. */
+/* Classilla is very sensitive to low memory. <10MB should be safe. */
 //const uint32 gGCSize = 4L * 1024L * 1024L; /* pref? */
+#warning JS Runtime Size should really be a pref!
 const uint32 gGCSize = 8L * 1024L * 1024L; /* pref? */
 
 /* attribute JSRuntime runtime; */

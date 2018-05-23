@@ -104,7 +104,8 @@ nsresult nsJSEventListener::HandleEvent(nsIDOMEvent* aEvent)
       return NS_OK;
     }
     //if (mReturnResult == nsReturnResult_eNotSet) {
-      if (eventString.Equals(NS_LITERAL_STRING("error")) || eventString.Equals(NS_LITERAL_STRING("mouseover"))) {
+      if (eventString.Equals(NS_LITERAL_STRING("error")) ||
+          eventString.Equals(NS_LITERAL_STRING("mouseover"))) {
         mReturnResult = nsReturnResult_eReverseReturnResult;
       }
       else {
@@ -175,21 +176,34 @@ nsresult nsJSEventListener::HandleEvent(nsIDOMEvent* aEvent)
   }
 
   PRBool jsBoolResult;
-  PRBool returnResult = (mReturnResult == nsReturnResult_eReverseReturnResult);
-
+  //PRBool returnResult = (mReturnResult == nsReturnResult_eReverseReturnResult);
   rv = mContext->CallEventHandler(obj, JSVAL_TO_OBJECT(funval), argc, argv,
-                                  &jsBoolResult, returnResult);
+                                  &jsBoolResult); // bug 226462 // , returnResult);
 
   if (argv != &arg) {
     ::JS_PopArguments(cx, stackPtr);
   }
 
+// bug 226462
+#if(0)
   if (NS_FAILED(rv)) {
     return rv;
   }
 
   if (!jsBoolResult) 
     aEvent->PreventDefault();
+#else
+  if (NS_SUCCEEDED(rv)) {
+    // if mReturnResult == nsReturnResult_eDoNotReverseReturnResult and
+    // jsBoolResult == true, or if mReturnResult !=
+    // nsReturnResult_eDoNotReverseReturnResult and jsBoolResult ==
+    // false, prevent default
+
+    if (!(jsBoolResult ^ (mReturnResult == nsReturnResult_eReverseReturnResult)))
+      aEvent->PreventDefault();
+  }
+#endif
+// end bug
 
   return rv;
 }

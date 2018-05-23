@@ -761,7 +761,7 @@ nsContentUtils::ReparentContentWrapper(nsIContent *aContent,
     return NS_OK;
   }
 
-  nsCOMPtr<nsIDocument> old_doc(aOldDocument);
+  nsIDocument* old_doc = aOldDocument; //nsCOMPtr<nsIDocument> old_doc(aOldDocument); // bug 211634
 
   if (!old_doc) {
     nsCOMPtr<nsINodeInfo> ni;
@@ -769,7 +769,7 @@ nsContentUtils::ReparentContentWrapper(nsIContent *aContent,
     aContent->GetNodeInfo(*getter_AddRefs(ni));
 
     if (ni) {
-      ni->GetDocument(*getter_AddRefs(old_doc));
+      old_doc = ni->GetDocument(); // ni->GetDocument(*getter_AddRefs(old_doc)); // bug 211634
     }
 
     if (!aOldDocument) {

@@ -1673,8 +1673,16 @@ MathMLElementFactoryImpl::CreateInstanceByTag(nsINodeInfo* aNodeInfo,
   static const char kMathMLStyleSheetURI[] = "resource:///res/mathml.css";
 
   // this bit of code is to load mathml.css on demand
+  
+// bug 211634
+#if(0)
   nsCOMPtr<nsIDocument> doc;
   aNodeInfo->GetDocument(*getter_AddRefs(doc));
+#else
+  nsIDocument* doc = aNodeInfo->GetDocument();
+#endif
+// end bug
+
   if (doc) {
     nsCOMPtr<nsIHTMLContentContainer> htmlContainer(do_QueryInterface(doc));
     if (htmlContainer) {

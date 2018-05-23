@@ -193,6 +193,17 @@ nsresult nsMacCommandLine::Initialize(int& argc, char**& argv)
   return NS_OK;
 }
 
+/* sigh ... Cameron */
+#ifdef XP_MAC
+char *strdup(const char *str)
+{
+    char *copy = (char *) malloc(strlen(str)+1);
+    if (copy)
+        strcpy(copy, str);
+    return copy;
+}
+#endif
+
 //----------------------------------------------------------------------------------------
 nsresult nsMacCommandLine::AddToCommandLine(const char* inArgText)
 //----------------------------------------------------------------------------------------

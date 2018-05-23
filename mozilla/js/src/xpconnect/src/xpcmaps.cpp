@@ -36,6 +36,7 @@
 /* Private maps (hashtables). */
 
 #include "xpcprivate.h"
+#include "jsdhash.h"
 
 /***************************************************************************/
 // static shared...
@@ -200,7 +201,7 @@ struct JSDHashTableOps IID2WrappedJSClassMap::Entry::sOps =
 {
     JS_DHashAllocTable,
     JS_DHashFreeTable,
-    JS_DHashGetKeyStub,
+//    JS_DHashGetKeyStub,
     HashIIDPtrKey,
     MatchIIDPtrKey,
     JS_DHashMoveEntryStub,
@@ -238,7 +239,7 @@ struct JSDHashTableOps IID2NativeInterfaceMap::Entry::sOps =
 {
     JS_DHashAllocTable,
     JS_DHashFreeTable,
-    JS_DHashGetKeyStub,
+//    JS_DHashGetKeyStub,
     HashIIDPtrKey,
     MatchIIDPtrKey,
     JS_DHashMoveEntryStub,
@@ -406,7 +407,7 @@ struct JSDHashTableOps NativeSetMap::Entry::sOps =
 {
     JS_DHashAllocTable,
     JS_DHashFreeTable,
-    JS_DHashGetKeyStub,
+//    JS_DHashGetKeyStub,
     HashNativeKey,
     Match,
     JS_DHashMoveEntryStub,
@@ -464,7 +465,7 @@ struct JSDHashTableOps IID2ThisTranslatorMap::Entry::sOps =
 {
     JS_DHashAllocTable,
     JS_DHashFreeTable,
-    GetKey,
+//    GetKey,
     HashIIDPtrKey,
     Match,
     JS_DHashMoveEntryStub,
@@ -542,7 +543,7 @@ struct JSDHashTableOps XPCNativeScriptableSharedMap::Entry::sOps =
 {
     JS_DHashAllocTable,
     JS_DHashFreeTable,
-    JS_DHashGetKeyStub,
+//    JS_DHashGetKeyStub,
     Hash,
     Match,
     JS_DHashMoveEntryStub,

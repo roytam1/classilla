@@ -468,9 +468,16 @@ void RectArea::ParseCoords(const nsAString& aSpec)
     nsCOMPtr<nsINodeInfo> nodeInfo;
     mArea->GetNodeInfo(*getter_AddRefs(nodeInfo));
     NS_ASSERTION(nodeInfo, "Element with no nodeinfo");
-    
+
+// bug 211634
+#if(0)    
     nsCOMPtr<nsIDocument> doc;
     nodeInfo->GetDocument(*getter_AddRefs(doc));
+#else
+	nsIDocument* doc = nodeInfo->GetDocument();
+#endif
+// end bug
+
     nsCAutoString urlSpec;
     if (doc) {
       nsCOMPtr<nsIURI> uri;

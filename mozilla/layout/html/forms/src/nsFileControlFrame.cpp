@@ -326,6 +326,9 @@ nsFileControlFrame::MouseClick(nsIDOMEvent* aMouseEvent)
     }
   }
 
+  // Tell our textframe to remember the currently focused value
+  mTextFrame->InitFocusedValue(); // bug 67873
+
   // Open dialog
   PRInt16 mode;
   result = filePicker->Show(&mode);
@@ -342,6 +345,8 @@ nsFileControlFrame::MouseClick(nsIDOMEvent* aMouseEvent)
     result = localFile->GetPath(unicodePath);
     if (!unicodePath.IsEmpty()) {
       mTextFrame->SetProperty(mPresContext, nsHTMLAtoms::value, unicodePath);
+      // May need to fire an onchange here
+      mTextFrame->CheckFireOnChange(); // bug 67873
       return NS_OK;
     }
   }

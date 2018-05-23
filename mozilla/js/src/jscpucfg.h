@@ -35,9 +35,11 @@
 #ifndef js_cpucfg___
 #define js_cpucfg___
 
-#include "jsosdep.h"
+/* This is no longer part of JSRef. -- Cameron Kaiser */
+/* #include "jsosdep.h" */
 
 #ifdef XP_MAC
+#define JS_HAVE_LONG_LONG
 #undef  IS_LITTLE_ENDIAN
 #define IS_BIG_ENDIAN 1
 

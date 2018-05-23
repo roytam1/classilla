@@ -303,12 +303,14 @@ nsAppShellService::DoProfileStartup(nsICmdLineService *aCmdLineService, PRBool c
       /* L10n FAIL, I'll fix this later when I get a round tuit or a lottadoh */
       if (prompter)
         // it focuses right here, for some reason (probably the lastwindowclosing logic).
+#warning LOCALIZE ME!
         prompter->Alert(nsnull, NS_LITERAL_STRING("Classilla").get(),
         						NS_LITERAL_STRING("You are using an altered browser user-agent. This may cause sites to enable features Classilla does not yet handle. To change the user-agent, go to Preferences > Navigator > User Agent.").get());
     }
     
 #if(0)
     // Also warn if the fixup renderer is on.
+    // This is currently disabled
     PRBool fixupson;
     rrv = prefBranch->GetBoolPref("classilla.layout.fixup", &fixupson);
     if (NS_SUCCEEDED(rrv) && fixupson) {

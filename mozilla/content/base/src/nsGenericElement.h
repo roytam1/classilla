@@ -51,6 +51,8 @@
 #include "nsIStyleSheetLinkingElement.h"
 #include "nsICSSStyleSheet.h"
 #include "nsICSSLoaderObserver.h"
+// bug 211634
+#include "nsIDocument.h"
 #include "nsVoidArray.h"
 #include "nsILinkHandler.h"
 #include "nsGenericDOMNodeList.h"
@@ -697,6 +699,15 @@ protected:
     return (flags & GENERIC_ELEMENT_HAS_LISTENERMANAGER &&
             sEventListenerManagersHash.ops);
   }
+
+// bug 211634
+#if(1)
+  nsIDocument* GetOwnerDocument() const
+  {
+    return mDocument ? mDocument : mNodeInfo->GetDocument();
+  }
+#endif
+// end bug
 
   /**
    * The document for this content

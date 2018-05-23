@@ -48,12 +48,17 @@ pref("keyword.URL", "http://keyword.netscape.com/keyword/");
 pref("keyword.enabled", false);
 pref("general.useragent.locale", "chrome://navigator/locale/navigator.properties");
 pref("general.useragent.contentlocale", "chrome://navigator-region/locale/region.properties");
-pref("general.useragent.misc", "rv:9.0.4");
-// these are synced up by UA override support in Classilla 9.0.4 using g.u.misc.
+pref("general.useragent.misc", "rv:9.2");
+// these are synced up by UA override support in Classilla 9.0.4+ using g.u.misc.
 pref("general.useragent.override_template", "");
 pref("general.useragent.override", "");
 // this is the general switch for the fixup renderer. see navigator.js.
+// we are not using it in 9.1, but we might use it later.
 pref("classilla.layout.fixup", false);
+// controls fast scrolling in nsWindow.
+pref("classilla.layout.slowscroll", false);
+// controls hiding plugins to avoid ugliness with double buffering
+pref("classilla.layout.hideplugins", false);
 
 pref("general.startup.browser",             true);
 pref("general.startup.mail",                false);

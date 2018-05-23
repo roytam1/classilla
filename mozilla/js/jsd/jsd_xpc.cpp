@@ -63,8 +63,11 @@
  * defining CAUTIOUS_SCRIPTHOOK makes jsds disable GC while calling out to the
  * script hook.  This is a hack to avoid some js engine problems that I havn't
  * properly tracked down.  I'm lame.
+ 
+ * This no longer works. -- Cameron 
+ 
  */
-#define CAUTIOUS_SCRIPTHOOK
+/* #define CAUTIOUS_SCRIPTHOOK */
 
 #ifdef DEBUG_verbose
 #   define DEBUG_COUNT(name, count)                                             \

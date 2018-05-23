@@ -524,6 +524,8 @@ nsHTMLButtonElement::HandleDOMEvent(nsIPresContext* aPresContext,
       case NS_MOUSE_LEFT_CLICK:
         {
           if (mForm) {
+// bug 192170
+#if(0)
             if (mType == NS_FORM_BUTTON_SUBMIT) {
               // tell the form to forget a possible pending submission.
               // the reason is that the script returned true (the event was
@@ -532,7 +534,8 @@ nsHTMLButtonElement::HandleDOMEvent(nsIPresContext* aPresContext,
               // to forget it and the form element will build a new one
               mForm->ForgetPendingSubmission();
             }
-
+#endif
+// end bug
             if (mType == NS_FORM_BUTTON_SUBMIT || mType == NS_FORM_BUTTON_RESET) {
               nsFormEvent event;
               event.eventStructType = NS_FORM_EVENT;

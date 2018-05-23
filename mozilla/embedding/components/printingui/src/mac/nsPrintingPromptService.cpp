@@ -368,7 +368,7 @@ nsPrintingPromptService::ShowPrintDialog(nsIDOMWindow *parent, nsIWebBrowserPrin
   
   // get pointer to invisible job dialog box
   gPrtJobDialog = ::PrJobInit(printRecH);
-  if (::PrError() != noErr) {
+  if (::PrError() != noErr || !gPrtJobDialog) { // || !gPrtJobDialog added Classilla issue 121
     ::DisposeHandle((Handle)printRecH);
     ::PrClose();
     return NS_ERROR_FAILURE;

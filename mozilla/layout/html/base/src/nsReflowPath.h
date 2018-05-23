@@ -102,6 +102,9 @@ public:
             mNode = iter.mNode;
             mIndex = iter.mIndex;
             return *this; }
+            
+        /* Classilla issue 62 */
+        PRInt32 GetIndex() { return mIndex; }
 
         nsReflowPath *
         get() const {

@@ -153,6 +153,11 @@ nsNodeInfoManager::Init(nsIDocument *aDocument)
   NS_ENSURE_TRUE(mNodeInfoHash, NS_ERROR_OUT_OF_MEMORY);
 
   mDocument = aDocument;
+#if(0)
+  if (!mDocument) {
+  	return NS_OK;
+  }
+#endif
   if (aDocument) {
     mPrincipal = nsnull;
   }
@@ -314,6 +319,8 @@ nsNodeInfoManager::GetNodeInfo(const nsAString& aQualifiedName,
   return GetNodeInfo(nameAtom, prefixAtom, nsid, aNodeInfo);
 }
 
+// bug 211634
+#if(0)
 NS_IMETHODIMP
 nsNodeInfoManager::GetDocument(nsIDocument*& aDocument)
 {
@@ -323,6 +330,15 @@ nsNodeInfoManager::GetDocument(nsIDocument*& aDocument)
 
   return NS_OK;
 }
+#else
+nsIDocument*
+nsNodeInfoManager::GetDocument() const
+{
+  return mDocument;
+}
+#endif
+// end bug
+
 
 NS_IMETHODIMP
 nsNodeInfoManager::GetDocumentPrincipal(nsIPrincipal** aPrincipal)

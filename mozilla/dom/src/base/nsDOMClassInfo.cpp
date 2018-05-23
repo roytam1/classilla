@@ -52,6 +52,7 @@
 #include "nsXPIDLString.h"
 #include "nsReadableUtils.h"
 #include "xptcall.h"
+#include "nsINodeInfo.h"
 
 // JavaScript includes
 #include "jsapi.h"
@@ -4289,6 +4290,8 @@ nsNodeSH::PreCreate(nsISupports *nativeObj, JSContext *cx, JSObject *globalObj,
   nsCOMPtr<nsIContent> content(do_QueryInterface(nativeObj));
   nsCOMPtr<nsIDocument> doc;
 
+// bug 227417 modified for Classilla
+#if(0)
   if (content) {
     content->GetDocument(*getter_AddRefs(doc));
   }
@@ -4314,7 +4317,50 @@ nsNodeSH::PreCreate(nsISupports *nativeObj, JSContext *cx, JSObject *globalObj,
 #endif
 
     doc = do_QueryInterface(nativeObj);
+#else
+  if (content) {
+    //doc = content->GetDocument();
+    content->GetDocument(*getter_AddRefs(doc));
 
+    // If the content node doesn't have a document, it's either a node
+    // that's not yet in a document, or the node is part of a document
+    // that's being torn down. In the latter case it's important to
+    // *not* use globalObj as the nodes parent since that would give
+    // the node the principal of globalObj (i.e. the principal of the
+    // document that's being loaded) and not the principal of the
+    // document where the node originated from. So when there's no
+    // document in the node, try to reach the original document
+    // through the node's nodeinfo, or through the nodeinfo in the
+    // node's parent (in case the node is a text node).
+    //
+    // nsIDOMNode::GetOwnerDocument() should do all of this for us,
+    // but it doesn't yet, so until it does, we'll need to do this by
+    // hand...
+    if (!doc) {
+      //nsINodeInfo *ni = content->GetNodeInfo();
+      nsCOMPtr<nsINodeInfo> ni;
+      content->GetNodeInfo(*getter_AddRefs(ni));
+
+      if (!ni) {
+        //nsIContent *parent = content->GetParent();
+        nsCOMPtr<nsIContent> parent;
+        nsresult rv = content->GetParent(*getter_AddRefs(parent));
+
+        if (parent) {
+          //ni = parent->GetNodeInfo();
+          parent->GetNodeInfo(*getter_AddRefs(ni));
+        }
+      }
+
+      if (ni) {
+        doc = ni->GetDocument();
+      }
+    }
+  }
+ 
+  if (!doc) {
+     doc = do_QueryInterface(nativeObj);
+#endif
     if (!doc) {
       // No document reachable from nativeObj, use the global object
       // that was passed to this method.
@@ -4413,6 +4459,7 @@ nsNodeSH::AddProperty(nsIXPConnectWrappedNative *wrapper, JSContext *cx,
   }
 
   return NS_OK;
+  //return nsEventReceiverSH::AddProperty(wrapper, cx, obj, id, vp, _retval); // hmmmmm. Cameron
 }
 
 NS_IMETHODIMP

@@ -34,6 +34,7 @@
 
 #ifndef jsosdep_h___
 #define jsosdep_h___
+#error This should no longer be included.
 /*
  * OS (and machine, and compiler XXX) dependent information.
  */

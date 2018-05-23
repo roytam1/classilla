@@ -122,6 +122,7 @@ public:
 
   // nsIHTMLFragmentContentSink
   NS_IMETHOD GetFragment(nsIDOMDocumentFragment** aFragment);
+  NS_IMETHOD SetTargetDocument(nsIDocument* aDocument); // pull up to Mozilla 1.7
 
   nsIContent* GetCurrentContent();
   PRInt32 PushContent(nsIContent *aContent);
@@ -754,6 +755,33 @@ nsHTMLFragmentContentSink::GetFragment(nsIDOMDocumentFragment** aFragment)
 
   return NS_OK;
 }
+
+// pull up to Mozilla 1.7 for Classilla issue 119
+NS_IMETHODIMP
+nsHTMLFragmentContentSink::SetTargetDocument(nsIDocument* aTargetDocument)
+{
+  NS_ENSURE_ARG_POINTER(aTargetDocument);
+
+  //mTargetDocument = aTargetDocument; // nothing here cares about this yet. it will later.
+  
+  //mNodeInfoManager = aTargetDocument->GetNodeInfoManager();
+  aTargetDocument->GetNodeInfoManager(*getter_AddRefs(mNodeInfoManager));
+  
+  if (mNodeInfoManager) {
+    return NS_OK;
+  }
+
+  nsresult rv = NS_NewNodeInfoManager(getter_AddRefs(mNodeInfoManager));
+  NS_ENSURE_SUCCESS(rv, rv);
+  
+  rv = mNodeInfoManager->Init(aTargetDocument);
+  if (NS_FAILED(rv)) {
+    mNodeInfoManager = nsnull;
+  }
+
+  return rv;
+}
+// end pull up
 
 nsIContent* 
 nsHTMLFragmentContentSink::GetCurrentContent()

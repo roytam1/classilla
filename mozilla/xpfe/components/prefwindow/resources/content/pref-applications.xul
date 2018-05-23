@@ -119,13 +119,13 @@
       </groupbox>    
     </vbox>
   </groupbox>
-  <!-- disabled in Classilla, since we no longer get the benefit on OS 9
+  <!-- disabled since Classilla is OS 9  
   <groupbox id="pluginFinderBox">
     <caption label="&plugins.label;"/>
     <vbox>
       <checkbox id="useNSPluginFinder" label="&pluginFinder.label;"
                 prefstring="application.use_ns_plugin_finder"/>
       <description>&pluginFinderDesc.label;</description>
-    </vbox>
+    </vbox> 
   </groupbox> -->
 </page>

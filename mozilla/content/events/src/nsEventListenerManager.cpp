@@ -2335,8 +2335,8 @@ nsresult nsEventListenerManager::HandleEvent(nsIPresContext* aPresContext,
 
   // XXX (NS_OK != ret) is going away,
   // (aEvent->flags & NS_EVENT_FLAG_NO_DEFAULT) is correct
-  if ((NS_OK != ret) ||
-    (aEvent->flags & NS_EVENT_FLAG_NO_DEFAULT)) {
+  //if ((NS_OK != ret) ||
+    if ((aEvent->flags & NS_EVENT_FLAG_NO_DEFAULT)) { // bug 233142
     *aEventStatus = nsEventStatus_eConsumeNoDefault;
   }
 
@@ -2689,7 +2689,22 @@ nsEventListenerManager::DispatchEvent(nsIDOMEvent* aEvent, PRBool *_retval)
       nsCOMPtr<nsIDocument> document;
       targetContent->GetDocument(*getter_AddRefs(document));
 
+// bug 211634 modified for Classilla plus backbugs
+#warning we have not got this compiling yet
+#if(1)
+  if (!document) {
+    // XXXbz GetOwnerDocument
+    nsCOMPtr<nsINodeInfo> nodeInfo;
+    targetContent->GetNodeInfo(*getter_AddRefs(nodeInfo)); // Clecko needs the *
+    if (nodeInfo) {
+    // document = nodeInfo->GetDocument();
+    }
+  }
+#endif
+// end bug
+
       // Do nothing if the element isn't in the document
+      // Do nothing if the element does not belong to a document either (M211634)
       if (!document)
         return NS_OK;
 

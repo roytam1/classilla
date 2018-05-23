@@ -164,7 +164,7 @@ _callHook(JSDContext *jsdc, JSContext *cx, JSStackFrame *fp, JSBool before,
                         }
                         if (delta > pdata->maxExecutionTime)
                             pdata->maxExecutionTime = delta;
-                        pdata->lastCallStart = JSLL_ZERO;
+                        pdata->lastCallStart = JSLL_INIT(0x00000000, 0x00000000); /* JSLL_ZERO; */
                         ++pdata->callCount;
                     } else if (pdata->recurseDepth) {
                         --pdata->recurseDepth;

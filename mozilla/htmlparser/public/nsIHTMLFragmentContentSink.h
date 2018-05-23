@@ -44,6 +44,7 @@
 #define NS_HTMLFRAGMENTSINK2_CONTRACTID "@mozilla.org/layout/htmlfragmentsink;2"
 
 class nsIDOMDocumentFragment;
+class nsIDocument; // Classilla issue 119
 
 #define NS_IHTML_FRAGMENT_CONTENT_SINK_IID \
  {0xa6cf9102, 0x15b3, 0x11d2,              \
@@ -58,6 +59,9 @@ public:
    *
    */
   NS_IMETHOD GetFragment(nsIDOMDocumentFragment** aFragment) = 0;
+  
+  // added for Classilla issue 119
+  NS_IMETHOD SetTargetDocument(nsIDocument* aTargetDocument) = 0;
 };
 
 #endif

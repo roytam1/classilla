@@ -48,6 +48,7 @@
 #include "nsIScriptGlobalObject.h"
 #include "nsIDOMWindow.h"
 #include "nsIDocShellTreeItem.h"
+#include "nsINodeInfo.h"
 
 static NS_DEFINE_CID(kIOServiceCID, NS_IOSERVICE_CID);
 
@@ -114,12 +115,26 @@ NS_IMETHODIMP nsImgManager::ShouldLoad(PRInt32 aContentType,
 
             nsCOMPtr<nsIURI> baseURI;
             nsCOMPtr<nsIDocument> doc;
+            nsCOMPtr<nsINodeInfo> nodeinfo; // needed for 211634 below
             nsCOMPtr<nsIContent> content(do_QueryInterface(aContext));
-            NS_ASSERTION(content, "no content avail");
+            NS_ASSERTION(content, "no content available");
             if (content) {
+            	// XXXbz GetOwnerDocument (bug 211634).
                 rv = content->GetDocument(*getter_AddRefs(doc));
+// bug 211634 plus backbugs modified for Classilla
+#if(0)
                 if (NS_FAILED(rv) || !doc) return rv;
-
+#else
+      if (NS_FAILED(rv) || !doc) {
+        rv = content->GetNodeInfo(*getter_AddRefs(nodeinfo)); // Clecko needs the *
+        if (NS_FAILED(rv) || !nodeinfo) return rv;
+ 
+        doc = nodeinfo->GetDocument();
+        // XXX what should this code do if there is really no document?
+        if (!doc) return NS_OK;
+      }
+#endif
+// end bug
                 rv = doc->GetBaseURL(*getter_AddRefs(baseURI));
                 if (NS_FAILED(rv) || !baseURI) return rv;
 

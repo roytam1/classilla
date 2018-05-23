@@ -297,7 +297,7 @@ nsWindow::nsWindow() : nsBaseWidget() , nsDeleteObserved(this), nsIKBStateContro
   
   // Get fast scroll preference. Only do this when the window is opened. -- Cameron
   // This fails gracefully if the prefBranch is mucked up or we're starting up.
-  // issue 100
+  // Classilla issue 100
   nsresult rrv;
   nsCOMPtr<nsIPrefBranch> prefBranch;
   nsCOMPtr<nsIPrefService> prefs = do_GetService(NS_PREFSERVICE_CONTRACTID, &rrv);
@@ -894,7 +894,7 @@ NS_IMETHODIMP nsWindow::Move(PRInt32 aX, PRInt32 aY)
 		// Invalidate the current location (unless it's the top-level window)
 		if ((mParent != nsnull) && (!mIsTopWidgetWindow)) {
 			Invalidate(PR_FALSE);
-			mLastYScroll = 0; // issue 28
+			mLastYScroll = 0; // Classilla issue 28
 		}
 	
 		// Set the bounds
@@ -925,7 +925,7 @@ NS_IMETHODIMP nsWindow::Resize(PRInt32 aWidth, PRInt32 aHeight, PRBool aRepaint)
     
     // Reset width in twips (just query again, just in case)
     fPixelsToTwips = 0.0;
-    mWidthInTwips = 0.0; // issue 28
+    mWidthInTwips = 0.0; // Classilla issue 28
 
 	// Recalculate the regions
 	CalcWindowRegions();
@@ -949,7 +949,7 @@ NS_IMETHODIMP nsWindow::Resize(PRInt32 aWidth, PRInt32 aHeight, PRBool aRepaint)
   }
 
   if (aRepaint)
-  	mLastYScroll = 0; // issue 28
+  	mLastYScroll = 0; // Classilla issue 28
   return NS_OK;
 }
 
@@ -1134,7 +1134,7 @@ void nsWindow::StartDraw(nsIRenderingContext* aRenderingContext)
 	mDrawing = PR_TRUE;
 
 // We shouldn't be calling this EVERY DAMN TIME. -- Cameron
-// issue 99
+// Classilla issue 99
 	//CalcWindowRegions();	//¥REVISIT
 
 	if (aRenderingContext == nsnull)
@@ -1249,7 +1249,7 @@ NS_IMETHODIMP	nsWindow::Update()
     return NS_OK;
 
   static PRBool  reentrant = PR_FALSE;
-  mLastYScroll = 0; // issue 28
+  mLastYScroll = 0; // Classilla issue 28
 
   if (reentrant)
     HandleUpdateEvent(nil);
@@ -1826,14 +1826,14 @@ nsWindow::ScrollBits ( Rect & inRectToScroll, PRInt32 inLeftDelta, PRInt32 inTop
 
 /* It seems that a lot of the assumptions made for widget updating don't work right
    on Mac OS 9. For that reason, I'm forcing more repaints, but invoking CopyBits less so
-   that we have less double painting. See issue 28. -- Cameron */
+   that we have less double painting. See Classilla issue 28. -- Cameron */
    
 #if TARGET_CARBON
   ::ScrollWindowRect ( mWindowPtr, &inRectToScroll, inLeftDelta, inTopDelta, 
                         kScrollWindowInvalidate, NULL );
 #else
 #if(1)
-// issue 28
+// Classilla issue 28
 // This makes scrolling less smooth, but really fixes a multitude of repaint problems.
 // It does NOT replace ::InvalWindowRgn -- we still need that.
 #define OHCRAP Invalidate(doCopyBits = PR_FALSE)
@@ -1852,7 +1852,7 @@ nsWindow::ScrollBits ( Rect & inRectToScroll, PRInt32 inLeftDelta, PRInt32 inTop
 	// We can fast scroll IFF:
 	// - The user says it's okay to
 	// - AND we are not clipped horizontally (i.e., a horizontal scroll bar is showing)
-	//   and, by extension, we are not scrolling horizontally (used as a quick case)
+	//   and, by extension, we are not scrolled horizontally (used as a quick case)
 	// - AND the view manager says we are still double buffered.
 	// This still gets it wrong, but not often.
 	// To catch most of the rest, we force overpainting when we do the final InvalWindowRgn.
@@ -1893,8 +1893,22 @@ nsWindow::ScrollBits ( Rect & inRectToScroll, PRInt32 inLeftDelta, PRInt32 inTop
 					mWidthInTwips = (float)mBounds.width * fPixelsToTwips;
 				}
 				if (fPixelsToTwips != 0.0) {
-					if(x > mWidthInTwips)
-						OHCRAP;
+					KeyMap keymap;
+					GetKeys(keymap);
+					if(x > mWidthInTwips) {
+						// If we have a horizontal scroll bar showing, but the user has
+						// Command held down, then DON'T slow scroll
+						if (keymap[1] & 32768) {
+							;
+						} else {
+							OHCRAP;
+						}
+					} else {
+						// If we have a horizontal scroll bar NOT showing, but the user
+						// has Command held down, then DO slow scroll
+						if (keymap[1] & 32768)
+							OHCRAP;
+					}
 				}
 			}
 		}
@@ -1940,11 +1954,12 @@ nsWindow::ScrollBits ( Rect & inRectToScroll, PRInt32 inLeftDelta, PRInt32 inTop
   ::RectRgn(updateRgn, &frame);
   ::DiffRgn (updateRgn, destRgn, updateRgn);
 
-  if(::EmptyRgn(mWindowPtr->visRgn))    
+  if(::EmptyRgn(mWindowPtr->visRgn))    // Classilla issue 28
   {
 
-	if (doCopyBits) // issue 28
-    ::CopyBits ( 
+
+	if(doCopyBits) // it's faster here. don't move this up.
+	    ::CopyBits ( 
       &mWindowPtr->portBits, 
       &mWindowPtr->portBits, 
       &source, 
@@ -2017,7 +2032,7 @@ nsWindow::ScrollBits ( Rect & inRectToScroll, PRInt32 inLeftDelta, PRInt32 inTop
   // and add it to the dirty region
   ::UnionRgn(updateRgn, localVisRgn, updateRgn);
   
-  // issue 28
+  // Classilla issue 28
   // finally, widen our dirty region AGAIN by scroll size and force overpainting
   // of the scrolled area to whitewash over any accumulated rounding errors.
   // we only need to do this if we are fast scrolling, and we only need to do
@@ -2033,9 +2048,9 @@ nsWindow::ScrollBits ( Rect & inRectToScroll, PRInt32 inLeftDelta, PRInt32 inTop
   	::GetRegionBounds(updateRgn, &makeBiggerSlice);
 
 	//if (inTopDelta > 0)
-		makeBiggerSlice.bottom += absTop;
+		makeBiggerSlice.bottom += absTop; // + absTop; did not help
 	//if (inTopDelta < 0)
-  		makeBiggerSlice.top -= absTop;
+  		makeBiggerSlice.top -= absTop; // - absTop; did not help
   	makeBiggerSlice.top = (makeBiggerSlice.top < 0) ? 0 : makeBiggerSlice.top;
   
   	::RectRgn(biggerSlice, &makeBiggerSlice);

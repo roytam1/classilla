@@ -213,6 +213,11 @@ strncasecomp (const char* one, const char * two, int n)
 static char file_url_prefix[]    = "file:";
 #define FILE_URL_PREFIX_LEN     (sizeof file_url_prefix - 1)
 
+/* sigh ... Cameron */
+#ifdef XP_MAC
+extern char* strdup(const char* str);
+#endif
+
 const char*
 jsd_BuildNormalizedURL( const char* url_string )
 {

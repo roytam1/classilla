@@ -761,9 +761,15 @@ nsHTMLImageElement::SetSrcInner(nsIURI* aBaseURL,
   NS_ENSURE_SUCCESS(result, result);
 
   if (!mDocument) {
+// bug 211634 (added for Clecko)
+#if(0)
     nsCOMPtr<nsIDocument> doc;
     mNodeInfo->GetDocument(*getter_AddRefs(doc));
-
+#else
+    nsIDocument *doc = mNodeInfo->GetDocument();
+#endif
+// end bug
+    
     nsCOMPtr<nsIPresShell> shell;
 
     doc->GetShellAt(0, getter_AddRefs(shell));
@@ -890,10 +896,19 @@ nsHTMLImageElement::SetSrc(const nsAString& aSrc)
   }
 
   if (!baseURL) {
+// bug 211634
+#if(0)
     mNodeInfo->GetDocument(*getter_AddRefs(doc));
     if (doc) {
       rv = doc->GetBaseURL(*getter_AddRefs(baseURL));
     }
+#else
+    nsIDocument *sdoc = mNodeInfo->GetDocument();
+    if (sdoc) {
+    	rv = sdoc->GetBaseURL(*getter_AddRefs(baseURL));
+    }
+#endif
+// end bug
   }
 
   if (NS_SUCCEEDED(rv)) {

@@ -2532,10 +2532,16 @@ nsRange::CreateContextualFragment(const nsAString& aFragment,
   nsCOMPtr<nsIDocument> document;
   nsCOMPtr<nsIDOMDocument> domDocument;
 
-  result = content->GetDocument(*getter_AddRefs(document));
-  if (document && NS_SUCCEEDED(result)) {
-    domDocument = do_QueryInterface(document, &result);
+// pull up to Mozilla 1.7
+  //result = content->GetDocument(*getter_AddRefs(document));
+  //if (document && NS_SUCCEEDED(result)) {
+  //  domDocument = do_QueryInterface(document, &result);
+  //}
+  result = mStartParent->GetOwnerDocument(getter_AddRefs(domDocument));
+  if (domDocument && NS_SUCCEEDED(result)) {
+  	document = do_QueryInterface(domDocument, &result);
   }
+// end pullup
 
   nsVoidArray tagStack;
   nsCOMPtr<nsIDOMNode> parent = mStartParent;
@@ -2571,6 +2577,7 @@ nsRange::CreateContextualFragment(const nsAString& aFragment,
 
     result = NS_NewHTMLFragmentContentSink(getter_AddRefs(sink));
     if (NS_SUCCEEDED(result)) {
+      sink->SetTargetDocument(document); // Classilla issue 119 - pull up to 1.7
       parser->SetContentSink(sink);
       nsCOMPtr<nsIDOMNSDocument> domnsDocument(do_QueryInterface(document));
       if (domnsDocument) {
@@ -2625,9 +2632,10 @@ nsRange::CreateContextualFragment(const nsAString& aFragment,
       }
 
       nsDTDMode mode = eDTDMode_autodetect;
-      nsCOMPtr<nsIDOMDocument> ownerDoc;
-      mStartParent->GetOwnerDocument(getter_AddRefs(ownerDoc));
-      nsCOMPtr<nsIHTMLDocument> htmlDoc(do_QueryInterface(ownerDoc));
+      //nsCOMPtr<nsIDOMDocument> ownerDoc;
+      //mStartParent->GetOwnerDocument(getter_AddRefs(ownerDoc));
+      //nsCOMPtr<nsIHTMLDocument> htmlDoc(do_QueryInterface(ownerDoc));
+      nsCOMPtr<nsIHTMLDocument> htmlDoc(do_QueryInterface(domDocument)); // pull up to Mozilla 1.7
       if (htmlDoc) {
         nsCompatibility compatMode;
         htmlDoc->GetCompatibilityMode(compatMode);
