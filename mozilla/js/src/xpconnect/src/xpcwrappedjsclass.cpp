@@ -223,7 +223,7 @@ nsXPCWrappedJSClass::CallQueryInterfaceOnJSObject(XPCCallContext& ccx,
     JSContext* cx = ccx.GetJSContext();
     JSObject* id;
     jsval retval;
-    JSObject* retObj;
+    JSObject* retObj = nsnull;
     JSBool success = JS_FALSE;
     jsid funid;
     jsval fun;

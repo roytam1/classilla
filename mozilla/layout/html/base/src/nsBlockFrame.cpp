@@ -410,6 +410,7 @@ nsBlockFrame::nsBlockFrame()
 #ifdef DEBUG
   InitDebugFlags();
 #endif
+  mDontBuildFloaterList = PR_FALSE;
 }
 
 nsBlockFrame::~nsBlockFrame()

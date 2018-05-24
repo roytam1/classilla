@@ -740,6 +740,7 @@ nsDocument::ResetToURI(nsIURI *aURI, nsILoadGroup *aLoadGroup)
 
   NS_IF_RELEASE(mDocumentURL);
   mPrincipal = nsnull;
+  mSecurityInfo = nsnull;
   mLoadFlags = nsIRequest::LOAD_NORMAL;
   mDocumentLoadGroup = nsnull;
 

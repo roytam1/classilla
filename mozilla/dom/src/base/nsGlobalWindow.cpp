@@ -1930,6 +1930,104 @@ GlobalWindowImpl::GetLength(PRUint32* aLength)
   return NS_ERROR_FAILURE;
 }
 
+// bug 262887
+PRBool
+GlobalWindowImpl::DispatchCustomEvent(const char *aEventName)
+{
+  nsCOMPtr<nsIDOMDocumentEvent> doc(do_QueryInterface(mDocument));
+  nsCOMPtr<nsIDOMEvent> event;
+
+  // Doesn't this seem backwards? Seems like
+  // nsEventStateManager::DispatchNewEvent() screws up on the
+  // logic for its prevent default argument...
+  PRBool preventDefault = PR_TRUE;
+
+  if (doc) {
+    doc->CreateEvent(NS_LITERAL_STRING("Events"), getter_AddRefs(event));
+
+    nsCOMPtr<nsIPrivateDOMEvent> privateEvent(do_QueryInterface(event));
+    if (privateEvent) {
+      event->InitEvent(NS_ConvertASCIItoUCS2(aEventName), PR_TRUE, PR_TRUE);
+
+      privateEvent->SetTrusted(PR_TRUE);
+
+      DispatchEvent(event, &preventDefault);
+    }
+  }
+
+  return preventDefault;
+}
+
+// bug 103638
+static already_AddRefed<nsIDocShellTreeItem>
+GetCallerDocShellTreeItem()
+{
+  nsCOMPtr<nsIJSContextStack> stack =
+    do_GetService(sJSStackContractID);
+
+  JSContext *cx = nsnull;
+
+  if (stack) {
+    stack->Peek(&cx);
+  }
+
+  nsIDocShellTreeItem *callerItem = nsnull;
+
+  if (cx) {
+    nsCOMPtr<nsIScriptGlobalObject> nativeGlob;
+    nsJSUtils::GetDynamicScriptGlobal(cx, getter_AddRefs(nativeGlob));
+
+    nsCOMPtr<nsIWebNavigation> callerWebNav =
+      do_GetInterface(nativeGlob);
+
+    if (callerWebNav) {
+      CallQueryInterface(callerWebNav, &callerItem);
+    }
+  }
+
+  return callerItem;
+}
+
+PRBool
+GlobalWindowImpl::WindowExists(const nsAString& aName)
+{
+  nsCOMPtr<nsIDocShellTreeItem> caller = GetCallerDocShellTreeItem();
+  PRBool foundWindow = PR_FALSE;
+
+  if (!caller) {
+    // If we can't reach a caller, try to use our own docshell
+    caller = do_QueryInterface(mDocShell);
+  }
+
+  nsCOMPtr<nsIDocShellTreeItemTmp> docShell(do_QueryInterface(mDocShell));
+
+  if (docShell) {
+    nsCOMPtr<nsIDocShellTreeItem> namedItem;
+
+    docShell->FindItemWithNameTmp(PromiseFlatString(aName).get(), nsnull,
+                                  caller, getter_AddRefs(namedItem));
+
+    foundWindow = !!namedItem;
+  } else {
+    // No caller reachable and we don't have a docshell any more. Fall
+    // back to using the windowwatcher service to find any window by
+    // name.
+
+    nsCOMPtr<nsIWindowWatcher> wwatch =
+      do_GetService(NS_WINDOWWATCHER_CONTRACTID);
+    if (wwatch) {
+      nsCOMPtr<nsIDOMWindow> namedWindow;
+      wwatch->GetWindowByName(PromiseFlatString(aName).get(), nsnull,
+                              getter_AddRefs(namedWindow));
+
+      foundWindow = !!namedWindow;
+    } 
+  }
+
+  return foundWindow;
+}
+// end bug
+
 NS_IMETHODIMP GlobalWindowImpl::SetFullScreen(PRBool aFullScreen)
 {
   // Only chrome can change our fullScreen mode.
@@ -1958,6 +2056,8 @@ NS_IMETHODIMP GlobalWindowImpl::SetFullScreen(PRBool aFullScreen)
   if (itemType != nsIDocShellTreeItem::typeChrome)
     return NS_ERROR_FAILURE;
 
+// bug 262887
+#if(0)
   // dispatch an onfullscreen DOM event so that XUL apps can
   // respond visually if we are kicked into full screen mode
   nsCOMPtr<nsIDOMDocumentEvent> doc(do_QueryInterface(mDocument));
@@ -1973,6 +2073,14 @@ NS_IMETHODIMP GlobalWindowImpl::SetFullScreen(PRBool aFullScreen)
   // event handlers can prevent us from going into full-screen mode
   if (!allowDefault)
     return NS_OK;
+#else
+  // dispatch a "fullscreen" DOM event so that XUL apps can
+  // respond visually if we are kicked into full screen mode
+  if (!DispatchCustomEvent("fullscreen")) {
+    // event handlers can prevent us from going into full-screen mode
+    return NS_OK;
+  }
+#endif
 
   nsCOMPtr<nsIBaseWindow> treeOwnerAsWin;
   GetTreeOwner(getter_AddRefs(treeOwnerAsWin));
@@ -2127,6 +2235,89 @@ GlobalWindowImpl::IsCallerChrome()
 void
 GlobalWindowImpl::MakeScriptDialogTitle(const nsAString &aInTitle, nsAString &aOutTitle)
 {
+// bug 298934 modified for Classilla
+#if(1)
+  aOutTitle.Truncate(0);
+
+  // Try to get a host from the running principal -- this will do the right
+  // thing for javascript: and data: documents.
+  
+  nsresult rv = NS_OK;
+  nsCOMPtr<nsIPrincipal> principal;
+  NS_WARN_IF_FALSE(sSecMan, "Global Window has no security manager!");
+  if (sSecMan) {
+    rv = sSecMan->GetSubjectPrincipal(getter_AddRefs(principal));
+
+    if (NS_SUCCEEDED(rv) && principal) {
+      // In 1.3, we need to QI the principal to nsICodebasePrincipal to get the URI.
+      nsCOMPtr<nsICodebasePrincipal> codebase = do_QueryInterface(principal);
+      if (codebase) {
+      nsCOMPtr<nsIURI> uri;
+      //rv = principal->GetURI(getter_AddRefs(uri));
+      rv = codebase->GetURI(getter_AddRefs(uri));
+      if (NS_SUCCEEDED(rv) && uri) {
+
+        // remove user:pass for privacy and spoof prevention
+		// maybe later
+        //nsCOMPtr<nsIURIFixup> fixup(do_GetService(NS_URIFIXUP_CONTRACTID));
+        //if (fixup) {
+          nsCOMPtr<nsIURI> fixedURI = uri;
+          //nsresult rv = fixup->CreateExposableURI(uri, getter_AddRefs(fixedURI));
+          //if (NS_SUCCEEDED(rv) && fixedURI) {
+            nsCAutoString host;
+            fixedURI->GetHost(host);
+
+            if (!host.IsEmpty()) {
+
+              // if this URI has a host we'll show it. For other schemes
+              // (e.g. file:) we fall back to the localized generic string
+
+              nsCAutoString prepath;
+              fixedURI->GetPrePath(prepath);
+
+              //aOutTitle = NS_ConvertUTF8toUTF16(prepath);
+              aOutTitle = NS_ConvertUTF8toUCS2(prepath);
+              if (!aInTitle.IsEmpty())
+                aOutTitle.Append(NS_LITERAL_STRING(" - ") + aInTitle);
+            }
+          //}
+        //}
+        }
+      }
+    }
+    else { // failed to get subject principal
+      NS_WARNING("No script principal? Who is calling alert/confirm/prompt?!");
+    }
+  }
+
+  if (aOutTitle.IsEmpty()) {
+
+    // We didn't find a host so use the generic title modifier.
+    // Load the string to be prepended to titles for script
+    // confirm/alert/prompt boxes.
+
+    nsCOMPtr<nsIStringBundleService> stringBundleService =
+       do_GetService(kCStringBundleServiceCID, &rv);
+
+    if (NS_SUCCEEDED(rv) && stringBundleService) {
+      nsCOMPtr<nsIStringBundle> stringBundle;
+      rv = stringBundleService->CreateBundle(kDOMBundleURL,
+         getter_AddRefs(stringBundle));
+
+      if (stringBundle) {
+        nsAutoString inTitle(aInTitle);
+        nsXPIDLString tempString;
+        const PRUnichar *formatStrings[1];
+        formatStrings[0] = inTitle.get();
+        rv = stringBundle->FormatStringFromName(
+          NS_LITERAL_STRING("ScriptDlgTitle").get(),
+          formatStrings, 1, getter_Copies(tempString));
+        if (tempString)
+          aOutTitle = tempString.get();
+      }
+    }
+  }
+#else
   aOutTitle.Truncate(0);
 
   // Load the string to be prepended to titles for script
@@ -2153,6 +2344,8 @@ GlobalWindowImpl::MakeScriptDialogTitle(const nsAString &aInTitle, nsAString &aO
         aOutTitle = tempString.get();
     }
   }
+#endif
+// end bug
 
   // Just in case
   if (aOutTitle.IsEmpty()) {
@@ -2165,16 +2358,32 @@ GlobalWindowImpl::MakeScriptDialogTitle(const nsAString &aInTitle, nsAString &aO
 NS_IMETHODIMP
 GlobalWindowImpl::Alert(const nsAString& aString)
 {
+// bug 262887
+#if(0)
   NS_ENSURE_STATE(mDocShell);
+#else
+  nsCOMPtr<nsIPrompt> prompter(do_GetInterface(mDocShell));
+  NS_ENSURE_TRUE(prompter, NS_ERROR_FAILURE);
+
+  if (!DispatchCustomEvent("DOMWillOpenModalDialog")) {
+    // Someone chose to prevent the default action for this event,
+    // if so, don't show the dialog after all...
+
+    return NS_OK;
+  }
+ 
+#endif
 
   nsAutoString str;
 
   str.Assign(aString);
 
+#if(0)
   // XXX: Concatenation of optional args?
 
   nsCOMPtr<nsIPrompt> prompter(do_GetInterface(mDocShell));
   NS_ENSURE_TRUE(prompter, NS_ERROR_FAILURE);
+#endif
 
   // Test whether title needs to prefixed with [script]
   PRBool isChrome = PR_FALSE;
@@ -2191,13 +2400,30 @@ GlobalWindowImpl::Alert(const nsAString& aString)
   // pending reflows.
   EnsureReflowFlushAndPaint();
 
-  return prompter->Alert(title, str.get());
+  //return prompter->Alert(title, str.get());
+  rv = prompter->Alert(title, PromiseFlatString(str).get());
+
+  DispatchCustomEvent("DOMModalDialogClosed");
+
+  return rv;
 }
 
 NS_IMETHODIMP
 GlobalWindowImpl::Confirm(const nsAString& aString, PRBool* aReturn)
 {
+#if(0)
   NS_ENSURE_STATE(mDocShell);
+#else
+  nsCOMPtr<nsIPrompt> prompter(do_GetInterface(mDocShell));
+  NS_ENSURE_TRUE(prompter, NS_ERROR_FAILURE);
+
+  if (!DispatchCustomEvent("DOMWillOpenModalDialog")) {
+    // Someone chose to prevent the default action for this event,
+    // if so, don't show the dialog after all...
+
+    return NS_OK;
+  }
+#endif
 
   nsAutoString str;
 
@@ -2220,14 +2446,19 @@ GlobalWindowImpl::Confirm(const nsAString& aString, PRBool* aReturn)
                    "chrome shouldn't be calling confirm(), use the prompt "
                    "service");
 
-  nsCOMPtr<nsIPrompt> prompter(do_GetInterface(mDocShell));
-  NS_ENSURE_TRUE(prompter, NS_ERROR_FAILURE);
+  //nsCOMPtr<nsIPrompt> prompter(do_GetInterface(mDocShell));
+  //NS_ENSURE_TRUE(prompter, NS_ERROR_FAILURE);
 
   // Before bringing up the window, unsuppress painting and flush
   // pending reflows.
   EnsureReflowFlushAndPaint();
 
-  return prompter->Confirm(title, str.get(), aReturn);
+  //return prompter->Confirm(title, str.get(), aReturn);
+  rv = prompter->Confirm(title, str.get(), aReturn);
+
+  DispatchCustomEvent("DOMModalDialogClosed");
+
+  return rv;  
 }
 
 NS_IMETHODIMP
@@ -2237,15 +2468,24 @@ GlobalWindowImpl::Prompt(const nsAString& aMessage,
                          PRUint32 aSavePassword,
                          nsAString& aReturn)
 {
+#if(0)
   NS_ENSURE_STATE(mDocShell);
 
   aReturn.Truncate(); // XXX Null string!!!
-
+#endif
   nsresult rv = NS_OK;
 
   nsCOMPtr<nsIAuthPrompt> prompter(do_GetInterface(mDocShell));
 
   NS_ENSURE_TRUE(prompter, NS_ERROR_FAILURE);
+
+  if (!DispatchCustomEvent("DOMWillOpenModalDialog")) {
+    // Someone chose to prevent the default action for this event,
+    // if so, don't show the dialog after all...
+    return NS_OK;
+  }
+
+  aReturn.Truncate(); // XXX Null string!!!
 
   PRBool b;
   nsXPIDLString uniResult;
@@ -2272,6 +2512,7 @@ GlobalWindowImpl::Prompt(const nsAString& aMessage,
                         aSavePassword,
                         PromiseFlatString(aInitial).get(),
                         getter_Copies(uniResult), &b);
+  DispatchCustomEvent("DOMModalDialogClosed");
   NS_ENSURE_SUCCESS(rv, rv);
 
   if (uniResult && b) {
@@ -2827,6 +3068,34 @@ PRBool IsPopupBlocked(nsIDOMDocument* aDoc)
   return blocked;
 }
 
+// this is what bug 103638 assumes for FirePopupBlockedEvent, but we don't have
+// nsIDOMPopupBlockedEvent, so we just use a trusted DOMEvent.
+#if(0)
+static
+void FirePopupBlockedEvent(nsIDOMDocument* aDoc,
+                           nsIURI *aRequestingURI, nsIURI *aPopupURI,
+                           const nsAString &aPopupWindowFeatures)
+{
+  if (aDoc) {
+    // Fire a "DOMPopupBlocked" event so that the UI can hear about blocked popups.
+    nsCOMPtr<nsIDOMDocumentEvent> docEvent(do_QueryInterface(aDoc));
+    nsCOMPtr<nsIDOMEvent> event;
+    docEvent->CreateEvent(NS_LITERAL_STRING("PopupBlockedEvents"), getter_AddRefs(event));
+    if (event) {
+      nsCOMPtr<nsIDOMPopupBlockedEvent> pbev(do_QueryInterface(event));
+      pbev->InitPopupBlockedEvent(NS_LITERAL_STRING("DOMPopupBlocked"),
+              PR_TRUE, PR_TRUE, aRequestingURI, aPopupURI, aPopupWindowFeatures);
+      nsCOMPtr<nsIPrivateDOMEvent> privateEvent(do_QueryInterface(event));
+      privateEvent->SetTrusted(PR_TRUE);
+
+      PRBool noDefault;
+      nsCOMPtr<nsIDOMEventTarget> targ(do_QueryInterface(aDoc));
+      targ->DispatchEvent(event, &noDefault);
+    }
+  }
+}
+
+// this is the old version.
 static
 void FirePopupBlockedEvent(nsIDOMDocument* aDoc)
 {
@@ -2843,6 +3112,52 @@ void FirePopupBlockedEvent(nsIDOMDocument* aDoc)
     }
   }
 }
+
+
+// backbugs for bug 103638 plus the revised FirePopupBlockedEvent
+#else
+
+static
+void FirePopupBlockedEvent(nsIDOMDocument* aDoc,
+                           nsIURI *aRequestingURI, nsIURI *aPopupURI)
+//                           const nsAString &aPopupWindowFeatures)
+{
+  if (aDoc) {
+    // Fire a "DOMPopupBlocked" event so that the UI can hear about blocked popups.
+    nsCOMPtr<nsIDOMDocumentEvent> docEvent(do_QueryInterface(aDoc));
+    nsCOMPtr<nsIDOMEvent> event;
+    docEvent->CreateEvent(NS_LITERAL_STRING("Events"), getter_AddRefs(event));
+    if (event) {
+      event->InitEvent(NS_LITERAL_STRING("DOMPopupBlocked"), PR_TRUE, PR_TRUE);
+      PRBool noDefault;
+      nsCOMPtr<nsIDOMEventTarget> targ(do_QueryInterface(aDoc));
+      targ->DispatchEvent(event, &noDefault);
+    }
+  }
+}
+
+// static??
+void FirePopupWindowEvent(nsIDOMDocument* aDoc)
+{
+  if (aDoc) {
+    // Fire a "PopupWindow" event
+    nsCOMPtr<nsIDOMDocumentEvent> docEvent(do_QueryInterface(aDoc));
+    nsCOMPtr<nsIDOMEvent> event;
+    docEvent->CreateEvent(NS_LITERAL_STRING("Events"), getter_AddRefs(event));
+    if (event) {
+      event->InitEvent(NS_LITERAL_STRING("PopupWindow"), PR_TRUE, PR_TRUE);
+
+      nsCOMPtr<nsIPrivateDOMEvent> privateEvent(do_QueryInterface(event));
+      privateEvent->SetTrusted(PR_TRUE);
+
+      PRBool noDefault;
+      nsCOMPtr<nsIDOMEventTarget> targ(do_QueryInterface(aDoc));
+      targ->DispatchEvent(event, &noDefault);
+    }
+  }
+}
+#endif
+// end backbug
 
 // static
 PRBool
@@ -2905,14 +3220,126 @@ GlobalWindowImpl::CheckForAbusePoint ()
   return PR_FALSE;
 }
 
+// bug 103638
+/* Allow or deny a window open based on whether popups are suppressed.
+   This method assumes we're in a popup situation; otherwise why call it?
+   Returns PR_TRUE if the window should be opened. */
+PRBool GlobalWindowImpl::CheckOpenAllow(const nsAString &aName)
+{
+  PRBool allowWindow = PR_TRUE;
+  
+  if (IsPopupBlocked(mDocument)) {
+    allowWindow = PR_FALSE;
+    // However it might still not be blocked.
+    // Special case items that don't actually open new windows.
+    nsAutoString name(aName);
+    if (!name.IsEmpty() &&
+        !name.EqualsIgnoreCase("_top") &&
+        !name.EqualsIgnoreCase("_self") &&
+        !name.EqualsIgnoreCase("_content")) {
+      if (WindowExists(name))
+        allowWindow = PR_TRUE;
+    }
+  }
+
+  return allowWindow;
+}
+
+/* If a window open is blocked, fire the appropriate DOM events.
+   aBlocked signifies we just blocked a popup.
+   aWindow signifies we just opened what is probably a popup.
+*/
+void
+GlobalWindowImpl::FireAbuseEvents(PRBool aBlocked, PRBool aWindow,
+                                  const nsAString &aPopupURL)
+{
+  // fetch the URI of the window requesting the opened window
+
+  nsCOMPtr<nsIDOMWindow> topWindow;
+  GetTop(getter_AddRefs(topWindow));
+  if (!topWindow)
+    return;
+
+  nsCOMPtr<nsIDOMDocument> topDoc;
+  topWindow->GetDocument(getter_AddRefs(topDoc));
+
+  nsCOMPtr<nsIURI> requestingURI;
+  nsCOMPtr<nsIURI> popupURI;
+  nsCOMPtr<nsIWebNavigation> webNav(do_GetInterface(topWindow));
+  if (webNav)
+    webNav->GetCurrentURI(getter_AddRefs(requestingURI));
+
+  // build the URI of the would-have-been popup window
+  // (see nsWindowWatcher::URIfromURL)
+
+  // first, fetch the opener's base URI
+
+  nsCOMPtr<nsIURI> baseURL;
+
+  nsCOMPtr<nsIJSContextStack> stack = do_GetService(sJSStackContractID);
+  nsCOMPtr<nsIDOMWindow> contextWindow;
+  if (stack) {
+    JSContext *cx = nsnull;
+    stack->Peek(&cx);
+    if (cx) {
+      nsCOMPtr<nsIScriptContext> currentCX;
+      nsJSUtils::GetDynamicScriptContext(cx, getter_AddRefs(currentCX));
+      if (currentCX) {
+        nsCOMPtr<nsIScriptGlobalObject> gobj;
+        currentCX->GetGlobalObject(getter_AddRefs(gobj));
+        contextWindow = do_QueryInterface(gobj);
+      }
+    }
+  }
+  if (!contextWindow)
+    contextWindow = NS_STATIC_CAST(nsIDOMWindow*,this);
+
+  nsCOMPtr<nsIDOMDocument> domdoc;
+  contextWindow->GetDocument(getter_AddRefs(domdoc));
+  nsCOMPtr<nsIDocument> doc(do_QueryInterface(domdoc));
+  if (doc)
+    doc->GetBaseURL(*getter_AddRefs(baseURL));
+
+  // use the base URI to build what would have been the popup's URI
+  nsCOMPtr<nsIIOService> ios(do_GetService(NS_IOSERVICE_CONTRACTID));
+  if (ios)
+    ios->NewURI(NS_ConvertUCS2toUTF8(aPopupURL), 0, baseURL,
+                getter_AddRefs(popupURI));
+
+  // fire an event chock full of informative URIs
+  if (aBlocked)
+    FirePopupBlockedEvent(topDoc, requestingURI, popupURI); // 1.3.1 bleh
+  if (aWindow)
+    FirePopupWindowEvent(topDoc);
+}
+// end bug
+
 NS_IMETHODIMP
 GlobalWindowImpl::Open(const nsAString& aUrl,
                        const nsAString& aName,
                        const nsAString& aOptions,
                        nsIDOMWindow **_retval)
 {
+// bug 103638
+#if(0)
   return OpenInternal(aUrl, aName, aOptions, PR_FALSE, nsnull, 0, nsnull,
                       _retval);
+#else
+  PRBool   abusedWindow = CheckForAbusePoint();
+  nsresult rv;
+
+  if (abusedWindow && !CheckOpenAllow(aName)) {
+    FireAbuseEvents(PR_TRUE, PR_FALSE, aUrl);
+    return NS_ERROR_FAILURE; // unlike the public Open method, return an error
+  }
+
+  rv = OpenInternal(aUrl, aName, aOptions, PR_FALSE, nsnull, 0, nsnull,
+                       _retval);
+  if (NS_SUCCEEDED(rv) && abusedWindow)
+    FireAbuseEvents(PR_FALSE, PR_TRUE, aUrl);
+  return rv;
+#endif
+// end bug
 }
 
 NS_IMETHODIMP
@@ -2956,6 +3383,8 @@ GlobalWindowImpl::Open(nsIDOMWindow **_retval)
     }
   }
 
+// bug 103638
+#if(0)
   /*
    * If we're in a commonly abused state (top level script, running a timeout,
    * or onload/onunload), and the preference is enabled, prevent window.open().
@@ -2987,6 +3416,14 @@ GlobalWindowImpl::Open(nsIDOMWindow **_retval)
       }
     }
   }
+#else
+  PRBool abusedWindow = CheckForAbusePoint();
+  if (abusedWindow && !CheckOpenAllow(name)) {
+    FireAbuseEvents(PR_TRUE, PR_FALSE, url);
+    return NS_OK; // don't open the window, but also don't throw a JS exception
+  }
+#endif
+// end bug
 
   rv = OpenInternal(url, name, options, PR_FALSE, nsnull, 0, nsnull, _retval);
 
@@ -3013,6 +3450,8 @@ GlobalWindowImpl::Open(nsIDOMWindow **_retval)
     nsCOMPtr<nsIDOMDocument> doc;
     (*_retval)->GetDocument(getter_AddRefs(doc));
   }
+  
+  if (abusedWindow) FireAbuseEvents(PR_FALSE, PR_TRUE, url); // bug 103638 backbugs
 
   return rv;
 }
@@ -3150,6 +3589,7 @@ GlobalWindowImpl::Close()
   // could be abused by content code, but do we care? I don't think
   // so...
 
+#if(0)
   nsCOMPtr<nsIDOMDocumentEvent> doc(do_QueryInterface(mDocument));
   nsCOMPtr<nsIDOMEvent> event;
 
@@ -3170,6 +3610,13 @@ GlobalWindowImpl::Close()
       return NS_OK;
     }
   }
+#else
+  if (!DispatchCustomEvent("DOMWindowClose")) {
+    // Someone chose to prevent the default action for this event, if
+    // so, let's not close this window after all...
+    return NS_OK;
+  }
+#endif  
 
   nsCOMPtr<nsIJSContextStack> stack =
     do_GetService(sJSStackContractID);
@@ -4351,6 +4798,18 @@ GlobalWindowImpl::OpenInternal(const nsAString& aUrl,
                                nsISupports *aExtraArgument,
                                nsIDOMWindow **aReturn)
 {
+// bug 306804
+  if (!IsChrome()) {
+    nsCOMPtr<nsIWebBrowserChrome> chrome;
+    GetWebBrowserChrome(getter_AddRefs(chrome));
+    if (!chrome) {
+      // No chrome means we don't want to go through with this open call
+      // -- see nsIWindowWatcher.idl
+      return NS_ERROR_NOT_AVAILABLE;
+    }
+  }
+// end bug
+
   nsXPIDLCString url;
   nsresult rv = NS_OK;  
 

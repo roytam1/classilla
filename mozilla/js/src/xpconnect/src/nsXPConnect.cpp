@@ -146,6 +146,8 @@ nsXPConnect::~nsXPConnect()
 
     gSelf = nsnull;
     gOnceAliveNowDead = JS_TRUE;
+    
+    XPC_WN_JSOps_Shutdown(); // bug 289074
 }
 
 // static

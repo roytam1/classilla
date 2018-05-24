@@ -1,0 +1,53 @@
+/* -*- Mode: IDL; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*-
+ *
+ * The contents of this file are subject to the Mozilla Public
+ * License Version 1.1 (the "License"); you may not use this file
+ * except in compliance with the License. You may obtain a copy of
+ * the License at http://www.mozilla.org/MPL/
+ * 
+ * Software distributed under the License is distributed on an "AS
+ * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * rights and limitations under the License.
+ * 
+ * The Original Code is the Mozilla browser.
+ * 
+ * The Initial Developer of the Original Code is Netscape
+ * Communications, Inc.  Portions created by Netscape are
+ * Copyright (C) 1999, Mozilla.  All Rights Reserved.
+ * 
+ * Contributor(s):
+ *   Travis Bogard <travis@netscape.com>
+ */
+
+#include "nsISupports.idl"
+
+/**
+ * nsIDocShellTreeOwnerTmp is a temporary internal interface used only
+ * to provide a changed signature for the findItemWithName() method to
+ * fix problems where DOM windows were reachable across domains.
+ */
+
+interface nsIDocShellTreeItem;
+
+[scriptable, uuid(739feaca-800c-4086-943c-d5c460d233cb)]
+interface nsIDocShellTreeOwnerTmp : nsISupports
+{
+  /*
+    Return the child DocShellTreeItem with the specified name.
+    name - This is the name of the item that is trying to be found.
+    aRequestor - This is the docshellTreeItem that is requesting the find.  This
+    parameter is used to identify when the child is asking its parent to find
+    a child with the specific name.  The parent uses this parameter to ensure
+    a resursive state does not occur by not again asking the requestor for find
+    a shell by the specified name.  Inversely the child uses it to ensure it
+    does not ask its parent to do the search if its parent is the one that
+    asked it to search.
+    aOriginalRequestor - The original treeitem that made the request, if any.
+    This is used to ensure that we don't run into cross-site issues.
+
+  */
+  nsIDocShellTreeItem findItemWithNameTmp(in wstring name, 
+                                          in nsIDocShellTreeItem aRequestor,
+                                          in nsIDocShellTreeItem aOriginalRequestor);
+};

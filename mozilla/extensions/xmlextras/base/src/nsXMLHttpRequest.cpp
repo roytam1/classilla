@@ -1286,6 +1286,20 @@ nsXMLHttpRequest::SetRequestHeader(const char *header, const char *value)
   if (!mChannel)             // open() initializes mChannel, and open()
     return NS_ERROR_FAILURE; // must be called before first setRequestHeader()
 
+// bug 302263 modified for Classilla
+  // Prevent modification to certain HTTP headers (see bug 302263):
+  const char *kInvalidHeaders[] = {
+    "host", "content-length", "transfer-encoding", "via", "upgrade"
+  };
+  nsCString xheader;
+  xheader.Assign(header);
+  for (size_t i = 0; i < NS_ARRAY_LENGTH(kInvalidHeaders); ++i) {
+    //if (header.LowerCaseEqualsASCII(kInvalidHeaders[i])) {
+    if (xheader.EqualsIgnoreCase(kInvalidHeaders[i])) {
+      return NS_ERROR_INVALID_ARG;
+    }
+  }
+// end bug
   nsCOMPtr<nsIHttpChannel> httpChannel(do_QueryInterface(mChannel));
 
   if (httpChannel) {

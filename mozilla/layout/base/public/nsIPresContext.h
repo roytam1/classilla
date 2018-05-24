@@ -106,6 +106,7 @@ enum nsLanguageSpecificTransformType {
 const PRUint32 kPresContext_UseDocumentColors = 0x01;
 const PRUint32 kPresContext_UseDocumentFonts = 0x02;
 const PRUint32 kPresContext_UnderlineLinks = 0x03;
+const PRUint32 kClassilla_Aggressive_RuleNode = 0x04;
 
 // supported values for cached integer pref types
 const PRUint32 kPresContext_MinimumFontSize = 0x01;

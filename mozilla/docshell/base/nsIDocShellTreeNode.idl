@@ -23,6 +23,8 @@
 
 #include "nsISupports.idl"
 #include "nsIDocShellTreeItem.idl"
+// bug 103638
+#include "nsIDocShellTreeNodeTmp.idl"
 
 /**
  * The nsIDocShellTreeNode supplies the methods for interacting with children
@@ -53,6 +55,9 @@ interface nsIDocShellTreeNode : nsISupports
 	nsIDocShellTreeItem getChildAt(in long index);
 
 	/*
+	as of bug 103638:
+	Deprecated method signature, see nsIDocShellTreeNodeTmp for details
+	
 	Return the child DocShellTreeItem with the specified name.
 	aName - This is the name of the item that is trying to be found.
 	aRecurse - Is used to tell the function to recurse through children.

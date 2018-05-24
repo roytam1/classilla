@@ -21,6 +21,8 @@
  */
 
 #include "nsISupports.idl"
+// bug 103638
+#include "nsIDocShellTreeOwnerTmp.idl"
 
 /**
  * The nsIDocShellTreeOwner
@@ -31,7 +33,9 @@ interface nsIDocShellTreeItem;
 [scriptable, uuid(80F30E10-A7CF-11d3-AFC5-00A024FFC08C)]
 interface nsIDocShellTreeOwner : nsISupports
 {
-	/*
+	/* as of bug 103638:
+	Deprecated method signature, see nsIDocShellTreeOwnerTmp for details
+	
 	Return the child DocShellTreeItem with the specified name.
 	name - This is the name of the item that is trying to be found.
 	aRequestor - This is the docshellTreeItem that is requesting the find.  This

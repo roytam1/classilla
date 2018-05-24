@@ -464,7 +464,7 @@ typedef struct Run {
 #define ADD_ODD_BIT_FROM_LEVEL(x, level)  ((x)|=((PRUint32)level<<31))
 #define REMOVE_ODD_BIT(x)          ((x)&=~INDEX_ODD_BIT)
 
-#define GET_INDEX(x)   (x&~INDEX_ODD_BIT)
+#define BIDI_GET_INDEX(x)   (x&~INDEX_ODD_BIT)
 #define GET_ODD_BIT(x) ((PRUint32)x>>31)
 #define IS_ODD_RUN(x)  ((x&INDEX_ODD_BIT)!=0)
 #define IS_EVEN_RUN(x) ((x&INDEX_ODD_BIT)==0)

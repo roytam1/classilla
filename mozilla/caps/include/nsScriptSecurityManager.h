@@ -300,9 +300,13 @@ private:
     virtual ~nsScriptSecurityManager();
 
     static JSBool JS_DLL_CALLBACK
-    CheckJSFunctionCallerAccess(JSContext *cx, JSObject *obj,
+    /* CheckJSFunctionCallerAccess(JSContext *cx, JSObject *obj,
+                                jsval id, JSAccessMode mode,
+                                jsval *vp); */
+    CheckObjectAccess(JSContext *cx, JSObject *obj,
                                 jsval id, JSAccessMode mode,
                                 jsval *vp);
+    
 
     static nsresult
     doGetObjectPrincipal(JSContext *cx, JSObject *obj, nsIPrincipal **result);
@@ -359,6 +363,8 @@ private:
 
     nsresult
     GetFunctionObjectPrincipal(JSContext* cx, JSObject* obj, 
+    						   // pull up 1.9 for bug 316589
+    						   JSStackFrame *fp,
                                nsIPrincipal** result);
 
     nsresult
@@ -402,7 +408,7 @@ private:
 #endif
 
     // JS strings we need to clean up on shutdown
-    static jsval sCallerID;
+    //static jsval sCallerID;
     static jsval sEnabledID;
 
     inline void

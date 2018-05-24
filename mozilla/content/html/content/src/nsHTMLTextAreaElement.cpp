@@ -274,7 +274,10 @@ nsHTMLTextAreaElement::Blur()
 NS_IMETHODIMP
 nsHTMLTextAreaElement::Focus() 
 {
-  return SetElementFocus(PR_TRUE);
+  // bug 124750
+  if (ShouldFocus(this))
+  	return SetElementFocus(PR_TRUE);
+  return NS_OK;
 }
 
 NS_IMETHODIMP

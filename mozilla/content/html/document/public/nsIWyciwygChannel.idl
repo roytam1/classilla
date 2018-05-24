@@ -45,7 +45,8 @@
  * help layout save dynamic pages in cache for future retrievals.
  */
 
-[scriptable, uuid (c36730c0-a3b9-4732-9973-c5e7dbe0dabe)]
+//[scriptable, uuid (c36730c0-a3b9-4732-9973-c5e7dbe0dabe)]
+[scriptable, uuid(4b3d42ee-bcdc-44b3-89f6-cf49a68cc27b)]
 interface nsIWyciwygChannel : nsIChannel
 {
     /**
@@ -57,4 +58,10 @@ interface nsIWyciwygChannel : nsIChannel
      * Close the cache entry; subsequent writes have undefined behavior.
      */
     void closeCacheEntry(in nsresult reason);
+
+  /**
+   * Set the wyciwyg channels security info
+   */
+  void setSecurityInfo(in nsISupports aSecurityInfo);
+
 };

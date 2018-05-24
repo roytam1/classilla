@@ -38,9 +38,16 @@ class nsXULWindow;
 class nsSiteWindow2;
 
 class nsContentTreeOwner : public nsIDocShellTreeOwner,
+/* bug 103638
                                   public nsIBaseWindow,
                                   public nsIInterfaceRequestor,
                                   public nsIWebBrowserChrome
+*/
+                           public nsIDocShellTreeOwnerTmp,
+                           public nsIBaseWindow,
+                           public nsIInterfaceRequestor,
+                           public nsIWebBrowserChrome
+
 {
 friend class nsXULWindow;
 friend class nsSiteWindow2;
@@ -50,6 +57,7 @@ public:
 
    NS_DECL_NSIBASEWINDOW
    NS_DECL_NSIDOCSHELLTREEOWNER
+   NS_DECL_NSIDOCSHELLTREEOWNERTMP
    NS_DECL_NSIINTERFACEREQUESTOR
    NS_DECL_NSIWEBBROWSERCHROME
 

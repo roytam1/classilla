@@ -1412,6 +1412,8 @@ static void
 fun_finalize(JSContext *cx, JSObject *obj)
 {
     JSFunction *fun;
+    jsval v;
+    JSPrincipals *prin;
 
     /* Ignore newborn and cloned function objects. */
     fun = (JSFunction *) JS_GetPrivate(cx, obj);
@@ -1426,6 +1428,14 @@ fun_finalize(JSContext *cx, JSObject *obj)
         if (fun->u.i.script)
             js_DestroyScript(cx, fun->u.i.script);
         DestroyLocalNames(cx, fun);
+    }
+
+	// bug 316589. see explanation under "Reserve two slots ..."
+    if (JS_GetReservedSlot(cx, obj, 2, &v) && !JSVAL_IS_VOID(v)) {
+        prin = JSVAL_TO_PRIVATE(v);
+        JSPRINCIPALS_DROP(cx, prin);
+        // ???
+        JS_RemoveRoot(cx, (void *)prin);
     }
 }
 
@@ -1450,10 +1460,25 @@ fun_reserveSlots(JSContext *cx, JSObject *obj)
  * Reserve two slots in all function objects for XPConnect.  Note that this
  * does not bloat every instance, only those on which reserved slots are set,
  * and those on which ad-hoc properties are defined.
+ *
+ * Mozilla 1.9 can reliably determine if a script is running outside of its
+ * usual principal. Mozilla 1.3.1/Classilla cannot, so we backport bug 316589 here:
++ * Reserve three slots in all function objects. The first two are used by
++ * XPConnect to remember information about what interface and member function a
++ * particular cloned function represents.  The third slot is used by
++ * js_CloneFunctionObject to remember a cloned function object's principal.
++ * Cloned function objects are objects created when we need to dynamically bind
++ * a function to a closure that is not its compile-time closure (e.g., a
++ * function statement or brutal sharing).  See the uses of JS_GetReservedSlot in
++ * xpcwrappednativeinfo.cpp and XPCDispObject.cpp
++ *
++ * Note that this does not bloat every instance, only those on which reserved
++ * slots are set, and those on which ad-hoc properties are defined.
+ * -- Cameron
  */
 JS_FRIEND_DATA(JSClass) js_FunctionClass = {
     js_Function_str,
-    JSCLASS_HAS_PRIVATE | JSCLASS_NEW_RESOLVE | JSCLASS_HAS_RESERVED_SLOTS(2) |
+    JSCLASS_HAS_PRIVATE | JSCLASS_NEW_RESOLVE | JSCLASS_HAS_RESERVED_SLOTS(3) | // not 2
     JSCLASS_MARK_IS_TRACE | JSCLASS_HAS_CACHED_PROTO(JSProto_Function),
     JS_PropertyStub,  JS_PropertyStub,
     fun_getProperty,  JS_PropertyStub,
@@ -2070,8 +2095,28 @@ js_CloneFunctionObject(JSContext *cx, JSFunction *fun, JSObject *parent)
      */
     clone = js_NewObject(cx, &js_FunctionClass, NULL, parent,
                          sizeof(JSObject));
+    //clone = js_NewObject(cx, &js_FunctionClass, fun, parent, sizeof(JSObject));
     if (!clone)
         return NULL;
+        
+    // Bug 316589 (see above). Set its principals in the slot reserved for that purpose.
+    // Note that 1.9 no longer has findObjectPrincipals in cx, but in the cx's runtime.
+    // This only works because Classilla implements an ObjectPrincipalsFinder in dom::nsJSEnvironment like 1.9.
+    //if (cx->findObjectPrincipals) {
+    if(cx->runtime->findObjectPrincipals) {
+        JSPrincipals *prin;
+
+        //prin = cx->findObjectPrincipals(cx, parent);
+        prin = cx->runtime->findObjectPrincipals(cx, parent);
+        if (!prin || !JS_SetReservedSlot(cx, clone, 2, PRIVATE_TO_JSVAL(prin)))
+            	return NULL;
+        // root the principals?
+        JS_AddRoot(cx, (void *)prin);
+        JSPRINCIPALS_HOLD(cx, prin);
+    } else {
+    	//JS_WARNING("no findObjectPrincipals\n");
+    }
+
     clone->fslots[JSSLOT_PRIVATE] = PRIVATE_TO_JSVAL(fun);
     return clone;
 }

@@ -24,10 +24,12 @@
 
 #include "nscore.h"
 #include "nsXPITriggerInfo.h"
+#include "nsNetUtil.h"
 #include "nsDebug.h"
 #include "nsIServiceManager.h"
 #include "nsIEventQueueService.h"
 #include "nsICertificatePrincipal.h"
+#include "nsIScriptSecurityManager.h"
 
 static NS_DEFINE_IID(kEventQueueServiceCID, NS_EVENTQUEUESERVICE_CID);
 
@@ -87,6 +89,27 @@ PRBool nsXPITriggerItem::IsRelativeURL()
 
     PRInt32 spos = mURL.FindChar('/');
     return (cpos > spos);
+}
+
+// bug 268059
+const PRUnichar*
+nsXPITriggerItem::GetSafeURLString()
+{
+    // create the safe url string the first time
+    if (mSafeURL.IsEmpty() && !mURL.IsEmpty())
+    {
+        nsCOMPtr<nsIURI> uri;
+        NS_NewURI(getter_AddRefs(uri), mURL);
+        if (uri)
+        {
+            nsCAutoString spec;
+            uri->SetUserPass(NS_LITERAL_CSTRING("\0"));
+            uri->GetSpec(spec);
+            mSafeURL = NS_ConvertUTF8toUCS2(spec);
+        }
+    }
+
+    return mSafeURL.get();
 }
 
 
@@ -177,6 +200,35 @@ static void* handleTriggerEvent(XPITriggerEvent* event)
                              event->status );
     if ( args )
     {
+
+// bug 293331
+        nsCOMPtr<nsIScriptSecurityManager> secman = 
+            do_GetService(NS_SCRIPTSECURITYMANAGER_CONTRACTID);
+        
+        if (!secman)
+        {
+            JS_ReportError(event->cx, "Could not get script security manager service");
+            return 0;
+        }
+
+        nsCOMPtr<nsIPrincipal> principal;
+        secman->GetSubjectPrincipal(getter_AddRefs(principal));
+        if (!principal)
+        {
+            JS_ReportError(event->cx, "Could not get principal from script security manager");
+            return 0;
+        }
+
+        PRBool equals = PR_FALSE;
+        principal->Equals(event->princ, &equals);
+
+        if (!equals)
+        {
+            JS_ReportError(event->cx, "Principal of callback context is different then InstallTriggers");
+            return 0;
+        }
+// end bug
+
         JS_CallFunctionValue( event->cx,
                               JSVAL_TO_OBJECT(event->global),
                               event->cbval,

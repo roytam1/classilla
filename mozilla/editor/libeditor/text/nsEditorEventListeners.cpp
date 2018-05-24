@@ -379,10 +379,22 @@ nsTextEditorMouseListener::MouseClick(nsIDOMEvent* aMouseEvent)
     return NS_OK;   // NS_OK means "we didn't process the event".  Go figure.
 
   nsCOMPtr<nsIDOMMouseEvent> mouseEvent ( do_QueryInterface(aMouseEvent) );
+// bug 265728 is a good idea, but we don't have GetIsTrusted, and we aren't really vulnerable.
+#if(1)
   if (!mouseEvent) {
     //non-ui event passed in.  bad things.
     return NS_OK;
   }
+#else
+  nsCOMPtr<nsIDOMNSEvent> nsEvent ( do_QueryInterface(aMouseEvent) );
+  PRBool isTrusted = PR_FALSE;
+  if (!mouseEvent || !nsEvent ||
+      NS_FAILED(nsEvent->GetIsTrusted(&isTrusted)) || !isTrusted) {
+    //non-ui, or non-trusted evet passed in.  bad things.
+    return NS_OK;
+  }
+#endif
+// end bug
 
   // If we got a mouse down inside the editing area, we should force the 
   // IME to commit before we change the cursor position

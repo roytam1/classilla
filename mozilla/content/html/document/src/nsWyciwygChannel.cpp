@@ -229,7 +229,10 @@ nsWyciwygChannel::SetNotificationCallbacks(nsIInterfaceRequestor* aNotificationC
 NS_IMETHODIMP 
 nsWyciwygChannel::GetSecurityInfo(nsISupports * *aSecurityInfo)
 {
-  return NS_ERROR_NOT_IMPLEMENTED;
+  //return NS_ERROR_NOT_IMPLEMENTED;
+  NS_IF_ADDREF(*aSecurityInfo = mSecurityInfo);
+
+  return NS_OK;
 }
 
 NS_IMETHODIMP
@@ -330,6 +333,10 @@ nsWyciwygChannel::WriteToCacheEntry(const nsACString &aScript)
     if (NS_FAILED(rv)) return rv;
   }
 
+  if (mSecurityInfo) {
+    mCacheEntry->SetSecurityInfo(mSecurityInfo);
+  }
+
   if (!mCacheOutputStream) {
     // Get the outputstream from the cache entry.
     rv = mCacheEntry->OpenOutputStream(0, getter_AddRefs(mCacheOutputStream));    
@@ -354,6 +361,14 @@ nsWyciwygChannel::CloseCacheEntry(nsresult reason)
 
     mCacheEntry = 0;
   }
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsWyciwygChannel::SetSecurityInfo(nsISupports *aSecurityInfo)
+{
+  mSecurityInfo = aSecurityInfo;
+
   return NS_OK;
 }
 
@@ -524,6 +539,9 @@ nsWyciwygChannel::ReadFromCache()
 
   NS_ENSURE_TRUE(mCacheEntry, NS_ERROR_FAILURE);
   nsresult rv;
+
+  // Get the stored security info
+  mCacheEntry->GetSecurityInfo(getter_AddRefs(mSecurityInfo));
 
   // Get a transport to the cached data...
   rv = mCacheEntry->OpenInputStream(0, getter_AddRefs(mCacheInputStream));

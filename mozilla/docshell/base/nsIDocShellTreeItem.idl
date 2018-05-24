@@ -21,6 +21,8 @@
  */
 
 #include "nsISupports.idl"
+// bug 103638
+#include "nsIDocShellTreeItemTmp.idl" 
 
 interface nsIDocShellTreeOwner;
 
@@ -97,6 +99,10 @@ interface nsIDocShellTreeItem : nsISupports
 	readonly attribute nsIDocShellTreeItem sameTypeRootTreeItem;
 
 	/*
+	as of 103638:
+	Deprecated method signature. See nsIDocShellTreeItemTmp for the
+	new signature and details.
+
 	Returns the docShellTreeItem with the specified name.  Search order is as 
 	follows...
 	1.)  Check name of self, if it matches return it.

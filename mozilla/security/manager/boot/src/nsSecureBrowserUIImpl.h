@@ -109,6 +109,10 @@ protected:
   PRInt32 mSubRequestsNoSecurity;
 
   nsresult UpdateSecurityState(nsIRequest* aRequest);
+  // bug 277564
+  nsresult EvaluateAndUpdateSecurityState(nsIRequest *aRequest);
+  void UpdateSubrequestMembers(nsIRequest *aRequest);
+
   void ObtainEventSink(nsIChannel *channel);
   
   nsCOMPtr<nsISupports> mSSLStatus;

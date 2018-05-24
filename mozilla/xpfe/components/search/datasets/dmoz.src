@@ -6,10 +6,10 @@
 	name="dmoz.org"
 	description = "dmoz.org"
 	method="GET"
-	action="http://search.dmoz.org/cgi-bin/search"
+	action="http://www.dmoz.org/search"
 >
 
-<INPUT NAME="search" user>
+<INPUT NAME="q" user>
 
 <INTERPRET
 	browserResultType = "category"

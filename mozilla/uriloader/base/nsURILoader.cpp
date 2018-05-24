@@ -189,6 +189,11 @@ NS_IMETHODIMP nsDocumentOpenInfo::OnStartRequest(nsIRequest *request, nsISupport
   // - In the case of a 204 (No Content)  or 205 (Reset Content) response, do not try to find a
   //   content handler.  Just return.  This causes the request to be
   //   ignored.
+  // after bug 276720:
+  // - In the case of a 204 (No Content) or 205 (Reset Content) response, do
+  //   not try to find a content handler.  Return NS_BINDING_ABORTED to cancel
+  //   the request.  This has the effect of ensuring that the DocLoader does
+  //   not try to interpret this as a real request.  
   //
   nsCOMPtr<nsIHttpChannel> httpChannel(do_QueryInterface(request, &rv));
 
@@ -203,7 +208,7 @@ NS_IMETHODIMP nsDocumentOpenInfo::OnStartRequest(nsIRequest *request, nsISupport
     }
 
     if (204 == responseCode || 205 == responseCode) {
-      return NS_OK;
+      return NS_BINDING_ABORTED; // NOT NS_OK: bug 276720
     }
   }
 

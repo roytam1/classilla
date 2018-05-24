@@ -105,6 +105,27 @@ NS_IMETHODIMP nsImgManager::ShouldLoad(PRInt32 aContentType,
         {
             // First, let be sure we are processing an HTTP or HTTPS images.
             // We should not waste time with chrome url...
+		    // we only want to check http, https, ftp
+    		PRBool isFtp;
+    		rv = aContentLoc->SchemeIs("ftp", &isFtp);
+			NS_ENSURE_SUCCESS(rv,rv);
+		    PRBool needToCheck = isFtp;
+    		if (!needToCheck) {
+      			rv = aContentLoc->SchemeIs("http", &needToCheck);
+      			NS_ENSURE_SUCCESS(rv,rv);
+			    if (!needToCheck) {
+        			rv = aContentLoc->SchemeIs("https", &needToCheck);
+    				NS_ENSURE_SUCCESS(rv,rv);
+      			}
+    		}
+
+		    // for chrome:// and resources and others, no need to check.
+		    if (!needToCheck)
+       			return NS_OK;
+
+
+// bug 51631 and 203629 disables this
+#if(0)
             PRBool httpType;
             rv = aContentLoc->SchemeIs("http", &httpType);
             if (NS_FAILED(rv) || !httpType) {
@@ -112,6 +133,7 @@ NS_IMETHODIMP nsImgManager::ShouldLoad(PRInt32 aContentType,
                 rv = aContentLoc->SchemeIs("https", &httpType);
                 if (NS_FAILED(rv) || !httpType) return rv;
             }
+#endif
 
             nsCOMPtr<nsIURI> baseURI;
             nsCOMPtr<nsIDocument> doc;
@@ -138,6 +160,8 @@ NS_IMETHODIMP nsImgManager::ShouldLoad(PRInt32 aContentType,
                 rv = doc->GetBaseURL(*getter_AddRefs(baseURI));
                 if (NS_FAILED(rv) || !baseURI) return rv;
 
+// bug 51631 and 203629
+#if(0)
                 // Let check if we are running a mail window, doesn't matter if mail images are allowed
                 if (IMAGE_BlockedInMail()) {
                     nsCOMPtr<nsIDocShell> docshell;
@@ -152,6 +176,25 @@ NS_IMETHODIMP nsImgManager::ShouldLoad(PRInt32 aContentType,
                         }
                     }
                 }
+#else
+				nsCOMPtr<nsIDocShell> docshell;
+       			rv = GetRootDocShell(aWindow, getter_AddRefs(docshell));
+       			if (docshell) {
+         			PRUint32 appType;
+         			rv = docshell->GetAppType(&appType);
+         			if (NS_SUCCEEDED(rv) && appType == nsIDocShell::APP_TYPE_MAIL) {
+           				// never allow ftp for mail messages, 
+           				// because we don't want to send the users email address
+           				// as the anonymous password
+           				//if (mBlockInMailNewsPref || isFtp) {
+           				if (isFtp) { // if (mBlockInMailNewsPref || isFtp) {
+                            //we are dealing with an mail or newsgroup window, let's block the image
+                            *_retval = PR_FALSE;
+                            return NS_OK;
+                        }
+                    }
+                }
+#endif
 
                 nsCAutoString baseHost;
                 rv = baseURI->GetAsciiHost(baseHost);

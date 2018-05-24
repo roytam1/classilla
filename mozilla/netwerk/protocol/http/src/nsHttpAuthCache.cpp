@@ -59,17 +59,19 @@ nsHttpAuthCache::Init()
     return NS_OK;
 }
 
+// *scheme added by bug 226278
 nsresult
-nsHttpAuthCache::GetAuthEntryForPath(const char *host,
+nsHttpAuthCache::GetAuthEntryForPath(const char *scheme,
+									 const char *host,
                                      PRInt32     port,
                                      const char *path,
                                      nsHttpAuthEntry **entry)
 {
-    LOG(("nsHttpAuthCache::GetAuthEntryForPath [host=%s:%d path=%s]\n",
-        host, port, path));
+    LOG(("nsHttpAuthCache::GetAuthEntryForPath [scheme=%s:host=%s:%d path=%s]\n",
+        scheme, host, port, path));
 
     nsCAutoString key;
-    nsHttpAuthNode *node = LookupAuthNode(host, port, key);
+    nsHttpAuthNode *node = LookupAuthNode(scheme, host, port, key);
     if (!node)
         return NS_ERROR_NOT_AVAILABLE;
 
@@ -77,17 +79,18 @@ nsHttpAuthCache::GetAuthEntryForPath(const char *host,
 }
 
 nsresult
-nsHttpAuthCache::GetAuthEntryForDomain(const char *host,
+nsHttpAuthCache::GetAuthEntryForDomain(const char *scheme,
+									   const char *host,
                                        PRInt32     port,
                                        const char *realm,
                                        nsHttpAuthEntry **entry)
 
 {
-    LOG(("nsHttpAuthCache::GetAuthEntryForDomain [host=%s:%d realm=%s]\n",
-        host, port, realm));
+    LOG(("nsHttpAuthCache::GetAuthEntryForDomain [scheme=%s:host=%s:%d realm=%s]\n",
+        scheme, host, port, realm));
 
     nsCAutoString key;
-    nsHttpAuthNode *node = LookupAuthNode(host, port, key);
+    nsHttpAuthNode *node = LookupAuthNode(scheme, host, port, key);
     if (!node)
         return NS_ERROR_NOT_AVAILABLE;
 
@@ -95,7 +98,8 @@ nsHttpAuthCache::GetAuthEntryForDomain(const char *host,
 }
 
 nsresult
-nsHttpAuthCache::SetAuthEntry(const char *host,
+nsHttpAuthCache::SetAuthEntry(const char *scheme,
+							  const char *host,
                               PRInt32     port,
                               const char *path,
                               const char *realm,
@@ -107,8 +111,8 @@ nsHttpAuthCache::SetAuthEntry(const char *host,
 {
     nsresult rv;
 
-    LOG(("nsHttpAuthCache::SetAuthEntry [host=%s:%d realm=%s path=%s metadata=%x]\n",
-        host, port, realm, path, metadata));
+    LOG(("nsHttpAuthCache::SetAuthEntry [scheme=%s host=%s:%d realm=%s path=%s metadata=%x]\n",
+        scheme, host, port, realm, path, metadata));
 
     if (!mDB) {
         rv = Init();
@@ -116,7 +120,7 @@ nsHttpAuthCache::SetAuthEntry(const char *host,
     }
 
     nsCAutoString key;
-    nsHttpAuthNode *node = LookupAuthNode(host, port, key);
+    nsHttpAuthNode *node = LookupAuthNode(scheme, host, port, key);
 
     if (!node) {
         // only create a new node if we have a real entry
@@ -144,6 +148,8 @@ nsHttpAuthCache::SetAuthEntry(const char *host,
     return rv;
 }
 
+// No clearauthentry in 1.3.1
+
 nsresult
 nsHttpAuthCache::ClearAll()
 {
@@ -160,8 +166,9 @@ nsHttpAuthCache::ClearAll()
 // nsHttpAuthCache <private>
 //-----------------------------------------------------------------------------
 
+// This is the equivalent of GetAuthKey in 1.4 (bug 226278 modified for Classilla 1.3.1)
 nsHttpAuthNode *
-nsHttpAuthCache::LookupAuthNode(const char *host, PRInt32 port, nsAFlatCString &key)
+nsHttpAuthCache::LookupAuthNode(const char *scheme, const char *host, PRInt32 port, nsAFlatCString &key)
 {
     char buf[32];
 
@@ -170,7 +177,10 @@ nsHttpAuthCache::LookupAuthNode(const char *host, PRInt32 port, nsAFlatCString &
 
     PR_snprintf(buf, sizeof(buf), "%d", port);
 
-    key.Assign(host);
+    //key.Assign(host);
+    key.Assign(scheme);
+    key.Append(NS_LITERAL_CSTRING("://"));
+    key.Append(host);
     key.Append(':');
     key.Append(buf);
 

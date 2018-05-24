@@ -2766,6 +2766,33 @@ NS_IMETHODIMP nsWindow::ResetInputState()
 	return NS_ERROR_ABORT;
 }
 
+// Classilla issue 105
+nsWindow* nsWindow::GetTopLevelWindow(PRBool aStopOnDialogOrPopup)
+{
+   if (mIsTopWidgetWindow) return this;
+   
+   nsWindow* curWindow = this;
+ 
+   while (PR_TRUE) {
+     if (aStopOnDialogOrPopup) {
+       switch (curWindow->mWindowType) {
+         case eWindowType_dialog:
+         case eWindowType_popup:
+           return curWindow;
+       }
+     }
+ 
+     nsWindow* parentWindow = (nsWindow *)curWindow->GetParent();
+ 
+     if (!parentWindow)
+       return curWindow;
+ 
+     curWindow = parentWindow;
+   }
+}
+
+
+
 
 #if !TARGET_CARBON
 

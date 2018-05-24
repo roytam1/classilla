@@ -77,7 +77,6 @@
   	<RDF:li resource="NC:SearchCategory?engine=urn:search:engine:CompuServe.src" />
   	<RDF:li resource="NC:SearchCategory?engine=urn:search:engine:ICQ.src" />
         <RDF:li resource="NC:SearchCategory?engine=urn:search:engine:google.src" />
-  	<RDF:li resource="NC:SearchCategory?engine=urn:search:engine:NetscapeSearch.src" />
   </RDF:Seq>
 
   <RDF:Seq about="NC:SearchCategory?category=urn:search:category:2">

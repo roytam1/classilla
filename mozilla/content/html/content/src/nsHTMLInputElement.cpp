@@ -165,6 +165,7 @@ public:
                                nsIContent* aSubmitElement);
   NS_IMETHOD SaveState();
   NS_IMETHOD RestoreState(nsIPresState* aState);
+  virtual PRBool AllowDrop();
 
   // nsIContent
   NS_IMETHOD SetFocus(nsIPresContext* aPresContext);
@@ -1182,7 +1183,7 @@ nsHTMLInputElement::Select()
     // If the DOM event was not canceled (e.g. by a JS event handler
     // returning false)
     if (status == nsEventStatus_eIgnore) {
-      if (presContext) {
+      if (presContext && ShouldFocus(this)) { // bug 124750
         nsCOMPtr<nsIEventStateManager> esm;
         presContext->GetEventStateManager(getter_AddRefs(esm));
         if (esm) {
@@ -1320,7 +1321,15 @@ nsHTMLInputElement::HandleDOMEvent(nsIPresContext* aPresContext,
       }
     }
   }
-
+  
+  // bug 328566
+  // Don't allow mutation events which are targeted somewhere inside
+  // <input>, except if they are dispatched to the element itself.
+  if (!(NS_EVENT_FLAG_INIT & aFlags) &&
+      aEvent->eventStructType == NS_MUTATION_EVENT) {
+    return NS_OK;
+  }
+ 
   // If we're a file input we have anonymous content underneath
   // that we need to hide.  We need to set the event target now
   // to ourselves and the original target to the previous target.
@@ -2653,6 +2662,13 @@ nsHTMLInputElement::RestoreState(nsIPresState* aState)
   return rv;
 }
 
+PRBool
+nsHTMLInputElement::AllowDrop()
+{
+  // Allow drop on anything other than file inputs.
+
+  return mType != NS_FORM_INPUT_FILE;
+}
 
 /*
  * Radio group stuff

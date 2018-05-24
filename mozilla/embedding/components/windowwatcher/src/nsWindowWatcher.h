@@ -86,6 +86,7 @@ private:
   nsresult RemoveWindow(nsWatcherWindowEntry *inInfo);
 
   nsresult FindItemWithName(const PRUnichar *aName,
+  							nsIDocShellTreeItem *aOriginalRequestor, // bug 103638
                             nsIDocShellTreeItem **aFoundItem);
 
   static JSContext *GetJSContextFromWindow(nsIDOMWindow *aWindow);

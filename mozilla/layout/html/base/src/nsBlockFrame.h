@@ -558,6 +558,8 @@ protected:
 
 private:
   nsAbsoluteContainingBlock mAbsoluteContainer;
+public:
+  PRBool mDontBuildFloaterList;
 
 
 #ifdef DEBUG

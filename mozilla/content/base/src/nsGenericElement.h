@@ -603,6 +603,8 @@ public:
   static PRBool HasMutationListeners(nsIContent* aContent,
                                      PRUint32 aType);
 
+  static PRBool ShouldFocus(nsIContent *aContent); // bug 124750
+
   static nsresult InitHashes();
 
   static PLDHashTable sEventListenerManagersHash;

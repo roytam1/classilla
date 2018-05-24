@@ -51,6 +51,56 @@
 
 static NS_DEFINE_CID(kStreamListenerTeeCID, NS_STREAMLISTENERTEE_CID);
 
+// bug 297078
+//
+// From section 2.2 of RFC 2616, a token is defined as:
+//
+//   token          = 1*<any CHAR except CTLs or separators>
+//   CHAR           = <any US-ASCII character (octets 0 - 127)>
+//   separators     = "(" | ")" | "<" | ">" | "@"
+//                  | "," | ";" | ":" | "\" | <">
+//                  | "/" | "[" | "]" | "?" | "="
+//                  | "{" | "}" | SP | HT
+//   CTL            = <any US-ASCII control character
+//                    (octets 0 - 31) and DEL (127)>
+//   SP             = <US-ASCII SP, space (32)>
+//   HT             = <US-ASCII HT, horizontal-tab (9)>
+//
+static const char kValidTokenMap[128] = {
+    0, 0, 0, 0, 0, 0, 0, 0, //   0
+    0, 0, 0, 0, 0, 0, 0, 0, //   8
+    0, 0, 0, 0, 0, 0, 0, 0, //  16
+    0, 0, 0, 0, 0, 0, 0, 0, //  24
+
+    0, 1, 0, 1, 1, 1, 1, 1, //  32
+    0, 0, 1, 1, 0, 1, 1, 0, //  40
+    1, 1, 1, 1, 1, 1, 1, 1, //  48
+    1, 1, 0, 0, 0, 0, 0, 0, //  56
+
+    0, 1, 1, 1, 1, 1, 1, 1, //  64
+    1, 1, 1, 1, 1, 1, 1, 1, //  72
+    1, 1, 1, 1, 1, 1, 1, 1, //  80
+    1, 1, 1, 0, 0, 0, 1, 1, //  88
+
+    1, 1, 1, 1, 1, 1, 1, 1, //  96
+    1, 1, 1, 1, 1, 1, 1, 1, // 104
+    1, 1, 1, 1, 1, 1, 1, 1, // 112
+    1, 1, 1, 0, 1, 0, 1, 0  // 120
+};
+//static PRBool IsValidToken(const nsCString &s)
+static PRBool IsValidToken(const nsPromiseFlatCString &s) // for Classilla
+{
+    const char *start = s.get();
+    const char *end   = start + s.Length();
+
+    for (; start != end; ++start)
+        if (((unsigned char) *start) > 127 || !kValidTokenMap[*start])
+            return PR_FALSE;
+
+    return PR_TRUE;
+}
+// end bug
+
 //-----------------------------------------------------------------------------
 // nsHttpChannel <public>
 //-----------------------------------------------------------------------------
@@ -701,6 +751,19 @@ nsHttpChannel::ProcessNormal()
     // being called inside our OnDataAvailable (see bug 136678).
     mCachedContentIsPartial = PR_FALSE;
 
+	// Fudge content types we want to be treated as something else from the network
+	// (Classilla issue 184, issue 189). We also have to stuff this in the cached headers,
+	// if there are any.
+	if(
+		mResponseHead->ContentType().Equals(NS_LITERAL_CSTRING("text/vnd.wap.wml")) ||
+		mResponseHead->ContentType().Equals(NS_LITERAL_CSTRING("application/xhtml+xml")) ||
+		0) {
+			mResponseHead->SetContentType(NS_LITERAL_CSTRING("text/html"));
+			if (mCachedResponseHead) {
+				mCachedResponseHead->SetContentType(NS_LITERAL_CSTRING("text/html"));
+			}
+	}
+		
     // For .gz files, apache sends both a Content-Type: application/x-gzip
     // as well as Content-Encoding: gzip, which is completely wrong.  In
     // this case, we choose to ignore the rogue Content-Encoding header. We
@@ -1704,8 +1767,33 @@ nsHttpChannel::ProcessAuthentication(PRUint32 httpStatus)
     const char *challenge;
     PRBool proxyAuth = (httpStatus == 407);
 
+// bug 267263, partial
+#if(0)
     if (proxyAuth)
         challenge = mResponseHead->PeekHeader(nsHttp::Proxy_Authenticate);
+#else
+    if (proxyAuth) {
+        // only allow a proxy challenge if we have a proxy server configured.
+        // otherwise, we could inadvertantly expose the user's proxy
+        // credentials to an origin server.  We could attempt to proceed as
+        // if we had received a 401 from the server, but why risk flirting
+        // with trouble?  IE similarly rejects 407s when a proxy server is
+        // not configured, so there's no reason not to do the same.
+        if (!mConnectionInfo->UsingHttpProxy()) {
+            LOG(("rejecting 407 when proxy server not configured!\n"));
+            return NS_ERROR_UNEXPECTED;
+        }
+        if (mConnectionInfo->UsingSSL() && !mTransaction->SSLConnectFailed()) {
+            // we need to verify that this challenge came from the proxy
+            // server itself, and not some server on the other side of the
+            // SSL tunnel.
+            LOG(("rejecting 407 from origin server!\n"));
+            return NS_ERROR_UNEXPECTED;
+        }
+        challenge = mResponseHead->PeekHeader(nsHttp::Proxy_Authenticate);
+    }
+#endif
+// end bug
     else
         challenge = mResponseHead->PeekHeader(nsHttp::WWW_Authenticate);
 
@@ -1795,16 +1883,23 @@ nsHttpChannel::GetCredentials(const char *challenges,
 
     nsCAutoString realm;
     ParseRealm(challenge.get(), realm);
+    
+    
 
     const char *host;
-    nsCAutoString path;
+    nsCAutoString path, scheme;
     nsXPIDLString *user;
     nsXPIDLString *pass;
     PRInt32 port;
-
-    if (proxyAuth) {
+	
+    // it is possible for the origin server to fake a proxy challenge.  if
+    // that happens we need to be sure to use the origin server as the auth
+    // domain.  otherwise, we could inadvertantly expose the user's proxy
+    // credentials to an origin server. (modified M220122 for Classilla / bug 226278)
+    if (proxyAuth && mConnectionInfo->UsingHttpProxy()) {
         host = mConnectionInfo->ProxyHost();
         port = mConnectionInfo->ProxyPort();
+        scheme = NS_LITERAL_CSTRING("http");
         user = &mProxyUser;
         pass = &mProxyPass;
     }
@@ -1816,6 +1911,9 @@ nsHttpChannel::GetCredentials(const char *challenges,
 
         rv = GetCurrentPath(path);
         if (NS_FAILED(rv)) return rv;
+        
+        rv = mURI->GetScheme(scheme);
+        if (NS_FAILED(rv)) return rv;
     }
 
     //
@@ -1825,7 +1923,7 @@ nsHttpChannel::GetCredentials(const char *challenges,
     // try instead.
     //
     nsHttpAuthEntry *entry = nsnull;
-    authCache->GetAuthEntryForDomain(host, port, realm.get(), &entry);
+    authCache->GetAuthEntryForDomain(scheme.get(), host, port, realm.get(), &entry);
 
     PRBool requireUserPass = PR_FALSE;
     rv = auth->ChallengeRequiresUserPass(challenge.get(), &requireUserPass);
@@ -1837,8 +1935,8 @@ nsHttpChannel::GetCredentials(const char *challenges,
                 LOG(("clearing bad credentials from the auth cache\n"));
                 // ok, we've already tried this user:pass combo, so clear the
                 // corresponding entry from the auth cache.
-                ClearPasswordManagerEntry(host, port, realm.get(), entry->User());
-                authCache->SetAuthEntry(host, port, nsnull, realm.get(),
+                ClearPasswordManagerEntry(scheme.get(), host, port, realm.get(), entry->User());
+                authCache->SetAuthEntry(scheme.get(), host, port, nsnull, realm.get(),
                                         nsnull, nsnull, nsnull, nsnull, nsnull);
                 entry = nsnull;
                 user->Adopt(0);
@@ -1859,7 +1957,8 @@ nsHttpChannel::GetCredentials(const char *challenges,
         if (!entry && user->IsEmpty()) {
             // at this point we are forced to interact with the user to get their
             // username and password for this domain.
-            rv = PromptForUserPass(host, port, proxyAuth, realm.get(),
+            // PromptForUserPass is the equivalent of PromptForIdentity in 1.3.1
+            rv = PromptForUserPass(scheme.get(), host, port, proxyAuth, realm.get(),
                                    getter_Copies(*user),
                                    getter_Copies(*pass));
             if (NS_FAILED(rv)) return rv;
@@ -1893,7 +1992,7 @@ nsHttpChannel::GetCredentials(const char *challenges,
     //
     // if the credentials are not reusable, then we don't bother sticking them
     // in the auth cache.
-    return authCache->SetAuthEntry(host, port, path.get(), realm.get(),
+    return authCache->SetAuthEntry(scheme.get(), host, port, path.get(), realm.get(),
                                    reusable ? creds.get() : nsnull,
                                    user->get(), pass->get(),
                                    challenge.get(), metadata);
@@ -2002,8 +2101,10 @@ nsHttpChannel::ParseRealm(const char *challenge, nsACString &realm)
     }
 }
 
+// "PromptForIdentity"
 nsresult
-nsHttpChannel::PromptForUserPass(const char *host,
+nsHttpChannel::PromptForUserPass(const char *scheme,
+								 const char *host,
                                  PRInt32 port,
                                  PRBool proxyAuth,
                                  const char *realm,
@@ -2020,6 +2121,7 @@ nsHttpChannel::PromptForUserPass(const char *host,
     // construct the domain string
     // we always add the port to domain since it is used
     // as the key for storing in password maanger.
+    // XXX: need scheme:// at some point; see bug 226278
     nsCAutoString domain;
     domain.Assign(host);
     domain.Append(':');
@@ -2062,6 +2164,12 @@ nsHttpChannel::PromptForUserPass(const char *host,
         realmU.AppendWithConversion(realm);
         realmU.Append(NS_LITERAL_STRING("\""));
 
+        // prepend "scheme://" displayHost (bug 226278)
+        nsAutoString schemeU;
+        schemeU.AssignWithConversion(scheme);
+        schemeU.Append(NS_LITERAL_STRING("://"));
+        hostU.Insert(schemeU.get(), 0);
+
         const PRUnichar *strings[] = { realmU.get(), hostU.get() };
         rv = bundle->FormatStringFromName(
                         NS_LITERAL_STRING("EnterUserPasswordForRealm").get(),
@@ -2093,6 +2201,7 @@ nsHttpChannel::PromptForUserPass(const char *host,
 void
 nsHttpChannel::SetAuthorizationHeader(nsHttpAuthCache *authCache,
                                       nsHttpAtom header,
+                                      const char *scheme, // bug 226278
                                       const char *host,
                                       PRInt32 port,
                                       const char *path,
@@ -2103,7 +2212,7 @@ nsHttpChannel::SetAuthorizationHeader(nsHttpAuthCache *authCache,
     nsHttpAuthEntry *entry = nsnull;
     nsresult rv;
 
-    rv = authCache->GetAuthEntryForPath(host, port, path, &entry);
+    rv = authCache->GetAuthEntryForPath(scheme, host, port, path, &entry);
     if (NS_SUCCEEDED(rv)) {
         nsXPIDLCString temp;
         const char *creds = entry->Creds();
@@ -2138,17 +2247,19 @@ nsHttpChannel::AddAuthorizationHeaders()
     if (authCache) {
         // check if proxy credentials should be sent
         const char *proxyHost = mConnectionInfo->ProxyHost();
-        if (proxyHost)
+        if (proxyHost && mConnectionInfo->UsingHttpProxy())
             SetAuthorizationHeader(authCache, nsHttp::Proxy_Authorization,
-                                   proxyHost, mConnectionInfo->ProxyPort(),
+                                  // proxyHost, mConnectionInfo->ProxyPort(),
+                                   "http", proxyHost, mConnectionInfo->ProxyPort(), // bug 226278
                                    nsnull,
                                    getter_Copies(mProxyUser),
                                    getter_Copies(mProxyPass));
 
         // check if server credentials should be sent
-        nsCAutoString path;
-        if (NS_SUCCEEDED(GetCurrentPath(path)))
+        nsCAutoString path, scheme;
+        if (NS_SUCCEEDED(GetCurrentPath(path)) && NS_SUCCEEDED(mURI->GetScheme(scheme)))
             SetAuthorizationHeader(authCache, nsHttp::Authorization,
+            					   scheme.get(),
                                    mConnectionInfo->Host(),
                                    mConnectionInfo->Port(),
                                    path.get(),
@@ -2385,7 +2496,7 @@ nsHttpChannel::SetContentType(const nsACString &value)
 
     nsCAutoString contentTypeBuf, charsetBuf;
     NS_ParseContentType(value, contentTypeBuf, charsetBuf);
-
+    
     mResponseHead->SetContentType(contentTypeBuf);
 
     // take care not to stomp on an existing charset
@@ -2512,7 +2623,20 @@ nsHttpChannel::SetRequestMethod(const nsACString &method)
 {
     NS_ENSURE_TRUE(!mIsPending, NS_ERROR_IN_PROGRESS);
 
+// bug 297078 modified for Classilla
+#if(0)
     nsHttpAtom atom = nsHttp::ResolveAtom(method);
+#else
+    //const nsCString &flatMethod = PromiseFlatCString(method);
+    const nsPromiseFlatCString &flatMethod = PromiseFlatCString(method);
+
+    // Method names are restricted to valid HTTP tokens.
+    if (!IsValidToken(flatMethod))
+        return NS_ERROR_INVALID_ARG;
+
+    nsHttpAtom atom = nsHttp::ResolveAtom(flatMethod.get());
+#endif
+// end bug
     if (!atom)
         return NS_ERROR_FAILURE;
 
@@ -2703,6 +2827,8 @@ nsHttpChannel::SetRequestHeader(const nsACString &header,
 {
     NS_ENSURE_TRUE(!mIsPending, NS_ERROR_IN_PROGRESS);
 
+// bug 297078 modified for Classilla
+#if(0)
     LOG(("nsHttpChannel::SetRequestHeader [this=%x header=\"%s\" value=\"%s\" merge=%u]\n",
         this, PromiseFlatCString(header).get(), PromiseFlatCString(value).get(), merge));
 
@@ -2713,6 +2839,41 @@ nsHttpChannel::SetRequestHeader(const nsACString &header,
     }
 
     return mRequestHead.SetHeader(atom, value, merge);
+#else
+    //const nsCString &flatHeader = PromiseFlatCString(header);
+    //const nsCString &flatValue  = PromiseFlatCString(value);
+    const nsPromiseFlatCString &flatHeader = PromiseFlatCString(header);
+    const nsPromiseFlatCString &flatValue = PromiseFlatCString(value);
+
+    LOG(("nsHttpChannel::SetRequestHeader [this=%x header=\"%s\" value=\"%s\" merge=%u]\n",
+        this, flatHeader.get(), flatValue.get(), merge));
+
+    // Header names are restricted to valid HTTP tokens.
+    if (!IsValidToken(flatHeader))
+        return NS_ERROR_INVALID_ARG;
+    
+    // Header values MUST NOT contain line-breaks.  RFC 2616 technically
+    // permits CTL characters, including CR and LF, in header values provided
+    // they are quoted.  However, this can lead to problems if servers do not
+    // interpret quoted strings properly.  Disallowing CR and LF here seems
+    // reasonable and keeps things simple.  We also disallow a null byte.
+    //if (flatValue.FindCharInSet("\r\n") != kNotFound ||
+    
+    // It seems as if there is a more efficient way to do this. maybe not in 1.3.1.
+    nsCString t;
+    t.Assign(flatValue.get());
+    if (t.FindCharInSet("\r\n") != kNotFound ||
+        flatValue.Length() != strlen(flatValue.get()))
+        return NS_ERROR_INVALID_ARG;
+
+    nsHttpAtom atom = nsHttp::ResolveAtom(flatHeader.get());
+    if (!atom) {
+        NS_WARNING("failed to resolve atom");
+        return NS_ERROR_NOT_AVAILABLE;
+    }
+
+    return mRequestHead.SetHeader(atom, flatValue, merge);
+#endif
 }
 
 NS_IMETHODIMP
@@ -3093,6 +3254,28 @@ nsHttpChannel::OnDataAvailable(nsIRequest *request, nsISupports *ctxt,
 
     if (mListener) {
         //
+        // synthesize transport progress event.  we do this here since we want
+        // to delay OnProgress events until we start streaming data.  this is
+        // crucially important since it impacts the lock icon (see bug 240053).
+        //
+        nsresult transportStatus;
+        if (request == mCachePump)
+            transportStatus = nsITransport::STATUS_READING;
+        else
+            transportStatus = nsISocketTransport::STATUS_RECEIVING_FROM;
+
+        // mResponseHead may reference new or cached headers, but either way it
+        // holds our best estimate of the total content length.  Even in the case
+        // of a byte range request, the content length stored in the cached
+        // response headers is what we want to use here.
+
+        PRUint32 progressMax = mResponseHead->ContentLength();
+        PRUint32 progress = mLogicalOffset + count;
+        NS_ASSERTION(progress <= progressMax, "unexpected progress values");
+
+        OnTransportStatus(nsnull, transportStatus, progress, progressMax);
+
+        //
         // we have to manually keep the logical offset of the stream up-to-date.
         // we cannot depend soley on the offset provided, since we may have 
         // already streamed some data from another source (see, for example,
@@ -3104,7 +3287,8 @@ nsHttpChannel::OnDataAvailable(nsIRequest *request, nsISupports *ctxt,
                                                   mLogicalOffset,
                                                   count);
         if (NS_SUCCEEDED(rv))
-            mLogicalOffset += count;
+            //mLogicalOffset += count;
+            mLogicalOffset = progress;
         return rv;
     }
 
@@ -3128,8 +3312,9 @@ nsHttpChannel::OnTransportStatus(nsITransport *trans, nsresult status,
         mProgressSink->OnStatus(this, nsnull, status, host.get());
 
         // suppress "sending to" progress event if not uploading
-        if (status == nsISocketTransport::STATUS_RECEIVING_FROM ||
-            (status == nsISocketTransport::STATUS_SENDING_TO && mUploadStream)) {
+        //if (status == nsISocketTransport::STATUS_RECEIVING_FROM ||
+        //    (status == nsISocketTransport::STATUS_SENDING_TO && mUploadStream)) {
+        if (progress > 0) { // bug 240053
             mProgressSink->OnProgress(this, nsnull, progress, progressMax);
         }
     }
@@ -3299,8 +3484,10 @@ nsHttpChannel::OnCacheEntryAvailable(nsICacheEntryDescriptor *entry,
 }
 
 void
-nsHttpChannel::ClearPasswordManagerEntry(const char *host, PRInt32 port, const char *realm, const PRUnichar *user)
+nsHttpChannel::ClearPasswordManagerEntry(const char *scheme, const char *host, PRInt32 port, const char *realm, const PRUnichar *user)
 {
+	// XXX: scheme is for future reference, see bug 226278
+	
     nsresult rv;
     nsCOMPtr<nsIPasswordManager> passWordManager = do_GetService(NS_PASSWORDMANAGER_CONTRACTID, &rv);
     if (passWordManager) {
@@ -3531,6 +3718,7 @@ nsHttpChannel::SetNewListener(nsIStreamListener *aListener, nsIStreamListener **
 
     wrapper->forget(_retval);
     mListener = aListener;
+    CloseCacheEntry(NS_ERROR_ABORT); // Classilla issue 199
     return NS_OK;
 }
 

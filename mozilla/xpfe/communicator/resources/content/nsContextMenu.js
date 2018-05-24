@@ -243,7 +243,8 @@ nsContextMenu.prototype = {
 
         // See if the user clicked on an image.
         if ( this.target.nodeType == Node.ELEMENT_NODE ) {
-             if ( this.target.localName.toUpperCase() == "IMG" ) {
+             //if ( this.target.localName.toUpperCase() == "IMG" ) {
+             if ( this.target instanceof HTMLImageElement ) { // bug 298892
                 this.onImage = true;
                 this.imageURL = this.target.src;
 
@@ -265,7 +266,8 @@ nsContextMenu.prototype = {
                             var area = areas[i];
                             if ( area.nodeType == Node.ELEMENT_NODE
                                  &&
-                                 area.localName.toUpperCase() == "AREA" ) {
+                                 //area.localName.toUpperCase() == "AREA" ) {
+                                 area instanceof HTMLAreaElement ) {
                                 // Get type (rect/circle/polygon/default).
                                 var type = area.getAttribute( "type" );
                                 var coords = this.parseCoords( area );
@@ -290,7 +292,8 @@ nsContextMenu.prototype = {
                         }
                     }
                 }
-             } else if ( this.target.localName.toUpperCase() == "OBJECT"
+             //} else if ( this.target.localName.toUpperCase() == "OBJECT"
+             } else if ( this.target instanceof HTMLObjectElement
                          &&
                          // See if object tag is for an image.
                          this.objectIsImage( this.target ) ) {
@@ -298,7 +301,8 @@ nsContextMenu.prototype = {
                 this.onImage = true;
                 // URL must be constructed.
                 this.imageURL = this.objectImageURL( this.target );
-             } else if ( this.target.localName.toUpperCase() == "INPUT") {
+             //} else if ( this.target.localName.toUpperCase() == "INPUT") {
+             } else if (this.target instanceof HTMLInputElement) {
                type = this.target.getAttribute("type");
                if(type && type.toUpperCase() == "IMAGE") {
                  this.onImage = true;
@@ -308,9 +312,11 @@ nsContextMenu.prototype = {
                } else /* if (this.target.getAttribute( "type" ).toUpperCase() == "TEXT") */ {
                  this.onTextInput = this.isTargetATextBox(this.target);
                }
-            } else if ( this.target.localName.toUpperCase() == "TEXTAREA" ) {
+            //} else if ( this.target.localName.toUpperCase() == "TEXTAREA" ) {
+            } else if (this.target instanceof HTMLTextAreaElement) {
                  this.onTextInput = true;
-            } else if ( this.target.localName.toUpperCase() == "HTML" ) {
+            //} else if ( this.target.localName.toUpperCase() == "HTML" ) {
+            } else if (this.target instanceof HTMLHtmlElement) {
                // pages with multiple <body>s are lame. we'll teach them a lesson.
                var bodyElt = this.target.ownerDocument.getElementsByTagName("body")[0];
                if ( bodyElt ) {
@@ -380,10 +386,13 @@ nsContextMenu.prototype = {
                 var localname = elem.localName.toUpperCase();
                 
                 // Link?
-                if ( !this.onLink && 
+                if ( !this.onLink && /*
                     ( (localname === "A" && elem.href) ||
                       localname === "AREA" ||
-                      localname === "LINK" ||
+                      localname === "LINK" || */
+                    ( (elem instanceof HTMLAnchorElement && elem.href) ||
+                       elem instanceof HTMLAreaElement ||
+                       elem instanceof HTMLLinkElement ||
                       elem.getAttributeNS( "http://www.w3.org/1999/xlink", "type") == "simple" ) ) {
                     // Clicked on a link.
                     this.onLink = true;
@@ -405,10 +414,14 @@ nsContextMenu.prototype = {
                 if ( !this.onMetaDataItem ) {
                     // We currently display metadata on anything which fits
                     // the below test.
+                    /*
                     if ( ( localname === "BLOCKQUOTE" && 'cite' in elem && elem.cite)  ||
                          ( localname === "Q" && 'cite' in elem && elem.cite)           ||
                          ( localname === "TABLE" && 'summary' in elem && elem.summary) ||
-                         ( ( localname === "INS" || localname === "DEL" ) &&
+                         ( ( localname === "INS" || localname === "DEL" ) && */
+                    if ( ( elem instanceof HTMLQuoteElement && 'cite' in elem && elem.cite) ||
+                         ( elem instanceof HTMLTableElement && 'summary' in elem && elem.summary) ||
+                         ( ( elem instanceof HTMLInsElement || elem instanceof HTMLDelElement) &&
                            ( ( 'cite' in elem && elem.cite ) ||
                              ( 'dateTime' in elem && elem.dateTime ) ) )               ||
                          ( 'title' in elem && elem.title )                             ||
@@ -579,7 +592,8 @@ nsContextMenu.prototype = {
         // when there is one
         var reference = null;
         if (context == "selection")
-          reference = focusedWindow.__proto__.getSelection.call(focusedWindow);
+          //reference = focusedWindow.__proto__.getSelection.call(focusedWindow);
+          reference = focusedWindow.getSelection(); // bug 289074
         else if (context == "mathml")
           reference = this.target;
         else
@@ -794,7 +808,8 @@ nsContextMenu.prototype = {
     
     searchSelected : function() {
         var focusedWindow = document.commandDispatcher.focusedWindow;
-        var searchStr = focusedWindow.__proto__.getSelection.call(focusedWindow);
+        //var searchStr = focusedWindow.__proto__.getSelection.call(focusedWindow);
+        var searchStr = focusedWindow.getSelection(); // bug 289074
         searchStr = searchStr.toString();
         searchStr = searchStr.replace( /^\s+/, "" );
         searchStr = searchStr.replace(/(\n|\r|\t)+/g, " ");
@@ -848,7 +863,8 @@ nsContextMenu.prototype = {
       if (node.nodeType != Node.ELEMENT_NODE)
         return false;
 
-      if (node.localName.toUpperCase() == "INPUT") {
+      //if (node.localName.toUpperCase() == "INPUT") {
+      if (node instanceof HTMLInputElement) {
         var attrib = "";
         var type = node.getAttribute("type");
 
@@ -864,7 +880,8 @@ nsContextMenu.prototype = {
                 (attrib != "RESET") &&
                 (attrib != "BUTTON") );
       } else  {
-        return(node.localName.toUpperCase() == "TEXTAREA");
+        //return(node.localName.toUpperCase() == "TEXTAREA");
+        return(node instanceof HTMLTextAreaElement);
       }
     },
     

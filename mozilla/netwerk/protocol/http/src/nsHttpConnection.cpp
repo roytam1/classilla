@@ -353,6 +353,9 @@ nsHttpConnection::OnHeadersAvailable(nsAHttpTransaction *trans,
             LOG(("SSL proxy CONNECT failed!\n"));
             // close out the write request
             mSocketOut->Close();
+            nsHttpTransaction *mtrans =
+                     NS_STATIC_CAST(nsHttpTransaction *, mTransaction);
+            mtrans->SetSSLConnectFailed(); // backbugs for bug 267263
         }
     }
 

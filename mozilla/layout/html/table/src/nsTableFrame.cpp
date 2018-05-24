@@ -1354,6 +1354,9 @@ nsTableFrame::InsertRowGroups(nsIPresContext&  aPresContext,
     OrderRowGroups(orderedRowGroups, numRowGroups);
 
     nsAutoVoidArray rows;
+    
+// bug 317554 modified for Classilla
+#if(0)
     for (nsIFrame* kidFrame = aFirstRowGroupFrame; kidFrame; kidFrame->GetNextSibling(&kidFrame)) {
       nsTableRowGroupFrame* rgFrame = GetRowGroupFrame(kidFrame);
       if (rgFrame) {
@@ -1385,6 +1388,44 @@ nsTableFrame::InsertRowGroups(nsIPresContext&  aPresContext,
         break;
       }
     }
+#else
+    // Loop over the rowgroups and check if some of them are new, if they are
+    // insert cellmaps in the order that is predefined by OrderRowGroups,
+    for (PRUint32 rgIndex = 0; rgIndex < numRowGroups; rgIndex++) {
+      nsIFrame* kidFrame = aFirstRowGroupFrame;
+      while (kidFrame) {
+        nsTableRowGroupFrame* rgFrame = GetRowGroupFrame(kidFrame);
+
+        if (GetRowGroupFrame((nsIFrame*)orderedRowGroups.ElementAt(rgIndex)) == rgFrame) {
+          nsTableRowGroupFrame* priorRG = (0 == rgIndex)
+            ? nsnull : GetRowGroupFrame((nsIFrame*)orderedRowGroups.ElementAt(rgIndex - 1)); 
+          // create and add the cell map for the row group
+          cellMap->InsertGroupCellMap(*rgFrame, priorRG);
+          // collect the new row frames in an array and add them to the table
+          //PRInt32 numRows = CollectRows(kidFrame, rows);
+          PRInt32 numRows = CollectRows(&aPresContext, kidFrame, rows);
+          if (numRows > 0) {
+            PRInt32 rowIndex = 0;
+            if (priorRG) {
+              PRInt32 priorNumRows = priorRG->GetRowCount();
+               rowIndex = priorRG->GetStartRowIndex() + priorNumRows;
+            }
+            InsertRows(aPresContext, *rgFrame, rows, rowIndex, PR_TRUE);
+            rows.Clear();
+          }
+          break;
+        }
+        else {
+          if (kidFrame == aLastRowGroupFrame) {
+            break;
+          }
+          //kidFrame = kidFrame->GetNextSibling();
+          kidFrame->GetNextSibling(&kidFrame);
+        }
+      }
+    }
+#endif
+// end bug
   }
 }
 

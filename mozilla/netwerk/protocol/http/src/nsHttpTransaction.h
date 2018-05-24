@@ -133,6 +133,11 @@ public:
     nsresult ReadSegments(nsAHttpSegmentReader *, PRUint32, PRUint32 *);
     nsresult WriteSegments(nsAHttpSegmentWriter *, PRUint32, PRUint32 *);
     void     Close(nsresult);
+    
+    // backbugs for bug 267263
+    void SetSSLConnectFailed() { mSSLConnectFailed = PR_TRUE; }
+    PRBool SSLConnectFailed() { return mSSLConnectFailed; }
+    
 
 private:
     nsresult Restart();
@@ -207,6 +212,8 @@ private:
     PRPackedBool                    mReceivedData;
     PRPackedBool                    mDestroying;
     PRPackedBool                    mClosed;
+    PRPackedBool					mHasRequestBody; // bug 240053
+    PRPackedBool					mSSLConnectFailed; // backbugs for bug 267643
 };
 
 #endif // nsHttpTransaction_h__

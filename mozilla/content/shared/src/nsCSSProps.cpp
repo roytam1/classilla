@@ -115,13 +115,46 @@ nsCSSProps::ReleaseTable(void)
   }
 }
 
+/* Handle aliases (backbugs from bug 693510) for Classilla 1.3.1 issue 193 */
+/* We do this backwards, since we natively use -moz-border-*. */
+/* Synthetic CSS properties we want to alias can be added here. */
+
+struct CSSPropertyAlias {
+  char name[sizeof("border-bottom-right-radius")];
+  nsCSSProperty id;
+};
+ 
+static const CSSPropertyAlias gAliases[] = {
+  { "border-radius", eCSSProperty__moz_border_radius },
+  { "border-bottom-left-radius", eCSSProperty__moz_border_radius_bottomLeft },
+  { "border-bottom-right-radius", eCSSProperty__moz_border_radius_bottomRight },
+  { "border-top-left-radius", eCSSProperty__moz_border_radius_topLeft },
+  { "border-top-right-radius", eCSSProperty__moz_border_radius_topRight },
+  /* { "-moz-box-shadow", eCSSProperty_box_shadow }, one day perhaps */
+  // Don't forget to update the sizeof in CSSPropertyAlias above with the
+  // longest string when you add stuff here.
+};
+
 nsCSSProperty 
 nsCSSProps::LookupProperty(const nsACString& aProperty)
 {
   NS_ASSERTION(gPropertyTable, "no lookup table, needs addref");
   if (gPropertyTable) {
-    return nsCSSProperty(gPropertyTable->Lookup(aProperty));
-  }  
+    nsCSSProperty res = nsCSSProperty(gPropertyTable->Lookup(aProperty));
+    if (res == eCSSProperty_UNKNOWN) {
+      nsCAutoString lopro(aProperty);
+      ToLowerCase(lopro);
+      for (const CSSPropertyAlias *alias = gAliases,
+                           *alias_end = gAliases + NS_ARRAY_LENGTH(gAliases);
+        alias < alias_end; ++alias) {
+        if (lopro.Equals(alias->name)) { // "LowerCaseEqualsASCII("
+          res = alias->id;
+          break;
+        }
+      }
+    }
+    return res;
+  }
   return eCSSProperty_UNKNOWN;
 }
 
@@ -132,7 +165,21 @@ nsCSSProps::LookupProperty(const nsAString& aProperty) {
   // converting and avoid a PromiseFlatCString() call.
   NS_ASSERTION(gPropertyTable, "no lookup table, needs addref");
   if (gPropertyTable) {
-    return nsCSSProperty(gPropertyTable->Lookup(aProperty));
+    nsCSSProperty res = nsCSSProperty(gPropertyTable->Lookup(aProperty));
+    if (res == eCSSProperty_UNKNOWN) {
+      // Yuck.
+      nsCAutoString lopro(NS_LossyConvertUCS2toASCII(aProperty).get());
+      ToLowerCase(lopro);
+      for (const CSSPropertyAlias *alias = gAliases,
+                              *alias_end = gAliases + NS_ARRAY_LENGTH(gAliases);
+           alias < alias_end; ++alias) {
+        if (lopro.Equals(alias->name)) { // "LowerCaseEqualsASCII("
+          res = alias->id;
+          break;
+        }
+      }
+    }
+    return res;
   }  
   return eCSSProperty_UNKNOWN;
 }

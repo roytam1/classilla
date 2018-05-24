@@ -175,10 +175,19 @@ nsDOMWindowList::NamedItem(const nsAString& aName, nsIDOMWindow** aReturn)
   // need to check that it's still non-null here.
 
   if (mDocShellNode) {
+// bug 103638
+#if(0)
     mDocShellNode->FindChildWithName(PromiseFlatString(aName).get(),
                                      PR_FALSE, PR_FALSE,
                                      nsnull, getter_AddRefs(item));
-
+#else
+    nsCOMPtr<nsIDocShellTreeNodeTmp> docShellNode =
+      do_QueryInterface(mDocShellNode);
+    docShellNode->FindChildWithNameTmp(PromiseFlatString(aName).get(),
+                                       PR_FALSE, PR_FALSE, nsnull,
+                                       nsnull, getter_AddRefs(item));
+#endif
+// end bug
     nsCOMPtr<nsIScriptGlobalObject> globalObject(do_GetInterface(item));
     NS_ASSERTION(globalObject, "Couldn't get to the globalObject");
     if (globalObject) {

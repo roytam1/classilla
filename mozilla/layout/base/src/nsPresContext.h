@@ -238,6 +238,7 @@ protected:
   PRPackedBool          mUseDocumentColors;       // set in GetUserPrefs
   PRPackedBool          mUnderlineLinks;          // set in GetUserPrefs
   PRPackedBool          mUseFocusColors;          // set in GetUserPrefs
+  PRPackedBool			mAggressiveRuleNode;	  // set in GetUserPrefs for Classilla
 
   nscolor               mDefaultColor;            // set in GetUserPrefs
   nscolor               mDefaultBackgroundColor;  // set in GetUserPrefs

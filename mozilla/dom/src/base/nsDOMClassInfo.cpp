@@ -4035,13 +4035,21 @@ nsWindowSH::NewResolve(nsIXPConnectWrappedNative *wrapper, JSContext *cx,
     }
 
     if (count > 0) {
+      nsCOMPtr<nsIDocShellTreeNodeTmp> dsntmp(do_QueryInterface(dsn)); // bug 103638
       nsCOMPtr<nsIDocShellTreeItem> child;
 
       const jschar *chars = ::JS_GetStringChars(str);
 
+#if(0)
       dsn->FindChildWithName(NS_REINTERPRET_CAST(const PRUnichar*, chars),
                              PR_FALSE, PR_TRUE, nsnull,
                              getter_AddRefs(child));
+#else
+      dsntmp->FindChildWithNameTmp(NS_REINTERPRET_CAST(const PRUnichar*, chars),
+                                   PR_FALSE, PR_TRUE, nsnull, nsnull,
+                                   getter_AddRefs(child));
+#endif
+// end bug
 
       nsCOMPtr<nsIDOMWindow> child_win(do_GetInterface(child));
 

@@ -106,6 +106,10 @@
 // for mozilla 1.8
 #include "nsIContentIterator.h"
 
+// for bug 124750
+#include "nsIWebNavigation.h"
+#include "nsIBaseWindow.h"
+
 #ifdef DEBUG_waterson
 
 /**
@@ -2581,6 +2585,38 @@ nsGenericElement::SetFocus(nsIPresContext* aPresContext)
   }
   
   return NS_OK;
+}
+
+// bug 124750 modified for Classilla
+PRBool
+nsGenericElement::ShouldFocus(nsIContent *aContent)
+{
+  PRBool visible = PR_TRUE;
+
+  // Figure out if we're focusing an element in an inactive (hidden)
+  // tab (whose docshell is not visible), if so, drop this focus
+  // request on the floor
+
+  //nsIDocument *document = aContent->GetDocument();
+  nsCOMPtr<nsIDocument> document;
+  aContent->GetDocument(*getter_AddRefs(document));
+
+  if (document) {
+  	//nsIScriptGlobalObject *sgo = document->GetScriptGlobalObject();
+  	nsCOMPtr<nsIScriptGlobalObject> sgo;
+    document->GetScriptGlobalObject(getter_AddRefs(sgo));
+
+    if (sgo) {
+      nsCOMPtr<nsIWebNavigation> webNav(do_GetInterface(sgo));
+      nsCOMPtr<nsIBaseWindow> baseWin(do_QueryInterface(webNav));
+
+      if (baseWin) {
+        baseWin->GetVisibility(&visible);
+      }
+    }
+  }
+
+  return visible;
 }
 
 nsresult

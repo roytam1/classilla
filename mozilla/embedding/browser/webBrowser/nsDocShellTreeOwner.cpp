@@ -136,6 +136,7 @@ NS_IMPL_RELEASE(nsDocShellTreeOwner)
 NS_INTERFACE_MAP_BEGIN(nsDocShellTreeOwner)
     NS_INTERFACE_MAP_ENTRY_AMBIGUOUS(nsISupports, nsIDocShellTreeOwner)
     NS_INTERFACE_MAP_ENTRY(nsIDocShellTreeOwner)
+    NS_INTERFACE_MAP_ENTRY(nsIDocShellTreeOwnerTmp)
     NS_INTERFACE_MAP_ENTRY(nsIBaseWindow)
     NS_INTERFACE_MAP_ENTRY(nsIInterfaceRequestor)
     NS_INTERFACE_MAP_ENTRY(nsIWebProgressListener)
@@ -194,6 +195,17 @@ NS_IMETHODIMP nsDocShellTreeOwner::GetInterface(const nsIID& aIID, void** aSink)
 NS_IMETHODIMP nsDocShellTreeOwner::FindItemWithName(const PRUnichar* aName,
    nsIDocShellTreeItem* aRequestor, nsIDocShellTreeItem** aFoundItem)
 {
+// bug 103638
+  return FindItemWithNameTmp(aName, aRequestor, nsnull, aFoundItem);
+}
+
+NS_IMETHODIMP
+nsDocShellTreeOwner::FindItemWithNameTmp(const PRUnichar* aName,
+                                         nsIDocShellTreeItem* aRequestor,
+                                         nsIDocShellTreeItem* aOriginalRequestor,
+                                         nsIDocShellTreeItem** aFoundItem)
+{
+// end bug
   NS_ENSURE_ARG(aName);
   NS_ENSURE_ARG_POINTER(aFoundItem);
   *aFoundItem = nsnull; // if we don't find one, we return NS_OK and a null result 
@@ -231,6 +243,8 @@ NS_IMETHODIMP nsDocShellTreeOwner::FindItemWithName(const PRUnichar* aName,
   }
 
   // next, check our children
+// bug 103638
+#if(0)
   rv = FindChildWithName(aName, PR_TRUE, aRequestor, aFoundItem);
   if(NS_FAILED(rv) || *aFoundItem)
     return rv;
@@ -250,10 +264,42 @@ NS_IMETHODIMP nsDocShellTreeOwner::FindItemWithName(const PRUnichar* aName,
     return FindItemWithNameAcrossWindows(aName, aFoundItem);
 
   return NS_OK; // failed
+#else
+  rv = FindChildWithName(aName, PR_TRUE, aRequestor, aOriginalRequestor,
+                         aFoundItem);
+  if(NS_FAILED(rv) || *aFoundItem)
+    return rv;
+
+  // next, if we have a parent and it isn't the requestor, ask it
+  nsCOMPtr<nsIDocShellTreeOwner> reqAsTreeOwner(do_QueryInterface(aRequestor));
+
+  if(mTreeOwner) {
+    if (mTreeOwner != reqAsTreeOwner) {
+      nsCOMPtr<nsIDocShellTreeOwnerTmp> owner(do_QueryInterface(mTreeOwner));
+      if (owner) {
+        return owner->FindItemWithNameTmp(aName, mWebBrowser->mDocShellAsItem,
+                                          aOriginalRequestor, aFoundItem);
+      }
+
+      // Fall back to the unsafe FindItemWithName() method if the tree
+      // owner is not a nsIDocShellTreeOwnerTmp
+      return mTreeOwner->FindItemWithName(aName, mWebBrowser->mDocShellAsItem.get(),
+                                          aFoundItem);
+    }
+
+    return NS_OK;
+  }
+
+  // finally, failing everything else, search all windows
+  return FindItemWithNameAcrossWindows(aName, aRequestor, aOriginalRequestor,
+                                       aFoundItem);
+#endif
+// end bug
 }
 
 nsresult nsDocShellTreeOwner::FindChildWithName(const PRUnichar *aName, 
    PRBool aRecurse, nsIDocShellTreeItem* aRequestor, 
+   nsIDocShellTreeItem* aOriginalRequestor, // bug 103638
    nsIDocShellTreeItem **aFoundItem)
 {
   if (!mWebBrowser)
@@ -284,7 +330,13 @@ nsresult nsDocShellTreeOwner::FindChildWithName(const PRUnichar *aName,
         if (docshell) {
           nsCOMPtr<nsIDocShellTreeItem> item(do_QueryInterface(docshell));
           if (item && item.get() != aRequestor) {
-            rv = item->FindItemWithName(aName, mWebBrowser->mDocShellAsItem, aFoundItem);
+          // bug 103638
+            //rv = item->FindItemWithName(aName, mWebBrowser->mDocShellAsItem, aFoundItem);
+            nsCOMPtr<nsIDocShellTreeItemTmp> itemtmp(do_QueryInterface(item));
+            rv = itemtmp->FindItemWithNameTmp(aName,
+                                              mWebBrowser->mDocShellAsItem,
+                                              aOriginalRequestor, aFoundItem);
+// end bug
             if (NS_FAILED(rv) || *aFoundItem)
               break;
           }
@@ -297,6 +349,10 @@ nsresult nsDocShellTreeOwner::FindChildWithName(const PRUnichar *aName,
 
 nsresult nsDocShellTreeOwner::FindItemWithNameAcrossWindows(
                 const PRUnichar* aName,
+                // bug 103638
+                nsIDocShellTreeItem* aRequestor,
+                nsIDocShellTreeItem* aOriginalRequestor,
+                // end bug
                 nsIDocShellTreeItem** aFoundItem)
 {
   // search for the item across the list of top-level windows
@@ -326,9 +382,34 @@ nsresult nsDocShellTreeOwner::FindItemWithNameAcrossWindows(
         if (docshell) {
           nsCOMPtr<nsIDocShellTreeItem> item(do_QueryInterface(docshell));
           if (item) {
+// bug 103638
+#if(0)
             rv = item->FindItemWithName(aName, item, aFoundItem);
             if (NS_FAILED(rv) || *aFoundItem)
               break;
+#else
+            // Get the root tree item of same type, since roots are the only
+            // things that call into the treeowner to look for named items.
+            nsCOMPtr<nsIDocShellTreeItem> root;
+            item->GetSameTypeRootTreeItem(getter_AddRefs(root));
+            NS_ASSERTION(root, "Must have root tree item of same type");
+            // Make sure not to call back into our kid if we got called from it
+            if (root != aRequestor) {
+              // Get the tree owner so we can pass it in as the
+              // requestor so the child knows not to call back up.
+              nsCOMPtr<nsIDocShellTreeOwner> rootOwner;
+              root->GetTreeOwner(getter_AddRefs(rootOwner));
+
+              nsCOMPtr<nsIDocShellTreeItemTmp> rootTmp =
+                do_QueryInterface(root);
+              rv = rootTmp->FindItemWithNameTmp(aName, rootOwner,
+                                                aOriginalRequestor,
+                                                aFoundItem);
+              if (NS_FAILED(rv) || *aFoundItem)
+                break;
+            }
+#endif
+// end bug
           }
         }
       }

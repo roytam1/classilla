@@ -499,6 +499,11 @@ nsPresContext::GetUserPreferences()
     mFocusRingOnAnything = boolPref;
   }
 
+// Classilla issue 165 mitigation
+  if (NS_SUCCEEDED(mPrefs->GetBoolPref("classilla.layout.aggressive_style_cleanup", &boolPref))) {
+    mAggressiveRuleNode = boolPref;
+  }
+
   // * use fonts?
   if (NS_SUCCEEDED(mPrefs->GetIntPref("browser.display.use_document_fonts", &prefInt))) {
     mUseDocumentFonts = prefInt == 0 ? PR_FALSE : PR_TRUE;
@@ -559,6 +564,10 @@ nsPresContext::GetCachedBoolPref(PRUint32 aPrefType, PRBool& aValue)
   case kPresContext_UnderlineLinks:
     aValue = mUnderlineLinks;
     break;
+  // Classilla
+  case kClassilla_Aggressive_RuleNode:
+  	aValue = mAggressiveRuleNode;
+  	break;
   default :
     rv = NS_ERROR_INVALID_ARG;
     NS_ERROR("invalid arg");

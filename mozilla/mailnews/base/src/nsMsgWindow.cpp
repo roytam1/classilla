@@ -124,6 +124,8 @@ void nsMsgWindow::GetMessageWindowDocShell(nsIDocShell ** aDocShell)
     nsCOMPtr<nsIDocShell> rootShell(do_QueryReferent(mRootDocShellWeak));
     if (rootShell)
     {
+// bug 103638
+#if(0)
       nsCOMPtr<nsIDocShellTreeNode> rootAsNode(do_QueryInterface(rootShell));
 
       nsCOMPtr<nsIDocShellTreeItem> msgDocShellItem;
@@ -131,6 +133,15 @@ void nsMsgWindow::GetMessageWindowDocShell(nsIDocShell ** aDocShell)
          rootAsNode->FindChildWithName(NS_LITERAL_STRING("messagepane").get(), PR_TRUE, PR_FALSE,
                                        nsnull, getter_AddRefs(msgDocShellItem));
 
+#else
+      nsCOMPtr<nsIDocShellTreeNodeTmp> rootAsNode(do_QueryInterface(rootShell));
+
+      nsCOMPtr<nsIDocShellTreeItem> msgDocShellItem;
+      if(rootAsNode)
+         rootAsNode->FindChildWithNameTmp(NS_LITERAL_STRING("messagepane").get(), PR_TRUE, PR_FALSE,
+                                       nsnull, nsnull, getter_AddRefs(msgDocShellItem));
+#endif
+// end bug
       docShell = do_QueryInterface(msgDocShellItem);
       // we don't own mMessageWindowDocShell so don't try to keep a reference to it!
       mMessageWindowDocShellWeak = getter_AddRefs(NS_GetWeakReference(docShell));

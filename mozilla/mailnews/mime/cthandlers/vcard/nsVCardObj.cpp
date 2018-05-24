@@ -1348,6 +1348,8 @@ static void writeAttrValue(OFile *fp, VObject *o, int* length)
 
 static void writeGroup(OFile *fp, VObject *o)
 {
+// bug 257314
+#if(0)
     char buf1[256];
     char buf2[256];
     PL_strcpy(buf1,NAME_OF(o));
@@ -1358,6 +1360,15 @@ static void writeGroup(OFile *fp, VObject *o)
   PL_strcpy(buf1,buf2);
   }
     appendsOFile(fp,buf1);
+#else
+  nsCAutoString buf(NAME_OF(o));
+
+  while ((o=isAPropertyOf(o,VCGroupingProp)) != 0) {
+    buf.Insert(NS_LITERAL_CSTRING("."), 0);
+    buf.Insert(STRINGZ_VALUE_OF(o), 0);
+  }
+  appendsOFile(fp, buf.get());
+#endif
 }
 
 static int inList(const char **list, const char *s)

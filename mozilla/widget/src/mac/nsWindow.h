@@ -205,6 +205,7 @@ public:
 public:
   	// nsIKBStateControl interface
   	NS_IMETHOD ResetInputState();
+  	nsWindow* GetTopLevelWindow(PRBool aStopOnDialogOrPopup);
 
 protected:
 

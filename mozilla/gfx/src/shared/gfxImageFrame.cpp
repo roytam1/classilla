@@ -76,6 +76,12 @@ NS_IMETHODIMP gfxImageFrame::Init(nscoord aX, nscoord aY, nscoord aWidth, nscoor
     return NS_ERROR_FAILURE;
   }
 
+  /* reject over-wide or over-tall images */
+  if ( aWidth > 0xFFFF || aHeight > 0xFFFF){
+    NS_ERROR("image too big");
+    return NS_ERROR_FAILURE;
+  }
+
   nsresult rv;
 
   mOffset.MoveTo(aX, aY);

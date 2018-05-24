@@ -465,7 +465,20 @@ public:
   
   // bug 77296
   NS_IMETHOD_(PRBool) IsScriptEnabled() = 0;
-    
+
+  // Get the security info (i.e. SSL state etc) that the document got
+  // from the channel/document that created the content of the
+  // document. (bug 253121)
+  //
+  // @see nsIChannel
+  nsISupports *GetSecurityInfo()
+  {
+    return mSecurityInfo;
+  }
+
+protected:
+  // The document's security info
+  nsCOMPtr<nsISupports> mSecurityInfo;
 };
 
 

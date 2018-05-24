@@ -27,7 +27,7 @@
 #define IMG_BUILD_png 1
 #define IMG_BUILD_jpeg 1
 #define IMG_BUILD_xbm 1
-#define IMG_BUILD_ppm 1
+#define IMG_BUILD_ppm 0 // bug 220721
 #endif
 
 #include "nsIGenericFactory.h"

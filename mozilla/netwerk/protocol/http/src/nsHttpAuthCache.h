@@ -142,11 +142,14 @@ public:
    ~nsHttpAuthCache();
 
     nsresult Init();
+    
+    // scheme added by bug 226278
 
     // |host| and |port| are required
     // |path| can be null
     // |entry| is either null or a weak reference
-    nsresult GetAuthEntryForPath(const char *host,
+    nsresult GetAuthEntryForPath(const char *scheme,
+                                 const char *host,
                                  PRInt32     port,
                                  const char *path,
                                  nsHttpAuthEntry **entry);
@@ -154,7 +157,8 @@ public:
     // |host| and |port| are required
     // |realm| must not be null
     // |entry| is either null or a weak reference
-    nsresult GetAuthEntryForDomain(const char *host,
+    nsresult GetAuthEntryForDomain(const char *scheme,
+                                   const char *host,
                                    PRInt32     port,
                                    const char *realm,
                                    nsHttpAuthEntry **entry);
@@ -164,7 +168,8 @@ public:
     // |realm| must not be null
     // if |credentials|, |user|, |pass|, and |challenge| are each
     // null, then the entry is deleted.
-    nsresult SetAuthEntry(const char *host,
+    nsresult SetAuthEntry(const char *scheme,
+                          const char *host,
                           PRInt32     port,
                           const char *directory,
                           const char *realm,
@@ -173,12 +178,19 @@ public:
                           const PRUnichar *pass,
                           const char *challenge,
                           nsISupports *metadata);
+                          
+    // 1.3 doesn't have a ClearAuthEntry() (bug 226278)
 
     // expire all existing auth list entries including proxy auths. 
     nsresult ClearAll();
 
 private:
-    nsHttpAuthNode *LookupAuthNode(const char *host, PRInt32 port, nsAFlatCString &key);
+    //nsHttpAuthNode *LookupAuthNode(const char *host, PRInt32 port, nsAFlatCString &key);
+    nsHttpAuthNode *LookupAuthNode(const char *scheme,
+                                   const char *host,
+                                   PRInt32     port,
+                                   nsAFlatCString  &key); // modified for 1.3.1
+
 
     // hash table allocation functions
     static void*        PR_CALLBACK AllocTable(void *, PRSize size);

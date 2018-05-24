@@ -94,6 +94,11 @@
 #include "nsIXULPrototypeCache.h"
 #include "nsIDOMLoadListener.h"
 
+// for bug 292589
+#include "nsIContentPolicy.h"
+#include "nsContentPolicy.h"
+#include "nsContentPolicyUtils.h"
+
 // Static IIDs/CIDs. Try to minimize these.
 static NS_DEFINE_CID(kXMLDocumentCID,             NS_XMLDOCUMENT_CID);
 
@@ -572,10 +577,10 @@ nsXBLService::LoadBindings(nsIContent* aContent, const nsAString& aURL, PRBool a
   NS_ENSURE_SUCCESS(rv, rv); //XXX can a document have no URI here?
   PRBool isChrome = PR_FALSE;
   rv = docURI->SchemeIs("chrome", &isChrome);
-
-  if (NS_FAILED(rv) || !isChrome) {
     nsCOMPtr<nsIURI> bindingURI;
     rv = NS_NewURI(getter_AddRefs(bindingURI), aURL);
+
+  if (NS_FAILED(rv) || !isChrome) {
     NS_ENSURE_SUCCESS(rv, rv);
 
     nsCOMPtr<nsIScriptSecurityManager> secMan(
@@ -587,6 +592,32 @@ nsXBLService::LoadBindings(nsIContent* aContent, const nsAString& aURL, PRBool a
     if (NS_FAILED(rv))
       return rv;
   }
+  // end bug
+
+  // bug 292589 modified for Classilla
+  // Content policy check.  We have to be careful to not pass aContent as the
+  // context here.  Otherwise, if there is a JS-implemented content policy, we
+  // will attempt to wrap the content node, which will try to load XBL bindings
+  // for it, if any.  Since we're not done loading this binding yet, that will
+  // reenter this method and we'll end up creating a binding and then
+  // immediately clobbering it in our table.  That makes things very confused,
+  // leading to misbehavior and crashes.
+  //PRInt16 decision = nsIContentPolicy::ACCEPT;
+  PRBool decision = PR_TRUE;
+  rv = NS_CheckContentLoadPolicy(nsIContentPolicy::OTHER, //nsIContentPolicy::TYPE_OTHER,
+                                 bindingURI, // aURL,
+                                 //docURI, // not in 1.3.1
+                                 document,        // context
+                                 //EmptyCString(),  // mime guess // not in 1.3.1
+                                 nsnull,          // extra
+                                 &decision);
+
+  if (NS_SUCCEEDED(rv) && !decision) // !NS_CP_ACCEPTED(decision))
+    rv = NS_ERROR_NOT_AVAILABLE;
+
+  if (NS_FAILED(rv))
+    return rv;
+  // end bug
 
   nsCOMPtr<nsIXBLBinding> newBinding;
   nsCAutoString url; url.AssignWithConversion(aURL);

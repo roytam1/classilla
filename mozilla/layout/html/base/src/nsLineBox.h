@@ -1235,8 +1235,11 @@ class nsLineList {
       NS_ASSERTION(!empty(), "no element to pop");
       link_type *newFirst = mLink._mNext->_mNext;
       newFirst->_mPrev = &mLink;
-      // mLink._mNext->_mNext = nsnull;
-      // mLink._mNext->_mPrev = nsnull;
+// attempt to fix issue 107 ... didn't work, commented back out
+#if(0)
+       mLink._mNext->_mNext = nsnull;
+       mLink._mNext->_mPrev = nsnull;
+#endif
       mLink._mNext = newFirst;
     }
 
@@ -1254,8 +1257,10 @@ class nsLineList {
       NS_ASSERTION(!empty(), "no element to pop");
       link_type *newLast = mLink._mPrev->_mPrev;
       newLast->_mNext = &mLink;
-      // mLink._mPrev->_mPrev = nsnull;
-      // mLink._mPrev->_mNext = nsnull;
+#if(0)
+       mLink._mPrev->_mPrev = nsnull;
+       mLink._mPrev->_mNext = nsnull;
+#endif
       mLink._mPrev = newLast;
     }
 

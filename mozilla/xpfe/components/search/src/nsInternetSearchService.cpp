@@ -951,6 +951,13 @@ InternetSearchDataSource::DeferredInit()
 
 #ifdef	XP_MAC
 		// on Mac, use system's search files too
+		// BUT only if we ask for them (Classilla issue 78)
+		nsCOMPtr<nsIPrefBranch> prefBranch(do_GetService(NS_PREFSERVICE_CONTRACTID));
+        if (!prefBranch)
+            return NS_ERROR_FAILURE;
+        PRBool enabled = PR_FALSE;
+		if (NS_SUCCEEDED(prefBranch->GetBoolPref("classilla.search.sherlock.enabled", &enabled)) && enabled) {
+		
       	nsCOMPtr<nsIFile> macSearchDir;
 
         rv = NS_GetSpecialDirectory(NS_MAC_INTERNET_SEARCH_DIR, getter_AddRefs(macSearchDir));
@@ -961,6 +968,8 @@ InternetSearchDataSource::DeferredInit()
       		OSErr err = ::Gestalt(gestaltSystemVersion, &response);
       		PRBool checkFileType = (!err) && (response >= 0x00001000) ? PR_FALSE : PR_TRUE;
       		rv = GetSearchEngineList(macSearchDir, PR_TRUE, checkFileType);
+      	}
+      	
       	}
 #endif
 	}
@@ -2553,6 +2562,18 @@ InternetSearchDataSource::GetInternetSearchURL(const char *searchEngineURI,
 	nsAutoString	action, input, method, userVar;
 	if (NS_FAILED(rv = GetData(dataUni, "search", 0, "action", action)))
 	    return(rv);
+	    
+	// Modified bug 290037, since we still love gopher://
+    // Search only supports the http protocol
+    // we don't have StringBeginsWith yet
+	if (action.Length() < 7) return NS_ERROR_UNEXPECTED;
+#define StringBeginsWith(x, l, y) (Substring(x, 0, l).Equals(y))
+    if (!StringBeginsWith(action, 5, NS_LITERAL_STRING("http:")) &&
+    	!StringBeginsWith(action, 7, NS_LITERAL_STRING("gopher:")) &&
+        !StringBeginsWith(action, 6, NS_LITERAL_STRING("https:")))
+        return NS_ERROR_UNEXPECTED;
+    // end bug
+	
 	if (NS_FAILED(rv = GetData(dataUni, "search", 0, "method", method)))
 	    return(rv);
 	if (NS_FAILED(rv = GetInputs(dataUni, userVar, text, input, direction, pageNumber, whichButtons)))

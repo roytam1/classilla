@@ -220,9 +220,10 @@ nsXBLPrototypeHandler::ExecuteHandler(nsIDOMEventReceiver* aReceiver,
 
   // See if our event receiver is a content node (and not us).
   PRBool isXULKey = (mType & NS_HANDLER_TYPE_XUL);
+  PRBool isXBLCommand = (mType & NS_HANDLER_TYPE_XBL_COMMAND);
 
   //XUL handlers shouldn't be triggered by non-trusted events.
-  if (isXULKey) {
+  if (isXULKey || isXBLCommand) {
     nsCOMPtr<nsIPrivateDOMEvent> privateEvent = do_QueryInterface(aEvent);
     if (privateEvent) {
       PRBool trustedEvent;

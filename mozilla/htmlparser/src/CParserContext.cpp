@@ -151,11 +151,14 @@ CParserContext::~CParserContext(){
  * @update	rickg 03.18.2000
  */
 void CParserContext::SetMimeType(const nsACString& aMimeType){
+  // Classilla issue 184. Making XHTML into HTML is the least bad of all bad options.
+  // However, it's better to do it at the HttpChannel level.
   mMimeType.Assign(aMimeType);
-
   mDocType=ePlainText;
 
-  if(mMimeType.Equals(NS_LITERAL_CSTRING(kHTMLTextContentType)))
+  if(mMimeType.Equals(NS_LITERAL_CSTRING(kHTMLTextContentType))
+  	 //|| mMimeType.Equals(NS_LITERAL_CSTRING(kXHTMLApplicationContentType))
+  	 )
     mDocType=eHTML_Strict;
   else if (mMimeType.Equals(NS_LITERAL_CSTRING(kXMLTextContentType))          ||
            mMimeType.Equals(NS_LITERAL_CSTRING(kXMLApplicationContentType))   ||

@@ -165,6 +165,8 @@ nsEditingSession::MakeWindowEditable(nsIDOMWindow *aWindow,
   if (NS_FAILED(rv)) return rv;
 
   // Disable JavaScript in this document:
+// bug 319858
+#if(0)
   nsCOMPtr<nsIScriptGlobalObject> sgo (do_QueryInterface(aWindow));
   if (sgo)
   {
@@ -176,6 +178,16 @@ nsEditingSession::MakeWindowEditable(nsIDOMWindow *aWindow,
       if (NS_FAILED(rv)) return rv;
     }
   }
+#else
+  PRBool scriptsEnabled;
+  rv = docShell->GetAllowJavascript(&scriptsEnabled);
+  if (NS_FAILED(rv)) return rv;
+  if (scriptsEnabled) {
+    rv = docShell->SetAllowJavascript(PR_FALSE);
+    if (NS_FAILED(rv)) return rv;
+  }
+#endif
+// end bug
 
   // Always remove existing editor
   TearDownEditorOnWindow(aWindow);

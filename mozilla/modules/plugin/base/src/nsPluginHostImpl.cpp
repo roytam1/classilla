@@ -2899,11 +2899,12 @@ NS_IMETHODIMP nsPluginHostImpl::GetURLWithHeaders(nsISupports* pluginInst,
   {
 
 // bug 59767
+// additional comments out from bug 280664
     // if this is a Java plugin calling, we need to do a security check
-    nsresult rv2;
-    nsCOMPtr<nsIJVMPluginInstance> javaInstance(do_QueryInterface(instance, &rv2));
+    //nsresult rv2;
+    //nsCOMPtr<nsIJVMPluginInstance> javaInstance(do_QueryInterface(instance, &rv2));
     
-    if (NS_SUCCEEDED(rv2))
+    //if (NS_SUCCEEDED(rv2))
       rv = DoURLLoadSecurityCheck(instance, url);
   }
   if (NS_SUCCEEDED(rv))
@@ -2967,13 +2968,14 @@ NS_IMETHODIMP nsPluginHostImpl::PostURL(nsISupports* pluginInst,
   nsCOMPtr<nsIPluginInstance> instance = do_QueryInterface(pluginInst, &rv);
 
 // bug 59767
+// additional comments out from bug 280664
   if (NS_SUCCEEDED(rv))
   {
     // if this is a Java plugin calling, we need to do a security check
-    nsresult rv2;
-    nsCOMPtr<nsIJVMPluginInstance> javaInstance(do_QueryInterface(instance, &rv2));
+    //nsresult rv2;
+    //nsCOMPtr<nsIJVMPluginInstance> javaInstance(do_QueryInterface(instance, &rv2));
     
-    if (NS_SUCCEEDED(rv2))
+    //if (NS_SUCCEEDED(rv2))
       rv = DoURLLoadSecurityCheck(instance, url);
   }
 // end bug

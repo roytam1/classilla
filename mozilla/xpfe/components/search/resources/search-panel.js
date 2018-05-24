@@ -129,7 +129,7 @@ function rememberSearchText(target)
     target = target.QueryInterface(nsIRDFLiteral).Value;
     if (target) {
       // convert plusses (+) back to spaces
-      target = target.replace(/+/g, " ");
+      target = target.replace(/\+/g, " ");
       var textNode = document.getElementById("sidebar-search-text");
 
       if (target != textNode.value) {
@@ -482,7 +482,7 @@ function haveSearchResults()
     target = target.QueryInterface(nsIRDFLiteral).Value;
     if (target) {
       // convert plusses (+) back to spaces
-      target = target.replace(/+/g, " ");
+      target = target.replace(/\+/g, " ");
       var textNode = document.getElementById("sidebar-search-text");
       textNode.value = unescape(target);
       return true;
@@ -956,7 +956,7 @@ function saveSearch()
     target = target.QueryInterface(nsIRDFLiteral).Value;
     if (target) {
       // convert plusses (+) back to spaces
-      target = target.replace(/+/g, " ");
+      target = target.replace(/\+/g, " ");
       lastSearchText = unescape(target);
     }
   }

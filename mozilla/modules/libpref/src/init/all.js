@@ -48,19 +48,35 @@ pref("keyword.URL", "http://keyword.netscape.com/keyword/");
 pref("keyword.enabled", false);
 pref("general.useragent.locale", "chrome://navigator/locale/navigator.properties");
 pref("general.useragent.contentlocale", "chrome://navigator-region/locale/region.properties");
-pref("general.useragent.misc", "rv:9.3.0");
+pref("general.useragent.misc", "rv:9.3.1");
 // these are synced up by UA override support in Classilla 9.0.4+ using g.u.misc.
 pref("general.useragent.override_template", "");
 pref("general.useragent.override", "");
 // this is the general switch for the fixup renderer. see navigator.js.
-// we are not using it in 9.1, but we might use it later.
+// we are not using it now, but we might use it later.
 pref("classilla.layout.fixup", false);
 // controls fast scrolling in nsWindow.
 pref("classilla.layout.slowscroll", false);
 // controls hiding plugins to avoid ugliness with double buffering
 pref("classilla.layout.hideplugins", false);
+// controls rulenode cleanup strategy (mitigation for issue 165)
+//pref("classilla.layout.aggressive_style_cleanup", false);
+// don't need it right now
 // last tab opened
 pref("classilla.lasttab", "");
+
+// site agent controls
+pref("classilla.sitecontrol.www.google.com", "a");
+pref("classilla.sitecontrol.mail.google.com", "a");
+pref("classilla.sitecontrol.code.google.com", "a");
+pref("classilla.sitecontrol.accounts.google.com", "a");
+
+// Disable Sherlock
+pref("classilla.search.sherlock.enabled", false);
+
+// network stuff
+user_pref("network.protocol-handler.external.mailto", false);
+user_pref("network.protocol-handler.external.news", false);
 
 pref("general.startup.browser",             true);
 pref("general.startup.mail",                false);
@@ -306,35 +322,35 @@ pref("capability.policy.default.DOMException.code", "allAccess");
 pref("capability.policy.default.DOMException.message", "allAccess");
 pref("capability.policy.default.DOMException.name", "allAccess");
 pref("capability.policy.default.DOMException.result", "allAccess");
-pref("capability.policy.default.DOMException.toString", "allAccess");
+pref("capability.policy.default.DOMException.toString.get", "allAccess");
 
-pref("capability.policy.default.History.back", "allAccess");
+pref("capability.policy.default.History.back.get", "allAccess");
 pref("capability.policy.default.History.current", "UniversalBrowserRead");
-pref("capability.policy.default.History.forward", "allAccess");
-pref("capability.policy.default.History.go", "allAccess");
+pref("capability.policy.default.History.forward.get", "allAccess");
+pref("capability.policy.default.History.go.get", "allAccess");
 pref("capability.policy.default.History.item", "UniversalBrowserRead");
 pref("capability.policy.default.History.next", "UniversalBrowserRead");
 pref("capability.policy.default.History.previous", "UniversalBrowserRead");
 pref("capability.policy.default.History.toString", "UniversalBrowserRead");
 
-pref("capability.policy.default.HTMLDocument.close", "allAccess");
-pref("capability.policy.default.HTMLDocument.open", "allAccess");
+pref("capability.policy.default.HTMLDocument.close.get", "allAccess");
+pref("capability.policy.default.HTMLDocument.open.get", "allAccess");
 
 pref("capability.policy.default.Location.hash.set", "allAccess");
 pref("capability.policy.default.Location.href.set", "allAccess");
-pref("capability.policy.default.Location.reload", "allAccess");
-pref("capability.policy.default.Location.replace", "allAccess");
+pref("capability.policy.default.Location.reload.get", "allAccess");
+pref("capability.policy.default.Location.replace.get", "allAccess");
 
 pref("capability.policy.default.Navigator.preference", "allAccess");
 pref("capability.policy.default.Navigator.preferenceinternal.get", "UniversalPreferencesRead");
 pref("capability.policy.default.Navigator.preferenceinternal.set", "UniversalPreferencesWrite");
 
-pref("capability.policy.default.Window.blur", "allAccess");
-pref("capability.policy.default.Window.close", "allAccess");
+pref("capability.policy.default.Window.blur.get", "allAccess");
+pref("capability.policy.default.Window.close.get", "allAccess");
 pref("capability.policy.default.Window.closed", "allAccess");
 pref("capability.policy.default.Window.Components", "allAccess");
 pref("capability.policy.default.Window.document", "allAccess");
-pref("capability.policy.default.Window.focus", "allAccess");
+pref("capability.policy.default.Window.focus.get", "allAccess");
 pref("capability.policy.default.Window.frames", "allAccess");
 pref("capability.policy.default.Window.history", "allAccess");
 pref("capability.policy.default.Window.length", "allAccess");
@@ -509,6 +525,9 @@ pref("network.protocol-handler.external.vbscript", false);
 pref("network.protocol-handler.external.javascript", false);
 pref("network.protocol-handler.external.ms-help", false);
 pref("network.protocol-handler.external.vnd.ms.radio", false);
+pref("network.protocol-handler.external.shell", false);
+pref("network.protocol-handler.external.help", false);
+pref("network.protocol-handler.external.disk", false);
 
 pref("network.hosts.smtp_server",           "mail");
 pref("network.hosts.pop_server",            "mail");

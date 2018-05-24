@@ -778,6 +778,8 @@ mime_generate_attachment_headers (const char *type,
   nsresult rv;
   nsCOMPtr<nsIPref> prefs(do_GetService(kPrefCID, &rv)); 
 
+// bug 258005
+#if(0)
   PRInt32 buffer_size = 2048 + (real_name ? 2*PL_strlen(real_name) : 0) + (base_url ? 2*PL_strlen(base_url) : 0) +
                         (type_param ? PL_strlen(type_param) : 0) + (encoding ? PL_strlen(encoding) : 0) +
                         (description ? PL_strlen(description) : 0) + (x_mac_type ? PL_strlen(x_mac_type) : 0) +
@@ -788,6 +790,8 @@ mime_generate_attachment_headers (const char *type,
 
   if (! buffer)
     return 0; /* NS_ERROR_OUT_OF_MEMORY */
+#endif
+  nsCString buf("");
 
   NS_ASSERTION (encoding, "null encoding");
 
@@ -831,14 +835,16 @@ mime_generate_attachment_headers (const char *type,
     }
   }
 
-  PUSH_STRING ("Content-Type: ");
-  PUSH_STRING (type);
+#define BPUSH_STRING(x) buf.Append(x)
+
+  BPUSH_STRING ("Content-Type: ");
+  BPUSH_STRING (type);
 
   if (type_param && *type_param)
   {
     if (*type_param != ';')
-      PUSH_STRING("; ");
-    PUSH_STRING(type_param);
+      BPUSH_STRING("; ");
+    BPUSH_STRING(type_param);
   }
 
   if (mime_type_needs_charset (type)) 
@@ -875,8 +881,8 @@ mime_generate_attachment_headers (const char *type,
          (PL_strcasecmp(encoding, ENCODING_BASE64) != 0)) &&
          (*charset_label))
     {
-      PUSH_STRING ("; charset=");
-      PUSH_STRING (charset_label);
+      BPUSH_STRING ("; charset=");
+      BPUSH_STRING (charset_label);
     }
   }
 
@@ -887,7 +893,7 @@ mime_generate_attachment_headers (const char *type,
     if(type && !PL_strcasecmp(type, "text/plain"))
     {
       if(UseFormatFlowed(bodyCharset))
-        PUSH_STRING ("; format=flowed");
+        BPUSH_STRING ("; format=flowed");
       // else
       // {
       // Don't add a markup. Could use 
@@ -899,59 +905,64 @@ mime_generate_attachment_headers (const char *type,
   }    
 
   if (x_mac_type && *x_mac_type) {
-    PUSH_STRING ("; x-mac-type=\"");
-    PUSH_STRING (x_mac_type);
-    PUSH_STRING ("\"");
+    BPUSH_STRING ("; x-mac-type=\"");
+    BPUSH_STRING (x_mac_type);
+    BPUSH_STRING ("\"");
   }
 
   if (x_mac_creator && *x_mac_creator) {
-    PUSH_STRING ("; x-mac-creator=\"");
-    PUSH_STRING (x_mac_creator);
-    PUSH_STRING ("\"");
+    BPUSH_STRING ("; x-mac-creator=\"");
+    BPUSH_STRING (x_mac_creator);
+    BPUSH_STRING ("\"");
   }
 
 #ifdef EMIT_NAME_IN_CONTENT_TYPE
   if (encodedRealName && *encodedRealName) {
     if (parmFolding == 0 || parmFolding == 1) {
-      PUSH_STRING (";\r\n name=\"");
-      PUSH_STRING (encodedRealName);
-      PUSH_STRING ("\"");
+      BPUSH_STRING (";\r\n name=\"");
+      BPUSH_STRING (encodedRealName);
+      BPUSH_STRING ("\"");
     }
     else // if (parmFolding == 2)
     {
       char *rfc2231Parm = RFC2231ParmFolding("name", charset.get(),
                          nsMsgI18NGetAcceptLanguage(), encodedRealName);
       if (rfc2231Parm) {
-        PUSH_STRING(";\r\n ");
-        PUSH_STRING(rfc2231Parm);
+        BPUSH_STRING(";\r\n ");
+        BPUSH_STRING(rfc2231Parm);
         PR_Free(rfc2231Parm);
       }
     }
   }
 #endif /* EMIT_NAME_IN_CONTENT_TYPE */
 
-  PUSH_NEWLINE ();
+  //PUSH_NEWLINE ();
+  buf.Append(CRLF);
 
-  PUSH_STRING ("Content-Transfer-Encoding: ");
-  PUSH_STRING (encoding);
-  PUSH_NEWLINE ();
+  BPUSH_STRING ("Content-Transfer-Encoding: ");
+  BPUSH_STRING (encoding);
+  //PUSH_NEWLINE ();
+  buf.Append(CRLF);
+  
 
   if (description && *description) {
     char *s = mime_fix_header (description);
     if (s) {
-      PUSH_STRING ("Content-Description: ");
-      PUSH_STRING (s);
-      PUSH_NEWLINE ();
+      BPUSH_STRING ("Content-Description: ");
+      BPUSH_STRING (s);
+      //PUSH_NEWLINE ();
+      buf.Append(CRLF);
       PR_Free(s);
     }
   }
 
   if ( (content_id) && (*content_id) )
   {
-    PUSH_STRING ("Content-ID: <");
-    PUSH_STRING (content_id);
-    PUSH_STRING (">");
-    PUSH_NEWLINE ();
+    BPUSH_STRING ("Content-ID: <");
+    BPUSH_STRING (content_id);
+    BPUSH_STRING (">");
+    //PUSH_NEWLINE ();
+    buf.Append(CRLF);
   }
 
   if (encodedRealName && *encodedRealName) {
@@ -961,15 +972,15 @@ mime_generate_attachment_headers (const char *type,
         rv = prefs->GetIntPref("mail.content_disposition_type", &pref_content_disposition);
         NS_ASSERTION(NS_SUCCEEDED(rv), "failed to get mail.content_disposition_type");
 
-    PUSH_STRING ("Content-Disposition: ");
+    BPUSH_STRING ("Content-Disposition: ");
 
     if (pref_content_disposition == 1)
-      PUSH_STRING ("attachment");
+      BPUSH_STRING ("attachment");
     else
       if (pref_content_disposition == 2 && 
           (!PL_strcasecmp(type, TEXT_PLAIN) || 
           (period && !PL_strcasecmp(period, ".txt"))))
-        PUSH_STRING("attachment");
+        BPUSH_STRING("attachment");
 
       /* If this document is an anonymous binary file or a vcard, 
       then always show it as an attachment, never inline. */
@@ -977,23 +988,24 @@ mime_generate_attachment_headers (const char *type,
         if (!PL_strcasecmp(type, APPLICATION_OCTET_STREAM) || 
             !PL_strcasecmp(type, TEXT_VCARD) ||
             !PL_strcasecmp(type, APPLICATION_DIRECTORY)) /* text/x-vcard synonym */
-          PUSH_STRING ("attachment");
+          BPUSH_STRING ("attachment");
         else
-          PUSH_STRING ("inline");
+          BPUSH_STRING ("inline");
 
     if (parmFolding == 0 || parmFolding == 1) {
-      PUSH_STRING (";\r\n filename=\"");
-      PUSH_STRING (encodedRealName);
-      PUSH_STRING ("\"" CRLF);
+      BPUSH_STRING (";\r\n filename=\"");
+      BPUSH_STRING (encodedRealName);
+      BPUSH_STRING ("\"" CRLF);
     }
     else // if (parmFolding == 2)
     {
       char *rfc2231Parm = RFC2231ParmFolding("filename", charset.get(),
                        nsMsgI18NGetAcceptLanguage(), encodedRealName);
       if (rfc2231Parm) {
-        PUSH_STRING(";\r\n ");
-        PUSH_STRING(rfc2231Parm);
-        PUSH_NEWLINE ();
+        BPUSH_STRING(";\r\n ");
+        BPUSH_STRING(rfc2231Parm);
+        //PUSH_NEWLINE ();
+        buf.Append(CRLF);
         PR_Free(rfc2231Parm);
       }
     }
@@ -1002,7 +1014,7 @@ mime_generate_attachment_headers (const char *type,
     if (type &&
         (!PL_strcasecmp (type, MESSAGE_RFC822) ||
         !PL_strcasecmp (type, MESSAGE_NEWS)))
-      PUSH_STRING ("Content-Disposition: inline" CRLF);
+      BPUSH_STRING ("Content-Disposition: inline" CRLF);
   
 #ifdef GENERATE_CONTENT_BASE
   /* If this is an HTML document, and we know the URL it originally
@@ -1036,9 +1048,9 @@ mime_generate_attachment_headers (const char *type,
       prefs->GetBoolPref("mail.use_content_location_on_send", &useContentLocation);
 
     if (useContentLocation)
-      PUSH_STRING ("Content-Location: \"");
+      BPUSH_STRING ("Content-Location: \"");
     else
-      PUSH_STRING ("Content-Base: \"");
+      BPUSH_STRING ("Content-Base: \"");
     /* rhp - Pref for Content-Location usage */
 
 /* rhp: this is to work with the Content-Location stuff */
@@ -1046,34 +1058,39 @@ CONTENT_LOC_HACK:
 
     while (*s != 0 && *s != '#')
     {
-      const char *ot = buffer_tail;
+      //const char *ot = buffer_tail;
+      PRUint32 ot=buf.Length();
+      char tmp[]="\x00\x00";
 
       /* URLs must be wrapped at 40 characters or less. */
       if (col >= 38) {
-        PUSH_STRING(CRLF "\t");
+        BPUSH_STRING(CRLF "\t");
         col = 0;
       }
 
       if (*s == ' ')
-        PUSH_STRING("%20");
+        BPUSH_STRING("%20");
       else if (*s == '\t')
-        PUSH_STRING("%09");
+        BPUSH_STRING("%09");
       else if (*s == '\n')
-        PUSH_STRING("%0A");
+        BPUSH_STRING("%0A");
       else if (*s == '\r')
-        PUSH_STRING("%0D");
+        BPUSH_STRING("%0D");
       else {
-        *buffer_tail++ = *s;
-        *buffer_tail = '\0';
+        //*buffer_tail++ = *s;
+        //*buffer_tail = '\0';
+        tmp[0]=*s;
+        buf.Append(tmp);
       }
       s++;
-      col += (buffer_tail - ot);
+      //col += (buffer_tail - ot);
+      col += (buf.Length() - ot);
     }
-    PUSH_STRING ("\"" CRLF);
+    BPUSH_STRING ("\"" CRLF);
 
     /* rhp: this is to try to get around this fun problem with Content-Location */
     if (!useContentLocation) {
-      PUSH_STRING ("Content-Location: \"");
+      BPUSH_STRING ("Content-Location: \"");
       s = base_url;
       col = 0;
       useContentLocation = PR_TRUE;
@@ -1087,10 +1104,11 @@ GIVE_UP_ON_CONTENT_BASE:
 #endif /* GENERATE_CONTENT_BASE */
 
   /* realloc it smaller... */
-  buffer = (char*) PR_REALLOC (buffer, buffer_tail - buffer + 1);
+  //buffer = (char*) PR_REALLOC (buffer, buffer_tail - buffer + 1);
 
   PR_FREEIF(encodedRealName);
-  return buffer;
+  //return buffer;
+  return PL_strdup(buf.get()); // bug 258005
 }
 
 static PRBool isValidHost( const char* host )

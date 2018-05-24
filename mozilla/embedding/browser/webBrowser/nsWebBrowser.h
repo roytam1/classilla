@@ -84,6 +84,7 @@ class nsWebBrowser : public nsIWebBrowser,
                      public nsIWebNavigation,
                      public nsIWebBrowserSetup,
                      public nsIDocShellTreeItem,
+                     public nsIDocShellTreeItemTmp, // bug 103638
                      public nsIBaseWindow,
                      public nsIScrollable, 
                      public nsITextScroll, 
@@ -101,6 +102,7 @@ public:
 
     NS_DECL_NSIBASEWINDOW
     NS_DECL_NSIDOCSHELLTREEITEM
+    NS_DECL_NSIDOCSHELLTREEITEMTMP // bug 103638
     NS_DECL_NSIINTERFACEREQUESTOR
     NS_DECL_NSISCROLLABLE   
     NS_DECL_NSITEXTSCROLL

@@ -58,6 +58,15 @@ static NS_DEFINE_IID(kIStringBundleServiceIID, NS_ISTRINGBUNDLESERVICE_IID);
 
 #include "nsIComponentManager.h"
 
+// needed for bug 292691
+#include "nsIScriptSecurityManager.h"
+#include "nsSystemPrincipal.h"
+#include "nsCodebasePrincipal.h"
+#include "nsICodebasePrincipal.h"
+#include "nsBasePrincipal.h"
+#include "nsAggregatePrincipal.h"
+// end
+
 #include "nsSoftwareUpdateIIDs.h"
 
 extern void ConvertJSValToStr(nsString&  aString,
@@ -173,6 +182,22 @@ InstallTriggerGlobalInstall(JSContext *cx, JSObject *obj, uintN argc, jsval *arg
   if (!enabled)
       return JS_TRUE;
 
+// bug 293331
+  nsCOMPtr<nsIScriptSecurityManager> secman(do_GetService(NS_SCRIPTSECURITYMANAGER_CONTRACTID));
+  if (!secman)
+  {
+    JS_ReportError(cx, "Could not the script security manager service.");
+    return JS_FALSE;
+  }
+  // get the principal.  if it doesn't exist, die.
+  nsCOMPtr<nsIPrincipal> principal;
+  secman->GetSubjectPrincipal(getter_AddRefs(principal));
+  if (!principal)
+  {
+    JS_ReportError(cx, "Could not get the Subject Principal during InstallTrigger.Install()");
+    return JS_FALSE;
+  }
+// end bug
 
   // get window.location to construct relative URLs
   nsString baseURL;
@@ -198,6 +223,8 @@ InstallTriggerGlobalInstall(JSContext *cx, JSObject *obj, uintN argc, jsval *arg
     nsXPITriggerInfo *trigger = new nsXPITriggerInfo();
     if (!trigger)
       return JS_FALSE;
+      
+    trigger->SetPrincipal(principal); // bug 293331
 
     JSIdArray *ida = JS_Enumerate( cx, JSVAL_TO_OBJECT(argv[0]) );
     if ( ida )

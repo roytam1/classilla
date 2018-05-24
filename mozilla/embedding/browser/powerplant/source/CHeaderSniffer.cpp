@@ -188,6 +188,7 @@ nsresult CHeaderSniffer::PerformSave(nsIURI* inOriginalURI, const ESaveFormat in
     // save vs. a single file save.
     PRBool isHTML = (mDocument && mContentType.Equals("text/html") ||
                      mContentType.Equals("text/xml") ||
+                     mContentType.Equals("text/vnd.wap.wml") ||
                      mContentType.Equals("application/xhtml+xml"));
     
     // Next find out the directory that we should start in.

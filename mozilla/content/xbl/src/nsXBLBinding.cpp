@@ -114,6 +114,11 @@
 
 #include "nsXBLBinding.h"
 
+// bug 292591
+#include "nsContentUtils.h"
+#include "nsIPrincipal.h"
+#include "nsIScriptSecurityManager.h"
+
 // Helper classes
 
 /***********************************************************************/
@@ -1526,7 +1531,71 @@ nsXBLBinding::AllowScripts()
 {
   PRBool result;
   mPrototypeBinding->GetAllowScripts(&result);
+// bug 292591 modified for Classilla
+#if(0)
   return result;
+#else
+  if (!result) {
+    return result;
+  }
+
+  // Nasty hack.  Use the JSContext of the bound node, since the
+  // security manager API expects to get the docshell type from
+  // that.  But use the nsIPrincipal of our document.
+  //nsIScriptSecurityManager* mgr = nsContentUtils::GetSecurityManager();
+  nsresult rv;
+  nsCOMPtr<nsIScriptSecurityManager> mgr(
+      do_GetService(NS_SCRIPTSECURITYMANAGER_CONTRACTID, &rv));
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  if (!mgr) {
+    return PR_FALSE;
+  }
+  
+  //nsIDocument* doc = mBoundElement->GetDocument();
+  nsCOMPtr<nsIDocument> doc;
+  mBoundElement->GetDocument(*getter_AddRefs(doc));
+  if (!doc) {
+    return PR_FALSE;
+  }
+
+  //nsIScriptGlobalObject* global = doc->GetScriptGlobalObject();
+  nsCOMPtr<nsIScriptGlobalObject> global;
+  doc->GetScriptGlobalObject(getter_AddRefs(global));
+  if (!global) {
+    return PR_FALSE;
+  }
+
+  //nsCOMPtr<nsIScriptContext> context = global->GetContext();
+  nsCOMPtr<nsIScriptContext> context;
+  global->GetContext(getter_AddRefs(context));
+  if (!context) {
+    return PR_FALSE;
+  }
+  
+  JSContext* cx = (JSContext*) context->GetNativeContext();
+
+  nsCOMPtr<nsIDocument> ourDocument;
+  //mPrototypeBinding->XBLDocumentInfo()->GetDocument(getter_AddRefs(ourDocument));
+  nsCOMPtr<nsIXBLDocumentInfo> xblDI;
+  mPrototypeBinding->GetXBLDocumentInfo(mBoundElement, getter_AddRefs(xblDI));
+  if (!xblDI) return PR_FALSE;
+  xblDI->GetDocument(getter_AddRefs(ourDocument));
+  if (!ourDocument) return PR_FALSE;
+  
+  //nsIPrincipal* principal = ourDocument->GetPrincipal();
+  nsCOMPtr<nsIPrincipal> principal;
+  ourDocument->GetPrincipal(getter_AddRefs(principal));
+  if (!principal) {
+    return PR_FALSE;
+  }
+
+  PRBool canExecute;
+  //nsresult 
+  rv = mgr->CanExecuteScripts(cx, principal, &canExecute);
+  return NS_SUCCEEDED(rv) && canExecute;
+#endif
+// end bug
 }
 
 NS_IMETHODIMP

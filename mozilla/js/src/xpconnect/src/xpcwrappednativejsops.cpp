@@ -37,6 +37,11 @@
 
 #include "xpcprivate.h"
 
+// bug 289074
+// Pull in nsIScriptSecurityManager.h temporarily until we can do
+// IsSystemCallingContent() w/o a direct caps dependency.
+#include "nsIScriptSecurityManager.h"
+
 /***************************************************************************/
 
 // All of the exceptions thrown into JS from this file go through here.
@@ -237,6 +242,8 @@ XPC_WN_DoubleWrappedGetter(JSContext *cx, JSObject *obj,
  * We *never* set toString or toSource as JS_ENUMERATE.
  */
 
+#define JSPROP_TRUST_ME 0x100   // XXXbe secret handshake
+
 static JSBool
 DefinePropertyIfFound(XPCCallContext& ccx,
                       JSObject *obj, jsval idval,
@@ -255,6 +262,8 @@ DefinePropertyIfFound(XPCCallContext& ccx,
     JSBool found;
     const char* name;
     jsid id;
+    
+    propFlags |= JSPROP_TRUST_ME; // bug 289074
 
     if(set)
     {
@@ -799,13 +808,499 @@ XPC_WN_Helper_DelProperty(JSContext *cx, JSObject *obj, jsval idval, jsval *vp)
     POST_HELPER_STUB
 }
 
+static nsIScriptSecurityManager *sSecMan;
+static nsIPrincipal *sSystemPrincipal;
+
+// bug 289074
+static PRBool
+EnsureSecMan()
+{
+    if(!sSecMan)
+    {
+        CallGetService(NS_SCRIPTSECURITYMANAGER_CONTRACTID, &sSecMan);
+
+        // No security manager reachable, not much point in pretending
+        // we care about security then.
+        if(!sSecMan)
+            return PR_FALSE;
+
+        sSecMan->GetSystemPrincipal(&sSystemPrincipal);
+
+        if(!sSystemPrincipal)
+        {
+            // No system principal. Shouldn't happen, but if it does
+            // we've lost already.
+            NS_RELEASE(sSecMan);
+
+            return PR_FALSE;
+        }
+    }
+    return PR_TRUE;
+}
+
+void
+XPC_WN_JSOps_Shutdown()
+{
+    NS_IF_RELEASE(sSecMan);
+}
+
+class XPCWrappedNativeOrProto
+{
+public:
+#define XPC_PROTO_TAG     ((jsword)0x1)
+#define XPC_PROTO_WORD(p) ((jsword)(p))
+
+    static JSBool
+    IsTaggedProto(XPCWrappedNativeProto* p)
+        {return XPC_PROTO_WORD(p) & XPC_PROTO_TAG;}
+
+    static XPCWrappedNativeProto*
+    TagProto(XPCWrappedNativeProto* s)
+        {NS_ASSERTION(!IsTaggedProto(s), "bad pointer!");
+         return (XPCWrappedNativeProto*)(XPC_PROTO_WORD(s) | XPC_PROTO_TAG);}
+
+    static XPCWrappedNativeProto*
+    UntagProto(XPCWrappedNativeProto* s)
+        {return (XPCWrappedNativeProto*)(XPC_PROTO_WORD(s) & ~XPC_PROTO_TAG);}
+
+    JSBool
+    IsWrapper() const {return !IsTaggedProto(mMaybeProto);}
+
+    XPCWrappedNativeOrProto(XPCWrappedNative *wrapper)
+    {
+        NS_ASSERTION(wrapper, "oops, null wrapper");
+        mMaybeWrapper = wrapper;
+    }
+
+    XPCWrappedNativeOrProto(XPCWrappedNativeProto *proto)
+    {
+        NS_ASSERTION(proto, "oops, null proto");
+        mMaybeProto = TagProto(proto);
+    }
+
+    operator void*()
+        {return UntagProto(mMaybeProto);}
+
+    XPCWrappedNative* GetWrapper()
+        {NS_ASSERTION(IsWrapper(), "d'oh!"); return mMaybeWrapper;}
+
+    XPCWrappedNativeProto* GetProto()
+        {NS_ASSERTION(!IsWrapper(), "D'OH!"); return UntagProto(mMaybeProto);}
+
+    XPCWrappedNativeScope* GetScope()
+        {return IsWrapper()
+                ? mMaybeWrapper->GetScope()
+                : UntagProto(mMaybeProto)->GetScope();}
+
+    JSObject* GetFlatJSObject()
+        {return IsWrapper()
+                ? mMaybeWrapper->GetFlatJSObject()
+                : UntagProto(mMaybeProto)->GetJSProtoObject();}
+
+    XPCNativeScriptableInfo* GetScriptableInfo()
+        {return IsWrapper()
+                ? mMaybeWrapper->GetScriptableInfo()
+                : UntagProto(mMaybeProto)->GetScriptableInfo();}
+
+    static XPCWrappedNativeOrProto
+    GetWrappedNativeOfJSObject(JSContext *cx, JSObject *obj,
+                               JSObject *funobj = nsnull)
+    {
+        if(JS_InstanceOf(cx, obj, &XPC_WN_ModsAllowed_Proto_JSClass, nsnull))
+            return (XPCWrappedNativeProto*) JS_GetPrivate(cx, obj);
+
+        XPCWrappedNative* wrapper =
+            XPCWrappedNative::GetWrappedNativeOfJSObject(cx, obj, funobj);
+
+        // Inline and specialize THROW_AND_RETURN_IF_BAD_WRAPPER(cx, wrapper);
+        if(!wrapper)
+            Throw(NS_ERROR_XPC_BAD_OP_ON_WN_PROTO, cx);
+        else if(!wrapper->IsValid())
+        {
+            Throw(NS_ERROR_XPC_HAS_BEEN_SHUTDOWN, cx);
+            wrapper = nsnull;
+        }
+        return wrapper;
+    }
+
+private:
+    union
+    {
+        XPCWrappedNative*       mMaybeWrapper;
+        XPCWrappedNativeProto*  mMaybeProto;
+    };
+};
+
+// XXXbe, XXXjst this checks if our chrome code is calling into
+// content code, but perhaps it should check for any trust-domain
+// boundary crossing.
+static PRBool
+IsSystemCallingContent(JSContext *cx, XPCWrappedNativeOrProto wrapper_or_proto)
+{
+    // Provided script is active on cx, a scope chain that's the same
+    // as the global object in the wrappers scope means we're not in a
+    // cross-trust- domain call (i.e. our system code is not calling
+    // content etc).
+    if(cx->fp &&
+       (cx->fp->scopeChain == wrapper_or_proto.GetScope()->GetGlobalJSObject()))
+        return PR_FALSE;
+
+    if(!EnsureSecMan())
+        return PR_FALSE;
+
+    PRBool isCallerChrome = PR_FALSE;
+    if(NS_SUCCEEDED(sSecMan->SubjectPrincipalIsSystem(&isCallerChrome)) &&
+       isCallerChrome)
+    {
+        nsCOMPtr<nsIPrincipal> objectPrincipal;
+
+        sSecMan->GetObjectPrincipal(cx, wrapper_or_proto.GetFlatJSObject(),
+                                    getter_AddRefs(objectPrincipal));
+
+        return objectPrincipal != sSystemPrincipal;
+    }
+
+    return PR_FALSE;
+}
+
+static JSBool
+GetOrSetUnshadowedMemberValue(JSContext *cx,
+                              XPCWrappedNativeOrProto wrapper_or_proto,
+                              jsval idval, uintN argc, jsval *argv, jsval *vp,
+                              JSBool *foundMember)
+{
+    // Ok, we know chrome is getting a content-defined property on a
+    // wrapped native prototype.  We're done -- no way can we let this
+    // madness go further.
+    if(!wrapper_or_proto.IsWrapper())
+        return Throw(NS_ERROR_XPC_BAD_OP_ON_WN_PROTO, cx);
+
+    XPCWrappedNative* wrapper = wrapper_or_proto.GetWrapper();
+    JSObject *obj = wrapper->GetFlatJSObject();
+
+    // this will do verification and the method lookup for us
+    XPCCallContext ccx(JS_CALLER, cx, obj, nsnull, idval);
+
+    // did we find a method/attribute by that name?
+    XPCNativeMember* member = ccx.GetMember();
+    if(member)
+    {
+        *foundMember = JS_TRUE;
+
+        // it would a be a big surprise if there is a member without
+        // an interface :)
+        XPCNativeInterface* iface = ccx.GetInterface();
+        if(!iface)
+            return Throw(NS_ERROR_XPC_BAD_CONVERT_JS, cx);
+
+        // get (and perhaps lazily create) the member's cloneable
+        // value (which is a function, unless we're dealing with a
+        // constant).
+        jsval val;
+        if(!member->GetValue(ccx, iface, &val))
+            return Throw(NS_ERROR_XPC_BAD_CONVERT_JS, cx);
+
+        // For constants, we simply return the value
+        if(member->IsConstant())
+        {
+            *vp = val;
+            return JS_TRUE;
+        }
+
+        // Make sure val doesn't get collected during any of the JS
+        // engine calls in this scope from here on.
+        AUTO_MARK_JSVAL(ccx, val);
+
+        // XXXbe why did jband add this?  It's not strictly necessary in core
+        // JS native objects, e.g. d = new Date; y = d.getFullYear() does not
+        // clone Date.prototype.getFullYear solely in order to make
+        // d.getFullYear.__parent__ == d.
+        // See the log comment for 1.26.22.10 of this file.
+        // The concern here is that while jband cloned in Resolve, we are
+        // cloning on every Get that crosses from chrome to content.
+
+        // clone a function we can use for this object
+        JSObject* funobj =
+            JS_CloneFunctionObject(cx, JSVAL_TO_OBJECT(val), obj);
+        if(!funobj)
+            return Throw(NS_ERROR_XPC_BAD_CONVERT_JS, cx);
+
+        // Extra scope just to be able to use AUTO_MARK_JSVAL once
+        // more for funval below. W/o the extra scope we get name
+        // collisions from the macro.
+        {
+            jsval funval = OBJECT_TO_JSVAL(funobj);
+
+            // protect funobj until it is actually attached
+            AUTO_MARK_JSVAL(ccx, funval);
+
+            // Call the getter function if the member is an attribute
+            if(member->IsAttribute())
+            {
+                jsid id;
+                if(!JS_ValueToId(cx, idval, &id))
+                    return JS_FALSE;
+
+                NS_ASSERTION(argc == 0 || member->IsWritableAttribute(),
+                             "Huh, setter called for readonly attribute!");
+
+                // Do the actual call to the getter or setter.
+                return js_InternalGetOrSet(cx, obj, id, funval,
+                                           (argc == 0) ? JSACC_READ : JSACC_WRITE,
+                                           argc, argv, vp);
+            }
+
+            // return the function
+            *vp = OBJECT_TO_JSVAL(funobj);
+        }
+    } else
+        *foundMember = JS_FALSE;
+        
+    return JS_TRUE;
+}
+// end bug
+
 JS_STATIC_DLL_CALLBACK(JSBool)
 XPC_WN_Helper_GetProperty(JSContext *cx, JSObject *obj, jsval idval, jsval *vp)
 {
+// bug 289074
+#if(0)
     PRE_HELPER_STUB
     GetProperty(wrapper, cx, obj, idval, vp, &retval);
+#else
+    // We can't use PRE_HELPER_STUB here since we need code between
+    // it and what it expects to follow.
+    XPCWrappedNative* wrapper =
+        XPCWrappedNative::GetWrappedNativeOfJSObject(cx, obj);
+    THROW_AND_RETURN_IF_BAD_WRAPPER(cx, wrapper);
+
+    if(IsSystemCallingContent(cx, wrapper))
+    {
+        JSBool foundMember;
+        if(!GetOrSetUnshadowedMemberValue(cx, wrapper, idval, 0, nsnull, vp,
+                                          &foundMember))
+            return JS_FALSE;
+
+        if(foundMember)
+            return JS_TRUE;
+    }
+
+    PRBool retval = JS_TRUE;
+    nsresult rv = wrapper->GetScriptableCallback()->
+        GetProperty(wrapper, cx, obj, idval, vp, &retval);
+#endif
+// end bug
     POST_HELPER_STUB
 }
+
+// bug 289074
+JS_STATIC_DLL_CALLBACK(JSBool)
+XPC_WN_Safe_PropertyStub(JSContext *cx, JSObject *obj, jsval idval, jsval *vp)
+{
+    XPCWrappedNativeOrProto wrapper_or_proto =
+        XPCWrappedNativeOrProto::GetWrappedNativeOfJSObject(cx, obj);
+
+    if(wrapper_or_proto && IsSystemCallingContent(cx, wrapper_or_proto))
+    {
+        JSBool foundMember;
+        if(!GetOrSetUnshadowedMemberValue(cx, wrapper_or_proto, idval,
+                                          0, nsnull, vp, &foundMember))
+            return JS_FALSE;
+
+        if(foundMember)
+            return JS_TRUE;
+   }
+    return JS_PropertyStub(cx, obj, idval, vp);
+}
+
+// We must wrap untrusted (user-defined) getters and setters defined
+// on wrapped native instances with a thunk that checks whether the
+// caller is crossing a trust domain, and bypasses the user-defined
+// getter or setter if so.
+
+const char id_str[]             = "id";
+const char unsafe_gsobj_str[]   = "unsafe_gsobj";
+
+JS_STATIC_DLL_CALLBACK(JSBool)
+XPC_WN_Safe_GetterSetterThunkNative(JSContext *cx, JSObject *obj, uintN argc,
+                                    jsval *argv, jsval *rval)
+{
+    JSObject *safe_gsobj = JSVAL_TO_OBJECT(argv[-2]);
+
+    jsval idval;
+    if(!JS_GetProperty(cx, safe_gsobj, id_str, &idval))
+        return JS_FALSE;
+
+    jsid id;
+    if(!JS_ValueToId(cx, idval, &id))
+        return JS_FALSE;
+    XPCWrappedNativeOrProto wrapper_or_proto =
+        XPCWrappedNativeOrProto::GetWrappedNativeOfJSObject(cx, obj,
+                                                            safe_gsobj);
+
+    if(wrapper_or_proto && IsSystemCallingContent(cx, wrapper_or_proto))
+    {
+        JSBool foundMember;
+        if(!GetOrSetUnshadowedMemberValue(cx, wrapper_or_proto,
+                                          ID_TO_VALUE(id), argc, argv, rval,
+                                          &foundMember))
+            return JS_FALSE;
+
+        if(foundMember)
+            return JS_TRUE;
+
+        XPCWrappedNative* wrapper = wrapper_or_proto.GetWrapper();
+        XPCNativeScriptableInfo* si = wrapper->GetScriptableInfo();
+        if(si)
+        {
+            if(argc == 0 && si->GetFlags().WantGetProperty())
+            {
+                // wrapper wants GetProperty() calls, call it, to prevent
+                // user defined getters from shadowing things from chrome
+                // code.
+                JSBool ok = PR_TRUE;
+                nsresult rv =
+                    si->GetCallback()->GetProperty(wrapper, cx,
+                                                   wrapper->GetFlatJSObject(),
+                                                   id, rval, &ok);
+
+                if(NS_FAILED(rv))
+                    return Throw(rv, cx);
+
+                return ok;
+            }
+
+            if(argc == 1 && si->GetFlags().WantSetProperty())
+            {
+                // wrapper wants SetProperty() calls, call it, to prevent
+                // user defined setters from shadowing things from chrome
+                // code.
+                JSBool ok = PR_TRUE;
+                jsval v = argv[0];
+
+                nsresult rv =
+                    si->GetCallback()->SetProperty(wrapper, cx,
+                                                   wrapper->GetFlatJSObject(),
+                                                   id, &v, &ok);
+
+                if(NS_FAILED(rv))
+                    return Throw(rv, cx);
+
+                return ok;
+            }
+        }
+
+        // Fall through
+    }
+
+    jsval unsafe_gsobj_val;
+    if(!JS_GetProperty(cx, safe_gsobj, unsafe_gsobj_str, &unsafe_gsobj_val))
+        return JS_FALSE;
+
+    return js_InternalGetOrSet(cx, obj, id, unsafe_gsobj_val,
+                               (argc == 1) ? JSACC_WRITE : JSACC_READ,
+                               argc, argv, rval);
+}
+
+#include "jsfun.h"      // XXXbe should have a JS_GetFunctionNative API
+
+static JSPropertyOp
+NewSafeGetterOrSetterThunk(JSContext *cx, JSObject *obj, jsid id,
+                           JSPropertyOp gsop, uintN nargs)
+{
+    JSObject *unsafe_gsobj = (JSObject *) gsop;
+
+    // If called from native code, no need for a thunk: gsop is trusted.
+    if(!cx->fp)
+        return gsop;
+
+    // Similarly, check whether the caller is a chrome script we must trust.
+    if(!EnsureSecMan())
+        return NULL;
+    PRBool isCallerChrome = PR_FALSE;
+    if(NS_SUCCEEDED(sSecMan->SubjectPrincipalIsSystem(&isCallerChrome)) &&
+       isCallerChrome)
+        return gsop;
+
+    // Don't double-thunk if we can help it.
+    if(JS_ObjectIsFunction(cx, unsafe_gsobj))
+    {
+        JSFunction *unsafe_gsfun =
+            (JSFunction *) JS_GetPrivate(cx, unsafe_gsobj);
+        if(unsafe_gsfun->u.n.native == XPC_WN_Safe_GetterSetterThunkNative) // not u.native; see jsfun.h (for Classilla)
+            return gsop;
+    }
+
+    // Make a thunk to check cross-trust-domain access before calling gsop.
+    JSFunction *safe_gsfun = JS_NewFunction(cx,
+                                            XPC_WN_Safe_GetterSetterThunkNative,
+                                            nargs, 0, obj, NULL);
+    if(!safe_gsfun)
+        return NULL;
+
+    JSObject *safe_gsobj = JS_GetFunctionObject(safe_gsfun);
+
+    // The only clean way to get id and unsafe_gsobj through is via permanent,
+    // readonly properties on safe_gsobj.
+    if(!JS_DefineProperty(cx, safe_gsobj, id_str, ID_TO_VALUE(id), NULL, NULL,
+                          JSPROP_READONLY | JSPROP_PERMANENT))
+        return NULL;
+
+    if(!JS_DefineProperty(cx, safe_gsobj, unsafe_gsobj_str,
+                          OBJECT_TO_JSVAL(unsafe_gsobj), NULL, NULL,
+                          JSPROP_READONLY | JSPROP_PERMANENT))
+        return NULL;
+
+    return (JSPropertyOp) safe_gsobj;
+}
+
+JS_STATIC_DLL_CALLBACK(JSBool)
+XPC_WN_JSOp_Safe_DefineProperty(JSContext *cx, JSObject *obj,
+                                jsid id, jsval value,
+                                JSPropertyOp getter, JSPropertyOp setter,
+                                uintN attrs, JSProperty **propp)
+{
+    if(!(attrs & JSPROP_TRUST_ME))
+    {
+        if(attrs & JSPROP_GETTER)
+        {
+            getter = NewSafeGetterOrSetterThunk(cx, obj, id, getter, 0);
+            if(!getter)
+                return JS_FALSE;
+        }
+        if(attrs & JSPROP_SETTER)
+        {
+            setter = NewSafeGetterOrSetterThunk(cx, obj, id, setter, 1);
+            if(!setter)
+                return JS_FALSE;
+        }
+    }
+
+    return js_ObjectOps.defineProperty(cx, obj, id, value, getter, setter,
+                                       attrs, propp);
+}
+
+JS_STATIC_DLL_CALLBACK(JSBool)
+XPC_WN_JSOp_Safe_GetProperty(JSContext *cx, JSObject *obj, jsid id, jsval *vp)
+{
+    XPCWrappedNativeOrProto wrapper_or_proto =
+        XPCWrappedNativeOrProto::GetWrappedNativeOfJSObject(cx, obj);
+
+    if(IsSystemCallingContent(cx, wrapper_or_proto))
+    {
+        JSBool foundMember;
+        if(!GetOrSetUnshadowedMemberValue(cx, wrapper_or_proto,
+                                          ID_TO_VALUE(id), 0, nsnull, vp,
+                                          &foundMember))
+            return JS_FALSE;
+
+        if(foundMember)
+            return JS_TRUE;
+    }
+
+    return js_ObjectOps.getProperty(cx, obj, id, vp);
+}
+// end bug
 
 JS_STATIC_DLL_CALLBACK(JSBool)
 XPC_WN_Helper_SetProperty(JSContext *cx, JSObject *obj, jsval idval, jsval *vp)
@@ -990,6 +1485,7 @@ extern "C" JS_IMPORT_DATA(JSObjectOps) js_ObjectOps;
 
 static JSObjectOps XPC_WN_WithCall_JSOps;
 static JSObjectOps XPC_WN_NoCall_JSOps;
+static JSObjectOps XPC_WN_ModsAllowed_JSOps; // bug 289074
 
 /*
     Here are the enumerator cases:
@@ -1114,9 +1610,21 @@ JSBool xpc_InitWrappedNativeJSOps()
     {
         memcpy(&XPC_WN_NoCall_JSOps, &js_ObjectOps, sizeof(JSObjectOps));
         XPC_WN_NoCall_JSOps.enumerate = XPC_WN_JSOp_Enumerate;
+        // bug 289074
+        XPC_WN_NoCall_JSOps.defineProperty = XPC_WN_JSOp_Safe_DefineProperty;
+        XPC_WN_NoCall_JSOps.getProperty = XPC_WN_JSOp_Safe_GetProperty;
+        // end bug
 
         memcpy(&XPC_WN_WithCall_JSOps, &js_ObjectOps, sizeof(JSObjectOps));
         XPC_WN_WithCall_JSOps.enumerate = XPC_WN_JSOp_Enumerate;
+        // bug 289074
+        XPC_WN_WithCall_JSOps.defineProperty = XPC_WN_JSOp_Safe_DefineProperty;
+        XPC_WN_WithCall_JSOps.getProperty = XPC_WN_JSOp_Safe_GetProperty;
+
+        memcpy(&XPC_WN_ModsAllowed_JSOps, &js_ObjectOps, sizeof(JSObjectOps));
+        XPC_WN_ModsAllowed_JSOps.defineProperty = XPC_WN_JSOp_Safe_DefineProperty;
+        XPC_WN_ModsAllowed_JSOps.getProperty = XPC_WN_JSOp_Safe_GetProperty;
+        // end bug
 
         XPC_WN_NoCall_JSOps.call = nsnull;
         XPC_WN_NoCall_JSOps.construct = nsnull;
@@ -1194,7 +1702,7 @@ XPCNativeScriptableShared::PopulateJSClass()
     if(mFlags.WantGetProperty())
         mJSClass.getProperty = XPC_WN_Helper_GetProperty;
     else
-        mJSClass.getProperty = JS_PropertyStub;
+        mJSClass.getProperty = XPC_WN_Safe_PropertyStub; // JS_PropertyStub; // bug 289074
 
     if(mFlags.WantSetProperty())
         mJSClass.setProperty = XPC_WN_Helper_SetProperty;
@@ -1414,6 +1922,12 @@ XPC_WN_ModsAllowed_Proto_Resolve(JSContext *cx, JSObject *obj, jsval idval)
                                  enumFlag, nsnull);
 }
 
+// bug 289074
+JS_STATIC_DLL_CALLBACK(JSObjectOps *)
+XPC_WN_ModsAllowed_Proto_GetObjectOps(JSContext *cx, JSClass *clasp)
+{
+    return &XPC_WN_ModsAllowed_JSOps;
+} // end bug
 
 JSClass XPC_WN_ModsAllowed_Proto_JSClass = {
     "XPC_WN_ModsAllowed_Proto_JSClass", // name;
@@ -1422,7 +1936,8 @@ JSClass XPC_WN_ModsAllowed_Proto_JSClass = {
     /* Mandatory non-null function pointer members. */
     JS_PropertyStub,                // addProperty;
     JS_PropertyStub,                // delProperty;
-    JS_PropertyStub,                // getProperty;
+    //JS_PropertyStub,                // getProperty;
+    XPC_WN_Safe_PropertyStub,       // getProperty; // bug 289074
     JS_PropertyStub,                // setProperty;
     XPC_WN_Shared_Proto_Enumerate,         // enumerate;
     XPC_WN_ModsAllowed_Proto_Resolve,      // resolve;
@@ -1430,7 +1945,8 @@ JSClass XPC_WN_ModsAllowed_Proto_JSClass = {
     XPC_WN_Shared_Proto_Finalize,          // finalize;
 
     /* Optionally non-null members start here. */
-    nsnull,                         // getObjectOps;
+    //nsnull,                         // getObjectOps;
+    XPC_WN_ModsAllowed_Proto_GetObjectOps, // getObjectOps; // bug 289074
     nsnull,                         // checkAccess;
     nsnull,                         // call;
     nsnull,                         // construct;
@@ -1503,6 +2019,11 @@ JSClass XPC_WN_NoMods_Proto_JSClass = {
     /* Mandatory non-null function pointer members. */
     XPC_WN_OnlyIWrite_Proto_PropertyStub,  // addProperty;
     XPC_WN_CannotModifyPropertyStub,       // delProperty;
+    /*
+       It's ok to use JS_PropertyStub here since this class (which is
+       used for wrapped native's prototypes) doesn't allow any changes
+       and thus no properties on the prototype can be overridden.
+     */
     JS_PropertyStub,                       // getProperty;
     XPC_WN_OnlyIWrite_Proto_PropertyStub,  // setProperty;
     XPC_WN_Shared_Proto_Enumerate,         // enumerate;
@@ -1586,7 +2107,8 @@ JSClass XPC_WN_Tearoff_JSClass = {
     /* Mandatory non-null function pointer members. */
     XPC_WN_OnlyIWrite_PropertyStub,     // addProperty;
     XPC_WN_CannotModifyPropertyStub,    // delProperty;
-    JS_PropertyStub,                    // getProperty;
+    //JS_PropertyStub,                    // getProperty;
+    XPC_WN_Safe_PropertyStub,           // getProperty; // bug 289074
     XPC_WN_OnlyIWrite_PropertyStub,     // setProperty;
     XPC_WN_TearOff_Enumerate,           // enumerate;
     XPC_WN_TearOff_Resolve,             // resolve;

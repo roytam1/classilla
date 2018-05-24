@@ -269,7 +269,7 @@ PRBool ConvertJSValToObj(nsISupports** aSupports,
                         JSContext* aContext,
                         jsval aValue)
 {
-  if (JSVAL_IS_NULL(aValue)) {
+  if (JSVAL_IS_NULL(aValue) || !*aSupports) { // bug 295854 modified for Classilla
     *aSupports = nsnull;
   }
   else if (JSVAL_IS_OBJECT(aValue)) {

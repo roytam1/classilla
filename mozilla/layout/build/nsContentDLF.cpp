@@ -89,7 +89,9 @@ static const char* const gHTMLTypes[] = {
   "text/css",
   "text/javascript",
   "application/x-javascript",
+  "text/vnd.wap.wml",
   "application/x-view-source", //XXX I wish I could just use nsMimeTypes.h here
+  //"application/xhtml+xml", // Classilla issue 184. We're using HttpChannel now.
   0
 };
   
@@ -196,6 +198,7 @@ nsContentDLF::CreateInstance(const char* aCommand,
       }
     }
 
+if (!knownType)
     for (typeIndex = 0; gXMLTypes[typeIndex] && !knownType; ++typeIndex) {
       if (type.Equals(gXMLTypes[typeIndex])) {
         knownType = PR_TRUE;
@@ -210,6 +213,7 @@ nsContentDLF::CreateInstance(const char* aCommand,
     }
 #endif // MOZ_SVG
 
+if (!knownType)
     for (typeIndex = 0; gRDFTypes[typeIndex] && !knownType; ++typeIndex) {
       if (type.Equals(gRDFTypes[typeIndex])) {
         knownType = PR_TRUE;
@@ -225,8 +229,27 @@ nsContentDLF::CreateInstance(const char* aCommand,
     aChannel->SetContentType(NS_LITERAL_CSTRING("text/plain"));
     aContentType = "text/plain";
   }
+  
+  // Get the scheme of the channel, if there is one (Classilla issue 184), because it may
+  // affect how we interpret the MIME type.
+#if(0)
+  nsCAutoString scheme;
+  if (0 == PL_strcmp(aContentType, "application/xhtml+xml") ||
+  	  0 == PL_strcmp(aContentType, "text/vnd.wap.wml"))  {
+  nsCOMPtr<nsIURI> aURL;
+  nsresult rv;
+  rv = aChannel->GetURI(getter_AddRefs(aURL));
+  if (NS_SUCCEEDED(rv))
+  	rv = aURL->GetScheme(scheme);
+  if (NS_FAILED(rv))
+  	scheme.Assign("");
+  }	else {
+  	scheme.Assign("");
+  }
+#endif  	
 
   // Try html
+#if(1)
   int typeIndex=0;
   while(gHTMLTypes[typeIndex]) {
     if (0 == PL_strcmp(gHTMLTypes[typeIndex++], aContentType)) {
@@ -236,6 +259,23 @@ nsContentDLF::CreateInstance(const char* aCommand,
                             aDocListener, aDocViewer);
     }
   }
+#else
+  int typeIndex=0;
+  while(gHTMLTypes[typeIndex]) {
+    if (0 == PL_strcmp(gHTMLTypes[typeIndex], aContentType)) {
+      if (0 != PL_strcmp(gHTMLTypes[typeIndex], "application/xhtml+xml") ||
+      		(!scheme.Equals("about") && !scheme.Equals("chrome") && !scheme.Equals("jar"))) {
+      	// WML is fudged by nsHttpChannel
+      	return CreateDocument(aCommand, 
+                            aChannel, aLoadGroup,
+                            aContainer, kHTMLDocumentCID,
+                            aDocListener, aDocViewer);
+      }
+    }
+    typeIndex++;
+  }
+#endif
+// end issue  
 
   // Try XML
   typeIndex = 0;

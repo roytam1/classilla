@@ -433,6 +433,9 @@ NS_IMPL_ISUPPORTS3(nsScriptSecurityManager,
 ///////////////////////////////////////////////////
 
 ///////////////// Security Checks /////////////////
+
+/* modified by bug 92773 */
+#if(0)
 JSBool JS_DLL_CALLBACK
 nsScriptSecurityManager::CheckJSFunctionCallerAccess(JSContext *cx, JSObject *obj,
                                                      jsval id, JSAccessMode mode,
@@ -473,6 +476,42 @@ nsScriptSecurityManager::CheckJSFunctionCallerAccess(JSContext *cx, JSObject *ob
 
     return JS_TRUE;
 }
+#else
+nsScriptSecurityManager::CheckObjectAccess(JSContext *cx, JSObject *obj,
+                                           jsval id, JSAccessMode mode,
+                                           jsval *vp)
+{
+    // Get the security manager
+    nsScriptSecurityManager *ssm =
+        nsScriptSecurityManager::GetScriptSecurityManager();
+ 
+    NS_ASSERTION(ssm, "Failed to get security manager service");
+    if (!ssm)
+    	return JS_FALSE;
+    	
+    // Get the object being accessed.  We protect these cases:
+    // 1. The Function.prototype.caller property's value, which might lead
+    //    an attacker up a call-stack to a function or another object from
+    //    a different trust domain.
+    // 2. A user-defined getter or setter function accessible on another
+    //    trust domain's window or document object.
+    // If *vp is not a primitive, some new JS engine call to this hook was
+    // added, but we can handle that case too -- if a primitive value in a
+    // property of obj is being accessed, we should use obj as the target
+    // object.
+    NS_ASSERTION(!JSVAL_IS_PRIMITIVE(*vp), "unexpected target property value");
+    JSObject* target = JSVAL_IS_PRIMITIVE(*vp) ? obj : JSVAL_TO_OBJECT(*vp); 
+    // Do the same-origin check -- this sets a JS exception if the check fails.
+    // Pass the target object's class name, as we have no class-info for it.
+    nsresult rv =
+        ssm->CheckPropertyAccess(cx, target, JS_GetClass(cx, target)->name, id,
+                                 nsIXPCSecurityManager::ACCESS_GET_PROPERTY); 
+    if (NS_FAILED(rv))
+        return JS_FALSE; // Security check failed (XXX was an error reported?)
+
+    return JS_TRUE;
+}
+#endif
 
 NS_IMETHODIMP
 nsScriptSecurityManager::CheckPropertyAccess(JSContext* cx,
@@ -1150,6 +1189,9 @@ nsScriptSecurityManager::GetBaseURIScheme(nsIURI* aURI, char** aScheme)
        return NS_ERROR_FAILURE;
 
     nsresult rv;
+    
+// bug 293671
+#if(0)
     nsCOMPtr<nsIURI> uri(aURI);
 
     //-- get the source scheme
@@ -1193,14 +1235,68 @@ nsScriptSecurityManager::GetBaseURIScheme(nsIURI* aURI, char** aScheme)
             return NS_ERROR_FAILURE;
         const char* page = spec.get() + sizeof(aboutScheme);
         if ((strcmp(page, "blank") == 0)   ||
+            (strncmp(page, "blank?", 6) == 0) || // bug 306261
+            (strncmp(page, "blank#", 6) == 0) || // bug 306261
             (strcmp(page, "") == 0)        ||
             (strcmp(page, "mozilla") == 0) ||
+            (strcmp(page, "classilla") == 0 || // whoops
+            (strcmp(page, "logo") == 0)    || // backbugs from 306261
             (strcmp(page, "credits") == 0))
         {
             *aScheme = nsCRT::strdup("about safe");
             return *aScheme ? NS_OK : NS_ERROR_OUT_OF_MEMORY;
         }
     }
+#else
+    //-- get the source scheme
+    nsCAutoString scheme;
+    rv = aURI->GetScheme(scheme);
+    if (NS_FAILED(rv)) return rv;
+
+    //-- If aURI is a view-source URI, drill down to the base URI
+    nsCAutoString path;
+    if (PL_strcmp(scheme.get(), "view-source") == 0)
+    {
+        rv = aURI->GetPath(path);
+        if (NS_FAILED(rv)) return rv;
+        nsCOMPtr<nsIURI> innerURI;
+        //rv = NS_NewURI(getter_AddRefs(innerURI), path, nsnull, nsnull,
+        //               sIOService);
+        rv = NS_NewURI(getter_AddRefs(innerURI), path, nsnull);
+        if (NS_FAILED(rv)) return rv;
+        return nsScriptSecurityManager::GetBaseURIScheme(innerURI, aScheme);
+    }
+
+    //-- If aURI is a jar URI, drill down again
+    nsCOMPtr<nsIJARURI> jarURI = do_QueryInterface(aURI);
+    if (jarURI)
+    {
+        nsCOMPtr<nsIURI> innerURI;
+        jarURI->GetJARFile(getter_AddRefs(innerURI));
+        if (!innerURI) return NS_ERROR_FAILURE;
+        return nsScriptSecurityManager::GetBaseURIScheme(innerURI, aScheme);
+    }
+
+    //-- if aURI is an about uri, distinguish 'safe' and 'unsafe' about URIs
+    static const char aboutScheme[] = "about";
+    if(nsCRT::strcasecmp(scheme.get(), aboutScheme) == 0)
+    {
+        nsCAutoString spec;
+        if(NS_FAILED(aURI->GetAsciiSpec(spec)))
+            return NS_ERROR_FAILURE;
+        const char* page = spec.get() + sizeof(aboutScheme);
+        if ((strcmp(page, "blank") == 0)   ||
+            (strcmp(page, "") == 0)        ||
+            (strcmp(page, "mozilla") == 0) ||
+            (strcmp(page, "logo") == 0)    ||
+            (strcmp(page, "credits") == 0))
+        {
+            *aScheme = nsCRT::strdup("about safe");
+            return *aScheme ? NS_OK : NS_ERROR_OUT_OF_MEMORY;
+        }
+    }
+#endif
+// end bug
 
     *aScheme = nsCRT::strdup(scheme.get());
     return *aScheme ? NS_OK : NS_ERROR_OUT_OF_MEMORY;
@@ -1210,6 +1306,17 @@ NS_IMETHODIMP
 nsScriptSecurityManager::CheckLoadURI(nsIURI *aSourceURI, nsIURI *aTargetURI,
                                       PRUint32 aFlags)
 {
+    // If someone passes a flag that we don't understand, we should
+    // fail, because they may need a security check that we don't
+    // provide.
+    NS_ENSURE_TRUE(!(aFlags & ~(nsIScriptSecurityManager::DISALLOW_FROM_MAIL |
+                                nsIScriptSecurityManager::ALLOW_CHROME |
+//                                nsIScriptSecurityManager::DISALLOW_SCRIPT |
+//                                nsIScriptSecurityManager::DISALLOW_SCRIPT_OR_DATA)),
+                                nsIScriptSecurityManager::DISALLOW_JAVASCRIPT |
+                                nsIScriptSecurityManager::DISALLOW_SCRIPT)), // bug 290949 (nb. names slightly different for us)
+                   NS_ERROR_UNEXPECTED);
+
     nsresult rv;
     //-- get the source scheme
     nsXPIDLCString sourceScheme;
@@ -1243,6 +1350,11 @@ nsScriptSecurityManager::CheckLoadURI(nsIURI *aSourceURI, nsIURI *aTargetURI,
     {
        return NS_ERROR_DOM_BAD_URI;
     }
+// bug 290949, simplified
+	if ((aFlags & nsIScriptSecurityManager::DISALLOW_SCRIPT) &&
+		(targetScheme.Equals("javascript")))
+			return NS_ERROR_DOM_BAD_URI;
+// end both bugs
 
     //-- If the schemes don't match, the policy is specified in this table.
     enum Action { AllowProtocol, DenyProtocol, PrefControlled, ChromeProtocol };
@@ -1421,7 +1533,7 @@ nsScriptSecurityManager::CheckFunctionAccess(JSContext *aCx, void *aFunObj,
 {
     //-- This check is called for event handlers
     nsCOMPtr<nsIPrincipal> subject;
-    nsresult rv = GetFunctionObjectPrincipal(aCx, (JSObject *)aFunObj,
+    nsresult rv = GetFunctionObjectPrincipal(aCx, (JSObject *)aFunObj, nsnull, // pull up 1.9
                                              getter_AddRefs(subject));
     //-- If subject is null, get a principal from the function object's scope.
     if (NS_SUCCEEDED(rv) && !subject)
@@ -1664,10 +1776,11 @@ nsScriptSecurityManager::GetSystemPrincipal(nsIPrincipal **result)
 {
     if (!mSystemPrincipal)
     {
+    	// In Classilla 9.3.1, the SystemPrincipal sets its own codebase.
         mSystemPrincipal = new nsSystemPrincipal();
         if (!mSystemPrincipal)
             return NS_ERROR_OUT_OF_MEMORY;
-        NS_ADDREF(mSystemPrincipal);
+        NS_ADDREF(mSystemPrincipal);		
     }
     *result = mSystemPrincipal;
     NS_ADDREF(*result);
@@ -1824,8 +1937,10 @@ nsScriptSecurityManager::GetPrincipalFromContext(JSContext *cx,
         nsCOMPtr<nsIScriptObjectPrincipal> globalData(do_QueryInterface(global));
         if (globalData)
             globalData->GetPrincipal(result);
+        return NS_OK;
     }
-    return NS_OK;
+    // return NS_OK; // moved above
+    return NS_ERROR_FAILURE;
 }
 
 nsresult
@@ -1855,32 +1970,188 @@ nsScriptSecurityManager::GetScriptPrincipal(JSContext *cx,
 nsresult
 nsScriptSecurityManager::GetFunctionObjectPrincipal(JSContext *cx,
                                                     JSObject *obj,
+                                                    // pull up 1.9
+                                                    JSStackFrame *fp,
                                                     nsIPrincipal **result)
 {
+// Just use the 1.7.13 version!!
+#if(0)
+
+#if(1)
+// pull up 1.9
+    if (!JS_ObjectIsFunction(cx, obj))
+    {
+        // Protect against pseudo-functions (like SJOWs).
+        /*
+        nsIPrincipal *result = doGetObjectPrincipal(obj);
+        if (!result)
+            *rv = NS_ERROR_FAILURE;
+        return result;
+        */
+        nsresult rv = doGetObjectPrincipal(cx, obj, result);
+        if (!*result)
+        	return NS_ERROR_FAILURE;
+        return rv;
+    }
+#endif
+
     JSFunction *fun = (JSFunction *) JS_GetPrivate(cx, obj);
     JSScript *script = JS_GetFunctionScript(cx, fun);
+    
+#if(1)
+// pull up 1.9
+    if (!script) {
+    	// A native function: skip it in order to find its scripted caller.
+    	// return nsnull;
+    	*result = nsnull;
+    	return NS_OK;
+    }
+#endif
 
     nsCOMPtr<nsIPrincipal> scriptPrincipal;
+    nsresult rv;
     if (script)
     {
+    	// pull up 1.7.13 for bug 316589
+    	JSScript *frameScript = nsnull;
+    	
+    	if (fp)
+    		frameScript = JS_GetFrameScript(cx, fp);
+    	
+    	if (frameScript && frameScript != script) {
+    		// There is a frame script, and it's different than the
+            // function script. In this case we're dealing with either
+            // an eval or a Script object, and in those cases the
+            // principal we want is in the frame's script, not in the
+            // function's script. The function's script is where the
+            // function came from, not where the eval came from, and
+            // we want the principal for the source of the eval
+            // function object or new Script object.
+            rv = GetScriptPrincipal(cx, frameScript,
+                                    getter_AddRefs(scriptPrincipal));
+ 
+    	
+    	} else
+    	// end pull up
+    	
         if (JS_GetFunctionObject(fun) != obj)
         {
+// bug 316589
+// this is a scary one!
+#if(0)
             // Function is a clone, its prototype was precompiled from
             // brutally shared chrome. For this case only, get the
             // principals from the clone's scope since there's no
             // reliable principals compiled into the function.
             return doGetObjectPrincipal(cx, obj, result);
+#else
+            // Function is a clone. In some cases (such as brutal sharing or
+            // when a function comes from a function expression) the JS engine
+            // sticks the function's principals in the third slot (0 based).  If
+            // it doesn't, then we're probably looking at a function that was
+            // not in a script page (such as a function in a JS component), and
+            // we should fall back on getting the principals from its scope.
+            // Classilla note: this fix only works because our JS is 1.9+ and we
+            // retrospectively added the fix from 1.7.13 and the pull ups above.
+            jsval v;
+            if (!JS_GetReservedSlot(cx, obj, 2, &v))
+                return NS_ERROR_FAILURE;
+            if (JSVAL_IS_VOID(v))
+                return doGetObjectPrincipal(cx, obj, result);
+
+            nsJSPrincipals *prin =
+                NS_STATIC_CAST(nsJSPrincipals *,
+                               NS_STATIC_CAST(JSPrincipals*,
+                                              JSVAL_TO_PRIVATE(v)));
+            NS_ADDREF(*result = prin->nsIPrincipalPtr);
+            return NS_OK;
+#endif
+// end bug
+        }
+		else {
+        /* if (NS_FAILED(GetScriptPrincipal(cx, script,
+                                         getter_AddRefs(scriptPrincipal))))
+                  
+            return NS_ERROR_FAILURE; */
+        	rv = GetScriptPrincipal(cx, script, getter_AddRefs(scriptPrincipal));
         }
 
-        if (NS_FAILED(GetScriptPrincipal(cx, script,
-                                         getter_AddRefs(scriptPrincipal))))
-            return NS_ERROR_FAILURE;
+    }
+    if(NS_FAILED(rv)) return NS_ERROR_FAILURE;
+
+
+#else
+// THIS IS WHAT WE'RE ACTUALLY RUNNING
+
+    JSFunction *fun = (JSFunction *) JS_GetPrivate(cx, obj);
+    JSScript *funScript = JS_GetFunctionScript(cx, fun);
+
+    nsCOMPtr<nsIPrincipal> scriptPrincipal;
+    nsresult rv;
+    
+    if (funScript)
+    {
+        JSScript *frameScript = nsnull;
+
+        if (fp) {
+            frameScript = JS_GetFrameScript(cx, fp);
+        }
+
+        if (frameScript && frameScript != funScript) {
+            // There is a frame script, and it's different than the
+            // function script. In this case we're dealing with either
+            // an eval or a Script object, and in those cases the
+            // principal we want is in the frame's script, not in the
+            // function's script. The function's script is where the
+            // function came from, not where the eval came from, and
+            // we want the principal for the source of the eval
+            // function object or new Script object.
+            rv = GetScriptPrincipal(cx, frameScript,
+                                    getter_AddRefs(scriptPrincipal));
+            goto return_it;
+        }
+        else if (JS_GetFunctionObject(fun) != obj)
+        {
+            // Function is a clone. In some cases (such as brutal sharing or
+            // when a function comes from a function expression) the JS engine
+            // sticks the function's principals in the third slot (0 based).  If
+            // it doesn't, then we're probably looking at a function that was
+            // not in a script page (such as a function in a JS component), and
+            // we should fall back on getting the principals from its scope.
+            
+            jsval v;
+            if (!JS_GetReservedSlot(cx, obj, 2, &v))
+                return NS_ERROR_FAILURE;
+            if (JSVAL_IS_VOID(v))
+                return doGetObjectPrincipal(cx, obj, result);
+
+            nsJSPrincipals *prin =
+                NS_STATIC_CAST(nsJSPrincipals *,
+                               NS_STATIC_CAST(JSPrincipals*,
+                                              JSVAL_TO_PRIVATE(v)));
+            NS_ADDREF(*result = prin->nsIPrincipalPtr);
+            return NS_OK;
+        }
+        else
+        {
+            rv = GetScriptPrincipal(cx, funScript,
+                                    getter_AddRefs(scriptPrincipal));
+                                    goto return_it;
+        }
+        
+        rv = NS_ERROR_FAILURE; // NS_NOTREACHED
 
     }
+
+#endif
+return_it:
+        if (NS_FAILED(rv))
+            return NS_ERROR_FAILURE;
 
     *result = scriptPrincipal.get();
     NS_IF_ADDREF(*result);
     return NS_OK;
+    
 }
 
 nsresult
@@ -1896,7 +2167,8 @@ nsScriptSecurityManager::GetFramePrincipal(JSContext *cx,
         return GetScriptPrincipal(cx, script, result);
     }
 
-    nsresult rv = GetFunctionObjectPrincipal(cx, obj, result);
+// fp added for 1.9 pull up
+    nsresult rv = GetFunctionObjectPrincipal(cx, obj, fp, result);
 
 #ifdef DEBUG
     if (NS_SUCCEEDED(rv) && !*result)
@@ -2020,6 +2292,18 @@ nsScriptSecurityManager::doGetObjectPrincipal(JSContext *aCx, JSObject *aObj,
 
     // Couldn't find a principal for this object.
     return NS_ERROR_FAILURE;
+    // If ObjectPrincipalFinder (dom/nsJSEnvironment.cpp) is on, we need to
+    // return the system principal instead. JavaScript jsfun.c
+    // will root the principal for us so that the GC won't
+    // accidentally try to collect it.
+    nsScriptSecurityManager *ssm =
+        nsScriptSecurityManager::GetScriptSecurityManager();
+    if (!ssm)
+    	return NS_ERROR_FAILURE;
+    nsresult rv = ssm->GetSystemPrincipal(result);
+    if (NS_FAILED(rv)) return rv;
+    //NS_ADDREF(*result);
+    return rv;
 }
 
 nsresult
@@ -2609,10 +2893,12 @@ nsresult nsScriptSecurityManager::Init()
     JSContext* cx = GetSafeJSContext();
     if (!cx) return NS_ERROR_FAILURE;   // this can happen of xpt loading fails
     
-    if (sCallerID == JSVAL_VOID)
-        sCallerID = STRING_TO_JSVAL(::JS_InternString(cx, "caller"));
+/*    if (sCallerID == JSVAL_VOID)
+        sCallerID = STRING_TO_JSVAL(::JS_InternString(cx, "caller")); */
+	::JS_BeginRequest(cx);
     if (sEnabledID == JSVAL_VOID)
         sEnabledID = STRING_TO_JSVAL(::JS_InternString(cx, "enabled"));
+    ::JS_EndRequest(cx);
 
     nsresult rv = InitPrefs();
     NS_ENSURE_SUCCESS(rv, rv);
@@ -2630,7 +2916,8 @@ nsresult nsScriptSecurityManager::Init()
 #ifdef DEBUG
     JSCheckAccessOp oldCallback =
 #endif
-        JS_SetCheckObjectAccessCallback(rt, CheckJSFunctionCallerAccess);
+        //JS_SetCheckObjectAccessCallback(rt, CheckJSFunctionCallerAccess);
+        JS_SetCheckObjectAccessCallback(rt, CheckObjectAccess);
 
     // For now, assert that no callback was set previously
     NS_ASSERTION(!oldCallback, "Someone already set a JS CheckObjectAccess callback");
@@ -2639,7 +2926,7 @@ nsresult nsScriptSecurityManager::Init()
 
 static nsScriptSecurityManager *gScriptSecMan = nsnull;
 
-jsval nsScriptSecurityManager::sCallerID   = JSVAL_VOID;
+//jsval nsScriptSecurityManager::sCallerID   = JSVAL_VOID;
 jsval nsScriptSecurityManager::sEnabledID   = JSVAL_VOID;
 
 nsScriptSecurityManager::~nsScriptSecurityManager(void)
@@ -2661,7 +2948,7 @@ nsScriptSecurityManager::~nsScriptSecurityManager(void)
 void
 nsScriptSecurityManager::Shutdown()
 {
-    sCallerID = JSVAL_VOID;
+    //sCallerID = JSVAL_VOID;
     sEnabledID = JSVAL_VOID;
 }
 

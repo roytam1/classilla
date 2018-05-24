@@ -76,6 +76,7 @@
 #include "nsITimer.h"
 #include "nsDOMClassInfo.h"
 #include "nsIAtom.h"
+#include "nsJSPrincipals.h"
 
 #ifdef MOZ_LOGGING
 // Force PR_LOGGING so we can get JS strict warnings even in release builds
@@ -1249,10 +1250,9 @@ nsJSContext::CallEventHandler(void *aTarget, void *aHandler, PRUint32 argc,
 
       // Don't pass back results from failed calls.
       //*rval = JSVAL_VOID;
-      // We don't handle this yet.
+      *aBoolResult = PR_FALSE;
       // Tell the caller that the handler threw an error.
-      //rv = NS_ERROR_FAILURE; // bug 233142
-      // We probably shouldn't do this either yet. -- Cameron
+      rv = NS_ERROR_FAILURE; // bug 233142
     }
   }
 #endif
@@ -1376,6 +1376,7 @@ nsJSContext::InitContext(nsIScriptGlobalObject *aGlobalObject)
 
   nsCOMPtr<nsIXPConnect> xpc = do_GetService(nsIXPConnect::GetCID(), &rv);
   NS_ENSURE_SUCCESS(rv, rv);
+  
 
   JSObject *global = ::JS_GetGlobalObject(mContext);
 
@@ -1854,6 +1855,38 @@ DOMGCCallback(JSContext *cx, JSGCStatus status)
   return gOldJSGCCallback ? gOldJSGCCallback(cx, status) : JS_TRUE;
 }
 
+// This is for bug 316589 (see jsfun.c).
+JS_STATIC_DLL_CALLBACK(JSPrincipals *)
+ObjectPrincipalFinder(JSContext *cx, JSObject *obj)
+{
+  if (!sSecurityManager)
+    return nsnull;
+
+  nsCOMPtr<nsIPrincipal> principal;
+  nsresult rv =
+    sSecurityManager->GetObjectPrincipal(cx, obj,
+                                         getter_AddRefs(principal));
+                                         
+  if (NS_FAILED(rv)) {
+  	return nsnull;
+  }
+
+  if (NS_FAILED(rv) || !principal) {
+    return nsnull;
+  }
+
+  JSPrincipals *jsPrincipals = nsnull;
+  
+  principal->GetJSPrincipals(/* cx, */ &jsPrincipals);
+  
+  // nsIPrincipal::GetJSPrincipals() returns a strong reference to the
+  // JS principals, but the caller of this function expects a weak
+  // reference. So we need to release here.
+
+  JSPRINCIPALS_DROP(cx, jsPrincipals);
+  return jsPrincipals;
+}
+
 // static
 nsresult nsJSEnvironment::Init()
 {
@@ -1889,6 +1922,15 @@ nsresult nsJSEnvironment::Init()
                "nsJSEnvironment initialized more than once");
 
   gOldJSGCCallback = ::JS_SetGCCallbackRT(sRuntime, DOMGCCallback);
+
+  // Connect JSPrincipalsFinder (see bug 316589 and jsfun.c).
+#if(0)
+  // If you disable this, make sure nsScriptSecurityManager::doGetObjectPrincipal returns NS_ERROR_FAILURE instead of a system principal.
+  // If this is enabled, besides the above, make sure that BasePrincipal::GetJSPrincipals ADDREFs its own pointer or JavaScript will crash in GC.
+  // WE HAVE NOT FIXED THIS YET
+  JSObjectPrincipalsFinder oldfop = ::JS_SetObjectPrincipalsFinder(sRuntime, ObjectPrincipalFinder);
+  NS_ASSERTION(!oldfop, " fighting over the findObjectPrincipals callback!");
+#endif
 
   // Set these global xpconnect options...
   nsCOMPtr<nsIXPConnect> xpc(do_GetService(nsIXPConnect::GetCID(), &rv));

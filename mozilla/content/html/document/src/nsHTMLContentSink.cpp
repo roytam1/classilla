@@ -2953,6 +2953,12 @@ HTMLContentSink::BeginContext(PRInt32 aPosition)
   // Flush everything in the current context so that we don't have
   // to worry about insertions resulting in inconsistent frame creation.
   mCurrentContext->FlushTags(PR_TRUE);
+  
+  // Sanity check. (bug 320182)
+  if (mCurrentContext->mStackPos <= aPosition) {
+    NS_ERROR("Out of bounds position");
+    return NS_ERROR_FAILURE;
+  }
 
   PRInt32 insertionPoint = -1;
   nsHTMLTag nodeType      = mCurrentContext->mStack[aPosition].mType;

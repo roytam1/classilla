@@ -592,8 +592,13 @@ PRBool gif_write_ready(const gif_struct* gs)
   if (!gs)
     return PR_FALSE;
 
+// bug 285595
+#if(0)
   PRInt32 max = PR_MAX(MAX_READ_AHEAD, gs->requested_buffer_fullness);
   return (gs->gathered < max);
+#else
+  return (gs->gathered < MAX_READ_AHEAD);
+#endif
 }
 
 /******************************************************************************/
@@ -905,8 +910,16 @@ PRStatus gif_write(gif_struct *gs, const PRUint8 *buf, PRUint32 len)
       }
       /* Wait for specified # of bytes to enter buffer */
       else if (netscape_extension == 2) {
+// bug 285595
+#if(0)
         gs->requested_buffer_fullness = GETINT32(q + 1);
         GETN(gs->requested_buffer_fullness, gif_wait_for_buffer_full);
+#else
+        // Don't do this, this extension doesn't exist (isn't used at all) 
+        // and doesn't do anything, as our streaming/buffering takes care of it all...
+        // See: http://semmix.pl/color/exgraf/eeg24.htm
+        GETN(1, gif_netscape_extension_block);
+#endif
       } else
         gs->state = gif_error; // 0,3-7 are yet to be defined netscape
                                // extension codes
@@ -914,10 +927,13 @@ PRStatus gif_write(gif_struct *gs, const PRUint8 *buf, PRUint32 len)
       break;
     }
 
+// obsoleted by above
+#if(0)
     case gif_wait_for_buffer_full:
       gs->gathered = gs->requested_buffer_fullness;
       GETN(1, gif_netscape_extension_block);
       break;
+#endif
 
     case gif_image_header:
     {

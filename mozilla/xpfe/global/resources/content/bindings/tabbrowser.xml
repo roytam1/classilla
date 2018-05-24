@@ -559,6 +559,8 @@
             // Make a URI out of our href.
             var uri = Components.classes['@mozilla.org/network/standard-url;1'].createInstance();
             uri = uri.QueryInterface(Components.interfaces.nsIURI);
+            // Bandaid for bug 290036. This is likely paranoia.
+            if (uri && uri.schemeIs && uri.schemeIs("javascript")) return;
   
             var notifyListeners = true;
             var i;
@@ -1044,10 +1046,15 @@
         <body>
           <![CDATA[
             var url = transferUtils.retrieveURLFromData(aXferData.data, aXferData.flavour.contentType);
-
+/*
             // valid urls don't contain spaces ' '; if we have a space it isn't a valid url so bail out
             if (!url || !url.length || url.indexOf(" ", 0) != -1) 
               return;
+*/
+            // valid urls don't contain spaces ' '; if we have a space it isn't a valid url.
+            // Also disallow dropping javascript: or data: urls--bail out
+            if (!url || !url.length || url.indexOf(" ", 0) != -1 ||
+                /^\s*(javascript|data):/.test(url)) return; // bug 280056
             
             var bgLoad = this.mPrefs.getBoolPref("browser.tabs.loadInBackground");
 
@@ -1289,6 +1296,26 @@
           }
           this.removeTab(this.mTabContainer.childNodes[i]);
           event.preventDefault();
+        ]]>
+      </handler>
+      <handler event="DOMWillOpenModalDialog">
+        <![CDATA[
+          if (!event.isTrusted)
+            return;
+
+          // We're about to open a modal dialog, make sure the opening
+          // tab is brought to the front.
+
+          var targetTop = new XPCNativeWrapper(event.target, "top").top;
+
+          const browsers = this.browsers;
+          for (var i = 0; i < browsers.length; ++i) {
+            if (browsers[i].contentWindow == targetTop) {
+              this.selectedTab = this.mTabContainer.childNodes[i];
+
+              break;
+            }
+          }
         ]]>
       </handler>
     </handlers>

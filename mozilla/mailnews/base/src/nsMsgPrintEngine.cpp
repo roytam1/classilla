@@ -258,13 +258,23 @@ nsMsgPrintEngine::SetWindow(nsIDOMWindowInternal *aWin)
   nsCOMPtr<nsIDocShellTreeItem> rootAsItem;
   docShellAsItem->GetSameTypeRootTreeItem(getter_AddRefs(rootAsItem));
 
+// bug 103638
+#if(0)
   nsCOMPtr<nsIDocShellTreeNode> rootAsNode(do_QueryInterface(rootAsItem));
   NS_ENSURE_TRUE(rootAsNode, NS_ERROR_FAILURE);
 
   nsCOMPtr<nsIDocShellTreeItem> childItem;
   rootAsNode->FindChildWithName(NS_LITERAL_STRING("content").get(), PR_TRUE, PR_FALSE, nsnull,
     getter_AddRefs(childItem));
+#else
+  nsCOMPtr<nsIDocShellTreeNodeTmp> rootAsNode(do_QueryInterface(rootAsItem));
+  NS_ENSURE_TRUE(rootAsNode, NS_ERROR_FAILURE);
 
+  nsCOMPtr<nsIDocShellTreeItem> childItem;
+  rootAsNode->FindChildWithNameTmp(NS_LITERAL_STRING("content").get(), PR_TRUE, PR_FALSE, nsnull, nsnull,
+    getter_AddRefs(childItem));
+#endif
+// end bug
   mDocShell = do_QueryInterface(childItem);
 
   if(mDocShell)

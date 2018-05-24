@@ -186,6 +186,9 @@ nsresult
 nsJSPrincipals::Init(char *aCodebase)
 {
     codebase = aCodebase;
+    //codebase = PL_strdup(aCodebase);
+    //if (!codebase)
+    //	return NS_ERROR_OUT_OF_MEMORY;
     return NS_OK;
 }
 

@@ -175,6 +175,7 @@ typedef struct Pop3UidlHost {
 } Pop3UidlHost;
 
 typedef struct Pop3MsgInfo {
+	PRInt32 msgnum;
     PRInt32 size;
     char* uidl;
 } Pop3MsgInfo;
@@ -316,6 +317,7 @@ private:
   PRBool mDoAPOP;
   nsCOMPtr<nsISignatureVerifier> mHashGenerator;
   PRBool mIsSecure;
+  PRInt32 m_listpos;
 
     //////////////////////////////////////////////////////////////////////////////////////////
 	// Begin Pop3 protocol state handlers

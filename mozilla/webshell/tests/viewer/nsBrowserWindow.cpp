@@ -2073,6 +2073,8 @@ nsBrowserWindow::FindWebShellWithName(const PRUnichar* aName, nsIWebShell*& aRes
         }
       }      
 
+// bug 103638
+#if(0)
       nsCOMPtr<nsIDocShellTreeNode> docShellAsNode(do_QueryInterface(mDocShell));
 
       nsCOMPtr<nsIDocShellTreeItem> result;
@@ -2082,6 +2084,20 @@ nsBrowserWindow::FindWebShellWithName(const PRUnichar* aName, nsIWebShell*& aRes
           CallQueryInterface(result, &aResult);
           return NS_OK;
         }
+#else
+      nsCOMPtr<nsIDocShellTreeNodeTmp> docShellAsNode(do_QueryInterface(mDocShell));
+
+      nsCOMPtr<nsIDocShellTreeItem> result;
+      docShellAsNode->FindChildWithNameTmp(aName, PR_TRUE,
+                                           PR_FALSE, nsnull,
+                                           nsnull,
+                                           getter_AddRefs(result));
+      if (result) {
+        CallQueryInterface(result, &aResult);
+        return NS_OK;
+      }
+#endif
+// end bug
       }
     }
   }

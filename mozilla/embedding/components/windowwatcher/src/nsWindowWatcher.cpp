@@ -479,7 +479,8 @@ nsWindowWatcher::OpenWindowJS(nsIDOMWindow *aParent,
                                   uriToLoadIsChrome = PR_FALSE;
   PRUint32                        chromeFlags;
   nsAutoString                    name;             // string version of aName
-  nsCString                       features;         // string version of aFeatures
+  //nsCString                       features;         // string version of aFeatures
+  nsCAutoString                   features;         // string version of aFeatures (bug 103638)
   nsCOMPtr<nsIURI>                uriToLoad;        // from aUrl, if any
   nsCOMPtr<nsIDocShellTreeOwner>  parentTreeOwner;  // from the parent window, if any
   nsCOMPtr<nsIDocShellTreeItem>   newDocShellItem;  // from the new window
@@ -518,6 +519,8 @@ nsWindowWatcher::OpenWindowJS(nsIDOMWindow *aParent,
 
   // try to find an extant window with the given name
   if (nameSpecified) {
+// bug 103638
+#if(0)
     /* Oh good. special target names are now handled in multiple places:
        Here and within FindItemWithName, just below. I put _top here because
        here it's able to do what it should: get the topmost shell of the same
@@ -554,6 +557,42 @@ nsWindowWatcher::OpenWindowJS(nsIDOMWindow *aParent,
     } else
       FindItemWithName(name.get(), getter_AddRefs(newDocShellItem));
   }
+#else
+    nsCOMPtr<nsIJSContextStack> stack =
+      do_GetService(sJSStackContractID);
+
+    JSContext *cx = nsnull;
+
+    if (stack) {
+      stack->Peek(&cx);
+    }
+
+    nsCOMPtr<nsIDocShellTreeItem> callerItem;
+
+    if (cx) {
+      nsCOMPtr<nsIScriptGlobalObject> sgo;
+      nsWWJSUtils::nsGetDynamicScriptGlobal(cx, getter_AddRefs(sgo));
+      
+      callerItem = do_QueryInterface(sgo);
+    }
+
+    nsCOMPtr<nsIDocShellTreeItem> parentItem;
+    GetWindowTreeItem(aParent, getter_AddRefs(parentItem));
+
+    if (!callerItem) {
+      callerItem = parentItem;
+    }
+
+    if (parentItem) {
+      nsCOMPtr<nsIDocShellTreeItemTmp> item(do_QueryInterface(parentItem));
+      item->FindItemWithNameTmp(name.get(), nsnull, callerItem,
+                                getter_AddRefs(newDocShellItem));
+    } else
+      FindItemWithName(name.get(), callerItem,
+                       getter_AddRefs(newDocShellItem));
+  }
+#endif
+// end bug
 
   // no extant window? make a new one.
   if (!newDocShellItem) {
@@ -1049,6 +1088,8 @@ nsWindowWatcher::GetWindowByName(const PRUnichar *aTargetName,
   nsCOMPtr<nsIDocShellTreeItem> treeItem;
 
   // First, check if the TargetName exists in the aCurrentWindow hierarchy
+// bug 103638
+#if(0)
   webNav = do_GetInterface(aCurrentWindow);
   if (webNav) {
     nsCOMPtr<nsIDocShellTreeItem> docShellTreeItem;
@@ -1064,6 +1105,25 @@ nsWindowWatcher::GetWindowByName(const PRUnichar *aTargetName,
   if (!treeItem) {
     FindItemWithName(aTargetName, getter_AddRefs(treeItem));
   }
+#else
+  webNav = do_GetInterface(aCurrentWindow);
+  if (webNav) {
+    nsCOMPtr<nsIDocShellTreeItemTmp> docShellTreeItem;
+
+    docShellTreeItem = do_QueryInterface(webNav);
+    if (docShellTreeItem) {
+      // XXXbz sort out original requestor?
+      docShellTreeItem->FindItemWithNameTmp(aTargetName, nsnull, nsnull,
+                                            getter_AddRefs(treeItem));
+    }
+  }
+
+  // Next, see if the TargetName exists in any window hierarchy
+  if (!treeItem) {
+    FindItemWithName(aTargetName, nsnull, getter_AddRefs(treeItem));
+  }
+#endif
+// end bug
 
   if (treeItem) {
     nsCOMPtr<nsIDOMWindow> domWindow;
@@ -1328,7 +1388,9 @@ PRUint32 nsWindowWatcher::CalculateChromeFlags(const char *aFeatures,
        prevents untrusted script from opening modal windows in general
        while still allowing alerts and the like. */
     if (!aChromeURL)
-      chromeFlags &= ~nsIWebBrowserChrome::CHROME_MODAL;
+      //chromeFlags &= ~nsIWebBrowserChrome::CHROME_MODAL;
+      // bug 244965
+      chromeFlags &= ~(nsIWebBrowserChrome::CHROME_MODAL | nsIWebBrowserChrome::CHROME_OPENAS_CHROME);
   }
 
   return chromeFlags;
@@ -1385,6 +1447,8 @@ nsWindowWatcher::WinHasOption(const char *aOptions, const char *aName,
    known open window. a failure to find the item will not
    necessarily return a failure method value. check aFoundItem.
 */
+// bug 103638
+#if(0)
 nsresult
 nsWindowWatcher::FindItemWithName(
                     const PRUnichar* aName,
@@ -1431,6 +1495,61 @@ nsWindowWatcher::FindItemWithName(
 
   return rv;
 }
+#else
+nsresult
+nsWindowWatcher::FindItemWithName(const PRUnichar* aName,
+                                  nsIDocShellTreeItem* aOriginalRequestor,
+                                  nsIDocShellTreeItem** aFoundItem)
+{
+
+  *aFoundItem = 0;
+
+  /* special cases */
+  if(!aName || !*aName)
+    return NS_OK;
+
+  nsAutoString name(aName);
+
+  if(name.EqualsIgnoreCase("_blank") || name.EqualsIgnoreCase("_new"))
+    return NS_OK;
+  // _content will be handled by individual windows, below
+ 
+  nsCOMPtr<nsISimpleEnumerator> windows;
+  GetWindowEnumerator(getter_AddRefs(windows));
+  if (!windows)
+    return NS_ERROR_FAILURE;
+
+  PRBool   more;
+  nsresult rv = NS_OK;
+
+  do {
+    windows->HasMoreElements(&more);
+    if (!more)
+      break;
+    nsCOMPtr<nsISupports> nextSupWindow;
+    windows->GetNext(getter_AddRefs(nextSupWindow));
+    if (nextSupWindow) {
+      nsCOMPtr<nsIDOMWindow> nextWindow(do_QueryInterface(nextSupWindow));
+      if (nextWindow) {
+        nsCOMPtr<nsIDocShellTreeItem> treeItem;
+        GetWindowTreeItem(nextWindow, getter_AddRefs(treeItem));
+        if (treeItem) {
+          nsCOMPtr<nsIDocShellTreeItemTmp> treeItemTmp =
+            do_QueryInterface(treeItem);
+          rv = treeItemTmp->FindItemWithNameTmp(aName, treeItem,
+                                                aOriginalRequestor,
+                                                aFoundItem);
+          if (NS_FAILED(rv) || *aFoundItem)
+            break;
+        }
+      }
+    }
+  } while(1);
+
+  return rv;
+}
+#endif
+// end bug
 
 /* Fetch the nsIDOMWindow corresponding to the given nsIDocShellTreeItem.
    This forces the creation of a script context, if one has not already

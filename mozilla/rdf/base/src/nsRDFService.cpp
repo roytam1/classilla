@@ -71,8 +71,8 @@
 #include "nsCRT.h"
 
 // Classilla issue 111
-//#define WE_CACHE_THIS(x) (nsCRT::strncasecmp(x, "urn:mimetype", 11) && nsCRT::strcasecmp(x, "rdf:null"))
-#define WE_CACHE_THIS(x) (1)
+#define WE_CACHE_THIS(x) (nsCRT::strncasecmp(x, "urn:mimetype", 11) && nsCRT::strcasecmp(x, "rdf:null"))
+//#define WE_CACHE_THIS(x) (1)
 
 ////////////////////////////////////////////////////////////////////////
 
@@ -1000,10 +1000,6 @@ RDFServiceImpl::GetResource(const char* aURI, nsIRDFResource** aResource)
 
     PR_LOG(gLog, PR_LOG_DEBUG, ("rdfserv get-resource %s", aURI));
 
-// Classilla issue 111
-// Never fetch from cache for selected urn:s because they go haywire.
-if (WE_CACHE_THIS(aURI)) {
-
     // First, check the cache to see if we've already created and
     // registered this thing.
     PLDHashEntryHdr *hdr =
@@ -1014,8 +1010,7 @@ if (WE_CACHE_THIS(aURI)) {
         NS_ADDREF(*aResource = entry->mResource);
         return NS_OK;
     }
-}// end issue
-
+    
     // Nope. So go to the repository to create it.
 
     // Compute the scheme of the URI. Scan forward until we either:
@@ -1522,8 +1517,16 @@ RDFServiceImpl::GetDataSource(const char* aURI, PRBool aBlock, nsIRDFDataSource*
 
     // First, check the cache to see if we already have this
     // datasource loaded and initialized.
-    if(WE_CACHE_THIS(aURI)) // Classilla issue 111
-    {
+    
+    // Find mimetypes.rdf. If it's there, don't cache. Classilla issue 111 mitigation
+    // This still doesn't pull it up every time but it doesn't need a restart either.
+    const char *dot = strrchr(aURI, '/');
+    PRBool doCache = PR_TRUE;
+    if(dot && !nsCRT::strcasecmp(dot, "/mimetypes.rdf")) {
+    	*aDataSource = nsnull;
+    	doCache = PR_FALSE;
+    }
+    if (doCache) {
         nsIRDFDataSource* cached =
             NS_STATIC_CAST(nsIRDFDataSource*, PL_HashTableLookup(mNamedDataSources, spec.get()));
 
@@ -1572,7 +1575,7 @@ RDFServiceImpl::GetDataSource(const char* aURI, PRBool aBlock, nsIRDFDataSource*
         if (NS_FAILED(rv)) return rv;
     }
 
-    *aDataSource = ds;
+    *aDataSource = ds;    
     NS_ADDREF(*aDataSource);
     return NS_OK;
 }

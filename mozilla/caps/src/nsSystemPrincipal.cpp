@@ -88,7 +88,20 @@ NS_IMETHODIMP
 nsSystemPrincipal::Equals(nsIPrincipal *other, PRBool *result)
 {
     *result = (other == this);
-    return NS_OK;
+#if(0)
+    if (*result)
+    	return NS_OK;
+    	
+   	// Too easy. Check if this is chrome:.
+   	JSPrincipals *jsp;
+	other->GetJSPrincipals(&jsp);
+	if (jsp &&
+		jsp->codebase && 
+		(PL_strlen(jsp->codebase) > 9) &&
+		(PL_strncmp(jsp->codebase, "chrome://", 9) == 0))
+			*result = PR_TRUE;
+#endif
+   	return NS_OK;
 }
 
 NS_IMETHODIMP

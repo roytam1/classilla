@@ -48,6 +48,7 @@ typedef struct XPITriggerEvent {
     jsval       global;
     jsval       cbval;
     nsCOMPtr<nsISupports> ref;
+    nsCOMPtr<nsIPrincipal> princ; // bug 293331
 } XPITriggerEvent;
 
 
@@ -71,12 +72,15 @@ class nsXPITriggerItem
 
     PRBool  IsFileURL() { return Substring(mURL, 0, 6).Equals(NS_LITERAL_STRING("file:/")); }
     PRBool  IsRelativeURL();
+    
+    const PRUnichar* GetSafeURLString(); // bug 268059
 
     void    SetPrincipal(nsIPrincipal* aPrincipal);
   private:
     //-- prevent inadvertent copies and assignments
     nsXPITriggerItem& operator=(const nsXPITriggerItem& rhs);
     nsXPITriggerItem(const nsXPITriggerItem& rhs);
+    nsString mSafeURL; // bug 268059
 };
 
 
@@ -98,6 +102,8 @@ class nsXPITriggerInfo
     PRUint32            Size() { return mItems.Count(); }
 
     void                SendStatus(const PRUnichar* URL, PRInt32 status);
+    
+    void                SetPrincipal(nsIPrincipal* aPrinc) { mPrincipal = aPrinc; } // bug 293331
 
   private:
     nsVoidArray mItems;
@@ -105,6 +111,8 @@ class nsXPITriggerInfo
     nsCOMPtr<nsIXPConnectJSObjectHolder> mGlobalWrapper;
     jsval       mCbval;
     PRThread*   mThread;
+    
+    nsCOMPtr<nsIPrincipal>      mPrincipal; // bug 293331
 
     //-- prevent inadvertent copies and assignments
     nsXPITriggerInfo& operator=(const nsXPITriggerInfo& rhs);

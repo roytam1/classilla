@@ -147,11 +147,14 @@ private:
     nsresult GetAuthenticator(const char *scheme, nsIHttpAuthenticator **);
     void     GetUserPassFromURI(PRUnichar **user, PRUnichar **pass);
     void     ParseRealm(const char *challenge, nsACString &realm);
-    nsresult PromptForUserPass(const char *host, PRInt32 port, PRBool proxyAuth, const char *realm, PRUnichar **user, PRUnichar **pass);
-    void     SetAuthorizationHeader(nsHttpAuthCache *, nsHttpAtom header, const char *host, PRInt32 port, const char *path, PRUnichar **user, PRUnichar **pass);
+    //nsresult PromptForUserPass(const char *host, PRInt32 port, PRBool proxyAuth, const char *realm, PRUnichar **user, PRUnichar **pass);
+    //void     SetAuthorizationHeader(nsHttpAuthCache *, nsHttpAtom header, const char *host, PRInt32 port, const char *path, PRUnichar **user, PRUnichar **pass);
+    nsresult PromptForUserPass(const char *scheme, const char *host, PRInt32 port, PRBool proxyAuth, const char *realm, PRUnichar **user, PRUnichar **pass);
+    void     SetAuthorizationHeader(nsHttpAuthCache *, nsHttpAtom header, const char *scheme, const char *host, PRInt32 port, const char *path, PRUnichar **user, PRUnichar **pass);
     void     AddAuthorizationHeaders();
     nsresult GetCurrentPath(nsACString &);
-    void     ClearPasswordManagerEntry(const char *host, PRInt32 port, const char *realm, const PRUnichar *user);
+    //void     ClearPasswordManagerEntry(const char *host, PRInt32 port, const char *realm, const PRUnichar *user);
+    void	 ClearPasswordManagerEntry(const char *scheme, const char *host, PRInt32 port, const char *realm, const PRUnichar *user);
 
     static void *PR_CALLBACK AsyncCall_EventHandlerFunc(PLEvent *);
     static void  PR_CALLBACK AsyncCall_EventCleanupFunc(PLEvent *);

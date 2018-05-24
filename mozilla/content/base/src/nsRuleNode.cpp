@@ -53,6 +53,8 @@
 #include "nsITheme.h"
 #include "pldhash.h"
 
+static nsIPresContext *sentinel;
+
 /*
  * For storage of an |nsRuleNode|'s children in a linked list.
  */
@@ -422,6 +424,7 @@ nsRuleNode::Destroy()
 {
 if (!this) return;
 if (!mPresContext) return;
+if (mPresContext != sentinel) return;
 
   // Destroy ourselves.
   this->~nsRuleNode();
@@ -447,6 +450,7 @@ nsRuleNode::nsRuleNode(nsIPresContext* aContext, nsIStyleRule* aRule, nsRuleNode
     mNoneBits(0)
 {
   MOZ_COUNT_CTOR(nsRuleNode);
+  sentinel = aContext;
 }
 
 PR_STATIC_CALLBACK(PLDHashOperator)
@@ -5409,10 +5413,23 @@ nsRuleNode::GetStyleData(nsStyleStructID aSID,
 void
 nsRuleNode::Mark()
 {
+//return; // 9.2.3, 9.3.1 temporary fix
+
+// Current theory. keep static pointer to mPresContext. if this changes,
+// just return.
+
 if (!this) return;
 if (!mParent) return;
 
-//return; // 9.2.3 temporary fix
+// Don't Mark() if we're not being aggressive. See below.
+if (!mPresContext) return;
+if (mPresContext != sentinel) return;
+
+//PRBool aggro;
+//mPresContext->GetCachedBoolPref(kClassilla_Aggressive_RuleNode, aggro);
+//if (!aggro) return;
+
+
 
   //if (!this->mParent) {
   //	mDependentBits |= NS_RULE_NODE_GC_MARK;
@@ -5440,8 +5457,16 @@ SweepRuleNodeChildren(PLDHashTable *table, PLDHashEntryHdr *hdr,
 PRBool
 nsRuleNode::Sweep()
 {
-//return PR_FALSE; // 9.2.3 temporary fix
-if (!this) return PR_TRUE;
+//return PR_FALSE; // temporary fix
+
+// Classilla 9.3.1 (for issue 165): don't Sweep() if we're not being aggressive.
+if (!this) return PR_FALSE;
+if (!mPresContext) return PR_FALSE;
+if (mPresContext != sentinel) return PR_FALSE;
+//PRBool aggro;
+//mPresContext->GetCachedBoolPref(kClassilla_Aggressive_RuleNode, aggro);
+//if (!aggro) return PR_FALSE;
+
 
   // If we're not marked, then we have to delete ourself.
   if (!(mDependentBits & NS_RULE_NODE_GC_MARK)) {

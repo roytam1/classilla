@@ -51,6 +51,10 @@ var gOldCloseHandler = null; // close handler before we went into print preview
 var gInPrintPreviewMode = false;
 var gWebProgress        = null;
 
+var Cc = Components.classes;
+var Ci = Components.interfaces;
+var prefService = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService);
+
 /*
  *
  * Byblos stelae controller
@@ -58,9 +62,6 @@ var gWebProgress        = null;
  *
  */
  
-var Cc = Components.classes;
-var Ci = Components.interfaces;
-
 var observerService = Cc["@mozilla.org/observer-service;1"].getService(Ci.nsIObserverService);
     
 // The tracer is responsible for aggregating events from the HTTP traced channel
@@ -272,7 +273,6 @@ observerService.addObserver(httpRequestObserver, "http-on-examine-response", fal
  *
  * Site Control
  * This controls aspects of how the request is made, such as dynamic User-Agent control, etc.
- * In 9.3.0, this is very basic and used only to control Google, which is weird.
  * Classilla issue 169
  *
  */
@@ -287,6 +287,9 @@ var httpModifyObserver = { // watches for requests
 				Ci = Components.interfaces;
 			} catch(e) { }
 			if (!Cc) return; // wtf?!
+			
+			// Get our prefs branch handle.
+			var pb = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("classilla.sitecontrol.");
 
 			var consoleService = Cc["@mozilla.org/consoleservice;1"]
                                	.getService(Ci.nsIConsoleService);
@@ -304,7 +307,18 @@ var httpModifyObserver = { // watches for requests
 			if (!subject.URI)
 				return; // abort now
 			var spec = subject.URI.spec;
-			if (!/^https?:\/\/(www\.|mail\.|accounts\.)?google\.com($|\/)/.test(spec))
+			var host = subject.URI.host.toLowerCase();
+			var althost = "Classilla/CFM";
+			
+			// Check for hardcoded URLs and for URLs the user has specified. Let the user override.
+			var q = '';
+			try {
+				var q = pb.getCharPref(host);
+			} catch(e) { } // if this fails, it's no big deal.
+			if (q && q.length) {
+				if (q.length > 1)
+					althost = q;
+			} else if (!/^https?:\/\/(www\.|mail\.|accounts\.)?google\.com($|\/)/.test(spec))
 				return;
 			
 			// Now QI to an nsIHttpChannel so we can modify the request.
@@ -318,10 +332,8 @@ var httpModifyObserver = { // watches for requests
 			if (!subject.setRequestHeader)
 				return; // abort now
 				
-			// This is where the logic would ordinarily be. Here we just forge the user agent.
-			subject.setRequestHeader("User-Agent", "Classilla/CFM", false);
-				
-			// successful
+			// Forge the user-agent and continue.
+			subject.setRequestHeader("User-Agent", althost, false);
 			//consoleService.logStringMessage("Silent user-agent change for "+spec);
 		}
 	},
@@ -340,7 +352,6 @@ observerService.addObserver(httpModifyObserver, "http-on-modify-request", false)
  * Back to the browser, which is already in progress.
  *
  */
-
 
 function getWebNavigation()
 {

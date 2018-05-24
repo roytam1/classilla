@@ -53,6 +53,8 @@
 #include "nsIUploadChannel.h"
 #include "nsISecurityEventSink.h"
 #include "nsScriptSecurityManager.h"
+#include "nsIScriptObjectPrincipal.h"
+#include "nsIScriptContext.h"
 #include "nsDocumentCharsetInfoCID.h"
 #include "nsICanvasFrame.h"
 #include "nsIPluginViewer.h"
@@ -156,6 +158,11 @@ static NS_DEFINE_CID(kDOMScriptObjectFactoryCID,
 // Number of documents currently loading
 static PRInt32 gNumberOfDocumentsLoading = 0;
 
+// True means we validate window targets to prevent frameset
+// spoofing. Initialize this to a non-boolean value so we know to check
+// the pref on the creation of the first docshell.
+static PRBool gValidateOrigin = (PRBool)0xffffffff; // bug 103638
+
 // Hint for native dispatch of plevents on how long to delay after 
 // all documents have loaded in milliseconds before favoring normal
 // native event dispatch priorites over performance
@@ -242,7 +249,8 @@ nsDocShell::nsDocShell():
     mTreeOwner(nsnull),
     mChromeEventHandler(nsnull),
     mIsPrintingOrPP(PR_FALSE),
-    mIsExecutingOnLoadHandler(PR_FALSE)
+    mIsExecutingOnLoadHandler(PR_FALSE),
+    mAllowAuth(PR_TRUE)
 {
 #ifdef PR_LOGGING
     if (! gDocShellLog)
@@ -292,7 +300,9 @@ NS_INTERFACE_MAP_BEGIN(nsDocShell)
     NS_INTERFACE_MAP_ENTRY_AMBIGUOUS(nsISupports, nsIDocShell)
     NS_INTERFACE_MAP_ENTRY(nsIDocShell)
     NS_INTERFACE_MAP_ENTRY(nsIDocShellTreeItem)
+    NS_INTERFACE_MAP_ENTRY(nsIDocShellTreeItemTmp) // bug 103638
     NS_INTERFACE_MAP_ENTRY(nsIDocShellTreeNode)
+    NS_INTERFACE_MAP_ENTRY(nsIDocShellTreeNodeTmp) // bug 103638
     NS_INTERFACE_MAP_ENTRY(nsIDocShellHistory)
     NS_INTERFACE_MAP_ENTRY(nsIWebNavigation)
     NS_INTERFACE_MAP_ENTRY(nsIBaseWindow)
@@ -324,6 +334,8 @@ NS_IMETHODIMP nsDocShell::GetInterface(const nsIID & aIID, void **aSink)
              NS_SUCCEEDED(EnsureScriptEnvironment())) {
         *aSink = mScriptGlobal;
     }
+// bug 103638
+#if(0)
     else if (aIID.Equals(NS_GET_IID(nsIDOMWindowInternal)) &&
              NS_SUCCEEDED(EnsureScriptEnvironment())) {
         NS_ENSURE_SUCCESS(mScriptGlobal->
@@ -345,6 +357,17 @@ NS_IMETHODIMP nsDocShell::GetInterface(const nsIID & aIID, void **aSink)
                           NS_ERROR_FAILURE);
         return NS_OK;
     }
+#else
+    else if ((aIID.Equals(NS_GET_IID(nsIDOMWindowInternal)) ||
+              aIID.Equals(NS_GET_IID(nsPIDOMWindow)) ||
+              aIID.Equals(NS_GET_IID(nsIDOMWindow))) &&
+             NS_SUCCEEDED(EnsureScriptEnvironment())) {
+        NS_ENSURE_SUCCESS(mScriptGlobal->QueryInterface(aIID, aSink),
+                          NS_ERROR_FAILURE);
+        return NS_OK;
+    }
+#endif
+// end bug
     else if (aIID.Equals(NS_GET_IID(nsIDOMDocument)) &&
              NS_SUCCEEDED(EnsureContentViewer())) {
         mContentViewer->GetDOMDocument((nsIDOMDocument **) aSink);
@@ -361,6 +384,9 @@ NS_IMETHODIMP nsDocShell::GetInterface(const nsIID & aIID, void **aSink)
             return NS_NOINTERFACE;
     }
     else if (aIID.Equals(NS_GET_IID(nsIAuthPrompt))) {
+    	// if auth is not allowed, bail out
+    	if (!mAllowAuth)
+    		return NS_NOINTERFACE;
         nsCOMPtr<nsIAuthPrompt> authPrompter(do_GetInterface(mTreeOwner));
         if (authPrompter) {
             *aSink = authPrompter;
@@ -957,7 +983,7 @@ PRBool SameOrSubdomainOfTarget(nsIURI* aOriginURI, nsIURI* aTargetURI, PRBool aD
 // of loading in the hands of the target, which is more secure. (per Nav 4.x)
 //
 static
-PRBool ValidateOrigin(nsIDocShellTreeItem* aOriginTreeItem, nsIDocShellTreeItem* aTargetTreeItem)
+PRBool FValidateOrigin(nsIDocShellTreeItem* aOriginTreeItem, nsIDocShellTreeItem* aTargetTreeItem)
 {
 // pull up 1.8.1
     nsCOMPtr<nsIScriptSecurityManager> securityManager =
@@ -991,23 +1017,37 @@ PRBool ValidateOrigin(nsIDocShellTreeItem* aOriginTreeItem, nsIDocShellTreeItem*
   nsresult rv = originWebNav->GetCurrentURI(getter_AddRefs(originDocumentURI));
   NS_ENSURE_TRUE(NS_SUCCEEDED(rv) && originDocumentURI, PR_TRUE);
 
-// pull up 1.8.1
-// we don't have sURIFixup yet ...
 #if(0)
+// 1.8.1 way
     // This may be wyciwyg URI... if so, we need to extract the actual
     // URI from it.
-    if (sURIFixup) {
+    if (mURIFixup) {
         PRBool isWyciwyg = PR_FALSE;
         rv = originDocumentURI->SchemeIs("wyciwyg", &isWyciwyg);      
         if (isWyciwyg && NS_SUCCEEDED(rv)) {
             nsCOMPtr<nsIURI> temp;
-            sURIFixup->CreateExposableURI(originDocumentURI,
+            mURIFixup->CreateExposableURI(originDocumentURI,
                                           getter_AddRefs(temp));
             originDocumentURI = temp;
         }
     }
+#else
+// 1.4 way (bug 103638; more compatible)
+    // This may be wyciwyg URI... if so, we need to extract the actual
+    // URI from it.
+    PRBool isWyciwyg = PR_FALSE;
+    rv = originDocumentURI->SchemeIs("wyciwyg", &isWyciwyg);      
+    if (isWyciwyg && NS_SUCCEEDED(rv)) {
+        nsCOMPtr<nsIURIFixup> URIFixup = do_GetService(NS_URIFIXUP_CONTRACTID);
+
+        if (URIFixup) {
+            nsCOMPtr<nsIURI> temp;
+            URIFixup->CreateExposableURI(originDocumentURI,
+                                         getter_AddRefs(temp));
+            originDocumentURI = temp;
+        }
+    }
 #endif
-// end pull up
 
   // Get target principal uri (including document.domain)
   nsCOMPtr<nsIDOMDocument> targetDOMDocument(do_GetInterface(aTargetTreeItem));
@@ -1046,12 +1086,15 @@ nsresult nsDocShell::FindTarget(const PRUnichar *aWindowTarget,
                                 nsIDocShell **aResult)
 {
     nsresult rv;
-    nsAutoString name(aWindowTarget);
-    nsCOMPtr<nsIDocShellTreeItem> treeItem;
-    PRBool mustMakeNewWindow = PR_FALSE;
 
     *aResult      = nsnull;
     *aIsNewWindow = PR_FALSE;
+
+// bug 103638
+#if(0)
+    nsAutoString name(aWindowTarget);
+    nsCOMPtr<nsIDocShellTreeItem> treeItem;
+    PRBool mustMakeNewWindow = PR_FALSE;
 
     if(!name.Length() || name.EqualsIgnoreCase("_self"))
     {
@@ -1137,18 +1180,36 @@ nsresult nsDocShell::FindTarget(const PRUnichar *aWindowTarget,
             } // else (target from origin domain) allow this load
         } // else (pref is false) allow this load
     }
-
     if (mustMakeNewWindow)
+#else
+    // Try to locate the target window...
+    nsCOMPtr<nsIDocShellTreeItem> treeItem;
+    FindItemWithNameTmp(aWindowTarget, nsnull, this, getter_AddRefs(treeItem));
+
+	if (!treeItem)
+#endif
     {
+    	/// XXXbz this should really happen in FindItemWithName too, I think...
+// end bug
         nsCOMPtr<nsIDOMWindow> newWindow;
         nsCOMPtr<nsIDOMWindowInternal> parentWindow;
 
         // This DocShell is the parent window
         parentWindow = do_GetInterface(NS_STATIC_CAST(nsIDocShell*, this));
         if (!parentWindow) {
-            NS_ASSERTION(0, "Cant get nsIDOMWindowInternal from nsDocShell!");
+            NS_ERROR("Cant get nsIDOMWindowInternal from nsDocShell!");
             return NS_ERROR_FAILURE;
         }
+
+// bug 103638
+        nsAutoString name(aWindowTarget);
+        // XXXbz this should be handled somewhere else....  and in fact, it
+        // may be safe to just pass those through here.  Check.
+        if (name.EqualsIgnoreCase("_blank") ||
+            name.EqualsIgnoreCase("_new")) {
+            name.Truncate();
+        }
+// end bug
 
         rv = parentWindow->Open(NS_LITERAL_STRING(""),    // URL to load
                                 name,                     // Window name
@@ -1196,6 +1257,8 @@ nsresult nsDocShell::FindTarget(const PRUnichar *aWindowTarget,
     }
     else
     {
+// bug 103638
+#if(0)
         if (treeItem)
         {
             NS_ASSERTION(!*aResult, "aResult should be null if treeItem is set!");
@@ -1205,6 +1268,10 @@ nsresult nsDocShell::FindTarget(const PRUnichar *aWindowTarget,
         {
             NS_IF_ADDREF(*aResult);
         }
+#else
+        NS_ASSERTION(!*aResult, "aResult should be null if treeItem is set!");
+        treeItem->QueryInterface(NS_GET_IID(nsIDocShell), (void **)aResult);
+#endif
     }
     return NS_OK;
 }
@@ -1508,6 +1575,20 @@ nsDocShell::SetAllowJavascript(PRBool aAllowJavascript)
 {
     mAllowJavascript = aAllowJavascript;
     return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDocShell::GetAllowAuth(PRBool * aAllowAuth)
+{
+    *aAllowAuth = mAllowAuth;
+    return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDocShell::SetAllowAuth(PRBool aAllowAuth)
+{
+    mAllowAuth = aAllowAuth;
+	return NS_OK;
 }
 
 NS_IMETHODIMP nsDocShell::GetAllowMetaRedirects(PRBool * aReturn)
@@ -1829,22 +1910,216 @@ nsDocShell::GetSameTypeRootTreeItem(nsIDocShellTreeItem ** aRootTreeItem)
     return NS_OK;
 }
 
+static PRBool ValidateOrigin(nsIDocShellTreeItem *a, nsIDocShellTreeItem *b) {
+	// WTF!
+}
+
+// bug 103638
+/* static */
+PRBool
+nsDocShell::CanAccessItem(nsIDocShellTreeItem* aTargetItem,
+                          nsIDocShellTreeItem* aAccessingItem,
+                          PRBool aConsiderOpener)
+{
+    NS_PRECONDITION(aTargetItem, "Must have target item!");
+
+    if (!gValidateOrigin || !aAccessingItem) {
+        // Good to go
+        return PR_TRUE;
+    }
+
+    // XXXbz should we care if aAccessingItem or the document therein is
+    // chrome?  Should those get extra privileges?
+
+    // Now do a security check
+    // Bug 13871: Prevent frameset spoofing
+    //     See BugSplat 336170, 338737 and XP_FindNamedContextInList in
+    //     the classic codebase
+    //     Nav's behaviour was:
+    //         - pref controlled: "browser.frame.validate_origin" 
+    //           (gValidateOrigin)
+    //         - allow load if host of target or target's parent is same
+    //           as host of origin
+    //         - allow load if target is a top level window
+    
+    //     We are going to be a little more restrictive, with the
+    //     following algorithm:
+    //         - pref controlled in the same way
+    //         - allow access if the two treeitems are in the same tree
+    //         - allow access if the aTargetItem or one of its ancestors
+    //           has the same origin as aAccessingItem
+    //         - allow access if the target is a toplevel window and we can
+    //           access its opener.  Note that we only allow one level of
+    //           recursion there.
+
+    nsCOMPtr<nsIDocShellTreeItem> targetRoot;
+    aTargetItem->GetSameTypeRootTreeItem(getter_AddRefs(targetRoot));
+
+    nsCOMPtr<nsIDocShellTreeItem> accessingRoot;
+    aAccessingItem->GetSameTypeRootTreeItem(getter_AddRefs(accessingRoot));
+
+    if (targetRoot == accessingRoot) {
+        return PR_TRUE;
+    }
+
+    nsCOMPtr<nsIDocShellTreeItem> target = aTargetItem;
+    do {
+        if (FValidateOrigin(aAccessingItem, target)) { // WTF!!!!!!!
+            return PR_TRUE;
+        }
+            
+        nsCOMPtr<nsIDocShellTreeItem> parent;
+        target->GetSameTypeParent(getter_AddRefs(parent));
+        parent.swap(target);
+    } while (target);
+
+    if (aTargetItem != targetRoot) {
+        // target is a subframe, not in accessor's frame hierarchy, and all its
+        // ancestors have origins different from that of the accessor. Don't
+        // allow access.
+        return PR_FALSE;
+    }
+
+    if (!aConsiderOpener) {
+        // All done here
+        return PR_FALSE;
+    }
+
+    nsCOMPtr<nsIDOMWindow> targetWindow(do_GetInterface(aTargetItem));
+    nsCOMPtr<nsIDOMWindowInternal> targetInternal(do_QueryInterface(targetWindow));
+    if (!targetInternal) {
+        NS_ERROR("This should not happen, really");
+        return PR_FALSE;
+    }
+
+    nsCOMPtr<nsIDOMWindowInternal> targetOpener;
+    targetInternal->GetOpener(getter_AddRefs(targetOpener));
+    nsCOMPtr<nsIWebNavigation> openerWebNav(do_GetInterface(targetOpener));
+    nsCOMPtr<nsIDocShellTreeItem> openerItem(do_QueryInterface(openerWebNav));
+
+    if (!openerItem) {
+        return PR_FALSE;
+    }
+
+    return CanAccessItem(openerItem, aAccessingItem, PR_FALSE);    
+}
+
+
+static PRBool
+IsItemActive(nsIDocShellTreeItem *aItem)
+{
+    nsCOMPtr<nsIDOMWindow> tmp(do_GetInterface(aItem));
+    nsCOMPtr<nsIDOMWindowInternal> window(do_QueryInterface(tmp));
+
+    if (window) {
+        PRBool isClosed;
+
+        if (NS_SUCCEEDED(window->GetClosed(&isClosed)) && !isClosed) {
+            return PR_TRUE;
+        }
+    }
+
+    return PR_FALSE;
+}
+
 NS_IMETHODIMP
 nsDocShell::FindItemWithName(const PRUnichar * aName,
                              nsISupports * aRequestor,
                              nsIDocShellTreeItem ** _retval)
+{
+	return FindItemWithNameTmp(aName, aRequestor, nsnull, _retval);
+}
+
+NS_IMETHODIMP
+nsDocShell::FindItemWithNameTmp(const PRUnichar * aName,
+                                nsISupports * aRequestor,
+                                nsIDocShellTreeItem * aOriginalRequestor,
+                                nsIDocShellTreeItem ** _retval)
 {
     NS_ENSURE_ARG(aName);
     NS_ENSURE_ARG_POINTER(_retval);
 
     *_retval = nsnull;          // if we don't find one, we return NS_OK and a null result 
 
+#if(0)
     // This QI may fail, but the places where we want to compare, comparing
     // against nsnull serves the same purpose.
     nsCOMPtr<nsIDocShellTreeItem>
         reqAsTreeItem(do_QueryInterface(aRequestor));
+#else
+    if (!*aName)
+        return NS_OK;
 
+    if (!aRequestor)
+    {
+        nsCOMPtr<nsIDocShellTreeItem> foundItem;
+
+        // This is the entry point into the target-finding algorithm.  Check
+        // for special names.  This should only be done once, hence the check
+        // for a null aRequestor.
+
+        nsAutoString name(aName);
+        if (name.EqualsIgnoreCase("_self")) {
+            foundItem = this;
+        }
+        else if (name.EqualsIgnoreCase("_blank") ||
+                 name.EqualsIgnoreCase("_new"))
+        {
+            // Just return null.  Caller must handle creating a new window with
+            // a blank name himself.
+            return NS_OK;
+        }
+        else if (name.EqualsIgnoreCase("_parent"))
+        {
+            GetSameTypeParent(getter_AddRefs(foundItem));
+            if(!foundItem)
+                foundItem = this;
+        }
+        else if (name.EqualsIgnoreCase("_top"))
+        {
+            GetSameTypeRootTreeItem(getter_AddRefs(foundItem));
+            if(!foundItem)
+                foundItem = this;
+        }
+        // _main is an IE target which should be case-insensitive but isn't
+        // see bug 217886 for details
+        else if (name.EqualsIgnoreCase("_content") ||
+                 name.Equals(NS_LITERAL_STRING("_main")))
+        {
+            if (mTreeOwner)
+                mTreeOwner->GetPrimaryContentShell(getter_AddRefs(foundItem));
+#ifdef DEBUG
+            else {
+                NS_ERROR("Someone isn't setting up the tree owner.  "
+                         "You might like to try that.  "
+                         "Things will.....you know, work.");
+                // Note: _content should always exist.  If we don't have one
+                // hanging off the treeowner, just create a named window....
+                // so don't return here, in case we did that and can now find
+                // it.                
+            }
+#endif
+        }
+
+        if (foundItem && !CanAccessItem(foundItem, aOriginalRequestor)) {
+            foundItem = nsnull;
+        }
+
+        if (foundItem) {
+            // We return foundItem here even if it's not an active
+            // item since all the names we've dealt with so far are
+            // special cases that we won't bother looking for further.
+ 
+            foundItem.swap(*_retval);
+            return NS_OK;
+        }
+    }
+
+    // Keep looking
+    
+#endif
     // First we check our name.
+#if(0)
     if (mName.Equals(aName)) {
         *_retval = NS_STATIC_CAST(nsIDocShellTreeItem *, this);
         NS_ADDREF(*_retval);
@@ -1892,7 +2167,82 @@ nsDocShell::FindItemWithName(const PRUnichar * aName,
                           NS_ERROR_FAILURE);
     }
 
+#else
+    if (!mName.IsEmpty() && mName.Equals(aName) && IsItemActive(this) &&
+        CanAccessItem(this, aOriginalRequestor)) {
+        NS_ADDREF(*_retval = this);
+        return NS_OK;
+    }
+ 
+    // This QI may fail, but the places where we want to compare, comparing
+    // against nsnull serves the same purpose.
+    nsCOMPtr<nsIDocShellTreeItem> reqAsTreeItem(do_QueryInterface(aRequestor));
+
+    // Second we check our children making sure not to ask a child if
+    // it is the aRequestor.
+#ifdef DEBUG
+    nsresult rv =
+#endif
+    FindChildWithNameTmp(aName, PR_TRUE, PR_TRUE, reqAsTreeItem,
+                         aOriginalRequestor, _retval);
+    NS_ASSERTION(NS_SUCCEEDED(rv),
+                 "FindChildWithName should not be failing here.");
+    if (*_retval)
+        return NS_OK;
+        
+    // Third if we have a parent and it isn't the requestor then we
+    // should ask it to do the search.  If it is the requestor we
+    // should just stop here and let the parent do the rest.  If we
+    // don't have a parent, then we should ask the
+    // docShellTreeOwner to do the search.
+    if (mParent) {
+        if (mParent == reqAsTreeItem.get())
+            return NS_OK;
+
+        PRInt32 parentType;
+        mParent->GetItemType(&parentType);
+        if (parentType == mItemType) {
+            nsCOMPtr<nsIDocShellTreeItemTmp> parent =
+                do_QueryInterface(mParent);
+            return parent->
+                FindItemWithNameTmp(aName,
+                                    NS_STATIC_CAST(nsIDocShellTreeItem*,
+                                                   this),
+                                    aOriginalRequestor,
+                                    _retval);
+        }
+    }
+
+    // If the parent is null or not of the same type fall through and ask tree
+    // owner.
+
+    // This may fail, but comparing against null serves the same purpose
+    nsCOMPtr<nsIDocShellTreeOwner>
+        reqAsTreeOwner(do_QueryInterface(aRequestor));
+ 
+    if (mTreeOwner && mTreeOwner != reqAsTreeOwner) {
+        nsCOMPtr<nsIDocShellTreeOwnerTmp> owner(do_QueryInterface(mTreeOwner));
+
+        if (owner) {
+            return owner->
+                FindItemWithNameTmp(aName,
+                                    NS_STATIC_CAST(nsIDocShellTreeItem*,
+                                                   this),
+                                    aOriginalRequestor,
+                                    _retval);
+        }
+
+        // Fall back to the unsafe FindItemWithName() method if our
+        // owner is not an nsIDocShellTreeOwnerTmp
+        return mTreeOwner->
+            FindItemWithName(aName,
+                             NS_STATIC_CAST(nsIDocShellTreeItem*,
+                                            this),
+                             _retval);
+    }
+#endif 
     return NS_OK;
+// end bug (whew!)
 }
 
 NS_IMETHODIMP
@@ -2184,11 +2534,25 @@ nsDocShell::FindChildWithName(const PRUnichar * aName,
                               nsIDocShellTreeItem * aRequestor,
                               nsIDocShellTreeItem ** _retval)
 {
+// bug 103638
+    return FindChildWithNameTmp(aName, aRecurse, aSameType, aRequestor, nsnull,
+                                _retval);
+}
+
+NS_IMETHODIMP
+nsDocShell::FindChildWithNameTmp(const PRUnichar * aName,
+                                 PRBool aRecurse, PRBool aSameType,
+                                 nsIDocShellTreeItem * aRequestor,
+                                 nsIDocShellTreeItem * aOriginalRequestor,
+                                 nsIDocShellTreeItem ** _retval)
+{
+
     NS_ENSURE_ARG(aName);
     NS_ENSURE_ARG_POINTER(_retval);
 
     *_retval = nsnull;          // if we don't find one, we return NS_OK and a null result 
-
+	if (!*aName) return NS_OK;
+// end bug
     nsXPIDLString childName;
     PRInt32 i, n = mChildren.Count();
     for (i = 0; i < n; i++) {
@@ -2202,6 +2566,8 @@ nsDocShell::FindChildWithName(const PRUnichar * aName,
 
         PRBool childNameEquals = PR_FALSE;
         child->NameEquals(aName, &childNameEquals);
+// bug 103638
+#if(0)
         if (childNameEquals) {
             *_retval = child;
             NS_ADDREF(*_retval);
@@ -2229,6 +2595,40 @@ nsDocShell::FindChildWithName(const PRUnichar * aName,
         if (*_retval)           // found it
             return NS_OK;
     }
+#else
+        if (childNameEquals && IsItemActive(child) &&
+            CanAccessItem(child, aOriginalRequestor)) {
+            NS_ADDREF(*_retval = child);
+            break;
+        }
+
+        if (childType != mItemType)     //Only ask it to check children if it is same type
+            continue;
+
+        if (aRecurse && (aRequestor != child))  // Only ask the child if it isn't the requestor
+        {
+            // See if child contains the shell with the given name
+            nsCOMPtr<nsIDocShellTreeNodeTmp>
+                childAsNode(do_QueryInterface(child));
+            if (childAsNode) {
+#ifdef DEBUG
+                nsresult rv =
+#endif
+                childAsNode->FindChildWithNameTmp(aName, PR_TRUE,
+                                                  aSameType,
+                                                  NS_STATIC_CAST(nsIDocShellTreeItem*,
+                                                                 this),
+                                                  aOriginalRequestor,
+                                                  _retval);
+                NS_ASSERTION(NS_SUCCEEDED(rv),
+                             "FindChildWithName should not fail here");
+        if (*_retval)           // found it
+            return NS_OK;
+     }
+        }
+    }
+#endif
+// end bug
     return NS_OK;
 }
 
@@ -3044,6 +3444,8 @@ nsDocShell::Create()
 
     // i don't want to read this pref in every time we load a url
     // so read it in once here and be done with it...
+// bug 103638
+#if(0)
     mPrefs->GetBoolPref("network.protocols.useSystemDefaults",
                         &mUseExternalProtocolHandler);
     mPrefs->GetBoolPref("browser.block.target_new_window", &mDisallowPopupWindows);
@@ -3051,7 +3453,32 @@ nsDocShell::Create()
 
     // Check pref to see if we should prevent frameset spoofing
     mPrefs->GetBoolPref("browser.frame.validate_origin", &mValidateOrigin);
+#else
+	PRBool tmpbool;
+	
+    rv = mPrefs->GetBoolPref("network.protocols.useSystemDefaults", &tmpbool);
+    if (NS_SUCCEEDED(rv))
+      mUseExternalProtocolHandler = tmpbool;
 
+    rv = mPrefs->GetBoolPref("browser.block.target_new_window", &tmpbool);
+    if (NS_SUCCEEDED(rv))
+      mDisallowPopupWindows = tmpbool;
+
+    rv = mPrefs->GetBoolPref("browser.frames.enabled", &tmpbool);
+    if (NS_SUCCEEDED(rv))
+      mAllowSubframes = tmpbool;
+
+    if (gValidateOrigin == (PRBool)0xffffffff) {
+    // Check pref to see if we should prevent frameset spoofing
+    rv = mPrefs->GetBoolPref("browser.frame.validate_origin", &tmpbool);
+        if (NS_SUCCEEDED(rv)) {
+            gValidateOrigin = tmpbool;
+        } else {
+            gValidateOrigin = PR_TRUE;
+        }
+    }
+#endif
+// end bug
     // Should we use XUL error pages instead of alerts if possible?
     PRBool useErrorPages = PR_FALSE;
     mPrefs->GetBoolPref("browser.xul.error_pages.enabled", &useErrorPages);
@@ -4516,10 +4943,35 @@ nsDocShell::CreateAboutBlankContentViewer()
   mCreatingDocument = PR_TRUE;
   
   // pull up 1.8.1 modified
-  if (mContentViewer) {
+/*  if (mContentViewer) {
   	(void)FireUnloadNotification();
-  }
+  } */ // backout for bug 292691
   mFiredUnloadEvent = PR_FALSE;
+
+  if (mContentViewer) { // bug 292691
+    // We've got a content viewer already. Make sure the user
+    // permits us to discard the current document and replace it
+    // with about:blank. And also ensure we fire the unload events
+    // in the current document.
+
+/*
+    PRBool okToUnload;
+    rv = mContentViewer->PermitUnload(&okToUnload);
+
+    if (NS_SUCCEEDED(rv) && !okToUnload) {
+      // The user chose not to unload the page, interrupt the load.
+      return NS_ERROR_FAILURE;
+    }
+We don't support this yet. */
+
+    // Notify the current document that it is about to be unloaded!!
+    //
+    // It is important to fire the unload() notification *before* any state
+    // is changed within the DocShell - otherwise, javascript will get the
+    // wrong information :-(
+    //
+    (void) FireUnloadNotification();
+  }
 
   // one helper factory, please
   nsCOMPtr<nsIDocumentLoaderFactory> docFactory(do_CreateInstance(NS_DOCUMENT_LOADER_FACTORY_CONTRACTID_PREFIX "view;1?type=text/html"));
@@ -4989,6 +5441,132 @@ nsDocShell::SetupNewViewer(nsIContentViewer * aNewViewer)
     return NS_OK;
 }
 
+nsresult
+nsDocShell::CheckLoadingPermissions()
+{
+    // This method checks whether the caller may load content into
+    // this docshell. Even though we've done our best to hide windows
+    // from code that doesn't have the right to access them, it's
+    // still possible for an evil site to open a window and access
+    // frames in the new window through window.frames[] (which is
+    // allAccess for historic reasons), so we still need to do this
+    // check on load.
+	// Backbugs from bug 103638
+    nsresult rv = NS_OK, sameOrigin = NS_OK;
+
+    if (!gValidateOrigin || !IsFrame()) {
+        // Origin validation was turned off, or we're not a frame.
+        // Permit all loads.
+
+        return rv;
+    }
+
+    // We're a frame. Check that the caller has write permission to
+    // the parent before allowing it to load anything into this
+    // docshell.
+
+    nsCOMPtr<nsIScriptSecurityManager> securityManager =
+        do_GetService(NS_SCRIPTSECURITYMANAGER_CONTRACTID, &rv);
+    NS_ENSURE_SUCCESS(rv, rv);
+
+    PRBool ubwEnabled = PR_FALSE;
+    rv = securityManager->IsCapabilityEnabled("UniversalBrowserWrite",
+                                              &ubwEnabled);
+    if (NS_FAILED(rv) || ubwEnabled) {
+        return rv;
+    }
+
+    nsCOMPtr<nsIPrincipal> subjPrincipal;
+    rv = securityManager->GetSubjectPrincipal(getter_AddRefs(subjPrincipal));
+    NS_ENSURE_TRUE(NS_SUCCEEDED(rv) && subjPrincipal, rv);
+
+    // Check if the caller is from the same origin as this docshell,
+    // or any of it's ancestors.
+    nsCOMPtr<nsIDocShellTreeItem> item(this);
+    do {
+        nsCOMPtr<nsIScriptGlobalObject> sgo(do_GetInterface(item));
+        nsCOMPtr<nsIScriptObjectPrincipal> sop(do_QueryInterface(sgo));
+
+        nsCOMPtr<nsIPrincipal> p;
+        if (!sop || NS_FAILED(sop->GetPrincipal(getter_AddRefs(p))) || !p) {
+            return NS_ERROR_UNEXPECTED;
+        }
+
+        // Compare origins
+        sameOrigin =
+            securityManager->CheckSameOriginPrincipal(subjPrincipal, p);
+        if (NS_SUCCEEDED(sameOrigin)) {
+            // Same origin, permit load
+
+            return sameOrigin;
+        }
+
+        nsCOMPtr<nsIDocShellTreeItem> tmp;
+        item->GetSameTypeParent(getter_AddRefs(tmp));
+        item.swap(tmp);
+    } while (item);
+
+    // The caller is not from the same origin as this item, or any if
+    // this items ancestors. Only permit loading content if both are
+    // part of the same window, assuming we can find the window of the
+    // caller.
+
+    nsCOMPtr<nsIJSContextStack> stack =
+        do_GetService("@mozilla.org/js/xpc/ContextStack;1");
+    if (!stack) {
+        // No context stack available. Should never happen, but in
+        // case it does, return the sameOrigin error from the security
+        // check above.
+
+        return sameOrigin;
+    }
+
+    JSContext *cx = nsnull;
+    stack->Peek(&cx);
+
+    if (!cx) {
+        // No caller docshell reachable, return the sameOrigin error
+        // from the security check above.
+
+        return sameOrigin;
+    }
+
+	// tweaked for Classilla
+    //nsIScriptContext *currentCX = GetScriptContextFromJSContext(cx);
+    nsCOMPtr<nsIScriptContext> currentCX;
+    
+    if (!(::JS_GetOptions(cx) & JSOPTION_PRIVATE_IS_NSISUPPORTS)) {
+    	currentCX = nsnull;
+    } else {
+    	currentCX = do_QueryInterface(NS_STATIC_CAST(nsISupports *,
+    		::JS_GetContextPrivate(cx)));
+    }
+    nsCOMPtr<nsIDocShellTreeItem> callerTreeItem;
+    nsIScriptGlobalObject *sgo;
+    if (currentCX) currentCX->GetGlobalObject(&sgo);
+    nsIDocShell *nds;
+    if (sgo) sgo->GetDocShell(&nds);
+    if (currentCX && sgo && nds &&
+        //(sgo = currentCX->GetGlobalObject()) &&
+        (callerTreeItem = do_QueryInterface(nds))) {
+        //(callerTreeItem = do_QueryInterface(sgo->GetDocShell()))) {
+        nsCOMPtr<nsIDocShellTreeItem> callerRoot;
+        callerTreeItem->GetSameTypeRootTreeItem(getter_AddRefs(callerRoot));
+
+        nsCOMPtr<nsIDocShellTreeItem> ourRoot;
+        GetSameTypeRootTreeItem(getter_AddRefs(ourRoot));
+
+        if (ourRoot == callerRoot) {
+            // The running JS is in the same window as the target
+            // frame, permit load.
+            sameOrigin = NS_OK;
+        }
+    }
+
+    return sameOrigin;
+}
+
+
 
 //*****************************************************************************
 // nsDocShell: Site Loading
@@ -5136,9 +5714,18 @@ nsDocShell::InternalLoad(nsIURI * aURI,
                          !name.EqualsIgnoreCase("_self") &&
                          !name.EqualsIgnoreCase("_content")) {
                     nsCOMPtr<nsIDocShellTreeItem> targetTreeItem;
+                    // bug 103638
+#if(0)
                     FindItemWithName(name.get(),
                                      NS_STATIC_CAST(nsIInterfaceRequestor *, this),
                                      getter_AddRefs(targetTreeItem));
+#else
+                    FindItemWithNameTmp(name.get(),
+                                        nsnull,
+                                        this,
+                                        getter_AddRefs(targetTreeItem));
+#endif
+// end bug
                     if (targetTreeItem)
                         targetDocShell = do_QueryInterface(targetTreeItem);
                     else
@@ -6404,6 +6991,41 @@ nsDocShell::LoadHistoryEntry(nsISHEntry * aEntry, PRUint32 aLoadType)
                       NS_ERROR_FAILURE);
     NS_ENSURE_SUCCESS(aEntry->GetPostData(getter_AddRefs(postData)),
                       NS_ERROR_FAILURE);
+
+// This caused more problems than it fixed, including screwing up view-source:.
+#if(0)
+// bug 292691
+    PRBool isJavaScript, isData, isViewSource;
+    if ((NS_SUCCEEDED(uri->SchemeIs("javascript", &isJavaScript)) &&
+         isJavaScript) ||
+        (NS_SUCCEEDED(uri->SchemeIs("view-source", &isViewSource)) &&
+         isViewSource) || 
+        (NS_SUCCEEDED(uri->SchemeIs("data", &isData)) && isData)) {
+        // We're loading a javascript: or data: URL from session
+        // history. Replace the current document with about:blank to
+        // prevent anything from the current document from leaking
+        // into any JavaScript code in the URL.
+        rv = CreateAboutBlankContentViewer();
+        
+        /*
+        if (isData) {
+        	// Classilla issue 172. A definitive fix for this requires we implement the Mozilla 1.8
+        	// SHEntry hacks in M321299 and frankly that has a lot of regressions associated with it. A
+        	// down payment is just to stop data: from loading from history. This is wrong, and has
+        	// its own regressions, but they are likely to be less than the alternative.
+        	return NS_OK;
+        }
+        */
+
+        if (NS_FAILED(rv)) {
+            // The creation of the intermittent about:blank content
+            // viewer failed for some reason (potentially because the
+            // user prevented it). Interrupt the history load.
+            return NS_OK;
+        }
+    }
+// end bug
+#endif
 
     /* If there is a valid postdata *and* the user pressed
      * reload or shift-reload, take user's permission before we  

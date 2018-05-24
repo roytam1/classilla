@@ -1744,9 +1744,41 @@ PRBool nsMacEventHandler::HandleMouseMoveEvent( EventRecord& aOSEvent )
 		{
 			if (lastWidgetPointed)
 			{
+
+// Classilla issue 105 bug 125386
+        // We need to convert the coords to be relative to lastWidgetPointed.
+        nsPoint widgetHitPoint = mouseEvent.point;
+
+        Point macPoint = aOSEvent.where;
+        WindowRef wind = reinterpret_cast<WindowRef>(mTopLevelWidget->GetNativeData(NS_NATIVE_DISPLAY));
+        nsGraphicsUtils::SafeSetPortWindowPort(wind);
+
+        {
+          StOriginSetter originSetter(wind);
+          ::GlobalToLocal(&macPoint);
+        }
+
+        nsPoint lastWidgetHitPoint(macPoint.h, macPoint.v);
+
+        // if the mouse is in the grow box, pretend that it has left the window
+        WindowPtr windowThatHasEvent;
+        ControlPartCode partCode = ::FindWindow(macPoint, &windowThatHasEvent);
+        if ( partCode != inGrow ) {
+          nsRect bounds;
+          lastWidgetPointed->GetBounds(bounds);
+          nsPoint widgetOrigin(bounds.x, bounds.y);
+          lastWidgetPointed->LocalToWindowCoordinate(widgetOrigin);
+          lastWidgetHitPoint.MoveBy(-widgetOrigin.x, -widgetOrigin.y);
+        }
+			mouseEvent.point = lastWidgetHitPoint;
+
 				mouseEvent.widget = lastWidgetPointed;
 				mouseEvent.message = NS_MOUSE_EXIT;
 				retVal |= lastWidgetPointed->DispatchMouseEvent(mouseEvent);
+				
+			mouseEvent.point = widgetHitPoint;
+// end issue
+
 			}
 
       gEventDispatchHandler.SetWidgetPointed(widgetPointed);

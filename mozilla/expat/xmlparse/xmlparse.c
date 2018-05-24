@@ -1255,6 +1255,11 @@ doContent(XML_Parser parser,
       }
       return XML_ERROR_NO_ELEMENTS;
     case XML_TOK_INVALID:
+#if(0)
+      // Classilla issue 184: hack the parser (DISGUSTING!)
+      if (nextPtr) { *nextPtr = s; return XML_ERROR_NONE; }
+      *eventEndPP = end; return XML_ERROR_NONE;
+#endif
       *eventPP = next;
       return XML_ERROR_INVALID_TOKEN;
     case XML_TOK_PARTIAL:

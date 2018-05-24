@@ -423,6 +423,14 @@ InstallVersionCompareTo(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, j
           return JS_FALSE;
         }
 
+// bug 295854 (this also needs a fix in nsJSInstall.cpp:ConvertJSValToObj)
+        if (!versionObj)
+        {
+          JS_ReportError(cx, "Function compareTo expects a non null object.");
+          return JS_FALSE;
+        }
+
+
         if(NS_OK != nativeThis->CompareTo(versionObj, &nativeRet))
         {
           return JS_FALSE;

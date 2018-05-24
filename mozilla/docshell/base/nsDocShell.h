@@ -157,7 +157,10 @@ class nsDocShell : public nsIDocShell,
                    public nsIWebProgressListener,
                    public nsIEditorDocShell,
                    public nsIWebPageDescriptor,
-                   public nsSupportsWeakReference
+                   public nsSupportsWeakReference,
+                   public nsIDocShellTreeItemTmp, // both Tmps bug 103638
+                   public nsIDocShellTreeNodeTmp
+
 {
 friend class nsDSURIContentListener;
 
@@ -183,6 +186,8 @@ public:
     NS_DECL_NSICONTENTVIEWERCONTAINER
     NS_DECL_NSIEDITORDOCSHELL
     NS_DECL_NSIWEBPAGEDESCRIPTOR
+    NS_DECL_NSIDOCSHELLTREEITEMTMP
+    NS_DECL_NSIDOCSHELLTREENODETMP
 
     nsresult SetLoadCookie(nsISupports * aCookie);
     nsresult GetLoadCookie(nsISupports ** aResult);
@@ -278,9 +283,13 @@ protected:
         PRBool SetCurrentURI(nsIURI *aURI, nsIRequest *aRequest,
                          PRBool aFireOnLocationChange); // pull up to 1.8.1
 
-    virtual nsresult FindTarget(const PRUnichar *aTargetName,
+    //virtual // bug 103638 
+    nsresult FindTarget(const PRUnichar *aTargetName,
                                 PRBool *aIsNewWindow,
                                 nsIDocShell **aResult);
+    
+    // backbugs for bug 103638
+    nsresult CheckLoadingPermissions();
 
     PRBool IsFrame();
 
@@ -291,6 +300,16 @@ protected:
     virtual nsresult EndPageLoad(nsIWebProgress * aProgress,
                                  nsIChannel * aChannel,
                                  nsresult aResult);
+                                 
+    // Security checks to prevent frameset spoofing.  See comments at
+    // implementation sites. From bug 103638.
+    static PRBool CanAccessItem(nsIDocShellTreeItem* aTargetItem,
+                                nsIDocShellTreeItem* aAccessingItem,
+                                PRBool aConsiderOpener = PR_TRUE);
+    static PRBool ValidateOrigin(nsIDocShellTreeItem* aOriginTreeItem,
+                                 nsIDocShellTreeItem* aTargetTreeItem);
+
+
 protected:
     nsString                   mName;
     nsString                   mTitle;
@@ -329,6 +348,7 @@ protected:
     PRPackedBool               mHasFocus;
     PRPackedBool               mCreatingDocument; // (should be) debugging only
     PRPackedBool               mUseErrorPages;
+    PRPackedBool			   mAllowAuth;
 
     PRUint32                   mAppType;
     PRInt32                    mChildOffset;  // Offset in the parent's child list.
@@ -360,7 +380,7 @@ protected:
     PRBool                     mDisallowPopupWindows;
 
     // Validate window targets to prevent frameset spoofing
-    PRBool                     mValidateOrigin;
+    //PRBool                     mValidateOrigin;
 
     PRBool                     mIsBeingDestroyed;
 

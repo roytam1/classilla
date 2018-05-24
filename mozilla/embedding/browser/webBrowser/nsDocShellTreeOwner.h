@@ -75,6 +75,7 @@ public:
 
 
 class nsDocShellTreeOwner : public nsIDocShellTreeOwner,
+                            public nsIDocShellTreeOwnerTmp, // bug 103638
                             public nsIBaseWindow,
                             public nsIInterfaceRequestor,
                             public nsIWebProgressListener,
@@ -89,6 +90,7 @@ public:
 
     NS_DECL_NSIBASEWINDOW
     NS_DECL_NSIDOCSHELLTREEOWNER
+    NS_DECL_NSIDOCSHELLTREEOWNERTMP // bug 103638
     NS_DECL_NSIINTERFACEREQUESTOR
     NS_DECL_NSIWEBPROGRESSLISTENER
 
@@ -105,12 +107,24 @@ protected:
     NS_IMETHOD AddChromeListeners();
     NS_IMETHOD RemoveChromeListeners();
 
+// bug 103638
+#if(0)
     nsresult   FindChildWithName(const PRUnichar *aName, 
                  PRBool aRecurse, nsIDocShellTreeItem* aRequestor, 
                  nsIDocShellTreeItem **aFoundItem);
     nsresult   FindItemWithNameAcrossWindows(const PRUnichar* aName,
                  nsIDocShellTreeItem **aFoundItem);
-
+#else
+    nsresult   FindChildWithName(const PRUnichar *aName, 
+                 PRBool aRecurse, nsIDocShellTreeItem* aRequestor,
+                 nsIDocShellTreeItem* aOriginalRequestor,
+                 nsIDocShellTreeItem **aFoundItem);
+    nsresult   FindItemWithNameAcrossWindows(const PRUnichar* aName,
+                 nsIDocShellTreeItem* aRequestor,
+                 nsIDocShellTreeItem* aOriginalRequestor,
+                 nsIDocShellTreeItem **aFoundItem);
+#endif
+// end bug
     void       EnsurePrompter();
     void       EnsureAuthPrompter();
 

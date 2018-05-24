@@ -912,6 +912,7 @@ nsExpatDriver::CanParse(CParserContext& aParserContext,
 {
   eAutoDetectResult result = eUnknownDetect;
 
+// Classilla issue 184. Don't comment XHTML out here.
   if (eViewSource != aParserContext.mParserCommand) {
     if (aParserContext.mMimeType.EqualsWithConversion(kXMLTextContentType)         ||
         aParserContext.mMimeType.EqualsWithConversion(kXMLApplicationContentType)  ||

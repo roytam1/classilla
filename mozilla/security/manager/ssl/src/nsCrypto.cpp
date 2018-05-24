@@ -1801,16 +1801,26 @@ nsCryptoRunnable::Run()
   nsresult rv = m_args->m_principals->GetJSPrincipals(&principals);
   if (NS_FAILED(rv))
     return NS_ERROR_FAILURE;
+    
+  // make sure the right context is on the stack for security checks (bug 327126)
+  nsCOMPtr<nsIJSContextStack> stack(do_GetService("@mozilla.org/js/xpc/ContextStack;1"));
+  if (!stack || NS_FAILED(stack->Push(m_args->m_cx))) // cx)))
+    return NS_ERROR_FAILURE;
 
+  rv = NS_OK; // paranoia
   jsval retval;
   if (JS_EvaluateScriptForPrincipals(m_args->m_cx, m_args->m_scope, principals,
                                      m_args->m_jsCallback, 
                                      strlen(m_args->m_jsCallback),
                                      nsnull, 0,
                                      &retval) != JS_TRUE) {
-    return NS_ERROR_FAILURE;
+    //return NS_ERROR_FAILURE;
+    rv = NS_ERROR_FAILURE;
   }
-  return NS_OK;
+  //return NS_OK;
+  // bug 327126 encore
+  stack->Pop(nsnull);
+  return rv;
 }
 
 //Quick helper function to check if a newly issued cert
@@ -2013,7 +2023,8 @@ nsCrypto::ImportUserCertificates(const nsAString& aNickname,
            node = CERT_LIST_NEXT(node), i++) {
         derCerts[i] = node->cert->derCert;
       }
-      CERT_ImportCAChain(derCerts, numCAs, certUsageUserCertImport);
+      //CERT_ImportCAChain(derCerts, numCAs, certUsageUserCertImport); // bug 249004
+      nsNSSCertificateDB::ImportValidCACerts(numCAs, derCerts, ctx);
       nsMemory::Free(derCerts);
     }
     

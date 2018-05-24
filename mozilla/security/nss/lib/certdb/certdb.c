@@ -1139,6 +1139,7 @@ CERT_KeyUsageAndTypeForCertUsage(SECCertUsage usage,
 	    requiredCertType = NS_CERT_TYPE_OBJECT_SIGNING_CA;
 	    break;
 	  case certUsageAnyCA:
+	  case certUsageVerifyCA: // bug 249004
 	  case certUsageStatusResponder:
 	    requiredKeyUsage = KU_KEY_CERT_SIGN;
 	    requiredCertType = NS_CERT_TYPE_OBJECT_SIGNING_CA |
@@ -1324,6 +1325,8 @@ CERT_AddOKDomainName(CERTCertificate *cert, const char *hn)
 static SECStatus
 cert_TestHostName(char * cn, const char * hn)
 {
+// bug 234058
+#if(0)
     char * hndomain;
     int    regvalid;
 
@@ -1336,7 +1339,8 @@ cert_TestHostName(char * cn, const char * hn)
 	    *cndomain = '\0';
 	}
     }
-
+#endif
+	int
     regvalid = PORT_RegExpValid(cn);
     if (regvalid != NON_SXP) {
 	SECStatus rv;
@@ -1357,13 +1361,15 @@ cert_TestHostName(char * cn, const char * hn)
     if (PORT_Strcasecmp(hn, cn) == 0) {
 	return SECSuccess;
     }
-	    
+
+#if(0)	    
     if ( hndomain ) {
 	/* compare just domain name with cert name */
 	if ( PORT_Strcasecmp(hndomain+1, cn) == 0 ) {
 	    return SECSuccess;
 	}
     }
+#endif
 
     PORT_SetError(SSL_ERROR_BAD_CERT_DOMAIN);
     return SECFailure;

@@ -54,11 +54,13 @@ nsBasePrincipal::GetJSPrincipals(JSPrincipals **jsprin)
 {
     if (mJSPrincipals.nsIPrincipalPtr == nsnull) {
         mJSPrincipals.nsIPrincipalPtr = this;
-        // No need for a ADDREF since it is a self-reference
+        // No need for a ADDREF since it is a self-reference (???), but
+        // mJSPrincipals is not refcounted, so you can't AddRef it anyway.
+        // The pointer on the other hand ... (but see dom/nsJSEnvironment.cpp)
+        //NS_ADDREF(mJSPrincipals.nsIPrincipalPtr);
     }
     *jsprin = &mJSPrincipals;
-    //JSPRINCIPALS_HOLD(cx, *jsprin);
-    (++(*jsprin)->refcount);
+    JSPRINCIPALS_HOLD(nsnull, *jsprin); //(++(*jsprin)->refcount);
     return NS_OK;
 }
 

@@ -42,6 +42,7 @@
 #include "nscore.h"
 #include "nsString.h"
 #include "nsISupports.h"
+/* #include "jscntxt.h" */
 
 class nsIScriptGlobalObject;
 class nsIScriptSecurityManager;
@@ -332,7 +333,28 @@ public:
    * Tell the context whether or not to GC when destroyed.
    */
   NS_IMETHOD SetGCOnDestruction(PRBool aGCOnDestruction) = 0;
+  
 };
+
+// backbugs for bug 103638
+#if(0)
+static nsIScriptContext *
+GetScriptContextFromJSContext(JSContext *cx)
+{
+  if (!(::JS_GetOptions(cx) & JSOPTION_PRIVATE_IS_NSISUPPORTS)) {
+    return nsnull;
+  }
+
+  nsCOMPtr<nsIScriptContext> scx =
+    do_QueryInterface(NS_STATIC_CAST(nsISupports *,
+                                     ::JS_GetContextPrivate(cx)));
+
+  // This will return a pointer to something that's about to be
+  // released, but that's ok here.
+  return scx;
+}
+#endif
+// end bug
 
 #endif // nsIScriptContext_h__
 

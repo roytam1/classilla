@@ -89,6 +89,13 @@ interface nsIScriptSecurityManager : nsIXPCSecurityManager
     // Don't allow javascript: (and data:) URLs to load
     const unsigned long DISALLOW_JAVASCRIPT = 1 << 2;
     
+    // bug 290949
+    // Don't allow javascript: URLs to load
+    //   WARNING: Support for this value was added in Mozilla 1.7.8 and
+    //   Firefox 1.0.4.  Use in prior versions WILL BE IGNORED.
+    // and Classilla 9.3.1, of course ...
+    const unsigned long DISALLOW_SCRIPT = 1 << 3;
+    
     /**
      * Check that content from "from" can load "uri".
      *

@@ -242,6 +242,12 @@ protected:
                          float* aT2P);
   nsresult SecurityCheckURL(const char *aURL);
   PRBool   CheckForAbusePoint();
+  // bug 103638
+  PRBool   CheckOpenAllow(const nsAString &aName);
+  void     FireAbuseEvents(PRBool aBlocked, PRBool aWindow,
+                           const nsAString &aPopupURL);
+
+  PRBool DispatchCustomEvent(const char *aEventName);
 
   void FlushPendingNotifications(PRBool aFlushReflows);
   void EnsureReflowFlushAndPaint();
@@ -261,7 +267,13 @@ protected:
   nsresult ConvertCharset(const nsAString& aStr, char** aDest);
 
   PRBool   GetBlurSuppression();
+  
+  // bug 103638
+  PRBool WindowExists(const nsAString& aName);
 
+  // bug 306804
+  virtual PRBool IsChrome() const { return PR_FALSE; }
+  
 protected:
   // When adding new member variables, be careful not to create cycles
   // through JavaScript.  If there is any chance that a member variable
@@ -332,6 +344,9 @@ public:
 
 protected:
   nsresult GetMainWidget(nsIWidget** aMainWidget);
+  
+  // bug 306804
+  virtual PRBool IsChrome() const { return PR_TRUE; }
 
   nsString mTitle;
 };

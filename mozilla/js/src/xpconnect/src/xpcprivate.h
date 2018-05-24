@@ -3258,6 +3258,7 @@ protected:
 JSExceptionState* xpc_DoPreScriptEvaluated(JSContext* cx);
 void xpc_DoPostScriptEvaluated(JSContext* cx, JSExceptionState* state);
 JSBool xpc_IsReportableErrorCode(nsresult code);
+void XPC_WN_JSOps_Shutdown(); // bug 289074
 
 /***************************************************************************/
 // Inlined utilities.

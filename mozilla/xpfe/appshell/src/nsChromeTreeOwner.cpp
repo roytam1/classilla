@@ -70,6 +70,7 @@ NS_IMPL_RELEASE(nsChromeTreeOwner)
 NS_INTERFACE_MAP_BEGIN(nsChromeTreeOwner)
    NS_INTERFACE_MAP_ENTRY_AMBIGUOUS(nsISupports, nsIDocShellTreeOwner)
    NS_INTERFACE_MAP_ENTRY(nsIDocShellTreeOwner)
+   NS_INTERFACE_MAP_ENTRY(nsIDocShellTreeOwnerTmp) // bug 103638
    NS_INTERFACE_MAP_ENTRY(nsIBaseWindow)
    NS_INTERFACE_MAP_ENTRY(nsIWebProgressListener)
    NS_INTERFACE_MAP_ENTRY(nsIInterfaceRequestor)
@@ -107,6 +108,15 @@ NS_IMETHODIMP nsChromeTreeOwner::GetInterface(const nsIID& aIID, void** aSink)
 NS_IMETHODIMP nsChromeTreeOwner::FindItemWithName(const PRUnichar* aName,
    nsIDocShellTreeItem* aRequestor, nsIDocShellTreeItem** aFoundItem)
 {
+// bug 103638
+  return FindItemWithNameTmp(aName, aRequestor, nsnull, aFoundItem);
+}
+
+NS_IMETHODIMP nsChromeTreeOwner::FindItemWithNameTmp(const PRUnichar* aName,
+   nsIDocShellTreeItem* aRequestor, nsIDocShellTreeItem* aOriginalRequestor,
+   nsIDocShellTreeItem** aFoundItem)
+{
+// end bug
    NS_ENSURE_ARG_POINTER(aFoundItem);
 
    *aFoundItem = nsnull;
@@ -147,7 +157,9 @@ NS_IMETHODIMP nsChromeTreeOwner::FindItemWithName(const PRUnichar* aName,
       NS_ENSURE_TRUE(xulWindow, NS_ERROR_FAILURE);
 
       nsCOMPtr<nsIDocShellTreeItem> shellAsTreeItem;
-     
+
+// bug 103638
+#if(0)     
       if(fIs_Content)
          {
          xulWindow->GetPrimaryContentShell(getter_AddRefs(shellAsTreeItem));
@@ -170,6 +182,40 @@ NS_IMETHODIMP nsChromeTreeOwner::FindItemWithName(const PRUnichar* aName,
             shellAsTreeItem->FindItemWithName(aName, shellOwnerSupports, aFoundItem);
             }
          }
+#else
+      if(fIs_Content)
+         {
+         xulWindow->GetPrimaryContentShell(aFoundItem);
+         } 
+      else
+         {
+         nsCOMPtr<nsIDocShell> shell;
+         xulWindow->GetDocShell(getter_AddRefs(shell));
+         shellAsTreeItem = do_QueryInterface(shell);
+         if (shellAsTreeItem) {
+           // Get the root tree item of same type, since roots are the only
+           // things that call into the treeowner to look for named items.
+           nsCOMPtr<nsIDocShellTreeItem> root;
+           shellAsTreeItem->GetSameTypeRootTreeItem(getter_AddRefs(root));
+           shellAsTreeItem = root;
+         }
+         if(shellAsTreeItem && aRequestor != shellAsTreeItem)
+            {
+            // Do this so we can pass in the tree owner as the requestor so the child knows not
+            // to call back up.
+            nsCOMPtr<nsIDocShellTreeOwner> shellOwner;
+            shellAsTreeItem->GetTreeOwner(getter_AddRefs(shellOwner));
+            nsCOMPtr<nsISupports> shellOwnerSupports(do_QueryInterface(shellOwner));
+
+            nsCOMPtr<nsIDocShellTreeItemTmp> shellAsTreeItemTmp =
+              do_QueryInterface(shellAsTreeItem);
+            shellAsTreeItemTmp->FindItemWithNameTmp(aName, shellOwnerSupports,
+                                                    aOriginalRequestor,
+                                                    aFoundItem);
+            }
+         }
+#endif
+// end bug
       if(*aFoundItem)
          return NS_OK;   
       windowEnumerator->HasMoreElements(&more);

@@ -1693,6 +1693,8 @@ XPCConvert::JSArray2Native(XPCCallContext& ccx, void** d, jsval s,
     if(pErr)
         *pErr = NS_ERROR_XPC_BAD_CONVERT_JS;
 
+// bug 236618 modified for Classilla 1.3.1
+#if(0)
 #define POPULATE(_mode, _t)                                                  \
     PR_BEGIN_MACRO                                                           \
         cleanupMode = _mode;                                                 \
@@ -1710,7 +1712,26 @@ XPCConvert::JSArray2Native(XPCCallContext& ccx, void** d, jsval s,
                 goto failure;                                                \
         }                                                                    \
     PR_END_MACRO
-
+#else
+#define POPULATE(_mode, _t)                                                  \
+    PR_BEGIN_MACRO                                                           \
+        cleanupMode = _mode;                                                 \
+        if(capacity > ~(size_t)0 / sizeof(_t) ||                             \
+           nsnull == (array = nsMemory::Alloc(capacity * sizeof(_t))))       \
+        {                                                                    \
+            if(pErr)                                                         \
+                *pErr = NS_ERROR_OUT_OF_MEMORY;                              \
+            goto failure;                                                    \
+        }                                                                    \
+        for(initedCount = 0; initedCount < count; initedCount++)             \
+        {                                                                    \
+            if(!JS_GetElement(cx, jsarray, initedCount, &current) ||         \
+               !JSData2Native(ccx, ((_t*)array)+initedCount, current, type,  \
+                              useAllocator, iid, pErr))                      \
+                goto failure;                                                \
+        }                                                                    \
+    PR_END_MACRO
+#endif
 
     // XXX check IsPtr - esp. to handle array of nsID (as opposed to nsID*)
 

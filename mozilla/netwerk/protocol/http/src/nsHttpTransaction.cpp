@@ -125,6 +125,7 @@ nsHttpTransaction::nsHttpTransaction()
     , mReceivedData(PR_FALSE)
     , mDestroying(PR_FALSE)
     , mClosed(PR_FALSE)
+    , mHasRequestBody(PR_FALSE)
 {
     LOG(("Creating nsHttpTransaction @%x\n", this));
 }
@@ -203,6 +204,8 @@ nsHttpTransaction::Init(PRUint8 caps,
     nsCOMPtr<nsIInputStream> headers = do_QueryInterface(sup, &rv);
 
     if (requestBody) {
+    	mHasRequestBody = PR_TRUE;
+    	
         // wrap the headers and request body in a multiplexed input stream.
         nsCOMPtr<nsIMultiplexInputStream> multi =
             do_CreateInstance(kMultiplexInputStream, &rv);
@@ -258,13 +261,18 @@ nsHttpTransaction::OnTransportStatus(nsresult status, PRUint32 progress)
     
     NS_ASSERTION(PR_GetCurrentThread() == gSocketThread, "wrong thread");
 
+    // nsHttpChannel synthesizes progress events in OnDataAvailable in bug 240053
+    if (status == nsISocketTransport::STATUS_RECEIVING_FROM)
+        return;
+
     PRBool postEvent;
     {
         nsAutoLock lock(mLock);
 
         // stamp latest socket status
         mTransportStatus = status;
-        
+
+#if(0)        
         if (status == nsISocketTransport::STATUS_RECEIVING_FROM) {
             // ignore the progress argument and use our own.  as a result,
             // the progress reported will not include the size of the response
@@ -274,6 +282,17 @@ nsHttpTransaction::OnTransportStatus(nsresult status, PRUint32 progress)
             mTransportProgressMax = mContentLength;
         }
         else if (status == nsISocketTransport::STATUS_SENDING_TO) {
+#else
+        // nsHttpChannel synthesizes progress events in OnDataAvailable
+        if (status == nsISocketTransport::STATUS_RECEIVING_FROM)
+            return;
+
+        if (status == nsISocketTransport::STATUS_SENDING_TO) {
+            // suppress progress when only writing request headers
+            if (!mHasRequestBody)
+                return;
+
+#endif
             // when uploading, we include the request headers in the progress
             // notifications.
             mTransportProgress = progress;

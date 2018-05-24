@@ -278,7 +278,12 @@ nsHTMLButtonElement::Blur()
 NS_IMETHODIMP
 nsHTMLButtonElement::Focus()
 {
-  return SetElementFocus(PR_TRUE);
+//  return SetElementFocus(PR_TRUE);
+  if (ShouldFocus(this)) {
+    return SetElementFocus(PR_TRUE);
+  }
+ 
+   return NS_OK;
 }
 
 NS_IMETHODIMP

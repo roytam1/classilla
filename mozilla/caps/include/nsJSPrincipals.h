@@ -48,6 +48,7 @@ struct nsJSPrincipals : JSPrincipals {
   ~nsJSPrincipals(void);
 
   nsIPrincipal *nsIPrincipalPtr;
+  
 };
 
 #endif /* _NS_JSPRINCIPALS_H_ */

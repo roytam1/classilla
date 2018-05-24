@@ -381,6 +381,80 @@ void nsSecureBrowserUIImpl::ResetStateTracking()
                     sizeof(RequestHashEntry), 16);
 }
 
+// bug 277564
+nsresult
+nsSecureBrowserUIImpl::EvaluateAndUpdateSecurityState(nsIRequest *aRequest)
+{
+  nsCOMPtr<nsIChannel> channel(do_QueryInterface(aRequest));
+
+  if (channel) {
+    mNewToplevelSecurityState = GetSecurityStateFromChannel(channel);
+
+    PR_LOG(gSecureDocLog, PR_LOG_DEBUG,
+           ("SecureUI:%p: OnStateChange: remember mNewToplevelSecurityState => %x\n", this,
+            mNewToplevelSecurityState));
+
+    // Get SSL Status information if possible
+    nsCOMPtr<nsISupports> info;
+    channel->GetSecurityInfo(getter_AddRefs(info));
+    nsCOMPtr<nsISSLStatusProvider> sp = do_QueryInterface(info);
+    if (sp) {
+      // Ignore result
+      sp->GetSSLStatus(getter_AddRefs(mSSLStatus));
+    }
+
+    if (info) {
+      nsCOMPtr<nsITransportSecurityInfo> secInfo(do_QueryInterface(info));
+      if (secInfo) {
+        secInfo->GetShortSecurityDescription(getter_Copies(mInfoTooltip));
+      }
+    }
+  }
+  else {
+    mNewToplevelSecurityState = nsIWebProgressListener::STATE_IS_INSECURE;
+  }
+
+  // assume mNewToplevelSecurityState was set in this scope!
+  // see code that is directly above
+
+  mNewToplevelSecurityStateKnown = PR_TRUE;
+  return UpdateSecurityState(aRequest);
+}
+
+void
+nsSecureBrowserUIImpl::UpdateSubrequestMembers(nsIRequest *aRequest)
+{
+  // For wyciwyg channels in subdocuments we only update our
+  // subrequest state members.
+  PRUint32 reqState = nsIWebProgressListener::STATE_IS_INSECURE;
+  nsCOMPtr<nsIChannel> channel(do_QueryInterface(aRequest));
+
+  if (channel) {
+    reqState = GetSecurityStateFromChannel(channel);
+  }
+
+  if (reqState & STATE_IS_SECURE) {
+    if (reqState & STATE_SECURE_LOW || reqState & STATE_SECURE_MED) {
+      PR_LOG(gSecureDocLog, PR_LOG_DEBUG,
+             ("SecureUI:%p: OnStateChange: subreq LOW\n", this));
+      ++mSubRequestsLowSecurity;
+    } else {
+      PR_LOG(gSecureDocLog, PR_LOG_DEBUG,
+             ("SecureUI:%p: OnStateChange: subreq HIGH\n", this));
+      ++mSubRequestsHighSecurity;
+    }
+  } else if (reqState & STATE_IS_BROKEN) {
+    PR_LOG(gSecureDocLog, PR_LOG_DEBUG,
+           ("SecureUI:%p: OnStateChange: subreq BROKEN\n", this));
+    ++mSubRequestsBrokenSecurity;
+  } else {
+    PR_LOG(gSecureDocLog, PR_LOG_DEBUG,
+           ("SecureUI:%p: OnStateChange: subreq INSECURE\n", this));
+    ++mSubRequestsNoSecurity;
+  }
+}
+// end bug
+
 NS_IMETHODIMP
 nsSecureBrowserUIImpl::OnStateChange(nsIWebProgress* aWebProgress,
                                      nsIRequest* aRequest,
@@ -540,6 +614,8 @@ nsSecureBrowserUIImpl::OnStateChange(nsIWebProgress* aWebProgress,
         return NS_OK;
       }
 
+// bug 253121
+#if(0)
       if (NS_SUCCEEDED(uri->SchemeIs("wyciwyg", &vs)) && vs)
       {
         // We ignore everything caused by wycywig == document.write/writeln
@@ -555,6 +631,7 @@ nsSecureBrowserUIImpl::OnStateChange(nsIWebProgress* aWebProgress,
         // wyciwyg channel object.
         return NS_OK;
       }
+#endif
     }
   }
 
@@ -810,6 +887,8 @@ nsSecureBrowserUIImpl::OnStateChange(nsIWebProgress* aWebProgress,
 
     --mDocumentRequestsInProgress;
 
+// bug 277564
+#if(0)
     {
       PRBool MustEvaluate = PR_TRUE;
 
@@ -854,8 +933,13 @@ nsSecureBrowserUIImpl::OnStateChange(nsIWebProgress* aWebProgress,
         mNewToplevelSecurityStateKnown = PR_TRUE;
         return UpdateSecurityState(aRequest);
       }
+#else
+    if (requestHasTransferedData) {
+      // Data has been transferred for the single toplevel
+      // request. Evaluate the security state.
+    return EvaluateAndUpdateSecurityState(aRequest);
     }
-    
+#endif    
     return NS_OK;
   }
   
@@ -872,6 +956,7 @@ nsSecureBrowserUIImpl::OnStateChange(nsIWebProgress* aWebProgress,
 
     if (requestHasTransferedData)
     {  
+#if(0)
       PRUint32 reqState = nsIWebProgressListener::STATE_IS_INSECURE;
 
       if (channel) {
@@ -905,6 +990,10 @@ nsSecureBrowserUIImpl::OnStateChange(nsIWebProgress* aWebProgress,
          ("SecureUI:%p: OnStateChange: subreq INSECURE\n", this));
         ++mSubRequestsNoSecurity;
       }
+#else
+      UpdateSubrequestMembers(aRequest);
+#endif
+// end bug
       
       // Care for the following scenario:
       // A new top level document load might have already started,
@@ -941,6 +1030,8 @@ void nsSecureBrowserUIImpl::ObtainEventSink(nsIChannel *channel)
 nsresult nsSecureBrowserUIImpl::UpdateSecurityState(nsIRequest* aRequest)
 {
   lockIconState newSecurityState;
+  lockIconState warnSecurityState; // bug 271194
+  PRBool showWarning = PR_FALSE; // bug 271194
 
   if (mNewToplevelSecurityState & STATE_IS_SECURE)
   {
@@ -1035,7 +1126,8 @@ nsresult nsSecureBrowserUIImpl::UpdateSecurityState(nsIRequest* aRequest)
       high        high
     */
 
-    PRBool showWarning = PR_TRUE;
+    //PRBool
+    showWarning = PR_TRUE;
     
     switch (mPreviousSecurityState)
     {
@@ -1056,8 +1148,11 @@ nsresult nsSecureBrowserUIImpl::UpdateSecurityState(nsIRequest* aRequest)
         break;
     }
     
+
     if (showWarning)
     {
+// bug 271194
+#if(0)
       switch (newSecurityState)
       {
         case lis_no_security:
@@ -1077,6 +1172,11 @@ nsresult nsSecureBrowserUIImpl::UpdateSecurityState(nsIRequest* aRequest)
           ConfirmEnteringSecure();
           break;
       }
+#else
+      warnSecurityState = newSecurityState;
+#endif
+// moved below
+// end bug
     }
 
     mPreviousSecurityState = newSecurityState;
@@ -1131,6 +1231,31 @@ nsresult nsSecureBrowserUIImpl::UpdateSecurityState(nsIRequest* aRequest)
 
   }
 
+// bug 271194
+  if (showWarning)
+  {
+    switch (warnSecurityState)
+    {
+      case lis_no_security:
+      case lis_broken_security:
+        ConfirmLeavingSecure();
+        break;
+
+      case lis_mixed_security:
+        ConfirmMixedMode();
+        break;
+
+      case lis_low_security:
+        ConfirmEnteringWeak();
+        break;
+
+      case lis_high_security:
+        ConfirmEnteringSecure();
+        break;
+    }
+  }
+// end bug
+
   return NS_OK; 
 }
 
@@ -1139,20 +1264,97 @@ nsSecureBrowserUIImpl::OnLocationChange(nsIWebProgress* aWebProgress,
                                         nsIRequest* aRequest,
                                         nsIURI* aLocation)
 {
-  mCurrentURI = aLocation;
+  // bug 258048 // PRBool isWyciwyg = PR_FALSE; // bug 277564
 
-  if (mCurrentURI)
+  if (aLocation)
   {
+  /* bug 258048
+    nsresult rv = aLocation->SchemeIs("wyciwyg", &isWyciwyg);
+    NS_ENSURE_SUCCESS(rv, rv); // bug 277564
+    */
+
     PRBool vs;
     
-    if (NS_SUCCEEDED(mCurrentURI->SchemeIs("view-source", &vs)) && vs)
-    {
+    nsresult
+    rv = aLocation->SchemeIs("view-source", &vs);
+    NS_ENSURE_SUCCESS(rv, rv);
+ 
+    if (vs) {
       PR_LOG(gSecureDocLog, PR_LOG_DEBUG,
              ("SecureUI:%p: OnLocationChange: view-source\n", this));
-
-      mIsViewSource = PR_TRUE;
     }
+    
+    mIsViewSource = vs;
   }
+
+  mCurrentURI = aLocation;
+  
+// bug 258048
+#if(0)
+// bug 277564
+  if (isWyciwyg) {
+    nsCOMPtr<nsIDOMWindow> windowForProgress;
+    aWebProgress->GetDOMWindow(getter_AddRefs(windowForProgress));
+
+    if (windowForProgress.get() == mWindow.get()) {
+      // For toplevel wyciwyg channels, upate the security state right
+      // away.
+      return EvaluateAndUpdateSecurityState(aRequest);
+    }
+
+    // For wyciwyg channels in subdocuments we only update our
+    // subrequest state members.
+    UpdateSecurityState(aRequest);
+
+    // Care for the following scenario:
+
+    // A new top level document load might have already started, but
+    // the security state of the new top level document might not yet
+    // been known.
+    // 
+    // At this point, we are learning about the security state of a
+    // sub-document.  We must not update the security state based on
+    // the sub content, if the new top level state is not yet known.
+    //
+    // We skip updating the security state in this case.
+
+    if (mNewToplevelSecurityStateKnown)
+      return UpdateSecurityState(aRequest);
+  }
+// end bug
+#else
+  // The location bar has changed, so we must update the security state.  The
+  // only concern with doing this here is that a page may transition from being
+  // reported as completely secure to being reported as partially secure
+  // (mixed).  This may be confusing for users, and it may bother users who
+  // like seeing security dialogs.  However, it seems prudent given that page
+  // loading may never end in some edge cases (perhaps by a site with malicious
+  // intent).
+
+  nsCOMPtr<nsIDOMWindow> windowForProgress;
+  aWebProgress->GetDOMWindow(getter_AddRefs(windowForProgress));
+
+  if (windowForProgress.get() == mWindow.get()) {
+    // For toplevel channels, update the security state right away.
+    return EvaluateAndUpdateSecurityState(aRequest);
+  }
+  // For channels in subdocuments we only update our subrequest state members.
+  UpdateSubrequestMembers(aRequest);
+  // Care for the following scenario:
+
+  // A new toplevel document load might have already started, but the security
+  // state of the new toplevel document might not yet be known.
+  // 
+  // At this point, we are learning about the security state of a sub-document.
+  // We must not update the security state based on the sub content, if the new
+  // top level state is not yet known.
+  //
+  // We skip updating the security state in this case.
+
+  if (mNewToplevelSecurityStateKnown)
+    return UpdateSecurityState(aRequest); 
+#endif
+// end bug
 
   return NS_OK;
 }

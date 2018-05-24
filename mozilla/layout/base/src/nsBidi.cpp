@@ -1497,7 +1497,7 @@ nsresult nsBidi::GetVisualRun(PRInt32 aRunIndex, PRInt32 *aLogicalStart, PRInt32
   } else {
     PRInt32 start=mRuns[aRunIndex].logicalStart;
     if(aLogicalStart!=NULL) {
-      *aLogicalStart=GET_INDEX(start);
+      *aLogicalStart=BIDI_GET_INDEX(start);
     }
     if(aLength!=NULL) {
       if(aRunIndex>0) {
@@ -1920,7 +1920,7 @@ nsresult nsBidi::GetVisualIndex(PRInt32 aLogicalIndex, PRInt32* aVisualIndex) {
           /* linear search for the run, search on the visual runs */
           for(i=0;; ++i) {
             length=runs[i].visualLimit-visualStart;
-            offset=aLogicalIndex-GET_INDEX(runs[i].logicalStart);
+            offset=aLogicalIndex-BIDI_GET_INDEX(runs[i].logicalStart);
             if(offset>=0 && offset<length) {
               if(IS_EVEN_RUN(runs[i].logicalStart)) {
                 /* LTR */
@@ -1986,11 +1986,11 @@ nsresult nsBidi::GetLogicalIndex(PRInt32 aVisualIndex, PRInt32 *aLogicalIndex)
             if(i>0) {
               aVisualIndex-=runs[i-1].visualLimit;
             }
-            *aLogicalIndex = GET_INDEX(start)+aVisualIndex;
+            *aLogicalIndex = BIDI_GET_INDEX(start)+aVisualIndex;
             return NS_OK;
           } else {
             /* RTL */
-            *aLogicalIndex = GET_INDEX(start)+runs[i].visualLimit-aVisualIndex-1;
+            *aLogicalIndex = BIDI_GET_INDEX(start)+runs[i].visualLimit-aVisualIndex-1;
             return NS_OK;
           }
         }

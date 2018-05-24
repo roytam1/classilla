@@ -617,6 +617,42 @@ class nsCOMPtr
         }
 #endif
 
+      void
+      swap( nsCOMPtr<T>& rhs )
+          // ...exchange ownership with |rhs|; can save a pair of refcount operations
+        {
+#if(1) //def NSCAP_FEATURE_USE_BASE
+          nsISupports* temp = rhs.mRawPtr;
+#else
+          T* temp = rhs.mRawPtr;
+#endif
+          NSCAP_LOG_ASSIGNMENT(&rhs, mRawPtr);
+          NSCAP_LOG_ASSIGNMENT(this, temp);
+          /* NSCAP_LOG_RELEASE(this, mRawPtr);
+          NSCAP_LOG_RELEASE(&rhs, temp); */
+          rhs.mRawPtr = mRawPtr;
+          mRawPtr = temp;
+          // |rhs| maintains the same invariants, so we don't need to |NSCAP_ASSERT_NO_QUERY_NEEDED|
+        }
+
+      void
+      swap( T*& rhs )
+          // ...exchange ownership with |rhs|; can save a pair of refcount operations
+        {
+#if(1)//def NSCAP_FEATURE_USE_BASE
+          nsISupports* temp = rhs;
+#else
+          T* temp = rhs;
+#endif
+          NSCAP_LOG_ASSIGNMENT(this, temp);
+          /* NSCAP_LOG_RELEASE(this, mRawPtr); */
+          rhs = NS_REINTERPRET_CAST(T*, mRawPtr);
+          mRawPtr = temp;
+          NSCAP_ASSERT_NO_QUERY_NEEDED();
+        }
+
+
+
 
         // Other pointer operators
 
