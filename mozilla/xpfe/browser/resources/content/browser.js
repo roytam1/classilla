@@ -56,6 +56,19 @@ var Ci = Components.interfaces;
 var prefService = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService);
 
 /*
+ * Helper functions for CSS parsing
+ * Classilla issue 206
+ *
+ */
+ 
+// Remove a block from t with the "key" (note: not necessarily a single selector) k. k is treated as a regex.
+function removeCSSBlock(t, k) {
+	var kx = new RegExp("(\\}|^)[\\r\\n\\s]*"+k+"\\s\\{*[^}]+\\}");
+	return t.replace(kx, "$1");
+}
+// To replace the block, just add it to the end of your new CSS with the same key.
+
+/*
  *
  * Byblos stelae controller
  * Classilla issue 170
@@ -74,13 +87,17 @@ function ByblosTracer() { }
 
 ByblosTracer.prototype = {
 	originalListener : null, // observer sets this
+	started : false,
 	receivedData : null,
 	buffer : null,
 	stele : null, // observer sets this
+	isCSS : false, // observer sets this
 	console : null, // observer sets this
 	
 	onStartRequest : function(request, context) {
 		//this.console.logStringMessage("tracer onStartRequest");
+		if (this.started) return;
+		this.started = true;
 		this.receivedData = [];
 		this.buffer = [];
 		
@@ -115,7 +132,11 @@ ByblosTracer.prototype = {
 		var fump = this.receivedData.join('');
 		var lump = fump;
 		try {
-			var respobj = this.stele.parseHTML(fump);
+			var respobj;
+			if (this.isCSS)
+				respobj = this.stele.parseCSS(fump);
+			else
+				respobj = this.stele.parseHTML(fump);
 			lump = (respobj.response == "ok") ? respobj.body : fump;
 		} catch(e) {
 			this.console.logStringMessage("Byblos failure: stele failed parsing the page: "+e);
@@ -144,6 +165,7 @@ ByblosTracer.prototype = {
 		if (did_rewrite)
 			this.console.logStringMessage("Byblos success: successfully rewrote page");
 		this.originalListener.onStopRequest(request, context, status);
+		this.started = false;
 	},
 	QueryInterface : function(aIID) {
 		var Cc = Components.classes;
@@ -159,6 +181,7 @@ ByblosTracer.prototype = {
 // determining if a stele exists for translation.
 
 var httpRequestObserver = { // watches for URIs it can intercept
+	locked : false,
 	observe : function(subject, topic, data) {
 		if (topic == "http-on-examine-response" && subject) {
 			var Cc = null;
@@ -168,11 +191,18 @@ var httpRequestObserver = { // watches for URIs it can intercept
 				Ci = Components.interfaces;
 			} catch(e) { }
 			if (!Cc) return; // wtf?!
+			if (this.locked) return;
 
 			var consoleService = Cc["@mozilla.org/consoleservice;1"]
                                	.getService(Ci.nsIConsoleService);
             if (!consoleService)
             	consoleService = { logStringMessage : function(w) { } };
+			var ioService=Cc["@mozilla.org/network/io-service;1"]
+    							.getService(Ci.nsIIOService);
+  			var scriptableStream=Cc["@mozilla.org/scriptableinputstream;1"]
+    							.getService(Ci.nsIScriptableInputStream);
+    		if (!ioService || !scriptableStream) // we couldn't load the JS anyway
+    			return;
                                	
             // The object we get from nsHttpHandler is a raw nsISupports, so now we need to
             // QI it. We start with an nsIChannel to get the URI and MIME type.
@@ -180,7 +210,7 @@ var httpRequestObserver = { // watches for URIs it can intercept
 			if (!subject.URI)
 				return; // wtf?
 			var uri = subject.URI;
-			var host = subject.URI.asciiHost;
+			var host = subject.URI.asciiHost.toLowerCase();
 			            
             // Next, QI to nsIHttpChannel to get the request information.
 			subject.QueryInterface(Ci.nsIHttpChannel);
@@ -191,34 +221,67 @@ var httpRequestObserver = { // watches for URIs it can intercept
             var mime = "???";
             try {
             	mime = subject.getResponseHeader("Content-Type");
-            } catch(e) { /* Hmm. */ }
+            } catch(e) { /* Hmm. */
+            	//consoleService.logStringMessage("HTTP Content-Type failure "+subject+" "+mime+" "+host+": "+e);
+            }
 			// Remove the character set, if there is one.
 			mime = mime.replace(/; charset=.+$/i, "");
 			
 			//consoleService.logStringMessage("HTTP observer fired "+subject+" "+mime+" "+host);
 
-            if (mime != "text/html" && mime != "application/xhtml+xml")
+			// Allow only text/html, xhtml and text/css.
+			// If we get the ??? fallback, the full request is not ready yet and we'll get it later.
+            if (mime != "text/html" && mime != "application/xhtml+xml" && mime != "text/css")
             	return;
+            this.locked = true; // don't try to rerun this.
+            	
+           	// For CSS, the root we search is different.
+           	var rootDir = "resource://programdir/Byblos/";
+           	if (mime == "text/css")
+           		rootDir += "%20CSS/";
 			
 			// Is this a site that has a stele available for translation? Let's try loading one.
+			// If not, try falling back.
 			var str = "";
-			var srcUrl = "resource://programdir/Byblos/"+host+".js";
-			try {
-				var ioService=Cc["@mozilla.org/network/io-service;1"]
-    							.getService(Ci.nsIIOService);
-  				var scriptableStream=Cc["@mozilla.org/scriptableinputstream;1"]
-    							.getService(Ci.nsIScriptableInputStream);
-  				var channel=ioService.newChannel(srcUrl,null,null);
-  				var input=channel.open();
-  				scriptableStream.init(input);
-  				str=scriptableStream.read(input.available());
-  				scriptableStream.close();
-  				input.close();
-  			} catch(e) { }
-
+			var keepLooking = true;
+			var jsFile = host+".js";
+			var srcUrl = rootDir+jsFile;
+			while(!str && keepLooking) {
+				//consoleService.logStringMessage("trying "+srcUrl);
+				try {
+  					var channel=ioService.newChannel(srcUrl,null,null);
+  					var input=channel.open();
+  					scriptableStream.init(input);
+  					str=scriptableStream.read(input.available());
+  					scriptableStream.close();
+  					input.close();
+  				} catch(e) { }
+  				if (!str) {
+  					// Try a fallback. Substitute any existing ANY.. at the beginning with //, then
+  					// replace the first part of the domain name with ANY.. If that generates an
+  					// impossible filespec, give up.
+  					jsFile = jsFile.replace(/^ANY\.\./, '');
+  					jsFile = jsFile.replace(/^[^\.]*\./, 'ANY..');
+  					
+  					if (jsFile == "ANY..js" || 
+  						jsFile == ".js" ||
+  						jsFile == "..js" ||
+  						jsFile == "." ||
+  						jsFile == ".." ||
+  						jsFile == "")
+  						keepLooking = false;
+  					else
+  						srcUrl = rootDir+jsFile;
+  				} else {
+  					keepLooking = false;
+  				}
+  			}
+  			
 			// Couldn't load from the Byblos directory, so quietly fail.
-			if (!str)
+			if (!str) {
+				this.locked = false;
 				return;
+			}
 				
 			// Try to interpret the JS.
 			var stele = null;
@@ -226,19 +289,24 @@ var httpRequestObserver = { // watches for URIs it can intercept
 				var stelef = null;
 				eval("var stelef = "+str+";");
 				stele = stelef();
-			} catch(e) { consoleService.logStringMessage("Byblos failure parsing stele for "+host+": "+e); }
-			if (!stele)
+			} catch(e) { consoleService.logStringMessage("Byblos failure parsing stele for "+host+" from "+srcUrl+": "+e); }
+			if (!stele) {
+				this.locked = false;
 				return;
+			}
 			
-			consoleService.logStringMessage("Byblos info: got stele for "+host);
+			consoleService.logStringMessage("Byblos info: got stele for "+host+" from "+srcUrl);
 			// See if the stele wants this URL.
-			if (!stele.wantURI(uri))
+			if (!stele.wantURI(uri)) {
 				// Guess not.
+				this.locked = false;
 				return;
+			}
 
 			// Yes, start the Byblos tracer. This is delicate -- if the QI fails on setNewListener,
 			// we must undo this immediately.
 			var tracer = new ByblosTracer();
+			tracer.isCSS = (mime == "text/css");
 			tracer.console = consoleService;
 			tracer.stele = stele;
 			// Finally QI ourselves to nsITraceableChannel. Do NOT catch failure here; it should propagate.
@@ -249,10 +317,15 @@ var httpRequestObserver = { // watches for URIs it can intercept
 				// we need to fail in a recoverable way (unlike the original nsITraceableChannel).
 				tracer.originalListener = subject.getCurrentListener();
 			} catch(e) { }
-			if (tracer.originalListener == null)
+			if (tracer.originalListener == null) {
 				// This will not work. Abort now.
+				tracer = null;
+				stele = null;
+				this.locked = false;
 				return;
+			}
 			// We do NOT want to catch this error; it should be propagated if this fails.
+			this.locked = false;
 			subject.setNewListener(tracer);
 		}
 	},

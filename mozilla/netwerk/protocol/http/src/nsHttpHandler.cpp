@@ -563,8 +563,9 @@ nsHttpHandler::OnExamineResponse(nsIHttpChannel *chan)
         // fire off the notification, ignore the return code.
         httpNotify->OnExamineResponse(chan);
     }
-    
+
     // notify interested observers (in our case, the Byblos manager) (Classilla issue 170)
+    // If this doesn't work, we get another chance in nsHttpChannel.
 	nsCOMPtr<nsIObserverService> os(do_GetService("@mozilla.org/observer-service;1", &rv));
   	if (os) {
   		// force the channel to become an nsIHttpChannel, or this won't work.

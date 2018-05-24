@@ -146,6 +146,7 @@
       default:
       	// bug 298892
         //linkNode = findParentNode(event.originalTarget, "a");
+        linkNode = event.originalTarget; // issue 203
         while (linkNode && !(linkNode instanceof HTMLAnchorElement))
         	linkNode = linkNode.parentNode;
         // <a> cannot be nested.  So if we find an anchor without an

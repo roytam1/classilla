@@ -5013,7 +5013,7 @@ js_TraceObject(JSTracer *trc, JSObject *obj)
     JSClass *clasp;
     size_t nslots, i;
     jsval v;
-
+    
     JS_ASSERT(OBJ_IS_NATIVE(obj));
     cx = trc->context;
     scope = OBJ_SCOPE(obj);
@@ -5101,7 +5101,7 @@ js_TraceObject(JSTracer *trc, JSObject *obj)
     nslots = STOBJ_NSLOTS(obj);
     if (scope->object == obj && scope->map.freeslot < nslots)
         nslots = scope->map.freeslot;
-
+        
     for (i = 0; i != nslots; ++i) {
         v = STOBJ_GET_SLOT(obj, i);
         if (JSVAL_IS_TRACEABLE(v)) {

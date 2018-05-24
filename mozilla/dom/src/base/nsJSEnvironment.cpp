@@ -1883,7 +1883,7 @@ ObjectPrincipalFinder(JSContext *cx, JSObject *obj)
   // JS principals, but the caller of this function expects a weak
   // reference. So we need to release here.
 
-  JSPRINCIPALS_DROP(cx, jsPrincipals);
+  //JSPRINCIPALS_DROP(cx, jsPrincipals);
   return jsPrincipals;
 }
 
@@ -1926,7 +1926,6 @@ nsresult nsJSEnvironment::Init()
   // Connect JSPrincipalsFinder (see bug 316589 and jsfun.c).
 #if(0)
   // If you disable this, make sure nsScriptSecurityManager::doGetObjectPrincipal returns NS_ERROR_FAILURE instead of a system principal.
-  // If this is enabled, besides the above, make sure that BasePrincipal::GetJSPrincipals ADDREFs its own pointer or JavaScript will crash in GC.
   // WE HAVE NOT FIXED THIS YET
   JSObjectPrincipalsFinder oldfop = ::JS_SetObjectPrincipalsFinder(sRuntime, ObjectPrincipalFinder);
   NS_ASSERTION(!oldfop, " fighting over the findObjectPrincipals callback!");

@@ -2213,6 +2213,7 @@ JS_TraceChildren(JSTracer *trc, void *thing, uint32 kind)
             obj->map->ops->trace(trc, obj);
         } else {
             nslots = STOBJ_NSLOTS(obj);
+            
             for (i = 0; i != nslots; ++i) {
                 v = STOBJ_GET_SLOT(obj, i);
                 if (JSVAL_IS_TRACEABLE(v)) {

@@ -12209,11 +12209,13 @@ nsCSSFrameConstructor::FindFrameWithContent(nsIPresContext*  aPresContext,
     // Search for the frame in each child list that aParentFrame supports
     nsIAtom* listName = nsnull;
     PRInt32 listIndex = 0;
+    PRBool searchAgain; // bug 334829
     do {
 #ifdef NOISY_FINDFRAME
       FFWC_doLoop++;
 #endif
       nsIFrame* kidFrame=nsnull;
+      searchAgain = PR_FALSE; // bug 334829
       // if we were given an hint, try to use it here to find a good
       // previous frame to start our search (|kidFrame|).
       if (aHint) {
@@ -12356,12 +12358,23 @@ nsCSSFrameConstructor::FindFrameWithContent(nsIPresContext*  aPresContext,
         // looking through something other than primary frame
         // list. Reboot the search from scratch, without the hint, but
         // using the null child list again.
+        //after 334829:
+        // If we get here, and we had a hint, then we didn't find a frame.
+        // The hint may have been a frame whose location in the frame tree
+        // doesn't match the location of its corresponding element in the
+        // DOM tree, e.g. a floated or absolutely positioned frame, or e.g.
+        // a <col> frame, in which case we'd be off in the weeds looking
+        // through something other than the primary frame list.
+        // Reboot the search from scratch, without the hint, but using the
+        // null child list again.
+
         aHint = nsnull;
+        searchAgain = PR_TRUE; // bug 334829
       } else {
         NS_IF_RELEASE(listName);
         aParentFrame->GetAdditionalChildListName(listIndex++, &listName);
       }
-    } while(listName);
+    } while(listName || searchAgain); // bug 334829 // while(listName);
 
     // We didn't find a matching frame. If aFrame has a next-in-flow,
     // then continue looking there

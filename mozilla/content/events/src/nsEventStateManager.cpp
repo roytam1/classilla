@@ -51,6 +51,7 @@
 #include "nsIEditorDocShell.h"
 #include "nsIFormControl.h"
 #include "nsIComboboxControlFrame.h" // bug 97283
+#include "nsISelectControlFrame.h" // issue 211
 #include "nsIDOMHTMLAnchorElement.h"
 #include "nsIDOMHTMLInputElement.h"
 #include "nsIDOMHTMLSelectElement.h"
@@ -1657,8 +1658,16 @@ nsEventStateManager::DoWheelScroll(nsIPresContext* aPresContext,
     	focusFrame->GetParent(&focusFrame);
     	continue; // while
     } 
+
+// Classilla issue 211
+// Don't scroll <select> boxes (open or otherwise); it doesn't work (they either roll up or take over the window).
+	void *scf;
+	if(NS_SUCCEEDED(focusFrame->QueryInterface(NS_GET_IID(nsISelectControlFrame), &scf))) {
+		 focusFrame->GetParent(&focusFrame);
+		 continue;
+	}
     
-// issue 95
+// Classilla issue 95
 // while based in spirit on bug 259615, in practice this code is nothing like it
 // because we have to resort to more primitive means in 1.3.1. -- Cameron
 
@@ -1676,7 +1685,7 @@ nsEventStateManager::DoWheelScroll(nsIPresContext* aPresContext,
     		// document body defaults to overflow:visible, but still scrollable. so,
     		// if this is <html> or the <body>, we can always try scrolling it,
     		// and if it doesn't work it will get back to XUL somehow.
-    		nsCOMPtr<nsIContent> thisContent;
+    		nsCOMPtr<nsIContent> thisContent; // moved up to check <select>
     		focusFrame->GetContent(getter_AddRefs(thisContent));
     		if (thisContent) {
     			nsCOMPtr<nsIAtom> tagname;
@@ -1724,6 +1733,7 @@ nsEventStateManager::DoWheelScroll(nsIPresContext* aPresContext,
     	 		NS_WARNING("fark: no view for scrollview??");
     	 	}
     	 }
+
     	 // verify this is not a combobox
     	 nsIComboboxControlFrame* comboBox = nsnull;
     	 CallQueryInterface(focusFrame, &comboBox);

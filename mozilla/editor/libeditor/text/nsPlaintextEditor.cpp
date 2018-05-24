@@ -55,6 +55,7 @@
 #include "nsIDOMKeyListener.h" 
 #include "nsIDOMMouseListener.h"
 #include "nsIDOMMouseEvent.h"
+#include "nsIFrameSelection.h"
 #include "nsISelection.h"
 #include "nsISelectionPrivate.h"
 #include "nsIDOMHTMLAnchorElement.h"
@@ -542,6 +543,42 @@ NS_IMETHODIMP nsPlaintextEditor::HandleKeyPress(nsIDOMKeyEvent* aKeyEvent)
       nsString empty;
       return TypedText(empty, eTypedText);
     }
+    
+    // Classilla issue 202. We shouldn't need this though! What happened?!
+    // Drive the caret ourselves.
+#if(1)
+    else if (keyCode == nsIDOMKeyEvent::DOM_VK_RIGHT ||
+    		 keyCode == nsIDOMKeyEvent::DOM_VK_LEFT) {      
+      if (!mSelConWeak) return NS_ERROR_NOT_INITIALIZED;
+      nsCOMPtr<nsISelectionController> selCont (do_QueryReferent(mSelConWeak));
+  	  if (selCont) {
+  	  	// Killing the caret doesn't help with turds in XUL text controls. 9.2.3 had this too, so it's not new.
+		//selCont->SetCaretEnabled(PR_FALSE);
+  	  	selCont->CharacterMove((keyCode == nsIDOMKeyEvent::DOM_VK_RIGHT), PR_FALSE); // If true, this extends the *selection*.
+  	  	//selCont->SetCaretEnabled(PR_TRUE);
+  	  	return NS_OK;
+  	  } else {
+  	  	return NS_ERROR_FAILURE;
+  	  }
+    }
+    else if (keyCode == nsIDOMKeyEvent::DOM_VK_UP ||
+    		 keyCode == nsIDOMKeyEvent::DOM_VK_DOWN) {
+      // Ignore this keystroke if this is not a multi-line text box.
+      if (mFlags & eEditorSingleLineMask) return NS_OK;
+      // Otherwise do mostly the same as above.
+      if (!mSelConWeak) return NS_ERROR_NOT_INITIALIZED;
+      nsCOMPtr<nsISelectionController> selCont (do_QueryReferent(mSelConWeak));
+  	  if (selCont) {
+		//selCont->SetCaretEnabled(PR_FALSE);
+  	  	selCont->LineMove((keyCode == nsIDOMKeyEvent::DOM_VK_DOWN), PR_FALSE);
+  	  	//selCont->SetCaretEnabled(PR_TRUE);
+  	  	return NS_OK;
+  	  } else {
+  	  	return NS_ERROR_FAILURE;
+  	  }
+    }      
+#endif    
+    // End issue 202 caret kludge
     
     if (character && !altKey && !ctrlKey && !metaKey)
     {

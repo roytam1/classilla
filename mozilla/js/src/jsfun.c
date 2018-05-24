@@ -1435,7 +1435,7 @@ fun_finalize(JSContext *cx, JSObject *obj)
         prin = JSVAL_TO_PRIVATE(v);
         JSPRINCIPALS_DROP(cx, prin);
         // ???
-        JS_RemoveRoot(cx, (void *)prin);
+        //JS_RemoveRoot(cx, v);
     }
 }
 
@@ -2108,11 +2108,13 @@ js_CloneFunctionObject(JSContext *cx, JSFunction *fun, JSObject *parent)
 
         //prin = cx->findObjectPrincipals(cx, parent);
         prin = cx->runtime->findObjectPrincipals(cx, parent);
+        if (!prin) return NULL;
+        
+        // PRIVATE_TO_JSVAL makes the pointer into a jsint; it's not actually a GC object.
         if (!prin || !JS_SetReservedSlot(cx, clone, 2, PRIVATE_TO_JSVAL(prin)))
             	return NULL;
-        // root the principals?
-        JS_AddRoot(cx, (void *)prin);
-        JSPRINCIPALS_HOLD(cx, prin);
+        
+        //JSPRINCIPALS_HOLD(cx, prin); // not _DROPped in nsJSEnvironment.cpp, so STRONG!
     } else {
     	//JS_WARNING("no findObjectPrincipals\n");
     }

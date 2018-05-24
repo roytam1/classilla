@@ -137,7 +137,7 @@ while(<W>) {
 
   @{$objects[$count][$objsize[$count]++]} = ( "$fields[0]", $fields[2], "$size" );
 
- # print "$fields[0] | $fields[1] | $size | $fields[2]\n";
+  print "$fields[0] | $fields[1] | $size | $fields[2]\n";
 }
 close(W);
 
@@ -223,7 +223,7 @@ for( $i = 0; $i <= $count; $i++ ) {
 
   print CFILE "static const CK_ATTRIBUTE_TYPE nss_builtins_types_$i [] = {\n";
   $o = $objects[$i];
- # print STDOUT "type $i object $o \n";
+ #print STDOUT "type $i object $o \n";
   my @ob = @{$o};
   my $j;
   for( $j = 0; $j < @ob; $j++ ) {

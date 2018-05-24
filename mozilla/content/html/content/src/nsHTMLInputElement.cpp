@@ -1321,7 +1321,7 @@ nsHTMLInputElement::HandleDOMEvent(nsIPresContext* aPresContext,
       }
     }
   }
-  
+
   // bug 328566
   // Don't allow mutation events which are targeted somewhere inside
   // <input>, except if they are dispatched to the element itself.

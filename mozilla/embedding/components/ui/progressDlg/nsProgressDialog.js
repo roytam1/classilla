@@ -269,11 +269,15 @@ nsProgressDialog.prototype = {
                 var title = this.getProperty( this.saving ? "savingAlertTitle" : "openingAlertTitle",
                                               [ this.fileName() ], 
                                               1 );
-                prompter.alert( this.dialog, title, aMessage );
+                // Classilla issue 211: this can get spurious messages on Byblos-gated media.
+                // The error is invariably 0x804b0008, which is NS_ERROR_FAILURE but unknown.
+                if (aStatus != 2152398856) {
+                	prompter.alert( this.dialog, title, aMessage+" "+aStatus );
     
-                // Close the dialog.
-                if ( !this.completed ) {
-                    this.onCancel();
+                	// Close the dialog.
+                	if ( !this.completed ) {
+                    	this.onCancel();
+                	}
                 }
             } else {
                 // Error occurred prior to onload even firing.

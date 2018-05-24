@@ -2206,13 +2206,32 @@ cookie_ParseDate(char *date_string, time_t & date) {
     if (LL_CMP(prdate, <, LL_Zero())) { // prdate < 0
       return NS_OK; // date = 0 from above
     }
+
+// Classilla issue 210. If the intermediate r is already greater than MAX_EXPIRE, then
+// don't transfer it to date; put MAX_EXPIRE there instead.
     PRInt64 r, u;
     LL_I2L(u, PR_USEC_PER_SEC);
     LL_DIV(r, prdate, u);
+#if(0)
     LL_L2I(date, r);
     if (date < 0) {
       date = MAX_EXPIRE;
+    } 
+#else
+    // Despite date ostensibly being signed, it doesn't actually get < 0 for dates very
+    // far in the future (9999 is very popular) because this *double* overflows. So we
+    // just do a very straightforward comparison.
+    LL_I2L(u, MAX_EXPIRE);
+    if (LL_CMP(r, <, u)) { // r < MAX_EXPIRE
+    	// Safe to put in date
+    	LL_L2I(date, r);
+    } else {
+    	// Unsafe, use MAX_EXPIRE
+    	date = MAX_EXPIRE;
     }
+#endif
+// end issue
+   
     // TRACEMSG(("Parsed date as GMT: %s\n", asctime(gmtime(&date))));    // TRACEMSG(("Parsed date as local: %s\n", ctime(&date)));
     return NS_OK;
   } 

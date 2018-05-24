@@ -48,6 +48,7 @@
 #include "plstr.h"
 #include "prprf.h"
 #include "nsEscape.h"
+#include "nsIObserverService.h"
 
 static NS_DEFINE_CID(kStreamListenerTeeCID, NS_STREAMLISTENERTEE_CID);
 
@@ -100,6 +101,39 @@ static PRBool IsValidToken(const nsPromiseFlatCString &s) // for Classilla
     return PR_TRUE;
 }
 // end bug
+
+// -------- nsChannelNotifyWrapper ---------
+//
+// This simple class handles notifies that can't be in nsHttpHandler but needs to pass an nsIHttpChannel
+// (apparently we can't easily QueryInterface ourselves to that). This fixes, among other issues, Classilla issue 208.
+//
+
+class nsChannelNotifyWrapper
+{
+public:
+	nsChannelNotifyWrapper(nsIHttpChannel *aChannel) {
+		// nsHttpChannel passes us itself.
+		nsresult rv;
+		
+		mChannel = do_QueryInterface(aChannel, &rv);
+	}
+		
+	~nsChannelNotifyWrapper() { mChannel = nsnull; }
+	
+	nsresult SendOnExamineResponse() {
+		nsresult rv;
+		
+		if (!mChannel)
+			return NS_ERROR_FAILURE;
+		nsCOMPtr<nsIObserverService> os(do_GetService("@mozilla.org/observer-service;1", &rv));
+		if (NS_SUCCEEDED(rv) && os)
+			return os->NotifyObservers(mChannel, "http-on-examine-response", 0);
+		return rv;
+	}
+
+private:
+	nsCOMPtr<nsIHttpChannel> mChannel;
+};
 
 //-----------------------------------------------------------------------------
 // nsHttpChannel <public>
@@ -621,8 +655,11 @@ nsHttpChannel::ApplyContentConversions()
 nsresult
 nsHttpChannel::CallOnStartRequest()
 {
-	mTracingEnabled = PR_FALSE; // issue 170 (bug 430155)
-	
+    // notify interested observers (in our case, the Byblos manager) (Classilla issue 170)
+    // However, we have to let a bridge class QI us properly (Classilla issue 208).
+    nsChannelNotifyWrapper nw(this);
+    nw.SendOnExamineResponse();
+    
     if (mResponseHead && mResponseHead->ContentType().IsEmpty()) {
      // bug 667907 (Classilla issue 178)
      if (mResponseHead->Version() == NS_HTTP_VERSION_0_9 &&
@@ -653,12 +690,14 @@ nsHttpChannel::CallOnStartRequest()
       }
     }
     
+	mTracingEnabled = PR_FALSE; // issue 170 (bug 430155)	
+    
     nsresult rv = mListener->OnStartRequest(this, mListenerContext);
     if (NS_FAILED(rv)) return rv;
 
     // install stream converter if required
     ApplyContentConversions();
-
+    
     return rv;
 }
 
@@ -3734,3 +3773,4 @@ nsHttpChannel::GetCurrentListener(nsIStreamListener **_retval)
     wrapper->gimme(_retval);
     return NS_OK;
 }
+
