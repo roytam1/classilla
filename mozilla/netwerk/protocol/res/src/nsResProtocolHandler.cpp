@@ -48,6 +48,7 @@
 #include "nsXPIDLString.h"
 #include "nsIFile.h"
 #include "nsDirectoryServiceDefs.h"
+#include "nsAppDirectoryServiceDefs.h"
 #include "nsNetUtil.h"
 #include "nsURLHelper.h"
 
@@ -138,6 +139,11 @@ nsResProtocolHandler::Init()
     rv = SetSpecialDir("componentsdir", NS_XPCOM_COMPONENT_DIR);
     if (NS_FAILED(rv)) return rv;
 
+    // Add the Extensions folder so that Byblos can live there too.
+    // (Setting profile folders here apparently hang Classilla at startup.)
+    rv = SetSpecialDir("documents", NS_MAC_DOCUMENTS_DIR);
+    if (NS_FAILED(rv)) return rv;
+    
     // Set up the "Resource" root to point to the old resource location 
     // such that:
     //     resource://<path>  ==  res://Resource/<path>

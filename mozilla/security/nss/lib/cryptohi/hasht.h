@@ -51,6 +51,7 @@ typedef enum {
     HASH_AlgMD2 = 1,
     HASH_AlgMD5 = 2,
     HASH_AlgSHA1 = 3,
+    HASH_AlgSHA256 = 4,
     HASH_AlgTOTAL
 } HASH_HashType;
 
@@ -60,6 +61,7 @@ typedef enum {
 #define MD2_LENGTH	16
 #define MD5_LENGTH	16
 #define SHA1_LENGTH	20
+#define SHA256_LENGTH 32
 
 /*
  * Structure to hold hash computation info and routines

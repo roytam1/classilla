@@ -1263,6 +1263,7 @@ ssl3_ComputeRecordMAC(
     SECStatus          rv;
     unsigned int       tempLen;
     unsigned char      temp[MAX_MAC_LENGTH];
+    PRBool             isTLS = PR_TRUE;
 
 /*  ssl_GetSpecReadLock(ss);  Don't have "ss"! */
 
@@ -1293,6 +1294,7 @@ ssl3_ComputeRecordMAC(
 	temp[9]  = MSB(inputLength);
 	temp[10] = LSB(inputLength);
 	tempLen  = 11;
+	isTLS = PR_FALSE;
     } else {
     	/* New TLS hash includes version. */
 	temp[9]  = MSB(version);
@@ -1373,6 +1375,7 @@ ssl3_SendRecord(   sslSocket *        ss,
     PRInt32                   cipherBytes = -1;
     PRBool                    isBlocking  = ssl_SocketIsBlocking(ss);
     PRBool                    ssl3WasNull = PR_FALSE;
+    PRUint32 p1Len, p2Len, oddLen = 0;
 // Classilla issue 167
 PRBool duong = PR_FALSE;
 
@@ -1435,7 +1438,9 @@ PRBool duong = PR_FALSE;
 	 * of bytes as the input buffer, we will fail.
 	 */
 	bufSize = contentLen + SSL3_BUFFER_FUDGE;
-
+	
+#if(1)
+	// NSS 3.7 / Mozilla 1.3.1 version
 	/*
 	 * null compression is easy to do
 	 */
@@ -1451,6 +1456,7 @@ PRBool duong = PR_FALSE;
 	/*
 	 * Add the MAC
 	 */
+
 	rv = ssl3_ComputeRecordMAC(
 	    cwSpec, (ss->sec.isServer) ? cwSpec->server.write_mac_context
 	                               : cwSpec->client.write_mac_context,
@@ -1462,12 +1468,15 @@ PRBool duong = PR_FALSE;
 	    goto spec_locked_loser;
 	}
 	fragLen = contentLen + macLen;	/* needs to be encrypted */
+	p1Len = contentLen;
+	p2Len = macLen;
 	PORT_Assert(fragLen <= MAX_FRAGMENT_LENGTH + 1024);
 
 	/*
 	 * Pad the text (if we're doing a block cipher)
 	 * then Encrypt it
 	 */
+
 	if (cipher_def->type == type_block) {
 	    int             padding_length;
 	    int             i;
@@ -1495,6 +1504,100 @@ spec_locked_loser:
 	    ssl_ReleaseSpecReadLock(ss);
 	    return SECFailure;
 	}
+#else
+	// Mozilla 1.8.1. Doesn't work yet??
+	/* no null compression */
+
+	ssl_GetSpecReadLock(ss);	/********************************/
+
+	cwSpec = ss->ssl3->cwSpec;
+	cipher_def = cwSpec->cipher_def;
+	/*
+	 * Add the MAC
+	 */
+	rv = ssl3_ComputeRecordMAC(
+	    cwSpec, (ss->sec.isServer) ? cwSpec->server.write_mac_context
+	                               : cwSpec->client.write_mac_context,
+	    type, cwSpec->version, cwSpec->write_seq_num,
+	    (unsigned char *)buf, contentLen,
+	    write->buf + contentLen + SSL3_RECORD_HEADER_LENGTH, &macLen);
+	if (rv != SECSuccess) {
+	    ssl_MapLowLevelError(SSL_ERROR_MAC_COMPUTATION_FAILURE);
+	    ssl_ReleaseSpecReadLock(ss);
+	    return SECFailure;
+	}
+	fragLen = contentLen + macLen;	/* needs to be encrypted */
+	p1Len = contentLen;
+	p2Len = macLen;
+	PORT_Assert(fragLen <= MAX_FRAGMENT_LENGTH + 1024);
+
+    if (cipher_def->type == type_block) {
+		unsigned char * pBuf;
+		int             padding_length;
+		int             i;
+
+		oddLen = contentLen % cipher_def->block_size;
+		/* Assume blockSize is a power of two */
+		padding_length = cipher_def->block_size - 1 -
+			((fragLen) & (cipher_def->block_size - 1));
+		fragLen += padding_length + 1;
+		PORT_Assert((fragLen % cipher_def->block_size) == 0);
+
+		/* Pad according to TLS rules (also acceptable to SSL3). */
+		pBuf = &write->buf[fragLen + SSL3_RECORD_HEADER_LENGTH - 1];
+		for (i = padding_length + 1; i > 0; --i) {
+	    	*pBuf-- = padding_length;
+		}
+		/* now, if contentLen is not a multiple of block size, fix it */
+		p2Len = fragLen - p1Len;
+    }
+    if (p1Len < 256) {
+		oddLen = p1Len;
+		p1Len = 0;
+    } else {
+		p1Len -= oddLen;
+    }
+    if (oddLen) {
+		p2Len += oddLen;
+		PORT_Assert( (cipher_def->block_size < 2) || \
+		     (p2Len % cipher_def->block_size) == 0);
+		PORT_Memcpy(write->buf + SSL3_RECORD_HEADER_LENGTH + p1Len,
+	       buf + p1Len, oddLen);
+    }
+    if (p1Len > 0) {
+		rv = cwSpec->encode( cwSpec->encodeContext, 
+	    	write->buf + SSL3_RECORD_HEADER_LENGTH, /* output */
+	    	&cipherBytes,                           /* actual outlen */
+	    	p1Len,                                  /* max outlen */
+	    	buf, p1Len);                      /* input, and inputlen */
+		PORT_Assert(rv == SECSuccess && cipherBytes == p1Len);
+		if (rv != SECSuccess || cipherBytes != p1Len) {
+	    	PORT_SetError(SSL_ERROR_ENCRYPTION_FAILURE);
+	    	ssl_ReleaseSpecReadLock(ss);
+	    	return SECFailure;
+		}
+    }
+    if (p2Len > 0) {
+		PRInt32 cipherBytesPart2 = -1;
+		rv = cwSpec->encode( cwSpec->encodeContext, 
+	    	write->buf + SSL3_RECORD_HEADER_LENGTH + p1Len,
+	    	&cipherBytesPart2,          /* output and actual outLen */
+	    	p2Len,                             /* max outlen */
+	    	write->buf + SSL3_RECORD_HEADER_LENGTH + p1Len,
+	    	p2Len);                            /* input and inputLen*/
+		PORT_Assert(rv == SECSuccess && cipherBytesPart2 == p2Len);
+		if (rv != SECSuccess || cipherBytesPart2 != p2Len) {
+	    	PORT_SetError(SSL_ERROR_ENCRYPTION_FAILURE);
+	    	ssl_ReleaseSpecReadLock(ss);
+	    	return SECFailure;
+		}
+		cipherBytes += cipherBytesPart2;
+    }	
+	buf   += contentLen;
+	bytes -= contentLen;
+	PORT_Assert( bytes >= 0 );
+#endif
+
 	PORT_Assert(cipherBytes <= MAX_FRAGMENT_LENGTH + 1024);
 
 	/*
@@ -1511,8 +1614,9 @@ spec_locked_loser:
 	write->buf[0] = type;
 	write->buf[1] = MSB(cwSpec->version);
 	write->buf[2] = LSB(cwSpec->version);
-	write->buf[3] = MSB(cipherBytes);
-	write->buf[4] = LSB(cipherBytes);
+	write->buf[3] = MSB(cipherBytes); //((cipherBytes + ((ss->advertisesSNI) ? 2 : 0)));
+	write->buf[4] = LSB(cipherBytes); //((cipherBytes + ((ss->advertisesSNI) ? 2 : 0)));
+	ss->advertisesSNI = PR_FALSE; // handled
 
 	PRINT_BUF(50, (ss, "send (encrypted) record data:", write->buf, write->len));
 
@@ -1637,10 +1741,10 @@ ssl3_FlushHandshake(sslSocket *ss, PRInt32 flags)
 
     rv = ssl3_SendRecord(ss, content_handshake, ss->sec.ci.sendBuf.buf,
 			 ss->sec.ci.sendBuf.len, flags);
+    ss->sec.ci.sendBuf.len = 0;
     if (rv < 0) {
 	return (SECStatus)rv;	/* error code set by ssl3_SendRecord */
     }
-    ss->sec.ci.sendBuf.len = 0;
     return SECSuccess;
 }
 
@@ -1849,6 +1953,19 @@ ssl3_HandleAlert(sslSocket *ss, sslBuffer *buf)
     case internal_error: 	error = SSL_ERROR_INTERNAL_ERROR_ALERT;   break;
     case user_canceled: 	error = SSL_ERROR_USER_CANCELED_ALERT;    break;
     case no_renegotiation: 	error = SSL_ERROR_NO_RENEGOTIATION_ALERT; break;
+    
+    /* Alerts for TLS client hello extensions */
+    case unsupported_extension: 
+			error = SSL_ERROR_UNSUPPORTED_EXTENSION_ALERT;    break;
+    case certificate_unobtainable: 
+			error = SSL_ERROR_CERTIFICATE_UNOBTAINABLE_ALERT; break;
+    case unrecognized_name: 
+			error = SSL_ERROR_UNRECOGNIZED_NAME_ALERT;        break;
+    case bad_certificate_status_response: 
+			error = SSL_ERROR_BAD_CERT_STATUS_RESPONSE_ALERT; break;
+    case bad_certificate_hash_value: 
+			error = SSL_ERROR_BAD_CERT_HASH_VALUE_ALERT;      break;
+
     default: 			error = SSL_ERROR_RX_UNKNOWN_ALERT; 	  break;
     }
     if (level == alert_fatal) {
@@ -2279,7 +2396,7 @@ ssl3_AppendHandshake(sslSocket *ss, const void *void_src, PRInt32 bytes)
     return SECSuccess;
 }
 
-static SECStatus
+/* static */ SECStatus
 ssl3_AppendHandshakeNumber(sslSocket *ss, PRInt32 num, PRInt32 lenSize)
 {
     SECStatus rv;
@@ -2384,7 +2501,7 @@ ssl3_ConsumeHandshake(sslSocket *ss, void *v, PRInt32 bytes, SSL3Opaque **b,
  * Thus, the largest value that may be sent this way is 0x7fffffff.
  * On error, an alert has been sent, and a generic error code has been set.
  */
-static PRInt32
+/* static */ PRInt32
 ssl3_ConsumeHandshakeNumber(sslSocket *ss, PRInt32 bytes, SSL3Opaque **b,
 			    PRUint32 *length)
 {
@@ -2665,6 +2782,8 @@ ssl3_SendClientHello(sslSocket *ss)
     int              length;
     int              num_suites;
     int              actual_count = 0;
+    PRInt32          total_exten_len = 0;
+    int              urllen;
 
     SSL_TRC(3, ("%d: SSL3[%d]: send client_hello handshake", SSL_GETPID(),
 		ss->fd));
@@ -2794,6 +2913,24 @@ ssl3_SendClientHello(sslSocket *ss)
     	return SECFailure;
     }
 
+	/* Classilla issue 219 */
+#if(1)
+    if (ss->enableTLS && ss->version > SSL_LIBRARY_VERSION_3_0) {
+		PRUint32 maxBytes = 65535; /* 2^16 - 1 */
+		PRInt32  extLen;
+
+		extLen = ssl3_CallHelloExtensionSenders(ss, PR_FALSE, maxBytes, NULL);
+		if (extLen < 0) {
+	    	return SECFailure;
+		}
+		maxBytes        -= extLen;
+		total_exten_len += extLen;
+
+		/* if (total_exten_len > 0)
+	    	total_exten_len += 2; */
+    } // end issue
+#endif
+
     /* how many suites does our PKCS11 support (regardless of policy)? */
     num_suites = ssl3_config_match_init(ss);
     if (!num_suites)
@@ -2807,8 +2944,8 @@ ssl3_SendClientHello(sslSocket *ss)
     length = sizeof(SSL3ProtocolVersion) + SSL3_RANDOM_LENGTH +
 	1 + ((sid == NULL) ? 0 : sid->u.ssl3.sessionIDLength) +
 	2 + num_suites*sizeof(ssl3CipherSuite) +
-	1 + compressionMethodsCount;
-
+	1 + compressionMethodsCount + total_exten_len;
+	
     rv = ssl3_AppendHandshakeHeader(ss, client_hello, length);
     if (rv != SECSuccess) {
 	return rv;	/* err set by ssl3_AppendHandshake* */
@@ -2880,6 +3017,24 @@ ssl3_SendClientHello(sslSocket *ss)
 	    return rv;	/* err set by ssl3_AppendHandshake* */
 	}
     }
+
+	/* Classilla issue 219 */
+    if (total_exten_len) {
+		PRUint32 maxBytes = total_exten_len - 2;
+		PRInt32  extLen;
+
+		rv = ssl3_AppendHandshakeNumber(ss, maxBytes, 2);
+		if (rv != SECSuccess) {
+	    	return rv;	/* err set by AppendHandshake. */
+		}
+
+		extLen = ssl3_CallHelloExtensionSenders(ss, PR_TRUE, maxBytes, NULL);
+		if (extLen < 0) {
+	    	return SECFailure;
+		}
+		maxBytes -= extLen;
+		PORT_Assert(!maxBytes);
+    } // end issue
 
     rv = ssl3_FlushHandshake(ss, 0);
     if (rv != SECSuccess) {
@@ -4109,9 +4264,30 @@ ssl3_HandleServerHello(sslSocket *ss, SSL3Opaque *b, PRUint32 length)
     }
     ss->ssl3->hs.compression = (SSL3CompressionMethod)temp;
 
+#if(0)
     if (length != 0) {	/* malformed */
 	goto alert_loser;
     }
+#else
+	/* Classilla issue 219. Handle extensions in the server response. */
+	
+    /* Note that if !isTLS && length != 0, we do NOT goto alert_loser.
+     * There are some old SSL 3.0 implementations that do send stuff
+     * after the end of the server hello, and we deliberately ignore
+     * such stuff in the interest of maximal interoperability (being
+     * "generous in what you accept").
+     */
+    if (isTLS && length != 0) {
+		SECItem extensions;
+		rv = ssl3_ConsumeHandshakeVariable(ss, &extensions, 2, &b, &length);
+		if (rv != SECSuccess || length != 0)
+	    	goto alert_loser;
+	    /* // NYI, we just consume these.
+		rv = ssl3_HandleHelloExtensions(ss, &extensions.data, &extensions.len);
+		if (rv != SECSuccess)
+	    	goto alert_loser; */
+    }
+#endif
 
     /* Any errors after this point are not "malformed" errors. */
     desc    = handshake_failure;
@@ -5065,6 +5241,23 @@ ssl3_HandleClientHello(sslSocket *ss, SSL3Opaque *b, PRUint32 length)
      * Non-zero length means that some new protocol revision has extended
      * the client hello message.
      */
+    /* Handle TLS hello extensions, for SSL3 & TLS. Classilla issue 219 (from bug 226271) */
+    if (length) {
+		/* Get length of hello extensions */
+		PRInt32 extension_length;
+		extension_length = ssl3_ConsumeHandshakeNumber(ss, 2, &b, &length);
+        if (extension_length < 0) {
+	    	goto loser;				/* alert already sent */
+		}
+		if (extension_length != length) {
+	    	ssl3_DecodeError(ss);		/* send alert */
+	    	goto loser;
+    	}
+		rv = ssl3_HandleClientHelloExtensions(ss, &b, &length);
+		if (rv != SECSuccess) {
+	    	goto loser;		/* malformed */
+		}
+    } // end issue
 
     desc = handshake_failure;
 
@@ -5581,7 +5774,9 @@ ssl3_SendServerHello(sslSocket *ss)
 {
     sslSessionID *sid;
     SECStatus     rv;
+    PRUint32      maxBytes = 65535;
     PRUint32      length;
+    PRInt32       extensions_len = 0;
 
     SSL_TRC(3, ("%d: SSL3[%d]: send server_hello handshake", SSL_GETPID(),
 		ss->fd));
@@ -5596,9 +5791,15 @@ ssl3_SendServerHello(sslSocket *ss)
     }
 
     sid = ss->sec.ci.sid;
+
+    extensions_len = ssl3_CallHelloExtensionSenders(ss, PR_FALSE, maxBytes,
+					       &ss->serverExtensionSenders[0]);
+    if (extensions_len > 0)
+    	extensions_len += 2; /* Add sizeof total extension length */
+
     length = sizeof(SSL3ProtocolVersion) + SSL3_RANDOM_LENGTH + 1 +
              ((sid == NULL) ? 0: SSL3_SESSIONID_BYTES) +
-	     sizeof(ssl3CipherSuite) + 1;
+	     sizeof(ssl3CipherSuite) + 1 + extensions_len;
     rv = ssl3_AppendHandshakeHeader(ss, server_hello, length);
     if (rv != SECSuccess) {
 	return rv;	/* err set by AppendHandshake. */
@@ -5635,6 +5836,22 @@ ssl3_SendServerHello(sslSocket *ss)
     rv = ssl3_AppendHandshakeNumber(ss, ss->ssl3->hs.compression, 1);
     if (rv != SECSuccess) {
 	return rv;	/* err set by AppendHandshake. */
+    }
+    if (extensions_len) {
+		PRInt32 sent_len;
+
+    	extensions_len -= 2;
+		rv = ssl3_AppendHandshakeNumber(ss, extensions_len, 2);
+		if (rv != SECSuccess) 
+	    	return rv;	/* err set by ssl3_SetupPendingCipherSpec */
+		sent_len = ssl3_CallHelloExtensionSenders(ss, PR_TRUE, extensions_len,
+					   &ss->serverExtensionSenders[0]);
+        PORT_Assert(sent_len == extensions_len);
+		if (sent_len != extensions_len) {
+	    	if (sent_len >= 0)
+	    		PORT_SetError(SEC_ERROR_LIBRARY_FAILURE);
+	    	return SECFailure;
+		}
     }
     rv = ssl3_SetupPendingCipherSpec(ss, ss->ssl3);
     if (rv != SECSuccess) {
@@ -7284,6 +7501,8 @@ ssl3_HandleHandshakeMessage(sslSocket *ss, SSL3Opaque *b, PRUint32 length)
 	}
 	rv = ssl3_HandleClientKeyExchange(ss, b, length);
 	break;
+	case new_session_ticket: // Currently silently accepted.
+	break;
     case finished:
         rv = ssl3_HandleFinished(ss, b, length, &hashes);
 	break;
@@ -8064,6 +8283,215 @@ ssl3_DestroySSL3Info(ssl3State *ssl3)
     ssl3_DestroyCipherSpec(&ssl3->specs[1]);
 
     PORT_Free(ssl3);
+}
+
+/* Support for SNI (moved from ssl3ecc.c in bug 226271) in Classilla issue 219. */
+/* Format an SNI extension, using the name from the socket's URL,
+ * unless that name is a dotted decimal string. Also handles dummy tickets, see below.
+ */
+PRInt32 
+ssl3_SendServerNameIndicationExtension( // ssl3_SendServerNameXtn in Mozilla 1.8.1
+			sslSocket * ss,
+			PRBool      append,
+			PRUint32    maxBytes)
+{
+    PRUint32 len, span;
+    
+    /* must have a hostname */
+    if (!ss || !ss->url || !ss->url[0])
+    	return 0;
+    /* must have at lest one character other than [0-9\.] */
+    len  = PORT_Strlen(ss->url);
+    span = strspn(ss->url, "0123456789.");
+    if (len == span) {
+    	/* is a dotted decimal IP address */
+	return 0;
+    }
+    if (append) {// && maxBytes >= len + 13) { // this never fails, no point in checking
+	SECStatus rv;
+	
+	/* hex dump for transmitting bruce: "00 00|00 0a|00 08|00|00 05 62 72 75 63 65" */
+	
+	/* extension_type */
+	rv = ssl3_AppendHandshakeNumber(ss,       0, 2); 
+	if (rv != SECSuccess) return -1;
+	/* length of extension_data */
+	rv = ssl3_AppendHandshakeNumber(ss, len + 5, 2); 
+	if (rv != SECSuccess) return -1;
+	/* length of server_name_list */
+	rv = ssl3_AppendHandshakeNumber(ss, len + 3, 2);
+	if (rv != SECSuccess) return -1;
+	/* Name Type (host_name) */
+	rv = ssl3_AppendHandshake(ss,       "\0",    1);
+	if (rv != SECSuccess) return -1;
+	/* HostName (length and value) */
+	rv = ssl3_AppendHandshakeVariable(ss, (unsigned char *)ss->url, len, 2);
+	if (rv != SECSuccess) return -1;
+
+#if(0)	
+	/* Strictly speaking, we have to handle tickets as well, even though we don't
+	   support them. Just send a dummy one. If we omit this, servers reject the SNI
+	   even though this is not part of that RFC. */
+	/* extension_type */
+	rv = ssl3_AppendHandshakeNumber(ss, 35, 2);
+	if (rv != SECSuccess) return -1;
+	/* "Fahrscheine, bitte." "Weg." */
+	rv = ssl3_AppendHandshakeNumber(ss, 0, 2);
+	if (rv != SECSuccess) return -1;
+#endif
+    }
+    if (!ss->sec.isServer) ss->advertisesSNI = PR_TRUE;
+    return len + 11; //15;
+}
+
+/* handle an incoming SNI extension, by ignoring it. */
+SECStatus
+ssl3_HandleServerNameIndicationExtension(sslSocket * ss, PRUint16 ex_type, 
+                                         SECItem *data)
+{
+    /* For now, we ignore this, as if we didn't understand it. :-)  */
+    return SECSuccess;
+}
+
+/* WARNING: THESE HANDLER TABLES ARE NOT ACTUALLY IMPLEMENTED YET IN CLASSILLA */
+
+/* Table of handlers for received TLS hello extensions, one per extension.
+ * In the second generation, this table will be dynamic, and functions
+ * will be registered here.
+ */
+static const ssl3HelloExtensionHandler handlers[] = {
+    {  0, &ssl3_HandleServerNameIndicationExtension    },
+    /* ECC handlers will be added here */
+    { -1, NULL }
+};
+
+/* Table of functions to format TLS hello extensions, one per extension.
+ * This static table is for the formatting of client hello extensions.
+ * The server's table of hello senders is dynamic, in the socket struct,
+ * and sender functions are registered there.
+ */
+static const ssl3HelloExtensionSender clientHelloSenders[] = {
+    {  0, &ssl3_SendServerNameIndicationExtension    },
+    /* ECC senders will be added here */
+    { -1, NULL }
+};
+
+/* go through hello extensions in buffer "b".
+ * For each one, find the extension handler in the table above, and 
+ * if present, invoke that handler.  
+ * ignore any externsions with unknown extensions types.
+ */
+SECStatus 
+ssl3_HandleClientHelloExtensions(sslSocket *ss, 
+                                 SSL3Opaque **b, 
+				 PRUint32 *length) // XXX. In this version, this is essentially a no-op.
+{
+    while (*length) {
+	const ssl3HelloExtensionHandler * handler;
+	SECStatus rv;
+	PRInt32   extension_type;
+	SECItem   extension_data;
+
+	/* Get the extension's type field */
+	extension_type = ssl3_ConsumeHandshakeNumber(ss, 2, b, length);
+	if (extension_type < 0)  /* failure to decode extension_type */
+	    return SECFailure;   /* alert already sent */
+
+	/* get the data for this extension, so we can pass it or skip it. */
+	rv = ssl3_ConsumeHandshakeVariable(ss, &extension_data, 2, b, length);
+	if (rv != SECSuccess)
+	    return rv;
+
+#if(0)
+	/* find extension_type is table of Client Hello Extension Handlers */
+	for (handler = handlers; handler->ex_type >= 0; handler++) {
+	    if (handler->ex_type == extension_type)
+	        break;
+	}
+
+	/* if found,  Call this handler */
+	if (handler->ex_type == extension_type) {
+	    rv = (*handler->ex_handler)(ss, (PRUint16)extension_type, 
+	                                             &extension_data);
+	    /* Ignore this result */
+	    /* Essentially, treat all bad extensions as unrecognized types. */
+	}
+#else
+	/* For debugging simplicity, call directly. */
+	if (extension_type == 0) {
+		rv = ssl3_HandleServerNameIndicationExtension(ss, (PRUint16)extension_type,
+			&extension_data);
+		if (rv != SECSuccess)
+			return rv;
+	}
+	/* Others are silently ignored. */
+#endif
+	
+    }
+    return SECSuccess;
+}
+
+/* Add a callback function to the table of senders of server hello extensions.
+ */
+SECStatus 
+ssl3_RegisterServerHelloExtensionSender(sslSocket *ss, PRUint16 ex_type,
+				        ssl3HelloExtensionSenderFunc cb)
+{
+#if(0)
+    int i;
+    ssl3HelloExtensionSender *sender = &ss->serverExtensionSenders[0];
+
+    for (i = 0; i < MAX_EXTENSION_SENDERS; ++i, ++sender) {
+        if (!sender->ex_sender) {
+	    sender->ex_type   = ex_type;
+	    sender->ex_sender = cb;
+	    return SECSuccess;
+	}
+	/* detect duplicate senders */
+	PORT_Assert(sender->ex_type != ex_type);
+	if (sender->ex_type == ex_type) {
+	    /* duplicate */
+	    break;
+	}
+    }
+    PORT_Assert(i < MAX_EXTENSION_SENDERS); /* table needs to grow */
+#else
+	PORT_Assert(0); // This routine is not currently supported.
+#endif
+    PORT_SetError(SEC_ERROR_LIBRARY_FAILURE);
+    return SECFailure;
+}
+
+/* call each of the extension senders and return the accumulated length */
+PRInt32
+ssl3_CallHelloExtensionSenders(sslSocket *ss, PRBool append, PRUint32 maxBytes,
+                               const ssl3HelloExtensionSender *sender)
+{
+    PRInt32 total_exten_len = 0;
+//return 0;   // XXX This doesn't work properly, we emit gibberish TLS 
+#if(0)
+	// For future expansion. Metrowerks does not seem to compile this properly,
+	// and only one thing ever gets called, so we just hardcode it.
+    int i;
+
+    if (!sender)
+    	sender = &clientHelloSenders[0];
+
+    for (i = 0; i < MAX_EXTENSION_SENDERS; ++i, ++sender) {
+	if (sender->ex_sender) {
+	    PRInt32 extLen = (*sender->ex_sender)(ss, append, maxBytes);
+	    if (extLen < 0)
+	    	return -1;
+	    maxBytes        -= extLen;
+	    total_exten_len += extLen;
+	}
+    }
+#else
+	// Call the extension directly.
+    total_exten_len = ssl3_SendServerNameIndicationExtension(ss, append, maxBytes);
+#endif
+
+    return total_exten_len;
 }
 
 /* End of ssl3con.c */

@@ -556,6 +556,8 @@ typedef CK_ULONG          CK_MECHANISM_TYPE;
 #define CKM_MD2_RSA_PKCS               0x00000004
 #define CKM_MD5_RSA_PKCS               0x00000005
 #define CKM_SHA1_RSA_PKCS              0x00000006
+/* Classilla issue 220 */
+#define CKM_SHA256_RSA_PKCS            0x00000040
 
 /* CKM_RIPEMD128_RSA_PKCS, CKM_RIPEMD160_RSA_PKCS & CKM_RSA_OAEP
  * are new for 2.10 */
@@ -638,6 +640,11 @@ typedef CK_ULONG          CK_MECHANISM_TYPE;
 /* CKM_SHA_1_HMAC and CKM_SHA_1_HMAC_GENERAL are new for v2.0 */
 #define CKM_SHA_1_HMAC                 0x00000221
 #define CKM_SHA_1_HMAC_GENERAL         0x00000222
+
+/* SHA-2 support in Classilla issue 220 */
+#define CKM_SHA256                     0x00000250
+#define CKM_SHA256_HMAC                0x00000251
+#define CKM_SHA256_HMAC_GENERAL        0x00000252
 
 /* CKM_RIPEMD128, CKM_RIPEMD128_HMAC, 
  * CKM_RIPEMD128_HMAC_GENERAL, CKM_RIPEMD160, CKM_RIPEMD160_HMAC,

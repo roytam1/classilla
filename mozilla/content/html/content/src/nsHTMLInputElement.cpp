@@ -1846,6 +1846,7 @@ static nsHTMLValue::EnumTable kInputTypeTable[] = {
   { "radio", NS_FORM_INPUT_RADIO },
   { "submit", NS_FORM_INPUT_SUBMIT },
   { "text", NS_FORM_INPUT_TEXT },
+  { "search", NS_FORM_INPUT_TEXT }, // fix Bing Classilla issue 223
   { 0 }
 };
 

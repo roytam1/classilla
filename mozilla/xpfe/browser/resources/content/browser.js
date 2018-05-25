@@ -89,6 +89,7 @@ ByblosTracer.prototype = {
 	originalListener : null, // observer sets this
 	started : false,
 	receivedData : null,
+	fullReplace : false,
 	buffer : null,
 	stele : null, // observer sets this
 	isCSS : false, // observer sets this
@@ -115,7 +116,7 @@ ByblosTracer.prototype = {
 
         // Copy received data as they come.
         var data = binaryInputStream.readBytes(count);
-        this.receivedData.push(data);
+        if (!this.fullReplace) this.receivedData.push(data);
 
 		// Defer! DEFER! But don't delete! Or something. (This is here for debugging)
 		//this.originalListener.onDataAvailable(request, context, stream, offset, count);
@@ -142,7 +143,7 @@ ByblosTracer.prototype = {
 			this.console.logStringMessage("Byblos failure: stele failed parsing the page: "+e);
 			did_rewrite = false;
 		}
-		
+				
 		// Break up the lump into 4K gobs to simulate a network read using a storage stream.
 		var storageStream = Cc["@mozilla.org/storagestream;1"]
 							.createInstance(Ci.nsIStorageStream);
@@ -235,50 +236,58 @@ var httpRequestObserver = { // watches for URIs it can intercept
             	return;
             this.locked = true; // don't try to rerun this.
             	
-           	// For CSS, the root we search is different.
-           	var rootDir = "resource://programdir/Byblos/";
+           	var rootDirs = [ "resource://programdir/" , "resource://documents/" ];
+           	var subPath = "Byblos/";
+            
            	if (mime == "text/css")
-           		rootDir += "%20CSS/";
+           		subPath += "%20CSS/";
 			
 			// Is this a site that has a stele available for translation? Let's try loading one.
 			// If not, try falling back.
 			var str = "";
-			var keepLooking = true;
-			var jsFile = host+".js";
-			var srcUrl = rootDir+jsFile;
-			while(!str && keepLooking) {
-				//consoleService.logStringMessage("trying "+srcUrl);
-				try {
-  					var channel=ioService.newChannel(srcUrl,null,null);
-  					var input=channel.open();
-  					scriptableStream.init(input);
-  					str=scriptableStream.read(input.available());
-  					scriptableStream.close();
-  					input.close();
-  				} catch(e) { }
-  				if (!str) {
-  					// Try a fallback. Substitute any existing ANY.. at the beginning with //, then
-  					// replace the first part of the domain name with ANY.. If that generates an
-  					// impossible filespec, give up.
-  					jsFile = jsFile.replace(/^ANY\.\./, '');
-  					jsFile = jsFile.replace(/^[^\.]*\./, 'ANY..');
-  					
-  					if (jsFile == "ANY..js" || 
-  						jsFile == ".js" ||
-  						jsFile == "..js" ||
-  						jsFile == "." ||
-  						jsFile == ".." ||
-  						jsFile == "")
+			var succeededUrl = "";
+			var basejsFile = host+".js";
+			var i = 0;
+			for (i=0; i<rootDirs.length; i++) {
+				var jsFile = basejsFile;
+				var srcUrl = rootDirs[i]+subPath+jsFile;
+				var keepLooking = true;
+				
+				while(!str && keepLooking) {
+					//consoleService.logStringMessage("trying "+srcUrl);
+					try {
+  						var channel=ioService.newChannel(srcUrl,null,null);
+  						var input=channel.open();
+  						scriptableStream.init(input);
+  						str=scriptableStream.read(input.available());
+  						scriptableStream.close();
+  						input.close();
+  					} catch(e) { }
+  					if (!str) {
+  						// Try a fallback. Substitute any existing ANY.. at the beginning with //, then
+  						// replace the first part of the domain name with ANY.. If that generates an
+  						// impossible filespec, give up.
+  						jsFile = jsFile.replace(/^ANY\.\./, '');
+  						jsFile = jsFile.replace(/^[^\.]*\./, 'ANY..');
+  						
+  						if (jsFile == "ANY..js" || 
+  							jsFile == ".js" ||
+  							jsFile == "..js" ||
+  							jsFile == "." ||
+  							jsFile == ".." ||
+  							jsFile == "")
+  							keepLooking = false;
+  						else
+  							srcUrl = rootDirs[i]+subPath+jsFile;
+  					} else {
+  						succeededUrl = srcUrl;
   						keepLooking = false;
-  					else
-  						srcUrl = rootDir+jsFile;
-  				} else {
-  					keepLooking = false;
+  					}
   				}
   			}
   			
-			// Couldn't load from the Byblos directory, so quietly fail.
-			if (!str) {
+			// Couldn't load from the Byblos directories, so quietly fail.
+			if (!str || !str.length) {
 				this.locked = false;
 				return;
 			}
@@ -289,13 +298,13 @@ var httpRequestObserver = { // watches for URIs it can intercept
 				var stelef = null;
 				eval("var stelef = "+str+";");
 				stele = stelef();
-			} catch(e) { consoleService.logStringMessage("Byblos failure parsing stele for "+host+" from "+srcUrl+": "+e); }
+			} catch(e) { consoleService.logStringMessage("Byblos failure parsing stele for "+host+" from "+succeededUrl+": "+e); }
 			if (!stele) {
 				this.locked = false;
 				return;
 			}
 			
-			consoleService.logStringMessage("Byblos info: got stele for "+host+" from "+srcUrl);
+			consoleService.logStringMessage("Byblos info: got stele for "+host+" from "+succeededUrl);
 			// See if the stele wants this URL.
 			if (!stele.wantURI(uri)) {
 				// Guess not.
@@ -307,6 +316,7 @@ var httpRequestObserver = { // watches for URIs it can intercept
 			// we must undo this immediately.
 			var tracer = new ByblosTracer();
 			tracer.isCSS = (mime == "text/css");
+			tracer.fullReplace = (stele.fullReplace && stele.fullReplace(uri));
 			tracer.console = consoleService;
 			tracer.stele = stele;
 			// Finally QI ourselves to nsITraceableChannel. Do NOT catch failure here; it should propagate.
@@ -419,6 +429,36 @@ var httpModifyObserver = { // watches for requests
 
 // Enable the observer.
 observerService.addObserver(httpModifyObserver, "http-on-modify-request", false);
+
+/*
+ *
+ * Other startup tasks for Classilla
+ *
+ */
+ 
+// Fix the UA if there is a template. Issue 216.
+// Keep this in sync with pref-ua.xul.
+
+if (Components && Components.classes && Components.interfaces) { // well, shee-et. we tried, son. we tried.
+  	// Get the preferences service
+    prefService = Components.classes["@mozilla.org/preferences-service;1"]
+                                     .getService(Components.interfaces.nsIPrefService);
+    if (prefService) {
+     	try {
+    		pref = prefService.getBranch(null);
+    		var k = pref.getCharPref("general.useragent.override_template");
+    		var l = pref.getCharPref("general.useragent.misc");
+    		//var lo = pref.getCharPref("general.useragent.locale"); // This doesn't work. Just use en-US for now.
+    		var lo = "en-US";
+    		l = "mimic; "+ l;
+    		k = k.replace("%s", l);
+    		k = k.replace("%l", lo);
+    		pref.setCharPref("general.useragent.override", k);
+     	} catch(e) {
+    		// damn it
+     	}
+    }
+}
 
 /*
  *

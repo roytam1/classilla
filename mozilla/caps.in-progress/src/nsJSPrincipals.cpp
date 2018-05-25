@@ -35,7 +35,11 @@
  * the terms of any one of the NPL, the GPL or the LGPL.
  *
  * ***** END LICENSE BLOCK ***** */
-#include "nsCodebasePrincipal.h"
+
+#include "nsString.h"
+#include "nsIObjectOutputStream.h"
+#include "nsIObjectInputStream.h"
+
 #include "nsJSPrincipals.h"
 #include "plstr.h"
 #include "nsXPIDLString.h"
@@ -138,7 +142,7 @@ nsTranscodeJSPrincipals(JSXDRState *xdr, JSPrincipals **jsprinp)
                     nsMemory::Free(olddata);
                     ::JS_XDRMemSetData(xdr, data, size);
 
-                    prin->GetJSPrincipals(jsprinp);
+                    prin->GetJsPrincipals(jsprinp);
                 }
             }
         }
@@ -185,10 +189,12 @@ nsJSPrincipals::nsJSPrincipals()
 nsresult
 nsJSPrincipals::Init(char *aCodebase)
 {
-    //codebase = aCodebase;
-    codebase = PL_strdup(aCodebase);
-    if (!codebase)
-    	return NS_ERROR_OUT_OF_MEMORY;
+    if (codebase)
+    {
+        NS_ERROR("Init called twice!");
+        return NS_ERROR_UNEXPECTED;
+    }
+    codebase = aCodebase;
     return NS_OK;
 }
 

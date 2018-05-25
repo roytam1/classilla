@@ -235,6 +235,35 @@ struct FREEBLVectorStr {
  SECStatus (* p_SHA1_Flatten)(SHA1Context *cx,unsigned char *space);
 
  SHA1Context * (* p_SHA1_Resurrect)(unsigned char *space, void *arg);
+ 
+ /* Classilla issue 220 */
+ 
+ SECStatus (* p_SHA256_Hash)(unsigned char *dest, const char *src);
+
+ SECStatus (* p_SHA256_HashBuf)(unsigned char *dest, const unsigned char *src,
+			      uint32 src_length);
+
+ SHA256Context *(* p_SHA256_NewContext)(void);
+
+ void (* p_SHA256_DestroyContext)(SHA256Context *cx, PRBool freeit);
+
+ void (* p_SHA256_Begin)(SHA256Context *cx);
+
+ void (* p_SHA256_Update)(SHA256Context *cx, const unsigned char *input,
+			unsigned int inputLen);
+
+ void (* p_SHA256_End)(SHA256Context *cx, unsigned char *digest,
+		     unsigned int *digestLen, unsigned int maxDigestLen);
+
+ void (* p_SHA256_TraceState)(SHA256Context *cx);
+
+ unsigned int (* p_SHA256_FlattenSize)(SHA256Context *cx);
+
+ SECStatus (* p_SHA256_Flatten)(SHA256Context *cx,unsigned char *space);
+
+ SHA256Context * (* p_SHA256_Resurrect)(unsigned char *space, void *arg);
+ 
+ /* -- */
 
  SECStatus (* p_RNG_RNGInit)(void);
 

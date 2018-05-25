@@ -701,6 +701,7 @@ nsHandleSSLError(nsNSSSocketInfo *socketInfo, PRInt32 err)
     nssComponent->PIPBundleFormatStringFromName(NS_LITERAL_STRING("PeersCertBadSignature").get(), 
                                                 params, 1, 
                                                 getter_Copies(formattedString));
+    break;
 
   //A generic error handler for peer cert
   case SEC_ERROR_UNKNOWN_CERT:
@@ -1309,6 +1310,7 @@ nsContinueDespiteCertError(nsNSSSocketInfo  *infoObject,
   NS_ASSERTION(peerCert, "Got nsnull cert back from nsNSSCertificate");
   switch (error) {
   case SEC_ERROR_INADEQUATE_KEY_USAGE: // Classilla issue 156
+  case SEC_ERROR_OID_UNKNOWN: // Classilla issue 218
   case SEC_ERROR_UNKNOWN_ISSUER:
   case SEC_ERROR_CA_CERT_INVALID:
   case SEC_ERROR_UNTRUSTED_ISSUER:

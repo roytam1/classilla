@@ -707,6 +707,22 @@ extern SECStatus SHA1_Flatten(SHA1Context *cx,unsigned char *space);
  */
 extern SHA1Context * SHA1_Resurrect(unsigned char *space, void *arg);
 
+/* For SHA-2, there is a block for each hash size. Classilla issue 220 */
+extern SECStatus SHA256_Hash(unsigned char *dest, const char *src);
+extern SECStatus SHA256_HashBuf(unsigned char *dest, const unsigned char *src,
+			      uint32 src_length);
+extern SHA256Context *SHA256_NewContext(void);
+extern void SHA256_DestroyContext(SHA256Context *cx, PRBool freeit);
+extern void SHA256_Begin(SHA256Context *cx);
+extern void SHA256_Update(SHA256Context *cx, const unsigned char *input,
+			unsigned int inputLen);
+extern void SHA256_End(SHA256Context *cx, unsigned char *digest,
+		     unsigned int *digestLen, unsigned int maxDigestLen);
+extern void SHA256_TraceState(SHA256Context *cx);
+extern unsigned int SHA256_FlattenSize(SHA256Context *cx);
+extern SECStatus SHA256_Flatten(SHA256Context *cx,unsigned char *space);
+extern SHA256Context * SHA256_Resurrect(unsigned char *space, void *arg);
+
 /*
 ** Pseudo Random Number Generation.  FIPS compliance desirable.
 */

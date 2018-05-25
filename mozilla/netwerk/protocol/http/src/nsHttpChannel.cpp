@@ -158,6 +158,7 @@ nsHttpChannel::nsHttpChannel()
     , mAllowPipelining(PR_TRUE)
     , mCachedContentIsValid(PR_FALSE)
     , mCachedContentIsPartial(PR_FALSE)
+    , mProxyAuthPending(PR_FALSE) // issue 213
     , mResponseHeadersModified(PR_FALSE)
     , mCanceled(PR_FALSE)
     , mUploadStreamHasHeaders(PR_FALSE)

@@ -1,6 +1,6 @@
 pref("general.useragent.security",       "U");
 
-pref("security.enable_ssl2",             true);
+pref("security.enable_ssl2",             false);
 pref("security.enable_ssl3",             true);
 pref("security.enable_tls",		 true);
 

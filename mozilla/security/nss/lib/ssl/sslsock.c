@@ -227,6 +227,7 @@ ssl_DupSocket(sslSocket *os)
 
 	ss->peerID             = !os->peerID ? NULL : PORT_Strdup(os->peerID);
 	ss->url                = !os->url    ? NULL : PORT_Strdup(os->url);
+	ss->advertisesSNI	   = os->advertisesSNI;
 
 	ss->ops      = os->ops;
 	ss->rTimeout = os->rTimeout;
@@ -1858,6 +1859,7 @@ ssl_NewSocket(void)
         ss->sizeCipherSpecs    = 0;  /* produced lazily */
         ss->preferredCipher    = NULL;
         ss->url                = NULL;
+        ss->advertisesSNI      = PR_FALSE;
 
 	for (i=kt_null; i < kt_kea_size; i++) {
 	    sslServerCerts * sc = ss->serverCerts + i;

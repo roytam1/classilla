@@ -126,7 +126,14 @@ typedef enum {
     insufficient_security   = 71,
     internal_error          = 80,
     user_canceled           = 90,
-    no_renegotiation        = 100
+    no_renegotiation        = 100,
+
+/* Alerts for client hello extensions */ /* Classilla issue 219 */
+    unsupported_extension           = 110,
+    certificate_unobtainable        = 111,
+    unrecognized_name               = 112,
+    bad_certificate_status_response = 113,
+    bad_certificate_hash_value      = 114
 
 } SSL3AlertDescription;
 
@@ -139,6 +146,7 @@ typedef enum {
     hello_request	= 0, 
     client_hello	= 1, 
     server_hello	= 2,
+    new_session_ticket = 4, // Needed because SNI expects this support, even though we ignore it.
     certificate 	= 11, 
     server_key_exchange = 12,
     certificate_request	= 13, 

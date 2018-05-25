@@ -112,6 +112,13 @@ CERT_VerifySignedDataWithPublicKey(CERTSignedData *sd,
     DER_ConvertBitString(&sig);
 
     algid = SECOID_GetAlgorithmTag(&sd->signatureAlgorithm);
+    
+    /* Handle situation of SEC_OID_UNKNOWN as a recoverable situation. Classilla issue 218 */
+    if (algid == SEC_OID_UNKNOWN) {
+    	PORT_SetError(SEC_ERROR_OID_UNKNOWN);
+    	return(SECFailure);
+    }
+    	
     rv = VFY_VerifyData(sd->data.data, sd->data.len, pubKey, &sig,
 			algid, wincx);
 
@@ -787,6 +794,8 @@ cert_VerifyCertChain(CERTCertDBHandle *handle, CERTCertificate *cert,
 		if ( PORT_GetError() == SEC_ERROR_EXPIRED_CERTIFICATE ) {
 		    PORT_SetError(SEC_ERROR_EXPIRED_ISSUER_CERTIFICATE);
 		    LOG_ERROR_OR_EXIT(log,issuerCert,count+1,0);
+		} else if (PORT_GetError() == SEC_ERROR_OID_UNKNOWN) { // Classilla issue 218
+			LOG_ERROR_OR_EXIT(log,issuerCert,count+1,0);
 		} else {
 		    PORT_SetError(SEC_ERROR_BAD_SIGNATURE);
 		    LOG_ERROR_OR_EXIT(log,subjectCert,count,0);

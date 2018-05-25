@@ -17,6 +17,8 @@ toolkit.jar:
         content/global/imapc_sluggo.xhtml           (resources/content/imapc_sluggo.xhtml)
         content/global/imapc.png                    (resources/content/imapc.png)
         content/global/onecpu.png                   (resources/content/onecpu.png)
+        content/global/onecpu_sluggo.xhtml			(resources/content/onecpu_sluggo.xhtml)
+        content/global/nosejob.png					(resources/content/nosejob.png)
         content/global/about.xul                    (resources/content/about.xul) 
         content/global/about.js                     (resources/content/about.js) 
         content/global/config.xul                   (resources/content/config.xul) 

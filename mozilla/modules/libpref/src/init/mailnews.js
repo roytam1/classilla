@@ -283,7 +283,7 @@ pref("mailnews.confirm.moveFoldersToTrash", true);
 
 pref("mailnews.reuse_message_window", true);
 
-pref("mailnews.start_page.url", "chrome://messenger-region/locale/region.properties");
+pref("mailnews.start_page.url", "about:blank");
 pref("mailnews.start_page.enabled", true);
 
 pref("mailnews.remember_selected_message", true);

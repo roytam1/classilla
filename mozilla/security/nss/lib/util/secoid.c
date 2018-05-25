@@ -50,6 +50,7 @@
 
 #define NISTALGS    USGOV, 3, 4
 #define AES         NISTALGS, 1
+#define SHAXXX      NISTALGS, 2
 
 /**
  ** The Netscape OID space is allocated by Terry Hayes.  If you need
@@ -413,6 +414,10 @@ CONST_OID aes256_CBC[] 				= { AES, 42 };
 CONST_OID aes256_OFB[] 				= { AES, 43 };
 CONST_OID aes256_CFB[] 				= { AES, 44 };
 #endif
+
+/* SHA-2 cert support in Classilla 9.3.3, Classilla issue 220 */
+CONST_OID sha256[]                       = { SHAXXX, 1 };
+CONST_OID pkcs1SHA256WithRSAEncryption[] = { PKCS1, 11 };
 
 #define OI(x) { siDEROID, (unsigned char *)x, sizeof x }
 #ifndef SECOID_NO_STRINGS
@@ -1012,6 +1017,12 @@ const static SECOidData oids[] = {
     OD( ms_smimeEncryptionKeyPreference, SEC_OID_MS_SMIME_ENCRYPTION_KEY_PREFERENCE,
 	"Microsoft S/MIME Encryption Key Preference", 
 	CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+	
+	/* Classilla SHA-2 support */
+	OD( sha256, SEC_OID_SHA256, "SHA-256", CKM_SHA256, INVALID_CERT_EXTENSION),
+	OD( pkcs1SHA256WithRSAEncryption, SEC_OID_PKCS1_SHA256_WITH_RSA_ENCRYPTION,
+	"PKCS #1 SHA-256 With RSA Encryption", CKM_SHA256_RSA_PKCS,
+	INVALID_CERT_EXTENSION ),
 };
 
 /*

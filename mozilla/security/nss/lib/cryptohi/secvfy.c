@@ -181,6 +181,9 @@ decodeSigAlg(SECOidTag alg, SECOidTag *hashalg)
       case SEC_OID_ISO_SHA_WITH_RSA_SIGNATURE:
         *hashalg = SEC_OID_SHA1;
 	return SECSuccess;
+	  case SEC_OID_PKCS1_SHA256_WITH_RSA_ENCRYPTION: // issue 220
+	    *hashalg = SEC_OID_SHA256;
+	return SECSuccess;
       /* what about normal DSA? */
       case SEC_OID_ANSIX9_DSA_SIGNATURE_WITH_SHA1_DIGEST:
       case SEC_OID_BOGUS_DSA_SIGNATURE_WITH_SHA1_DIGEST:
@@ -244,6 +247,7 @@ VFY_CreateContext(SECKEYPublicKey *key, SECItem *sig, SECOidTag algid,
 	  case SEC_OID_MD2:
 	  case SEC_OID_MD5:
 	  case SEC_OID_SHA1:
+	  case SEC_OID_SHA256: // issue 220
 	    break;
 	  default:
 	    PORT_SetError(SEC_ERROR_INVALID_ALGORITHM);
@@ -291,6 +295,9 @@ VFY_Begin(VFYContext *cx)
 	break;
       case SEC_OID_SHA1:
 	cx->hashobj = &SECHashObjects[HASH_AlgSHA1];
+	break;
+	  case SEC_OID_SHA256:
+	cx->hashobj = &SECHashObjects[HASH_AlgSHA256]; // issue 220
 	break;
       default:
 	PORT_SetError(SEC_ERROR_INVALID_ALGORITHM);

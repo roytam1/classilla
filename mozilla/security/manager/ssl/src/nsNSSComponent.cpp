@@ -1170,6 +1170,7 @@ nsNSSComponent::InitializeNSS(PRBool showWarningBox)
       PRBool enabled;
       mPref->GetBoolPref("security.enable_ssl2", &enabled);
       SSL_OptionSetDefault(SSL_ENABLE_SSL2, enabled);
+      SSL_OptionSetDefault(SSL_V2_COMPATIBLE_HELLO, enabled); // paranoia from bug 284450
       mPref->GetBoolPref("security.enable_ssl3", &enabled);
       SSL_OptionSetDefault(SSL_ENABLE_SSL3, enabled);
       mPref->GetBoolPref("security.enable_tls", &enabled);
@@ -1514,6 +1515,7 @@ nsNSSComponent::PrefChanged(const char* prefName)
   if (!nsCRT::strcmp(prefName, "security.enable_ssl2")) {
     mPref->GetBoolPref("security.enable_ssl2", &enabled);
     SSL_OptionSetDefault(SSL_ENABLE_SSL2, enabled);
+    SSL_OptionSetDefault(SSL_V2_COMPATIBLE_HELLO, enabled); // paranoia from bug 284450
   } else if (!nsCRT::strcmp(prefName, "security.enable_ssl3")) {
     mPref->GetBoolPref("security.enable_ssl3", &enabled);
     SSL_OptionSetDefault(SSL_ENABLE_SSL3, enabled);

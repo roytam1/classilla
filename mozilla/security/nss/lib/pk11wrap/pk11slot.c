@@ -76,6 +76,7 @@ PK11DefaultArrayEntry PK11_DefaultArray[] = {
 	{ "AES", SECMOD_AES_FLAG, CKM_AES_CBC },
 	{ "RC5", SECMOD_RC5_FLAG, CKM_RC5_CBC },
 	{ "SHA-1", SECMOD_SHA1_FLAG, CKM_SHA_1 },
+	{ "SHA-256", SECMOD_SHA256_FLAG, CKM_SHA256 },
 	{ "MD5", SECMOD_MD5_FLAG, CKM_MD5 },
 	{ "MD2", SECMOD_MD2_FLAG, CKM_MD2 },
 	{ "SSL", SECMOD_SSL_FLAG, CKM_SSL3_PRE_MASTER_KEY_GEN },
@@ -96,6 +97,7 @@ static PK11SlotList pk11_aesSlotList,
     pk11_rc2SlotList,
     pk11_rc5SlotList,
     pk11_sha1SlotList,
+    pk11_sha256SlotList, // issue 220
     pk11_md5SlotList,
     pk11_md2SlotList,
     pk11_rsaSlotList,
@@ -1235,6 +1237,7 @@ PK11_InitSlotLists(void)
     pk11_initSlotList(&pk11_md5SlotList);
     pk11_initSlotList(&pk11_md2SlotList);
     pk11_initSlotList(&pk11_sha1SlotList);
+    pk11_initSlotList(&pk11_sha256SlotList); // issue 220
     pk11_initSlotList(&pk11_rsaSlotList);
     pk11_initSlotList(&pk11_dsaSlotList);
     pk11_initSlotList(&pk11_dhSlotList);
@@ -1256,6 +1259,7 @@ PK11_DestroySlotLists(void)
     pk11_freeSlotList(&pk11_md5SlotList);
     pk11_freeSlotList(&pk11_md2SlotList);
     pk11_freeSlotList(&pk11_sha1SlotList);
+    pk11_freeSlotList(&pk11_sha256SlotList); // issue 220
     pk11_freeSlotList(&pk11_rsaSlotList);
     pk11_freeSlotList(&pk11_dsaSlotList);
     pk11_freeSlotList(&pk11_dhSlotList);
@@ -1290,6 +1294,8 @@ PK11_GetSlotList(CK_MECHANISM_TYPE type)
 	return &pk11_rc5SlotList;
     case CKM_SHA_1:
 	return &pk11_sha1SlotList;
+	case CKM_SHA256:
+	return &pk11_sha256SlotList; // issue 220
     case CKM_MD5:
 	return &pk11_md5SlotList;
     case CKM_MD2:

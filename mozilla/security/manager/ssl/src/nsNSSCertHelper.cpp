@@ -214,6 +214,12 @@ GetOIDText(SECItem *oid, nsINSSComponent *nssComponent, nsString &text)
     rv = nssComponent->GetPIPNSSBundleString(NS_LITERAL_STRING("CertDumpSHA1WithRSA").get(),
                                              text);
     break;
+  case SEC_OID_PKCS1_SHA256_WITH_RSA_ENCRYPTION: // issue 220
+    /* rv = nssComponent->GetPIPNSSBundleString(NS_LITERAL_STRING("CertDumpSHA1WithRSA").get(),
+                                             text); */
+    text.Assign(NS_LITERAL_STRING("PKCS #1 SHA-256 With RSA Encryption")); // temporary until locales catch up
+    break;
+  
   case SEC_OID_AVA_COUNTRY_NAME:
     rv = nssComponent->GetPIPNSSBundleString(NS_LITERAL_STRING("CertDumpAVACountry").get(),
                                              text);

@@ -1055,6 +1055,7 @@ CK_RV NSC_DigestInit(CK_SESSION_HANDLE hSession,
     MD2Context *md2_context;
     MD5Context *md5_context;
     SHA1Context *sha1_context;
+    SHA256Context *sha256_context;
     CK_RV crv = CKR_OK;
 
     session = pk11_SessionFromHandle(hSession);
@@ -1111,7 +1112,22 @@ CK_RV NSC_DigestInit(CK_SESSION_HANDLE hSession,
 	SHA1_Begin(sha1_context);
 	context->maxLen = SHA1_LENGTH;
 	break;
-    default:
+    case CKM_SHA256: /* Classilla issue 220 */
+	sha256_context = SHA256_NewContext();
+	context->cipherInfo = (void *)sha256_context;
+	context->cipherInfoLen = SHA256_FlattenSize(sha256_context);
+	context->currentMech = CKM_SHA256;
+        if (context->cipherInfo == NULL) {
+	    crv= CKR_HOST_MEMORY;
+	    break;
+	}
+	context->hashUpdate = (PK11Hash) SHA256_Update;
+	context->end = (PK11End) SHA256_End;
+	context->destroy = (PK11Destroy) SHA256_DestroyContext;
+	SHA256_Begin(sha256_context);
+	context->maxLen = SHA256_LENGTH;
+	break;
+default:
 	crv = CKR_MECHANISM_INVALID;
 	break;
     }

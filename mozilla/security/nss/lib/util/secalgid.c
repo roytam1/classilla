@@ -88,11 +88,13 @@ SECOID_SetAlgorithmID(PRArenaPool *arena, SECAlgorithmID *id, SECOidTag which,
       case SEC_OID_MD4:
       case SEC_OID_MD5:
       case SEC_OID_SHA1:
+      case SEC_OID_SHA256: // issue 220
       case SEC_OID_PKCS1_RSA_ENCRYPTION:
       case SEC_OID_PKCS1_MD2_WITH_RSA_ENCRYPTION:
       case SEC_OID_PKCS1_MD4_WITH_RSA_ENCRYPTION:
       case SEC_OID_PKCS1_MD5_WITH_RSA_ENCRYPTION:
       case SEC_OID_PKCS1_SHA1_WITH_RSA_ENCRYPTION:
+      case SEC_OID_PKCS1_SHA256_WITH_RSA_ENCRYPTION: // issue 220
 	add_null_param = PR_TRUE;
 	break;
       default:

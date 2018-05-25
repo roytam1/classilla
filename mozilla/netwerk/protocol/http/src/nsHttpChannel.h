@@ -216,6 +216,7 @@ private:
     PRPackedBool                      mResponseHeadersModified;
     PRPackedBool                      mCanceled;
     PRPackedBool                      mUploadStreamHasHeaders;
+    PRPackedBool                      mProxyAuthPending; // issue 213
     PRPackedBool                      mTracingEnabled; // issue 170
 
     class nsContentEncodings : public nsISimpleEnumerator

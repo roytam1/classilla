@@ -295,6 +295,10 @@ typedef enum {
     SEC_OID_SDN702_DSA_SIGNATURE = 189,
 
     SEC_OID_MS_SMIME_ENCRYPTION_KEY_PREFERENCE = 190,
+    
+    /* New for Classilla 9.3.3 / issue 220 */
+    SEC_OID_SHA256 = 191,
+    SEC_OID_PKCS1_SHA256_WITH_RSA_ENCRYPTION = 192,
 
     SEC_OID_TOTAL
 } SECOidTag;

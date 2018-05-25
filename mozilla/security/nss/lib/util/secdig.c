@@ -102,6 +102,7 @@ SGN_CreateDigestInfo(SECOidTag algorithm, unsigned char *sig, unsigned len)
       case SEC_OID_MD2:
       case SEC_OID_MD5:
       case SEC_OID_SHA1:
+      case SEC_OID_SHA256: // issue 220
 	break;
       default:
 	PORT_SetError(SEC_ERROR_INVALID_ALGORITHM);
