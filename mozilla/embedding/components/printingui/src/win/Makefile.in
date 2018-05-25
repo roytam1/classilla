@@ -39,6 +39,7 @@ REQUIRES	= xpcom \
 		  webbrwsr \
 		  intl \
 		  pref \
+		  view \
 		  $(NULL)
 
 CPPSRCS		= \

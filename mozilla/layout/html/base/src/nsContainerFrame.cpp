@@ -605,7 +605,9 @@ SyncFrameViewGeometryDependentProperties(nsIPresContext*  aPresContext,
   PRBool hasClip = display->IsAbsolutelyPositioned() && (display->mClipFlags & NS_STYLE_CLIP_RECT);
   //PRBool hasOverflowClip = isBlockLevel && (display->mOverflow == NS_STYLE_OVERFLOW_HIDDEN);
   PRBool hasOverflowClip = isBlockLevel && (display->mOverflow == NS_STYLE_OVERFLOW_CLIP); // bug 69355
+#ifndef _MSC_VER
 #warning put height calc here maybe
+#endif
   if (hasClip || hasOverflowClip) {
     nsSize frameSize;
     aFrame->GetSize(frameSize);

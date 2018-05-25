@@ -47,6 +47,7 @@ REQUIRES	= xpcom \
 		  shistory \
 		  windowwatcher \
 		  webbrowserpersist \
+		  view \
 		  $(NULL)
 
 ifeq ($(OS_ARCH),WINNT)

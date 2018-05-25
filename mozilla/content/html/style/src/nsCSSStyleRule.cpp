@@ -1240,7 +1240,7 @@ public:
 //  NS_IMETHOD RemoveProperty(const nsAString& aPropertyName, 
 //                            nsAString& aReturn);
 
-  virtual nsresult GetParentRule(nsIDOMCSSRule **aParent); // bug 188803
+  NS_IMETHOD GetParentRule(nsIDOMCSSRule **aParent); // bug 188803
   virtual void DropReference(void);
   virtual nsresult GetCSSDeclaration(nsCSSDeclaration **aDecl,
                                      PRBool aAllocate);

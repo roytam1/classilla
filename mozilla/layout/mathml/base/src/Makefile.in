@@ -44,6 +44,7 @@ REQUIRES	= xpcom \
 		  webbrwsr \
 		  windowwatcher \
 		  pref \
+		  view \
 		  $(NULL)
 
 LOCAL_INCLUDES = \

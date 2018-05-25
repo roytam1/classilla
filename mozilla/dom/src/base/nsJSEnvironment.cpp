@@ -89,8 +89,10 @@
 #include "nsILiveConnectManager.h"
 
 // for Cmd-. ( see issue 123)
+#ifdef XP_MAC
 #include <Events.h>
 #include <ToolUtils.h>
+#endif
 
 const size_t gStackSize = 8192;
 
@@ -288,14 +290,18 @@ NS_ScriptErrorReporter(JSContext *cx,
   ::JS_ClearPendingException(cx);
 }
 
+#ifndef _MSC_VER
 #warning evaluate this for 9.3
+#endif
 // Classilla issue 2 and issue 123
 #define MAYBE_GC_BRANCH_COUNT_MASK 0x00000fff // 4095
 #define MAYBE_STOP_BRANCH_COUNT_MASK 0x003fffff
 
 // We get a chance to intercept JavaScript execution here. -- Cameron
 // Classilla issue 123
+#ifndef _MSC_VER
 #warning add me back in 9.3
+#endif
 JSBool JS_DLL_CALLBACK
 nsJSContext::DOMBranchCallback(JSContext *cx, JSScript *script)
 {
@@ -311,6 +317,7 @@ nsJSContext::DOMBranchCallback(JSContext *cx, JSScript *script)
   // Run the GC if we get this far.
   JS_MaybeGC(cx);
 
+#ifdef XP_MAC
   // If the user is asking for all-stop, then stop! Classilla issue 123
   // This is expensive to execute, so we don't always do it.
   KeyMap keymap;
@@ -360,6 +367,7 @@ nsJSContext::DOMBranchCallback(JSContext *cx, JSScript *script)
   	return JS_FALSE;
   }
   // end issue
+#endif
   
 
   // Filter out most of the calls to this callback that make it this far
@@ -385,7 +393,9 @@ nsJSContext::DOMBranchCallback(JSContext *cx, JSScript *script)
   ireq->GetInterface(NS_GET_IID(nsIPrompt), getter_AddRefs(prompt));
   NS_ENSURE_TRUE(prompt, JS_TRUE);
 
+#ifndef _MSC_VER
 #warning This really should be localized!
+#endif
   NS_NAMED_LITERAL_STRING(title, "Script Warning");
   NS_NAMED_MULTILINE_LITERAL_STRING(msg,
       NS_L("A script on this page is causing Classilla to ")

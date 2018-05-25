@@ -49,6 +49,7 @@ REQUIRES	= xpcom \
 		  unicharutil \
 		  imglib2 \
 		  locale \
+		  view \
 		  $(NULL)
 
 include $(DEPTH)/config/autoconf.mk

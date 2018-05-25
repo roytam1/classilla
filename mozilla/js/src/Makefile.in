@@ -88,6 +88,9 @@ CSRCS		= \
 		jsstr.c \
 		jsutil.c \
 		jsxdrapi.c \
+		jsiter.c \
+		jsxml.c \
+		jsinvoke.c \
 		prmjtime.c \
 		$(NULL)
 
@@ -122,6 +125,9 @@ EXPORTS		= \
 		jsnum.h \
 		jsobj.h \
 		jsopcode.tbl \
+		jsproto.tbl \
+		jsreops.tbl \
+		jskeyword.tbl \
 		jsopcode.h \
 		jsosdep.h \
 		jsotypes.h \

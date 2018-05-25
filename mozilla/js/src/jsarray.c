@@ -426,7 +426,9 @@ GetArrayElement(JSContext *cx, JSObject *obj, jsdouble index, JSBool *hole,
         *vp = JSVAL_VOID;
         goto out;
 #else
+#ifndef _MSC_VER
 #warning !!!KLUDGE ALERT!!! we are handling properties a la old JavaScript
+#endif
 		// We don't drop the property -- there's no property to drop.
 		goto gimmeprop;
 #endif

@@ -4256,7 +4256,9 @@ nsCSSDeclaration::GetValue(const nsAString& aProperty,
 // part 10 BIG PATCH
 // PATCH IS FIRST!
 #if(1)
+#ifndef _MSC_VER
 #warning we made a lot of mistakes transcribing this. check me again.
+#endif
 PRBool nsCSSDeclaration::AppendValueToString(nsCSSProperty aProperty, nsAString& aResult) const
 {
   nsCSSCompressedDataBlock *data = GetValueIsImportant(aProperty)
@@ -5344,7 +5346,9 @@ nsCSSDeclaration::GetValue(nsCSSProperty aProperty,
   
 // PATCH IN THIS PORTION IS FIRST!
 #if(1)
+#ifndef _MSC_VER
 #warning we made a lot of mistakes transcribing this patch too. check it again also.
+#endif
   // simple properties are easy.
   if (!nsCSSProps::IsShorthand(aProperty) &&
       aProperty != eCSSProperty_play_during) {

@@ -36,6 +36,7 @@ XPIDLSRCS =                                     \
 	nsIDOMMediaList.idl			\
 	nsIDOMStyleSheet.idl			\
 	nsIDOMStyleSheetList.idl		\
+	nsIDOMNSDocumentStyle.idl		\
 	$(NULL)
 
 include $(topsrcdir)/config/rules.mk

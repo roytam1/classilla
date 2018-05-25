@@ -48,6 +48,7 @@ REQUIRES	= xpcom \
 		  webbrwsr \
 		  chardet \
 		  windowwatcher \
+		  view \
 		  $(NULL)
 
 ifdef MOZ_PHOENIX

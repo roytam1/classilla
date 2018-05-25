@@ -87,11 +87,12 @@
 /*
  * Asserts to verify assumptions behind pn_ macros.
  */
+#ifndef _MSC_VER
 JS_STATIC_ASSERT(offsetof(JSParseNode, pn_u.name.atom) ==
                  offsetof(JSParseNode, pn_u.apair.atom));
 JS_STATIC_ASSERT(offsetof(JSParseNode, pn_u.name.slot) ==
                  offsetof(JSParseNode, pn_u.lexical.slot));
-
+#endif
 /*
  * JS parsers, from lowest to highest precedence.
  *

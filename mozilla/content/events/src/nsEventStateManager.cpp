@@ -332,6 +332,7 @@ nsEventStateManager::PreHandleEvent(nsIPresContext* aPresContext,
   NS_ASSERTION(aEvent, "aEvent is null.  this should never happen");
   if (!aEvent) return NS_ERROR_NULL_POINTER;
 
+    nsRect gb;
   switch (aEvent->message) {
   case NS_MOUSE_LEFT_BUTTON_DOWN:
 #ifndef XP_OS2
@@ -372,7 +373,6 @@ nsEventStateManager::PreHandleEvent(nsIPresContext* aPresContext,
     // If the event coordinate is within the bounds of the view,
     // then it's not really an exit --- we may have traversed
     // widget boundaries but we're still in our toplevel window.
-    nsRect gb;
     aView->GetBounds(gb);
     int px, py;
     aView->GetPosition(&px, &py);

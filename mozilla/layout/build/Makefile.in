@@ -65,6 +65,7 @@ REQUIRES	= xpcom \
 		  xul \
 		  xultmpl \
 		  lwbrk \
+		  view \
 		  $(NULL)
 
 CPPSRCS		= \

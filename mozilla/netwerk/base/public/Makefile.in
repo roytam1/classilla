@@ -87,6 +87,12 @@ XPIDLSRCS	= \
 		nsICachingChannel.idl \
 		nsIByteRangeRequest.idl \
 		nsIMultiPartChannel.idl \
+		nsIAsyncStreamCopier.idl \
+		nsIBufferedStreams.idl \
+		nsIInputStreamChannel.idl \
+		nsIInputStreamPump.idl \
+		nsIStreamTransportService.idl \
+		nsITraceableChannel.idl \
 		$(NULL)
 
 EXPORTS		= \

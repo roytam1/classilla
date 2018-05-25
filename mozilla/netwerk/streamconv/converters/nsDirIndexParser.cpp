@@ -279,6 +279,7 @@ nsDirIndexParser::ParseData(nsIDirIndex *aIdx, char* aDataStr) {
     }
 
     fieldType t = fieldType(mFormat[i]);
+    const wchar_t *attempt;
     switch (t) {
     case FIELD_FILENAME: {
       // don't unescape at this point, so that UnEscapeAndConvert() can
@@ -321,7 +322,7 @@ nsDirIndexParser::ParseData(nsIDirIndex *aIdx, char* aDataStr) {
       // This broke with non-UTF8 encodings such as MacRoman (important in Classilla!)
       // so we try to give it a backup if we get a null string.
       // -- Cameron Kaiser
-      const wchar_t *attempt = NS_ConvertUTF8toUCS2(value).get();
+      attempt = NS_ConvertUTF8toUCS2(value).get();
       aIdx->SetDescription((*attempt == '\0') ? NS_ConvertASCIItoUCS2(value).get() : attempt);
       break;
     case FIELD_CONTENTLENGTH:

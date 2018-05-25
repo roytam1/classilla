@@ -583,20 +583,39 @@ NS_INTERFACE_MAP_END
 
 // these are stubs for the (non-existent) extra DOM3 features. incomplete on purpose;
 // see nsIDOM3Node.idl for why. added to bug 214051
-
+/*
 #define CLASSILLA_STUB_XUL_DOM3(x, ...) \
 	NS_IMETHODIMP \
 	nsXULDocument::x(__VA_ARGS__) { \
 		NS_NOTREACHED("x"); \
 		return NS_ERROR_NOT_IMPLEMENTED; \
 	}
+*/
+#define CLASSILLA_STUB_XUL_DOM3_1(x, a) \
+	NS_IMETHODIMP \
+	nsXULDocument::x(a) { \
+		NS_NOTREACHED("x"); \
+		return NS_ERROR_NOT_IMPLEMENTED; \
+	}
+#define CLASSILLA_STUB_XUL_DOM3_2(x, a, b) \
+	NS_IMETHODIMP \
+	nsXULDocument::x(a, b) { \
+		NS_NOTREACHED("x"); \
+		return NS_ERROR_NOT_IMPLEMENTED; \
+	}
+#define CLASSILLA_STUB_XUL_DOM3_3(x, a, b, c) \
+	NS_IMETHODIMP \
+	nsXULDocument::x(a, b, c) { \
+		NS_NOTREACHED("x"); \
+		return NS_ERROR_NOT_IMPLEMENTED; \
+	}
 
-CLASSILLA_STUB_XUL_DOM3(SetTextContent, const nsAString& foo)
-CLASSILLA_STUB_XUL_DOM3(GetTextContent, nsAString& foo)
-CLASSILLA_STUB_XUL_DOM3(GetFeature, const nsAString& foo, const nsAString& bar, nsISupports **state)
-CLASSILLA_STUB_XUL_DOM3(IsEqualNode, nsIDOMNode *foo, int *bar)
-CLASSILLA_STUB_XUL_DOM3(IsDefaultNamespace, const nsAString& foo, int *bar)
-CLASSILLA_STUB_XUL_DOM3(LookupPrefix, const nsAString& foo, nsAString& bar)
+CLASSILLA_STUB_XUL_DOM3_1(SetTextContent, const nsAString& foo)
+CLASSILLA_STUB_XUL_DOM3_1(GetTextContent, nsAString& foo)
+CLASSILLA_STUB_XUL_DOM3_3(GetFeature, const nsAString& foo, const nsAString& bar, nsISupports **state)
+CLASSILLA_STUB_XUL_DOM3_2(IsEqualNode, nsIDOMNode *foo, int *bar)
+CLASSILLA_STUB_XUL_DOM3_2(IsDefaultNamespace, const nsAString& foo, int *bar)
+CLASSILLA_STUB_XUL_DOM3_2(LookupPrefix, const nsAString& foo, nsAString& bar)
 // no GetUserData, no SetUserData. yet.
 
 //----------------------------------------------------------------------

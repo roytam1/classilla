@@ -646,7 +646,9 @@ struct nsRuleDataSVG : public nsCSSSVG {
 #endif
 
 // bug 125246
+#ifndef _MSC_VER
 #warning CLEAN ALL THIS CRAP OUT
+#endif
 #if(0)
 
 //
@@ -713,7 +715,9 @@ struct nsCSSDeclContains
 #endif
 
 // bug 201681
+#ifndef _MSC_VER
 #warning CLEAN ALL THIS CRAP OUT
+#endif
 #if(0)
 
 // --- nsCSSDeclaration -----------------

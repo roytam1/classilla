@@ -626,5 +626,7 @@ NS_EXPORT nsresult
   return NS_OK;
 }
 
+#ifndef _MSC_VER
 #warning we do not have CSSDisableProps
 #warning if we add them, we must reapply the relevant parts from bug 125246.
+#endif

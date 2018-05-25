@@ -29,9 +29,9 @@ MODULES_ZLIB_SRC_LCSRCS = \
 		gzio.c \
 		zutil.c \
 		inflate.c \
-		infblock.c \
+		infback.c \
 		inftrees.c \
-		infcodes.c \
+		inffast.c \
 		infutil.c \
 		inffast.c \
 		$(NULL)

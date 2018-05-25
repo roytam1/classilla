@@ -82,9 +82,10 @@
 #include "nsLayoutUtils.h" // bug 209694
 #include "nsStyleStruct.h" // for IsBlockLevel() IsFloating()
 
+#ifdef XP_MAC
 #include <Events.h>
 #include <ToolUtils.h>
-
+#endif
 
 #ifdef IBMBIDI
 #include "nsBidiPresUtils.h"
@@ -1586,7 +1587,9 @@ nsBlockFrame::ComputeFinalSize(const nsHTMLReflowState& aReflowState,
 	  const nsHTMLReflowState *prs = aReflowState.parentReflowState;
 	  if (!prs || NS_SHRINKWRAPWIDTH != prs->mComputedWidth) {
 #else
+#ifndef _MSC_VER
 #warning this may not work right yet
+#endif
 	  PRBool rewrap = PR_TRUE;
       for (const nsHTMLReflowState *prs = aReflowState.parentReflowState;
            prs && prs->mComputedWidth == NS_SHRINKWRAPWIDTH;
@@ -1790,7 +1793,9 @@ nsBlockFrame::ComputeFinalSize(const nsHTMLReflowState& aReflowState,
       }
     }
 #else
+#ifndef _MSC_VER
 #warning this might not work right yet
+#endif
 	// aReflowState.ApplyMinMaxConstraints(nsnull, &autoHeight);
 	if (NS_UNCONSTRAINEDSIZE != aReflowState.mComputedMaxHeight)
 		autoHeight = PR_MIN(autoHeight, aReflowState.mComputedMaxHeight);
@@ -2652,12 +2657,15 @@ nsBlockFrame::ReflowDirtyLines(nsBlockReflowState& aState)
   /* TIGHTEN THIS LOOP UP BIG TIME! */
   // Classilla issue 62
   PRInt32 iters = 1; 
+#ifdef XP_MAC
   EventRecord event;
+#endif
   
   for ( ; line != line_end; ++line,  aState.AdvanceToNextLine()) {
   
     
 
+#ifdef XP_MAC
   // Classilla issue 62
   // This doesn't fix our reflow problem, but it gives us an escape hatch.
   // Essentially we simply declare the reflow done as long as the user holds the
@@ -2667,13 +2675,13 @@ nsBlockFrame::ReflowDirtyLines(nsBlockReflowState& aState)
   // Since this is expensive to run, only do this on every fourth line.
   if ((iters & 3) == 0) {
       // Let us breathe a bit.
-#if(0)
+# if(0)
 // This really hurts performance
     EventAvail(0, &event);
     EventAvail(0, &event);
     EventAvail(0, &event);
     EventAvail(0, &event);
-#endif
+# endif
     KeyMap keymap;
     
     GetKeys(keymap);
@@ -2689,6 +2697,7 @@ nsBlockFrame::ReflowDirtyLines(nsBlockReflowState& aState)
     	goto skip_it_all; // at the bottom of the line iterator
     }
   }
+#endif
     // end issue
 
 #ifdef DEBUG
@@ -2798,7 +2807,7 @@ nsBlockFrame::ReflowDirtyLines(nsBlockReflowState& aState)
     }
 
 // bug 257612
-#if(0)
+# if(0)
     if (line->IsPreviousMarginDirty() && !line->IsDirty()) {
       // If the previous margin is dirty and we're not going to reflow
       // the line we need to pull out the correct top margin and set
@@ -2815,13 +2824,13 @@ nsBlockFrame::ReflowDirtyLines(nsBlockReflowState& aState)
         deltaY = aState.mY + aState.mPrevBottomMargin.get() - line->mBounds.y;
       }
     }
-#else
+# else
     PRBool previousMarginWasDirty = line->IsPreviousMarginDirty();
     if (previousMarginWasDirty && !line->IsDirty()) {
       // If the previous margin is dirty, reflow the current line
       line->MarkDirty();
     }
-#endif
+# endif
     line->ClearPreviousMarginDirty();
 
     // See if there's any reflow damage that requires that we mark the
@@ -2830,7 +2839,9 @@ nsBlockFrame::ReflowDirtyLines(nsBlockReflowState& aState)
       PropagateFloaterDamage(aState, line, deltaY);
     }
 #else
+#ifndef _MSC_VER
 #warning this does not work yet.
+#endif
     PRBool previousMarginWasDirty = line->IsPreviousMarginDirty();
     if (previousMarginWasDirty) {
       // If the previous margin is dirty, reflow the current line
@@ -2913,7 +2924,7 @@ nsBlockFrame::ReflowDirtyLines(nsBlockReflowState& aState)
 // (worst in tables, see the big gap in
 // https://bug113779.bugzilla.mozilla.org/attachment.cgi?id=126482).
 // bug 257612
-#if(0)
+# if(0)
       if (oldY == 0 && deltaY != line->mBounds.y) {
         // This means the current line was just reflowed for the first
         // time.  Thus we must mark the the previous margin of the next
@@ -2924,7 +2935,7 @@ nsBlockFrame::ReflowDirtyLines(nsBlockReflowState& aState)
           line.next()->MarkPreviousMarginDirty();
           // since it's marked dirty, nobody will care about |deltaY|
         }
-#else
+# else
       PRBool dirtyMargin = PR_FALSE;
       if (line->mBounds.height == 0 && previousMarginWasDirty) {
         // This means that the line might be empty, so the previous dirty
@@ -2951,12 +2962,14 @@ nsBlockFrame::ReflowDirtyLines(nsBlockReflowState& aState)
       if (dirtyMargin && line.next() != end_lines()) {
         line.next()->MarkPreviousMarginDirty();
         // since it's marked dirty, nobody will care about |deltaY|
-#endif
+# endif
       } else {
         deltaY = line->mBounds.YMost() - oldYMost;
       }
 #else
+# ifndef _MSC_VER
 #warning this does not work yet.
+# endif
 // this is the 1.8.1 code that does not fully work yet.
       // Test to see whether the margin that should be carried out
       // to the next line (NL) might have changed. In ReflowBlockFrame
@@ -3057,8 +3070,10 @@ nsBlockFrame::ReflowDirtyLines(nsBlockReflowState& aState)
       foundAnyClears = PR_TRUE;
     } // end bug
 
+#ifdef XP_MAC
 skip_it_all:
 	;
+#endif
 #ifdef DEBUG
     if (gNoisyReflow) {
       gNoiseIndent--;
@@ -3278,25 +3293,29 @@ nsBlockFrame::ReflowLine(nsBlockReflowState& aState,
   nsresult rv = NS_OK;
   NS_ABORT_IF_FALSE(aLine->GetChildCount(), "reflowing empty line");
   
-#if(0)
+#ifdef XP_MAC
+# if(0)
 // This does not seem to hit performance as bad as it does in ReflowDirtyLines.
   EventRecord event;
   EventAvail(0, &event);
   EventAvail(0, &event);
   EventAvail(0, &event);
   EventAvail(0, &event);
+# endif
 #endif
 
   // Setup the line-layout for the new line
   aState.mCurrentLine = aLine;
   aLine->ClearDirty();
   
+#ifdef XP_MAC
   // more Classilla issue 62
    KeyMap keymap;
     GetKeys(keymap);
     if (keymap[1] == 8421376) {
 		return rv;
 	}
+#endif
 	
 
 /* moved down by 1.7

@@ -992,7 +992,9 @@ static const PRInt32 kBackgroundYPositionKTable[] = {
 
   switch (aProp)  {
 
+#ifndef _MSC_VER
 #warning this section needs to be hand-checked
+#endif
 
   case eCSSProperty__moz_border_radius:
 // bug 125246

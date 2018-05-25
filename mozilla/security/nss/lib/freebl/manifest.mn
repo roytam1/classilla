@@ -67,6 +67,7 @@ ifdef MOZILLA_BSAFE_BUILD
 CSRCS = \
 	fblstdlib.c \
 	sha_fast.c \
+	sha512.c \
 	md2.c \
 	md5.c \
 	blapi_bsf.c \
@@ -79,6 +80,7 @@ CSRCS = \
 	prng_fips1861.c \
 	sysrand.c \
 	sha_fast.c \
+	sha512.c \
 	md2.c \
 	md5.c \
 	alg2268.c \

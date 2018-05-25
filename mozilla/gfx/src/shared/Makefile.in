@@ -36,6 +36,7 @@ REQUIRES= \
 		  string \
 		  imglib2 \
 		  widget \
+		  view \
 		  $(NULL)
 
 CPPSRCS = \

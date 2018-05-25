@@ -53,6 +53,7 @@ REQUIRES = \
 	uriloader \
 	necko \
 	mimetype \
+	view \
 	$(NULL)
 
 CPPSRCS	= \

@@ -46,7 +46,9 @@
 #ifndef _LIBMATH_H
 #define _LIBMATH_H
 
+#ifndef _MSC_VER
 #include <fp.h>
+#endif
 #include "jsconfig.h"
 
 /*

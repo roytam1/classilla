@@ -60,6 +60,7 @@ REQUIRES	= xpcom \
 		  embed_base \
 		  uconv \
 		  exthandler \
+		  view \
 		  $(NULL)
 
 CPPSRCS		= \

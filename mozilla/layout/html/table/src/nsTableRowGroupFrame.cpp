@@ -237,7 +237,9 @@ NS_METHOD nsTableRowGroupFrame::Paint(nsIPresContext*      aPresContext,
                 overflow == NS_STYLE_OVERFLOW_MOZ_SCROLLBARS_NONE;
 #else
                 overflow == NS_STYLE_OVERFLOW_CLIP;
+#ifndef _MSC_VER
 #warning when we define MOZ_SCROLLBARS_NONE this needs to be uncommented
+#endif
 #endif
   if (clip) { //if (disp && (NS_STYLE_OVERFLOW_HIDDEN == disp->mOverflow)) { // bug 221140
     aRenderingContext.PushState();

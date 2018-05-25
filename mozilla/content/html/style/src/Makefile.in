@@ -53,6 +53,7 @@ REQUIRES	= xpcom \
 
 CPPSRCS		= \
 		nsCSSDeclaration.cpp \
+		nsCSSStruct.cpp \
 		nsCSSLoader.cpp \
 		nsCSSOMFactory.cpp \
 		nsCSSParser.cpp \
@@ -74,15 +75,18 @@ CPPSRCS		= \
 		nsDOMCSSRect.cpp \
 		nsDOMCSSRGBColor.cpp \
 		nsStyleUtil.cpp \
+		nsCSSDataBlock.cpp \
 		$(NULL)
 
 EXPORTS		= \
 		nsDOMCSSDeclaration.h \
+		nsCSSDataBlock.h \
 		nsCSSValue.h \
 		nsICSSStyleRuleProcessor.h \
 		nsICSSRule.h \
 		nsICSSGroupRule.h \
 		nsICSSStyleRule.h \
+		nsICSSStyleRuleDOMWrapper.h \
 		nsICSSImportRule.h \
 		nsICSSMediaRule.h \
 		nsICSSNameSpaceRule.h \
@@ -90,6 +94,7 @@ EXPORTS		= \
 		nsICSSOMFactory.h \
 		nsIHTMLCSSStyleSheet.h \
 		nsIInspectorCSSUtils.h \
+		nsCSSStruct.h \
 		$(NULL)
 
 # we don't want the shared lib, but we want to force the creation of a static lib.

@@ -3937,6 +3937,7 @@ nsRuleNode::ComputeBorderData(nsStyleStruct* aStartStruct,
   }
 #else
   const nsCSSRect& ourStyle = marginData.mBorderStyle;
+{ // scope for compilers with broken |for| loop scoping
   FOR_CSS_SIDES(side) {
     const nsCSSValue &value = ourStyle.*(nsCSSRect::sides[side]);
     nsCSSUnit unit = value.GetUnit();
@@ -3951,6 +3952,7 @@ nsRuleNode::ComputeBorderData(nsStyleStruct* aStartStruct,
       border->SetBorderStyle(side, parentBorder->GetBorderStyle(side));
     }
   }
+}
 #endif
 // end bug
 
@@ -3983,6 +3985,7 @@ nsRuleNode::ComputeBorderData(nsStyleStruct* aStartStruct,
   nscolor borderColor;
   nscolor unused = NS_RGB(0,0,0);
   
+{ // scope for compilers with broken |for| loop scoping
   FOR_CSS_SIDES(side) {
     nsCSSValueList* list =
         marginData.mBorderColors.*(nsCSSValueListRect::sides[side]);
@@ -4001,6 +4004,7 @@ nsRuleNode::ComputeBorderData(nsStyleStruct* aStartStruct,
       }
     }
   }
+}
 #endif
 // end bug
 
@@ -4054,6 +4058,7 @@ nsRuleNode::ComputeBorderData(nsStyleStruct* aStartStruct,
   PRBool transparent;
   PRBool foreground;
 
+{ // scope for compilers with broken |for| loop scoping
   FOR_CSS_SIDES(side) {
     const nsCSSValue &value = ourBorderColor.*(nsCSSRect::sides[side]);
     if (eCSSUnit_Inherit == value.GetUnit()) {
@@ -4089,6 +4094,7 @@ nsRuleNode::ComputeBorderData(nsStyleStruct* aStartStruct,
       }
     }
   }
+}
 #endif
 // end bug
 
@@ -4107,6 +4113,7 @@ nsRuleNode::ComputeBorderData(nsStyleStruct* aStartStruct,
     }
   }
 #else
+{ // scope for compilers with broken |for| loop scoping
   FOR_CSS_SIDES(side) {
     parentBorder->mBorderRadius.Get(side, parentCoord);
     if (SetCoord(marginData.mBorderRadius.*(nsCSSRect::sides[side]), coord,
@@ -4114,6 +4121,7 @@ nsRuleNode::ComputeBorderData(nsStyleStruct* aStartStruct,
                  inherited))
       border->mBorderRadius.Set(side, coord);
   }
+}
 #endif
 // end bug
 
@@ -4186,6 +4194,7 @@ nsRuleNode::ComputePaddingData(nsStyleStruct* aStartStruct,
 #else
   nsStyleCoord  coord;
   nsStyleCoord  parentCoord;
+{ // scope for compilers with broken |for| loop scoping
   FOR_CSS_SIDES(side) {
     parentPadding->mPadding.Get(side, parentCoord);
     if (SetCoord(marginData.mPadding.*(nsCSSRect::sides[side]),
@@ -4194,6 +4203,7 @@ nsRuleNode::ComputePaddingData(nsStyleStruct* aStartStruct,
       padding->mPadding.Set(side, coord);
     }
   }
+}
 #endif
 // end bug
 
@@ -4489,6 +4499,7 @@ nsRuleNode::ComputePositionData(nsStyleStruct* aStartStruct,
 #else
   nsStyleCoord  coord;
   nsStyleCoord  parentCoord;
+{ // scope for compilers with broken |for| loop scoping
   FOR_CSS_SIDES(side) {
     parentPos->mOffset.Get(side, parentCoord);
     if (SetCoord(posData.mOffset.*(nsCSSRect::sides[side]),
@@ -4497,6 +4508,7 @@ nsRuleNode::ComputePositionData(nsStyleStruct* aStartStruct,
       pos->mOffset.Set(side, coord);
     }
   }
+}
 #endif
 // end bug
 

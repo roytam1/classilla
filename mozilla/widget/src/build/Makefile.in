@@ -41,6 +41,7 @@ REQUIRES	= xpcom \
 		  dom \
 		  timer \
 		  accessibility \
+		  view \
 		  $(NULL)
 
 CPPSRCS		= nsWinWidgetFactory.cpp

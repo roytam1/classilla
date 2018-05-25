@@ -34,7 +34,9 @@
  * the terms of any one of the NPL, the GPL or the LGPL.
  *
  * ***** END LICENSE BLOCK ***** */
-
+#ifdef WIN32
+#include <windows.h>
+#endif
 #include "zlib.h"
 #include "nsFileSpec.h"
 #include "prmem.h"

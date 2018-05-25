@@ -51,6 +51,7 @@
 
 #include "nsIMouseListener.h"
 #include "nsIEventListener.h"
+#include "nsIScrollableView.h"
 #include "nsString.h"
 
 #include "nsVoidArray.h"
@@ -348,7 +349,10 @@ public:
     virtual void            FreeNativeData(void * data, PRUint32 aDataType);//~~~
     NS_IMETHOD              SetColorMap(nsColorMap *aColorMap);
      //XXX-Scroll is obsolete it is going away soon
-    NS_IMETHOD              Scroll(PRInt32 aDx, PRInt32 aDy, nsRect *aClipRect);
+    //NS_IMETHOD              Scroll(PRInt32 aDx, PRInt32 aDy, nsRect *aClipRect);
+    NS_IMETHOD            	Scroll(PRInt32 aDx, PRInt32 aDy, nsRect *aClipRect,
+    							nsIScrollableView *scrollView, nsIViewManager *viewManager,
+    							PRUint32 aFlags); // issue 28
     NS_IMETHOD              ScrollWidgets(PRInt32 aDx, PRInt32 aDy);
     NS_IMETHOD              ScrollRect(nsRect &aRect, PRInt32 aDx, PRInt32 aDy);
     NS_IMETHOD              SetTitle(const nsString& aTitle); 

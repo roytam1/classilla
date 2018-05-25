@@ -91,6 +91,7 @@
 #include "nsContentUtils.h"
 #include "nsIDOMEventGroup.h"
 #include "nsContentCID.h"
+#include "nsINodeInfo.h"
 
 static NS_DEFINE_CID(kDOMScriptObjectFactoryCID,
                      NS_DOM_SCRIPT_OBJECT_FACTORY_CID);
@@ -2690,7 +2691,9 @@ nsEventListenerManager::DispatchEvent(nsIDOMEvent* aEvent, PRBool *_retval)
       targetContent->GetDocument(*getter_AddRefs(document));
 
 // bug 211634 modified for Classilla plus backbugs
+#ifndef _MSC_VER
 #warning we have not got this compiling yet
+#endif
 #if(1)
   if (!document) {
     // XXXbz GetOwnerDocument

@@ -39,6 +39,9 @@ REQUIRES	= string \
 		  necko \
 		  unicharutil \
 		  lwbrk \
+		  caps \
+		  xpconnect \
+		  js \
 		  $(NULL)
 
 CPPSRCS		= nsWebBrowserFind.cpp \

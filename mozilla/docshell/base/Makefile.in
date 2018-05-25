@@ -90,6 +90,9 @@ XPIDLSRCS	= \
 		nsIURIFixup.idl			\
 		nsIEditorDocShell.idl		\
 		nsIWebPageDescriptor.idl	\
+		nsIDocShellTreeItemTmp.idl	\
+		nsIDocShellTreeNodeTmp.idl	\
+		nsIDocShellTreeOwnerTmp.idl	\
 		$(NULL)
 
 CPPSRCS		= \

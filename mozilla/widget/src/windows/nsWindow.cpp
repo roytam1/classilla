@@ -2840,7 +2840,9 @@ NS_METHOD nsWindow::SetColorMap(nsColorMap *aColorMap)
 //
 //-------------------------------------------------------------------------
 //XXX Scroll is obsolete and should go away soon
-NS_METHOD nsWindow::Scroll(PRInt32 aDx, PRInt32 aDy, nsRect *aClipRect)
+//NS_METHOD nsWindow::Scroll(PRInt32 aDx, PRInt32 aDy, nsRect *aClipRect)
+NS_IMETHODIMP nsWindow::Scroll(PRInt32 aDx, PRInt32 aDy, nsRect *aClipRect,
+		nsIScrollableView *scrollView, nsIViewManager *viewManager, PRUint32 aFlags)
 {
   RECT  trect;
 

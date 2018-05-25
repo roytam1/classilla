@@ -3952,7 +3952,9 @@ PRBool CSSParserImpl::ParseProperty(PRInt32& aErrorCode,
 // part 1 BIG PATCH!
 // PATCH IS FIRST!
 #if(1)
+#ifndef _MSC_VER
 #warning check me again please
+#endif
   switch (aPropID) {  // handle shorthand or multiple properties
   case eCSSProperty_background:
     return ParseBackground(aErrorCode, aChangeHint);

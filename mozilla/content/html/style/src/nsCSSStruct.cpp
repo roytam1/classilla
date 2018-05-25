@@ -1448,7 +1448,9 @@ void nsCSSSVG::List(FILE* out, PRInt32 aIndent) const
 #endif // MOZ_SVG
 
 // bug 201681
+#ifndef _MSC_VER
 #warning CLEAN ME UP PLEASE AND ELIMINATE ALL THE REDUNDANT CRAP IN THIS!
+#endif
 #if(0)
 
 #ifdef DEBUG_REFS

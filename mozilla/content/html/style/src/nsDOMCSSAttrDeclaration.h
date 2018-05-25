@@ -74,7 +74,7 @@ public:
                                     PRBool aParseOnlyOneDecl,
                                     PRBool aClearOldDecl); 
   virtual nsresult GetParent(nsISupports **aParent);*/
-  virtual nsresult GetParentRule(nsIDOMCSSRule **aParent);
+  NS_IMETHOD GetParentRule(nsIDOMCSSRule **aParent);
 
 protected:
 // bug 171830

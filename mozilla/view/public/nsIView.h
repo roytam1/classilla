@@ -179,6 +179,7 @@ public:
    * Called to query the next sibling of the view.
    * @result view's next sibling
    */
+#undef GetNextSibling
   NS_IMETHOD  GetNextSibling(nsIView *&aNextSibling) const = 0;
 
   /**

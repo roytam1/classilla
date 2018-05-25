@@ -39,6 +39,7 @@ nsCSSPseudoElementList.h \
 nsCSSPseudoElements.h \
 nsCSSKeywordList.h \
 nsCSSKeywords.h \
+nsCSSProperty.h \
 nsCSSPropList.h \
 nsCSSProps.h \
 nsHTMLAtomList.h \

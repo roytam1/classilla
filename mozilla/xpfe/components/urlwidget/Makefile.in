@@ -41,6 +41,7 @@ REQUIRES	= \
 		  dom \
 		  widget \
 		  gfx \
+		  view \
 		  $(NULL)
 
 FORCE_STATIC_LIB = 1

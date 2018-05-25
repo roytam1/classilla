@@ -590,7 +590,7 @@ nsDOMCSSAttributeDeclaration::GetParent(nsISupports **aParent)
 
 #else
 
-nsresult
+NS_IMETHODIMP
 nsDOMCSSAttributeDeclaration::GetParentRule(nsIDOMCSSRule **aParent)
 {
   NS_ENSURE_ARG_POINTER(aParent);

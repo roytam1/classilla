@@ -51,6 +51,7 @@
 #include "jsscript.h"
 #include "jsprvtd.h"
 #include "jspubtd.h"
+#include "jsarena.h"
 
 JS_BEGIN_EXTERN_C
 
