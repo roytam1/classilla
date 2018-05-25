@@ -1,0 +1,167 @@
+<?xml version="1.0"?> 
+# The contents of this file are subject to the Netscape Public
+# License Version 1.1 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of
+# the License at http://www.mozilla.org/NPL/
+#  
+# Software distributed under the License is distributed on an "AS
+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# rights and limitations under the License.
+#  
+# The Original Code is Mozilla Communicator client code, released
+# March 31, 1998.
+# 
+# The Initial Developer of the Original Code is Netscape
+# Communications Corporation. Portions created by Netscape are
+# Copyright (C) 1998-1999 Netscape Communications Corporation. All
+# Rights Reserved.
+# 
+# Contributor(s): 
+
+<?xml-stylesheet href="chrome://global/skin/" type="text/css"?>
+
+<!DOCTYPE window [
+#ifdef XP_WIN
+<!ENTITY % brandDTD SYSTEM "chrome://global/locale/brand.dtd" >
+%brandDTD;
+#endif
+<!ENTITY % prefNavigatorDTD SYSTEM "chrome://browser/locale/pref/pref-navigator.dtd" >
+%prefNavigatorDTD;
+]>
+
+<page xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+      id="pref-navigator"      
+      onload="parent.initPanel('chrome://browser/content/pref/pref-navigator.xul');"
+      headertitle="&lHeader;">
+
+  <stringbundle id="bundle_prefutilities" src="chrome://browser/locale/pref/prefutilities.properties"/>
+  <stringbundle id="bundle_brand" src="chrome://global/locale/brand.properties"/>
+  <script type="application/x-javascript" src="chrome://browser/content/pref/pref-navigator.js"/>
+
+  <script type="application/x-javascript">
+  <![CDATA[
+    var _elementIDs = ["browserStartupHomepage"];
+#ifdef XP_WIN
+     // "Install" the SetFields function.  This will be
+     // called whenever the Navigator pane is shown.
+     window.SetFields = function( pageData ) {
+     // Determine if we have been selected as the default browser
+     // already, and enable/disable the "Set As Default" button
+     // accordingly.
+
+     // We store our state info in the same place as the code in
+     // pref-winhooks.js uses so that this panel and the 
+     // Advanced/System panel are kept in synch.
+     if (!("winHooks" in parent)) {
+       // Neither the Advanced/System panel nor this panel has
+       // appeared.  Initialize the state information.
+       parent.winHooks = new Object;
+
+       // Get winhooks service.
+       parent.winHooks.winhooks = Components.classes[ "@mozilla.org/winhooks;1" ]
+                                            .getService( Components.interfaces.nsIWindowsHooks );
+     
+       // Extract current settings (these are what the user has checked on
+       // the Advanced/System panel).
+       parent.winHooks.prefs = parent.winHooks.winhooks.settings;
+     }
+
+     // Start by checking http/https/ftp and html/xhtml/xml.
+     var prefs = parent.winHooks.prefs;
+     if (prefs.isHandlingHTTP  &&
+         prefs.isHandlingHTTPS &&
+         prefs.isHandlingFTP   &&
+         prefs.isHandlingHTML  &&
+         prefs.isHandlingXHTML &&
+         prefs.isHandlingXML) {
+       // The user *wants* us to be the default, apparently.
+       // We test the registry settings using a scratch copy of the
+       // settings because we don't care about some of them, but we
+       // don't want to mess up the user's choices from the
+       // Advanced/System panel.
+       var testSettings = parent.winHooks.winhooks.settings;
+       // Test that these are set.
+       testSettings.isHandlingHTTP  = true;
+       testSettings.isHandlingHTTPS = true;
+       testSettings.isHandlingFTP   = true;
+       testSettings.isHandlingHTML  = true;
+       testSettings.isHandlingXHTML = true;
+       testSettings.isHandlingXML   = true;
+       // Ignore the rest.
+       testSettings.isHandlingCHROME = false;
+       testSettings.isHandlingGOPHER = false;
+       testSettings.isHandlingJPEG   = false;
+       testSettings.isHandlingGIF    = false;
+       testSettings.isHandlingMNG    = false;
+       testSettings.isHandlingPNG    = false;
+       testSettings.isHandlingBMP    = false;
+       testSettings.isHandlingICO    = false;
+       testSettings.isHandlingXUL    = false;
+     }
+     // Return true to tell caller to process the standard pref fields.
+     return true;
+   }
+   // "Install" the makeDefault function;
+   window.makeDefault = function() {
+     // Extract current settings (these are what the
+     // user has checked on the Advanced/System panel).
+     var settings = parent.winHooks.prefs;
+
+     // Turn on all "default browser" settings.
+     settings.isHandlingHTTP  = true;
+     settings.isHandlingHTTPS = true;
+     settings.isHandlingFTP   = true;
+     settings.isHandlingHTML  = true;
+     settings.isHandlingXHTML = true;
+     settings.isHandlingXML   = true;
+
+     // Register callback that will be called when and if the
+     // user presses the OK button.
+     parent.hPrefWindow.registerOKCallbackFunc( function () {
+       // Apply the settings.
+       parent.winHooks.winhooks.settings = parent.winHooks.prefs;
+     } );
+    }
+#endif
+  ]]>
+  </script>
+  
+  <!-- homepage specification -->
+  <groupbox>
+    <caption label="&header2.label;"/>
+    <hbox align="center" flex="1">
+      <label value="&location.label;" accesskey="&location.accesskey;" control="browserStartupHomepage"/>
+      <textbox id="browserStartupHomepage" type="autocomplete" class="padded" flex="1" 
+               autocompletesearch="history"
+               preftype="localizedstring"
+               prefstring="browser.startup.homepage"/>  <!-- we may wish to change this to data
+                                               when we support fancy formatted local filenames -->
+    </hbox>
+    <hbox align="center" pack="end">
+      <button label="&useCurrent.label;" accesskey="&useCurrent.accesskey;"
+              label2="&useCurrentMultiple.label;"
+              oncommand="setHomePageToCurrentPage();"
+              id="browserUseCurrent"
+              prefstring="pref.browser.homepage.disable_button.current_page"/>
+      <button label="&useBookmark.label;" accesskey="&useBookmark.accesskey;"
+              oncommand="setHomePageToBookmark();"
+              id="browserUseBookmark"
+              prefstring="pref.browser.homepage.disable_button.bookmark_page"/>
+      <button label="&useBlank.label;" accesskey="&useBlank.accesskey;"
+              oncommand="document.getElementById('browserStartupHomepage').value = 'about:blank';"
+              id="browserUseBlank"
+              prefstring="pref.browser.homepage.disable_button.blank_page"/>
+    </hbox>
+  </groupbox>
+#ifdef XP_WIN
+  <groupbox orient="horizontal">
+     <caption label="&defaultBrowserGroup.label;"/>
+       <description>&makeDefaultText;</description>
+       <spacer flex="1"/>
+       <button label="&defaultBrowserButton.label;"
+               oncommand="makeDefault()"/>
+   </groupbox>
+#endif
+</page>
+

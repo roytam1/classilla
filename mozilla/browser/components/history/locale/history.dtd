@@ -1,0 +1,18 @@
+<!ENTITY find.label                "Find:">
+<!ENTITY find.accesskey            "n">
+<!ENTITY collapseExpand.accesskey            "e">
+<!ENTITY byDate.label "By Date">
+<!ENTITY byDate.accesskey "D">
+<!ENTITY bySite.label "By Site">
+<!ENTITY bySite.accesskey "S">
+<!ENTITY view.label "View">
+<!ENTITY byMostVisited.label "By Most Visited">
+<!ENTITY byMostVisited.accesskey "V">
+<!ENTITY byLastVisited.label "By Last Visited">
+<!ENTITY byLastVisited.accesskey "L">
+<!ENTITY byDayAndSite.label "By Date and Site">
+<!ENTITY byDayAndSite.accesskey "t">
+<!ENTITY openInNewWindow.label "Open in New Window">
+<!ENTITY openInNewWindow.accesskey "W">
+<!ENTITY openInNewTab.label "Open in New Tab">
+<!ENTITY openInNewTab.accesskey "T">

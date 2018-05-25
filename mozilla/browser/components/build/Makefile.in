@@ -1,0 +1,52 @@
+DEPTH=../../..
+topsrcdir=@top_srcdir@
+srcdir=@srcdir@
+VPATH=@srcdir@
+
+include $(DEPTH)/config/autoconf.mk
+
+MODULE = browsercomps
+LIBRARY_NAME = browsercomps
+SHORT_LIBNAME = brwsrcmp
+EXPORT_LIBRARY = 1
+IS_COMPONENT = 1
+MODULE_NAME = nsBrowserCompsModule
+
+REQUIRES = \
+	xpcom \
+	string \
+	autocomplete \
+	mork \
+	pref \
+	rdf \
+	intl \
+	downloads \
+	uriloader \
+	dom \
+	necko \
+	webbrowserpersist \
+	progressDlg \
+	mimetype \
+	$(NULL)
+
+EXPORTS = nsBrowserCompsCID.h
+
+CPPSRCS = nsModule.cpp \
+          $(NULL)
+
+LOCAL_INCLUDES = \
+	-I$(srcdir)/../downloads/src \
+	$(NULL)
+
+SHARED_LIBRARY_LIBS = \
+	$(DIST)/lib/$(LIB_PREFIX)download_s.$(LIB_SUFFIX) \
+	$(NULL)
+
+EXTRA_DSO_LDOPTS += \
+	$(EXTRA_DSO_LIBS) \
+	$(MOZ_UNICHARUTIL_LIBS) \
+	$(MOZ_COMPONENT_LIBS) \
+	$(MOZ_JS_LIBS) \
+	$(NULL)
+
+include $(topsrcdir)/config/rules.mk

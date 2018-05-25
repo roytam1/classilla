@@ -1,0 +1,18 @@
+
+<!--LOCALIZATION NOTE : FILE 'Advanced' prefs settings -->
+<!ENTITY lHeader                      "Advanced">
+
+<!ENTITY enbJavaCheck.label           "Enable Java">
+<!ENTITY enbJavaCheck.accesskey       "j">
+
+<!ENTITY sendAddFtpCheck.label        "Send this email address as anonymous FTP password:">
+<!ENTITY sendAddFtpCheck.accesskey    "e">
+<!ENTITY general.label "General">
+<!ENTITY popupReject.label              "Reject popup windows">
+<!ENTITY popupReject.accesskey          "r">
+
+<!ENTITY div.blessedservers.label       "Always allow the sites below to open popup windows:">
+
+<!ENTITY addpermission.label         "Add Site...">
+<!ENTITY removepermission.label         "Remove Site">
+<!ENTITY removeallpermissions.label     "Remove All Sites">

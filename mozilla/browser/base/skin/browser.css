@@ -1,0 +1,825 @@
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: NPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Netscape Public License
+ * Version 1.1 (the "License"); you may not use this file except in
+ * compliance with the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/NPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
+ * The Original Code is mozilla.org code.
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-1999
+ * the Initial Developer. All Rights Reserved.
+ *
+ * Contributor(s):
+ *   Joe Hewitt (hewitt@netscape.com)
+ *   Jason Kersey (kerz@netscape.com)
+ *   Pierre Chanial (chanial@noos.fr)
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the NPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the NPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
+
+@import url("chrome://global/skin/");
+
+@namespace url("http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul");
+
+#PersonalToolbar {
+  min-height: 26px;
+}
+
+/* ::::: bookmark buttons ::::: */
+
+toolbarbutton.bookmark-item {
+  margin: 0;
+  min-width: 0;
+  max-width: 13em;
+  padding: 2px 3px;
+  color: black !important;
+}
+
+toolbarbutton.bookmark-item:not([container="true"]) {
+  -moz-appearance: none;
+  cursor: default;
+  border: 1px solid transparent !important;
+}
+
+toolbarbutton.bookmark-item:not([container="true"]):hover {
+  -moz-border-top-colors: transparent !important;
+  -moz-border-right-colors: transparent !important;
+  -moz-border-bottom-colors: transparent !important;
+  -moz-border-left-colors: transparent !important;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+toolbarbutton.bookmark-item:hover:active,
+toolbarbutton.bookmark-item[open="true"] {
+  padding: 3px 2px 1px 4px;
+}
+
+.bookmark-item > .toolbarbutton-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Prevent [mode="icons"] from hiding the label */
+.bookmark-item > .toolbarbutton-text {
+  display: -moz-box !important;
+}
+
+.bookmark-item > .toolbarbutton-menu-dropmarker {
+  display: none;
+}
+
+.toolbarpaletteitem-box[type="bookmarks-toolbar"][place="palette"] {
+  width: 42px;
+  height: 42px;
+  background: url("chrome://browser/skin/bookmarks-large.png") no-repeat;
+}
+
+.bookmarks-toolbar-customize {
+  display: none;
+  max-width: 15em !important;
+}
+
+toolbarpaletteitem[place="toolbar"] .bookmarks-toolbar-customize {
+  display: -moz-box;
+}
+
+toolbarpaletteitem[place="toolbar"] .bookmarks-toolbar-overflow-items {
+  visibility: hidden;
+}
+
+toolbarpaletteitem[place="toolbar"] .bookmarks-toolbar-items {
+  visibility: hidden;
+}
+
+/* ::::: bookmark menus ::::: */
+
+menu.bookmark-item,
+menuitem.bookmark-item {
+  min-width: 0;
+  max-width: 26em;
+  border-top: 1px solid transparent !important;
+  border-bottom: 1px solid transparent !important;
+  padding: 1px 3px 1px 2px;
+  margin-top: -1px;
+}
+
+.bookmark-item > .menu-iconic-left > .menu-iconic-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* ..... drag and drop styles ..... */
+
+.bookmark-item[dragover-left="true"] {
+  -moz-border-left-colors: #000000;
+}
+.bookmark-item[dragover-right="true"] {
+  -moz-border-right-colors: #000000;
+}
+.bookmark-item[dragover-top="true"] {
+  -moz-border-top-colors: #000000;
+}
+.bookmark-item[dragover-bottom="true"] {
+  -moz-border-bottom-colors: #000000;
+}
+
+/* ::::: bookmark items ::::: */
+
+.bookmark-item  {
+  margin: 0px 2px;
+  list-style-image: url("chrome://global/skin/icons/folder-item.png") !important;
+  -moz-image-region: rect(0px 16px 16px 0px);
+}
+.bookmark-item:hover {
+  -moz-image-region: rect(0px 32px 16px 16px);
+}
+.bookmark-item:active {
+  -moz-image-region: rect(0px 48px 16px 32px);
+}
+
+.bookmark-item[container="true"] {
+  list-style-image: url("chrome://global/skin/icons/folder-item.png") !important;
+  -moz-image-region: rect(16px 16px 32px 0px);
+}
+.bookmark-item[container="true"]:hover {
+  -moz-image-region: rect(16px 32px 32px 16px);
+}
+.bookmark-item[open="true"],
+.bookmark-item[container="true"][open="true"] {
+  -moz-image-region: rect(16px 48px 32px 32px);
+}
+
+.groupmark-item {
+  width: 16px;
+  height: 16px;
+  margin: 0px 2px;
+  padding: 1px 3px 1px 2px;
+  list-style-image: url("chrome://browser/skin/bookmarks-menuicons.png") !important;
+  -moz-image-region: rect(0px 16px 16px 0px);
+}
+
+/* ::::: primary toolbar buttons ::::: */
+
+.toolbarbutton-1 {
+  -moz-appearance: none !important;
+  -moz-box-orient: vertical;
+  min-width: 0px;
+  padding: 2px 0px !important;
+  margin: 0px !important;
+  border: 0px !important;
+}
+
+toolbarbutton:not([disabled="true"]):hover,
+menubutton:not([disabled="true"]):hover,
+toolbarbutton:not([disabled="true"]):hover:active,
+menubutton:not([disabled="true"]):hover:active {
+  color: black !important;
+}
+
+.toolbarbutton-menubutton-button {
+  -moz-appearance: none !important;
+}
+
+.toolbarbutton-menubutton-stack,
+.toolbarbutton-menubutton-button,
+.toolbarbutton-menubutton-stack:hover,
+.toolbarbutton-menubutton-button:hover,
+.toolbarbutton-menubutton-stack:hover:active,
+.toolbarbutton-menubutton-button:hover:active {
+  border: 0px !important;
+  padding: 0px !important;
+  margin: 0px !important;
+}
+
+.toolbarbutton-menubutton-dropmarker {
+  list-style-image: url("chrome://browser/skin/dropmarker.png");
+  -moz-image-region: rect(0 14px 15px 0px) !important;
+}
+
+toolbarbutton:hover > stack > .toolbarbutton-menubutton-dropmarker {
+  -moz-image-region: rect(0 29px 15px 15px) !important;
+}
+
+toolbarbutton[disabled="true"] > stack > .toolbarbutton-menubutton-dropmarker,
+toolbarbutton[disabled="true"]:hover > stack > .toolbarbutton-menubutton-dropmarker {
+  list-style-image: url("chrome://browser/skin/dropmarker.png") !important;
+  -moz-image-region: rect(0px 44px 15px 30px) !important;
+}
+
+toolbarbutton[open="true"] > stack > .toolbarbutton-menubutton-dropmarker {
+  -moz-image-region: rect(0 59px 15px 45px) !important;
+}
+
+#back-button > .toolbarbutton-menubutton-stack
+    > .toolbarbutton-menubutton-dropmarker,
+#forward-button > .toolbarbutton-menubutton-stack
+    > .toolbarbutton-menubutton-dropmarker {
+  margin-left: 38px;
+  margin-top: 8px;
+}
+       
+toolbar[mode="icons"] #back-button > .toolbarbutton-menubutton-stack
+    > .toolbarbutton-menubutton-dropmarker,
+toolbar[mode="icons"] #forward-button > .toolbarbutton-menubutton-stack
+    > .toolbarbutton-menubutton-dropmarker {
+  margin-left: 38px;
+  margin-top: 22px;
+}
+
+toolbar[iconsize="small"] #back-button > .toolbarbutton-menubutton-stack
+    > .toolbarbutton-menubutton-dropmarker,
+toolbar[iconsize="small"] #forward-button > .toolbarbutton-menubutton-stack
+    > .toolbarbutton-menubutton-dropmarker
+{
+  margin-left: 20px;
+  margin-top: 0px;
+}
+
+toolbar[iconsize="small"][mode="icons"] #back-button > .toolbarbutton-menubutton-stack
+    > .toolbarbutton-menubutton-dropmarker,
+toolbar[iconsize="small"][mode="icons"] #forward-button > .toolbarbutton-menubutton-stack
+    > .toolbarbutton-menubutton-dropmarker
+{
+  margin-left: 18px;
+  margin-top: 12px;
+}
+
+toolbar[mode="icons"] .toolbarbutton-text {
+  display: none;
+}
+
+toolbar[mode="text"] .toolbarbutton-menubutton-dropmarker,
+toolbar[mode="text"] .toolbarbutton-icon {
+  display: none;
+}
+
+toolbar[mode="text"] .toolbarbutton-text {
+  padding: 4px 4px 5px 4px !important;
+  margin: 5px !important;
+}
+
+#back-button {
+  -moz-binding: url('chrome://browser/skin/browser.xml#toolbar-menu-button');
+  list-style-image: url("chrome://browser/skin/back-large.png");
+  -moz-image-region: rect(0px 46px 42px 0px);
+  -moz-box-orient: vertical;
+}
+#back-button[buttonover="true"] {
+  -moz-image-region: rect(0px 100px 42px 54px);
+}
+#back-button[disabled="true"] {
+  -moz-image-region: rect(0px 154px 42px 108px);
+}
+#back-button[buttondown="true"] {
+  -moz-image-region: rect(0px 208px 42px 162px);
+}
+
+#forward-button {
+  -moz-binding: url('chrome://browser/skin/browser.xml#toolbar-menu-button');
+  list-style-image: url("chrome://browser/skin/forward-large.png");
+  -moz-image-region: rect(0px 46px 42px 0px);
+  -moz-box-orient: vertical;
+}
+#forward-button[buttonover="true"] {
+  -moz-image-region: rect(0px 100px 42px 54px);
+}
+#forward-button[disabled="true"] {
+  -moz-image-region: rect(0px 154px 42px 108px) !important;
+}
+#forward-button[buttondown="true"] {
+  -moz-image-region: rect(0px 208px 42px 162px);
+}
+
+#reload-button {
+  list-style-image: url("chrome://browser/skin/reload-large.png");
+  -moz-image-region: rect(0px 40px 42px 0px);
+}
+#reload-button:hover {
+  -moz-image-region: rect(0px 81px 42px 41px);
+}
+#reload-button[disabled="true"] {
+  -moz-image-region: rect(0px 122px 42px 82px) !important;
+}
+#reload-button:hover:active {
+  -moz-image-region: rect(0px 163px 42px 123px);
+}
+
+
+#stop-button {
+  list-style-image: url("chrome://browser/skin/stop-large.png");
+  -moz-image-region: rect(0px 40px 42px 0px);
+}
+#stop-button:hover {
+  -moz-image-region: rect(0px 81px 42px 41px);
+}
+#stop-button[disabled="true"] {
+  -moz-image-region: rect(0px 122px 42px 82px) !important;
+}
+#stop-button:hover:active {
+  -moz-image-region: rect(0px 163px 42px 123px);
+}
+
+#home-button {
+  list-style-image: url("chrome://browser/skin/home-large.png") !important;
+  -moz-image-region: rect(0px 40px 42px 0px);
+}
+#home-button:hover {
+  -moz-image-region: rect(0px 94px 42px 54px);
+}
+#home-button[disabled="true"] {
+  -moz-image-region: rect(0px 148px 42px 108px) !important;
+}
+#home-button:hover:active {
+  -moz-image-region: rect(0px 202px 42px 162px);
+}
+
+#print-button {
+  list-style-image: url("chrome://browser/skin/print-large.png");
+  -moz-image-region: rect(0px 46px 42px 0px);
+}
+#print-button:hover {
+  -moz-image-region: rect(0px 100px 42px 54px);
+}
+#print-button:hover:active {
+  -moz-image-region: rect(0px 208px 42px 162px);
+}
+#print-button[disabled="true"] {
+  -moz-image-region: rect(0px 154px 42px 108px) !important;
+}
+
+#search-button {
+  list-style-image: url("chrome://browser/skin/search-large.png");
+  -moz-image-region: rect(0px 32px 32px 0px) !important;
+}
+#search-button:hover {
+  -moz-image-region: rect(0px 65px 32px 33px) !important;
+}
+#search-button[disabled="true"] {
+  -moz-image-region: rect(0px 98px 32px 66px) !important;
+}
+#search-button:hover:active {
+  -moz-image-region: rect(0px 131px 32px 99px) !important;
+}
+
+#new-tab-button {
+  list-style-image: url("chrome://browser/skin/newtab-large.png");
+  -moz-image-region: rect(0px 42px 42px 0px);
+}
+#new-tab-button:hover {
+  -moz-image-region: rect(0px 96px 42px 54px);
+}
+#new-tab-button[disabled="true"] {
+  -moz-image-region: rect(0px 150px 42px 108px);
+}
+#new-tab-button:hover:active,
+#new-tab-button[checked="true"] {
+  -moz-image-region: rect(0px 204px 42px 162px);
+}
+
+#new-window-button {
+  list-style-image: url("chrome://browser/skin/newwindow-large.png");
+  -moz-image-region: rect(0px 42px 42px 0px);
+}
+#new-window-button:hover {
+  -moz-image-region: rect(0px 96px 42px 54px);
+}
+#new-window-button[disabled="true"] {
+  -moz-image-region: rect(0px 150px 42px 108px);
+}
+#new-window-button:hover:active,
+#new-window-button[checked="true"] {
+  -moz-image-region: rect(0px 204px 42px 162px);
+}
+
+#downloads-button {
+  list-style-image: url("chrome://browser/skin/downloads-large.png");
+  -moz-image-region: rect(0px 42px 42px 0px);
+}
+#downloads-button:hover {
+  -moz-image-region: rect(0px 96px 42px 54px);
+}
+#downloads-button[disabled="true"] {
+  -moz-image-region: rect(0px 150px 42px 108px);
+}
+#downloads-button:hover:active,
+#downloads-button[checked="true"] {
+  -moz-image-region: rect(0px 204px 42px 162px);
+}
+
+#bookmarks-button {
+  list-style-image: url("chrome://browser/skin/bookmarks-large.png");
+  -moz-image-region: rect(0px 42px 42px 0px);
+}
+#bookmarks-button:hover {
+  -moz-image-region: rect(0px 96px 42px 54px);
+}
+#bookmarks-button[disabled="true"] {
+  -moz-image-region: rect(0px 150px 42px 108px);
+}
+#bookmarks-button:hover:active,
+#bookmarks-button[checked="true"] {
+  -moz-image-region: rect(0px 204px 42px 162px);
+}
+
+#history-button {
+  list-style-image: url("chrome://browser/skin/history-large.png");
+  -moz-image-region: rect(0px 42px 42px 0px);
+}
+#history-button:hover {
+  -moz-image-region: rect(0px 96px 42px 54px);
+}
+#history-button[disabled="true"] {
+  -moz-image-region: rect(0px 150px 42px 108px);
+}
+#history-button:hover:active, 
+#history-button[checked="true"] {
+  -moz-image-region: rect(0px 204px 42px 162px);
+}
+
+
+/* ::::: small primary toolbar buttons ::::: */
+
+toolbar[iconsize="small"] #back-button {
+  list-style-image: url("chrome://browser/skin/back-forward-small.png") !important;
+  -moz-image-region: rect(0px 28px 25px 0px);
+}
+toolbar[iconsize="small"] #back-button:hover {
+  -moz-image-region: rect(0px 56px 25px 28px);
+}
+toolbar[iconsize="small"] #back-button[buttondown="true"] {
+  -moz-image-region: rect(0px 112px 25px 84px);
+}
+toolbar[iconsize="small"] #back-button[disabled="true"] {
+  -moz-image-region: rect(0px 84px 25px 56px);
+}
+
+toolbar[iconsize="small"] #forward-button {
+  list-style-image: url("chrome://browser/skin/back-forward-small.png") !important;
+  -moz-image-region: rect(25px 28px 50px 0px);
+}
+toolbar[iconsize="small"] #forward-button:hover {
+  -moz-image-region: rect(25px 56px 50px 28px);
+}
+toolbar[iconsize="small"] #forward-button[buttondown="true"] {
+  -moz-image-region: rect(25px 84px 50px 56px);
+}
+toolbar[iconsize="small"] #forward-button[disabled="true"] {
+  -moz-image-region: rect(25px 112px 50px 84px) !important;
+}
+
+toolbar[iconsize="small"] #reload-button {
+  list-style-image: url("chrome://browser/skin/reload-small.png") !important;
+  -moz-image-region: rect(0px 24px 25px 0px);
+}
+toolbar[iconsize="small"] #reload-button:hover {
+  -moz-image-region: rect(0px 48px 25px 24px);
+}
+toolbar[iconsize="small"] #reload-button:hover:active {
+  -moz-image-region: rect(0px 72px 25px 48px);
+}
+toolbar[iconsize="small"] #reload-button[disabled="true"] {
+  -moz-image-region: rect(0px 96px 25px 72px) !important;
+}
+
+toolbar[iconsize="small"] #stop-button {
+  list-style-image: url("chrome://browser/skin/stop-small.png") !important;
+  -moz-image-region: rect(0px 24px 25px 0px);
+}
+toolbar[iconsize="small"] #stop-button:hover {
+  -moz-image-region: rect(0px 48px 25px 24px);
+}
+toolbar[iconsize="small"] #stop-button:hover:active {
+  -moz-image-region: rect(0px 72px 25px 48px);
+}
+toolbar[iconsize="small"] #stop-button[disabled="true"] {
+  -moz-image-region: rect(0px 96px 25px 72px) !important;
+}
+
+toolbar[iconsize="small"] #home-button {
+  list-style-image: url("chrome://browser/skin/home-small.png") !important;
+  -moz-image-region: rect(0px 28px 25px 0px);
+}
+toolbar[iconsize="small"] #home-button:hover {
+  -moz-image-region: rect(0px 56px 25px 28px);
+}
+toolbar[iconsize="small"] #home-button:hover:active {
+  -moz-image-region: rect(0px 112px 25px 84px);
+}
+
+toolbar[iconsize="small"] #print-button {
+  list-style-image: url("chrome://browser/skin/print-small.png");
+  -moz-image-region: rect(0px 28px 25px 0px);
+}
+toolbar[iconsize="small"] #print-button:hover {
+  -moz-image-region: rect(0px 56px 25px 28px);
+}
+toolbar[iconsize="small"] #print-button:hover:active {
+  -moz-image-region: rect(0px 84px 25px 56px);
+}
+toolbar[iconsize="small"] #print-button[disabled="true"] {
+  -moz-image-region: rect(0px 112px 25px 84px);
+}
+
+toolbar[iconsize="small"] #downloads-button {
+  list-style-image: url("chrome://browser/skin/downloads-small.png") !important;
+  -moz-image-region: rect(0px 24px 25px 0px);
+}
+toolbar[iconsize="small"] #downloads-button:hover {
+  -moz-image-region: rect(0px 48px 25px 24px);
+}
+toolbar[iconsize="small"] #downloads-button:hover:active,
+toolbar[iconsize="small"] #downloads-button[checked="true"] {
+  -moz-image-region: rect(0px 72px 25px 48px);
+}
+toolbar[iconsize="small"] #downloads-button[disabled="true"] {
+  -moz-image-region: rect(0px 96px 25px 72px) !important;
+}
+
+toolbar[iconsize="small"] #new-tab-button {
+  list-style-image: url("chrome://browser/skin/newtab-small.png") !important;
+  -moz-image-region: rect(0px 24px 25px 0px);
+}
+toolbar[iconsize="small"] #new-tab-button:hover {
+  -moz-image-region: rect(0px 48px 25px 24px);
+}
+toolbar[iconsize="small"] #new-tab-button:hover:active,
+toolbar[iconsize="small"] #new-tab-button[checked="true"] {
+  -moz-image-region: rect(0px 72px 25px 48px);
+}
+toolbar[iconsize="small"] #new-tab-button[disabled="true"] {
+  -moz-image-region: rect(0px 96px 25px 72px) !important;
+}
+
+toolbar[iconsize="small"] #new-window-button {
+  list-style-image: url("chrome://browser/skin/newwindow-small.png") !important;
+  -moz-image-region: rect(0px 24px 25px 0px);
+}
+toolbar[iconsize="small"] #new-window-button:hover {
+  -moz-image-region: rect(0px 48px 25px 24px);
+}
+toolbar[iconsize="small"] #new-window-button:hover:active,
+toolbar[iconsize="small"] #new-window-button[checked="true"] {
+  -moz-image-region: rect(0px 72px 25px 48px);
+}
+toolbar[iconsize="small"] #new-window-button[disabled="true"] {
+  -moz-image-region: rect(0px 96px 25px 72px) !important;
+}
+
+toolbar[iconsize="small"] #bookmarks-button {
+  list-style-image: url("chrome://browser/skin/bookmarks-small.png") !important;
+  -moz-image-region: rect(0px 24px 25px 0px);
+}
+toolbar[iconsize="small"] #bookmarks-button:hover {
+  -moz-image-region: rect(0px 48px 25px 24px);
+}
+toolbar[iconsize="small"] #bookmarks-button:hover:active,
+toolbar[iconsize="small"] #bookmarks-button[checked="true"] {
+  -moz-image-region: rect(0px 72px 25px 48px);
+}
+toolbar[iconsize="small"] #bookmarks-button[disabled="true"] {
+  -moz-image-region: rect(0px 96px 25px 72px) !important;
+}
+
+toolbar[iconsize="small"] #history-button {
+  list-style-image: url("chrome://browser/skin/history-small.png") !important;
+  -moz-image-region: rect(0px 24px 25px 0px);
+}
+toolbar[iconsize="small"] #history-button:hover {
+  -moz-image-region: rect(0px 48px 25px 24px);
+}
+toolbar[iconsize="small"] #history-button:hover:active,
+toolbar[iconsize="small"] #history-button[checked="true"] {
+  -moz-image-region: rect(0px 72px 25px 48px);
+}
+toolbar[iconsize="small"] #history-button[disabled="true"] {
+  -moz-image-region: rect(0px 96px 25px 72px) !important;
+}
+
+
+/* ::::: fullscreen window controls ::::: */
+
+#window-controls {
+  -moz-box-align: center;
+  padding: 0 2px 0 4px;
+  border-left: 2px solid;
+  -moz-border-left-colors: ThreeDHighlight ThreeDShadow;
+}
+
+#minimize-button {
+  list-style-image: url("chrome://navigator/skin/icons/minimize.gif");
+}
+#restore-button {
+  list-style-image: url("chrome://navigator/skin/icons/restore.gif");
+}
+#close-button {
+  list-style-image: url("chrome://navigator/skin/icons/close.gif");
+}
+
+/* ::::: nav-bar-inner ::::: */
+
+#urlbar {
+  margin: 2px 3px;
+}
+
+#search-bar {
+  width: 12em;
+}
+
+/* ::::: page proxy icon ::::: */
+
+#page-proxy-deck,
+#page-proxy-favicon,
+#page-proxy-button {
+  width: 16px;
+  height: 16px;
+}
+
+#page-proxy-deck {
+  cursor: -moz-grab;
+  margin: 2px 3px;
+}
+
+#page-proxy-favicon {
+  list-style-image: none;
+}
+
+#page-proxy-button {
+  list-style-image: url("chrome://global/skin/icons/folder-item.png") !important;
+  -moz-image-region: rect(0px 16px 16px 0px);
+}
+
+#page-proxy-button[pageproxystate="valid"]:hover  {
+  -moz-image-region: rect(0px 32px 16px 16px);
+}
+
+#page-proxy-button[pageproxystate="valid"]:hover:active {
+  -moz-image-region: rect(0px 48px 16px 32px);
+}
+
+#page-proxy-button[pageproxystate="invalid"] {
+  cursor: default;
+  -moz-image-region: rect(0px 64px 16px 48px);
+}
+
+/* ::::: search-bar ::::: */
+
+#search-proxy-button {
+  margin: 2px;
+  list-style-image: url("chrome://browser/skin/search-bar.png");
+}
+
+/* ::::: autocomplete ::::: */
+
+.autocomplete-treebody:-moz-tree-cell-text(treecolAutoCompleteComment) {
+  color: #555566;
+}
+
+/* ::::: go button ::::: */
+
+#go-button,
+#go-container {
+  -moz-appearance: none !important;
+  background-color: transparent;
+  margin: 0px;
+  border: none;
+  padding: 0px;
+  min-width: 0;
+  list-style-image: url("chrome://browser/skin/go-large.png");
+  -moz-image-region: rect(0px 26px 27px 0px) !important;
+}
+
+#go-button:hover {
+  -moz-image-region: rect(0px 53px 27px 27px) !important;
+}
+
+#sidebar {
+  border-bottom: 1px solid ThreeDShadow;
+  background-color: white;
+}
+
+#go-button[disabled="true"] {
+  -moz-image-region: rect(0px 80px 27px 54px) !important;
+}
+
+#go-button:hover:active {
+  -moz-image-region: rect(0px 107px 27px 81px) !important;
+}
+
+#go-button > .button-box {
+  border: none;
+}
+
+#go-button > .button-box > .button-text {
+  display: none !important;
+}
+
+/* ::::: content area ::::: */
+
+#content {
+  border-top: 1px solid ThreeDDarkShadow;
+  border-bottom: 1px solid ThreeDLightShadow;
+  border-left: 2px solid;
+  -moz-border-left-colors: ThreeDShadow ThreeDDarkShadow;
+}
+
+#status-bar {
+  border-top: none;
+}
+
+#security-button {
+  display: none;
+}
+
+#security-button[level="high"] {
+  list-style-image: url("chrome://browser/skin/lock-secure.gif");
+  display: -moz-box;
+}
+
+#security-button[level="low"] {
+  list-style-image: url("chrome://browser/skin/lock-secure.gif");
+  display: -moz-box;
+}
+
+#security-button[level="broken"] {
+  list-style-image: url("chrome://browser/skin/lock-broken.gif");
+  display: -moz-box;
+}
+
+#page-report-button {
+  display: none;
+}
+
+#page-report-button[blocked] {
+  display: -moz-box;
+  list-style-image: url("chrome://browser/skin/info-small.png");
+  padding: 0px 3px 0px 3px;
+}
+
+/* ::::: throbber ::::: */
+
+#navigator-throbber {
+  -moz-appearance: none;
+  -moz-user-focus: ignore;
+  margin: 2px 4px !important;
+  border: none !important;
+  padding: 0px !important;
+  min-width: 0;
+  background-color: transparent;
+  list-style-image: url("chrome://browser/skin/throbber-stopped.gif");
+}
+#navigator-throbber[busy="true"] {
+  list-style-image: url("chrome://browser/skin/throbber.gif");
+}
+
+toolbar[iconsize="small"] #navigator-throbber {
+  list-style-image: url("chrome://browser/skin/throbber-small-stopped.gif");
+}
+toolbar[iconsize="small"] #navigator-throbber[busy="true"] {
+  list-style-image: url("chrome://browser/skin/throbber-small.gif");
+}
+
+.tabs-closebutton {
+  margin: 0px 4px;
+  padding: 1px 2px 2px 2px;
+  border: none;
+  list-style-image: url("chrome://browser/skin/close.png");
+  -moz-image-region: rect(0px 20px 20px 0px);
+}
+
+.tabs-closebutton:hover {
+  -moz-image-region: rect(0px 50px 20px 30px);
+}
+
+.tabs-closebutton:hover:active {
+  -moz-image-region: rect(0px 110px 20px 90px);
+}
+
+toolbarbutton.chevron {
+  list-style-image: url("chrome://global/skin/toolbar/chevron.gif") !important;
+}
+
+
+toolbarbutton.chevron > .toolbarbutton-menu-dropmarker {
+  display: none;
+}
