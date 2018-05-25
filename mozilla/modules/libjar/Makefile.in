@@ -28,6 +28,12 @@ VPATH		= @srcdir@
 include $(DEPTH)/config/autoconf.mk
 include $(srcdir)/objs.mk
 
+ifeq ($(OS_ARCH),WINNT)
+ifneq (1,$(BUILD_STATIC_LIBS))
+DEFINES		+= -DZLIB_DLL
+endif
+endif
+
 # Make this a true dynamic component even in static builds because
 # this component is shared by installer
 MOZ_STATIC_COMPONENT_LIBS=
@@ -62,10 +68,6 @@ include $(topsrcdir)/config/rules.mk
 
 ifeq ($(OS_ARCH), Linux)
 DEFINES		+= -D_BSD_SOURCE
-endif
-
-ifeq ($(OS_ARCH),WINNT)
-DEFINES		+= -DZLIB_DLL=1
 endif
 
 EXTRA_DSO_LDOPTS += \

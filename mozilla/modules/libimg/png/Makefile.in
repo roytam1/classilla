@@ -63,7 +63,9 @@ FORCE_STATIC_LIB = 1
 include $(topsrcdir)/config/rules.mk
 
 ifeq ($(OS_ARCH),WINNT)
+ifneq (1,$(BUILD_STATIC_LIBS))
 DEFINES		+= -DZLIB_DLL
+endif
 ifdef BUILD_DEBUG_GC
 DEFINES		+= -DDEBUG_GC
 endif
