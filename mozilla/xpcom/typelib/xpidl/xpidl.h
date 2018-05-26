@@ -62,7 +62,7 @@
  * warnings... so I define a versioned one here.  Thanks to Mike Shaver for the
  * this solution, which allows us to pass through varargs calls.
  */
-#if !(LIBIDL_MAJOR_VERSION == 0 && LIBIDL_MINOR_VERSION == 6 && \
+#if 0/*!(LIBIDL_MAJOR_VERSION == 0 && LIBIDL_MINOR_VERSION == 6 && \
       LIBIDL_MICRO_VERSION == 5) && !defined(DEBUG_shaver)
 /*
  * This turns a varargs call to XPIDL_WARNING directly into a varargs
