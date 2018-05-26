@@ -1,40 +1,12 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #define INCL_DOS
 #define INCL_DOSERRORS
 #include <os2.h>
-#include <secrng.h>
+#include "secrng.h"
+#include "prerror.h"
 #include <stdlib.h>
 #include <time.h>
 #include <stdio.h>
@@ -137,7 +109,7 @@ EnumSystemFiles(void (*func)(const char *))
     {
       do {
         // pass the full pathname to the callback
-        sprintf( filename, "%s\\%s", sysDir, fileBuf.achName );
+        sprintf( filename, "%s%s", sysDir, fileBuf.achName );
         (*func)(filename);
 
         numFiles = 1;
@@ -156,7 +128,7 @@ EnumSystemFiles(void (*func)(const char *))
     return TRUE;
 }
 
-static int    dwNumFiles, dwReadEvery;
+static int    dwNumFiles, dwReadEvery, dwFileToRead=0;
 
 static void
 CountFiles(const char *file)
@@ -169,6 +141,30 @@ ReadFiles(const char *file)
 {
     if ((dwNumFiles % dwReadEvery) == 0)
         RNG_FileForRNG(file);
+
+    dwNumFiles++;
+}
+
+static void 
+ReadSingleFile(const char *filename)
+{
+    unsigned char buffer[1024];
+    FILE *file; 
+    
+    file = fopen((char *)filename, "rb");
+    if (file != NULL) {
+	while (fread(buffer, 1, sizeof(buffer), file) > 0) 
+	    ;
+	fclose(file);
+    }
+}
+
+static void
+ReadOneFile(const char *file)
+{
+    if (dwNumFiles == dwFileToRead) {
+        ReadSingleFile(file);
+    }
 
     dwNumFiles++;
 }
@@ -327,4 +323,19 @@ void RNG_FileForRNG(const char *filename)
 
     nBytes = RNG_GetNoise(buffer, 20); 
     RNG_RandomUpdate(buffer, nBytes);
+}
+
+static void rng_systemJitter(void)
+{
+    dwNumFiles = 0;
+    EnumSystemFiles(ReadOneFile);
+    dwFileToRead++;
+    if (dwFileToRead >= dwNumFiles) {
+	dwFileToRead = 0;
+    }
+}
+
+size_t RNG_SystemRNG(void *dest, size_t maxLen)
+{
+    return rng_systemFromNoise(dest,maxLen);
 }

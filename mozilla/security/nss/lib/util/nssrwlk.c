@@ -1,35 +1,6 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nssrwlk.h"
 #include "nspr.h"
@@ -98,7 +69,7 @@ static void     nssRWLock_ReleaseLockStack(void *lock_stack);
  *
  */
 
-PR_IMPLEMENT(NSSRWLock *)
+NSSRWLock *
 NSSRWLock_New(PRUint32 lock_rank, const char *lock_name)
 {
     NSSRWLock *rwlock;
@@ -144,7 +115,7 @@ loser:
 /*
 ** Destroy the given RWLock "lock".
 */
-PR_IMPLEMENT(void)
+void
 NSSRWLock_Destroy(NSSRWLock *rwlock)
 {
     PR_ASSERT(rwlock != NULL);
@@ -163,43 +134,10 @@ NSSRWLock_Destroy(NSSRWLock *rwlock)
     PR_DELETE(rwlock);
 }
 
-/***********************************************************************
-**  Given the address of a NULL pointer to a NSSRWLock, 
-**  atomically initializes that pointer to a newly created NSSRWLock.
-**  Returns the value placed into that pointer, or NULL.
-**   If the lock cannot be created because of resource constraints, 
-**   the pointer will be left NULL.
-**  
-***********************************************************************/
-PR_IMPLEMENT(NSSRWLock *)
-nssRWLock_AtomicCreate( NSSRWLock  ** prwlock, 
-			PRUint32      lock_rank, 
-			const char *  lock_name)
-{
-    NSSRWLock  *    rwlock;
-    static PRInt32  initializers;
-
-    PR_ASSERT(prwlock != NULL);
-
-    /* atomically initialize the lock */
-    while (NULL == (rwlock = *prwlock)) {
-        PRInt32 myAttempt = PR_AtomicIncrement(&initializers);
-        if (myAttempt == 1) {
-	    *prwlock = rwlock = NSSRWLock_New(lock_rank, lock_name);
-            (void) PR_AtomicDecrement(&initializers);
-            break;
-        }
-        PR_Sleep(PR_INTERVAL_NO_WAIT);          /* PR_Yield() */
-        (void) PR_AtomicDecrement(&initializers);
-    }
-
-    return rwlock;
-}
-
 /*
 ** Read-lock the RWLock.
 */
-PR_IMPLEMENT(void)
+void
 NSSRWLock_LockRead(NSSRWLock *rwlock)
 {
     PRThread *me = PR_GetCurrentThread();
@@ -237,7 +175,7 @@ NSSRWLock_LockRead(NSSRWLock *rwlock)
 
 /* Unlock a Read lock held on this RW lock.
 */
-PR_IMPLEMENT(void)
+void
 NSSRWLock_UnlockRead(NSSRWLock *rwlock)
 {
     PZ_Lock(rwlock->rw_lock);
@@ -266,7 +204,7 @@ NSSRWLock_UnlockRead(NSSRWLock *rwlock)
 /*
 ** Write-lock the RWLock.
 */
-PR_IMPLEMENT(void)
+void
 NSSRWLock_LockWrite(NSSRWLock *rwlock)
 {
     PRThread *me = PR_GetCurrentThread();
@@ -316,7 +254,7 @@ NSSRWLock_LockWrite(NSSRWLock *rwlock)
 
 /* Unlock a Read lock held on this RW lock.
 */
-PR_IMPLEMENT(void)
+void
 NSSRWLock_UnlockWrite(NSSRWLock *rwlock)
 {
     PRThread *me = PR_GetCurrentThread();
@@ -351,7 +289,7 @@ NSSRWLock_UnlockWrite(NSSRWLock *rwlock)
 }
 
 /* This is primarily for debugging, i.e. for inclusion in ASSERT calls. */
-PR_IMPLEMENT(PRBool)
+PRBool
 NSSRWLock_HaveWriteLock(NSSRWLock *rwlock) {
     PRBool ownWriteLock;
     PRThread *me = PR_GetCurrentThread();

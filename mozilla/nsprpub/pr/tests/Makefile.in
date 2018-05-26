@@ -1,35 +1,39 @@
 # 
-# The contents of this file are subject to the Mozilla Public
-# License Version 1.1 (the "License"); you may not use this file
-# except in compliance with the License. You may obtain a copy of
-# the License at http://www.mozilla.org/MPL/
-# 
-# Software distributed under the License is distributed on an "AS
-# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
-# implied. See the License for the specific language governing
-# rights and limitations under the License.
-# 
+# ***** BEGIN LICENSE BLOCK *****
+# Version: MPL 1.1/GPL 2.0/LGPL 2.1
+#
+# The contents of this file are subject to the Mozilla Public License Version
+# 1.1 (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+# http://www.mozilla.org/MPL/
+#
+# Software distributed under the License is distributed on an "AS IS" basis,
+# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+# for the specific language governing rights and limitations under the
+# License.
+#
 # The Original Code is the Netscape Portable Runtime (NSPR).
-# 
-# The Initial Developer of the Original Code is Netscape
-# Communications Corporation.  Portions created by Netscape are 
-# Copyright (C) 1998-2000 Netscape Communications Corporation.  All
-# Rights Reserved.
-# 
+#
+# The Initial Developer of the Original Code is
+# Netscape Communications Corporation.
+# Portions created by the Initial Developer are Copyright (C) 1998-2000
+# the Initial Developer. All Rights Reserved.
+#
 # Contributor(s):
-# 
-# Alternatively, the contents of this file may be used under the
-# terms of the GNU General Public License Version 2 or later (the
-# "GPL"), in which case the provisions of the GPL are applicable 
-# instead of those above.  If you wish to allow use of your 
-# version of this file only under the terms of the GPL and not to
-# allow others to use your version of this file under the MPL,
-# indicate your decision by deleting the provisions above and
-# replace them with the notice and other provisions required by
-# the GPL.  If you do not delete the provisions above, a recipient
-# may use your version of this file under either the MPL or the
-# GPL.
-# 
+#
+# Alternatively, the contents of this file may be used under the terms of
+# either the GNU General Public License Version 2 or later (the "GPL"), or
+# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+# in which case the provisions of the GPL or the LGPL are applicable instead
+# of those above. If you wish to allow use of your version of this file only
+# under the terms of either the GPL or the LGPL, and not to allow others to
+# use your version of this file under the terms of the MPL, indicate your
+# decision by deleting the provisions above and replace them with the notice
+# and other provisions required by the GPL or the LGPL. If you do not delete
+# the provisions above, a recipient may use your version of this file under
+# the terms of any one of the MPL, the GPL or the LGPL.
+#
+# ***** END LICENSE BLOCK *****
 
 
 #! gmake
@@ -75,7 +79,9 @@ CSRCS =             \
 	fileio.c		\
 	foreign.c	    \
 	forktest.c	    \
+	formattm.c	    \
 	fsync.c	        \
+	getai.c			\
 	gethost.c		\
 	getproto.c		\
 	i2l.c		    \
@@ -119,6 +125,7 @@ CSRCS =             \
 	op_nofil.c		\
 	openfile.c		\
 	parent.c    	\
+	parsetm.c    	\
 	peek.c    		\
 	perf.c    		\
 	pipeping.c		\
@@ -219,7 +226,7 @@ INCLUDES = -I$(dist_includedir) -I$(topsrcdir)/pr/include -I$(topsrcdir)/pr/incl
 
 ifeq ($(OS_ARCH), WINNT)
 ifdef NS_USE_GCC
-  EXTRA_LIBS += -lws2_32
+  EXTRA_LIBS += -lwsock32
 else
   EXTRA_LIBS += wsock32.lib
   LDOPTS = -NOLOGO -DEBUG -DEBUGTYPE:CV -INCREMENTAL:NO
@@ -230,13 +237,8 @@ endif # NS_USE_GCC
 endif
 
 ifeq ($(OS_ARCH),OS2)
-ifeq ($(MOZ_OS2_TOOLS),VACPP)
-  LDOPTS = -NOE -DEBUG -nologo -PMTYPE:VIO
-else
-ifeq ($(MOZ_OS2_EMX_OBJECTFORMAT),OMF)
-  LDOPTS = -Zlinker /PM:VIO
-endif
-endif
+EXTRA_LIBS = $(OS_LIBS)
+LDOPTS = -Zomf -Zlinker /PM:VIO -Zlinker /ST:0x64000
 endif
 
 ifneq ($(OS_ARCH), WINNT)
@@ -327,13 +329,9 @@ ifeq ($(OS_ARCH), SunOS)
         endif
     endif
 
-    ifneq ($(LOCAL_THREADS_ONLY),1)
-        ifdef USE_PTHREADS
-            EXTRA_LIBS = -lpthread -lthread
-        else
-            EXTRA_LIBS = -lthread
-        endif
-    endif # LOCAL_THREADS_ONLY
+    ifdef USE_PTHREADS
+        EXTRA_LIBS = -lpthread
+    endif
 endif # SunOS
 
 ifeq ($(OS_ARCH), NEC)
@@ -371,14 +369,10 @@ ifeq ($(OS_ARCH), NEWS-OS)
     EXTRA_LIBS = -lsocket -lnsl -lgen -lresolv
 endif
 
-ifeq ($(OS_ARCH), Linux)
-    ifeq ($(OS_RELEASE), 1.2)
-        EXTRA_LIBS = -ldl
-    else
-        LDOPTS += -Xlinker -rpath $(ABSOLUTE_LIB_DIR)
-        ifeq ($(USE_PTHREADS),1)
-            EXTRA_LIBS = -lpthread
-        endif
+ifeq (,$(filter-out Linux GNU GNU_%,$(OS_ARCH)))
+    LDOPTS += -Xlinker -rpath $(ABSOLUTE_LIB_DIR)
+    ifeq ($(USE_PTHREADS),1)
+        EXTRA_LIBS = -lpthread
     endif
 endif
 
@@ -435,7 +429,7 @@ LIBPTHREAD = -lpthread
 ifeq ($(OS_ARCH),AIX)
 LIBPTHREAD = -lpthreads
 endif
-ifeq (,$(filter-out FreeBSD OpenBSD BSD_OS NTO Darwin OpenUNIX,$(OS_ARCH)))
+ifeq (,$(filter-out FreeBSD OpenBSD BSD_OS QNX Darwin OpenUNIX,$(OS_ARCH)))
 LIBPTHREAD =
 endif
 ifeq ($(OS_ARCH)$(basename $(OS_RELEASE)),HP-UXB.10)
@@ -486,12 +480,14 @@ $(OBJDIR)/%$(PROG_SUFFIX): $(OBJDIR)/%.$(OBJ_SUFFIX)
 	@$(MAKE_OBJDIR)
 ifeq ($(NS_USE_GCC)_$(OS_ARCH),_WINNT)
 	link $(LDOPTS) $(EXTRA_LDOPTS) $< $(LIBPLC) $(LIBNSPR) $(EXTRA_LIBS) -out:$@
-else
-ifeq ($(OS_ARCH),OS2)
-	$(LD) $(EXEFLAGS) $(LDOPTS) $< $(LIBPLC) $(LIBNSPR) $(OS_LIBS) $(EXTRA_LIBS)
+ifdef MT
+	@if test -f $@.manifest; then \
+		$(MT) -NOLOGO -MANIFEST $@.manifest -OUTPUTRESOURCE:$@\;1; \
+		rm -f $@.manifest; \
+	fi
+endif
 else
 	$(PURE) $(CC) $(XCFLAGS) $< $(LDOPTS) $(LIBPLC) $(LIBNSPR) $(EXTRA_LIBS) -o $@
-endif # OS/2
 endif # WINNT
 endif # AIX_PRE_4_2
 

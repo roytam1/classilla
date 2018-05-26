@@ -1,42 +1,9 @@
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef PKISTORE_H
 #define PKISTORE_H
-
-#ifdef DEBUG
-static const char PKISTORE_CVS_ID[] = "@(#) $RCSfile: pkistore.h,v $ $Revision: 1.4.2.1 $ $Date: 2003/01/09 02:05:10 $ $Name:  $";
-#endif /* DEBUG */
 
 #ifndef NSSPKIT_H
 #include "nsspkit.h"
@@ -78,11 +45,14 @@ nssCertificateStore_Destroy
   nssCertificateStore *store
 );
 
-NSS_EXTERN PRStatus
-nssCertificateStore_Add
+/* Atomic Find cert in store, or add this cert to the store.
+** Ref counts properly maintained.
+*/
+NSS_EXTERN NSSCertificate *
+nssCertificateStore_FindOrAdd 
 (
   nssCertificateStore *store,
-  NSSCertificate *cert
+  NSSCertificate *c
 );
 
 NSS_EXTERN void
@@ -92,14 +62,24 @@ nssCertificateStore_RemoveCertLOCKED
   NSSCertificate *cert
 );
 
+struct nssCertificateStoreTraceStr {
+    nssCertificateStore* store;
+    PZLock* lock;
+    PRBool locked;
+    PRBool unlocked;
+};
+
+typedef struct nssCertificateStoreTraceStr nssCertificateStoreTrace;
+
 NSS_EXTERN void
 nssCertificateStore_Lock (
-  nssCertificateStore *store
+  nssCertificateStore *store, nssCertificateStoreTrace* out
 );
 
 NSS_EXTERN void
 nssCertificateStore_Unlock (
-  nssCertificateStore *store
+  nssCertificateStore *store, const nssCertificateStoreTrace* in,
+  nssCertificateStoreTrace* out
 );
 
 NSS_EXTERN NSSCertificate **
@@ -116,7 +96,7 @@ NSS_EXTERN NSSCertificate **
 nssCertificateStore_FindCertificatesByNickname
 (
   nssCertificateStore *store,
-  NSSUTF8 *nickname,
+  const NSSUTF8 *nickname,
   NSSCertificate *rvOpt[],
   PRUint32 maximumOpt,
   NSSArena *arenaOpt

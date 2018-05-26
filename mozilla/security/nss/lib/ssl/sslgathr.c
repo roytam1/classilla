@@ -1,39 +1,9 @@
 /*
  * Gather (Read) entire SSL2 records from socket into buffer.  
  *
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- *
- * $Id: sslgathr.c,v 1.4 2002/02/27 04:40:16 nelsonb%netscape.com Exp $
- */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include "cert.h"
 #include "ssl.h"
 #include "sslimpl.h"
@@ -87,7 +57,7 @@ ssl2_GatherData(sslSocket *ss, sslGather *gs, int flags)
     unsigned char *  pBuf;
     int              nb, err, rv;
 
-    PORT_Assert( ssl_HaveRecvBufLock(ss) );
+    PORT_Assert( ss->opt.noLocks || ssl_HaveRecvBufLock(ss) );
 
     if (gs->state == GS_INIT) {
 	/* Initialize gathering engine */
@@ -138,9 +108,9 @@ ssl2_GatherData(sslSocket *ss, sslGather *gs, int flags)
 	/* Probably finished this piece */
 	switch (gs->state) {
 	case GS_HEADER: 
-	    if ((ss->enableSSL3 || ss->enableTLS) && !ss->firstHsDone) {
+	    if (!SSL3_ALL_VERSIONS_DISABLED(&ss->vrange) && !ss->firstHsDone) {
 
-		PORT_Assert( ssl_Have1stHandshakeLock(ss) );
+		PORT_Assert( ss->opt.noLocks || ssl_Have1stHandshakeLock(ss) );
 
 		/* If this looks like an SSL3 handshake record, 
 		** and we're expecting an SSL2 Hello message from our peer, 
@@ -182,7 +152,7 @@ ssl2_GatherData(sslSocket *ss, sslGather *gs, int flags)
 			return SECFailure;
 		    }
 		}
-	    }	/* ((ss->enableSSL3 || ss->enableTLS) && !ss->firstHsDone) */
+	    }
 
 	    /* we've got the first 3 bytes.  The header may be two or three. */
 	    if (gs->hdr[0] & 0x80) {
@@ -194,6 +164,10 @@ ssl2_GatherData(sslSocket *ss, sslGather *gs, int flags)
 		gs->count = ((gs->hdr[0] & 0x3f) << 8) | gs->hdr[1];
 	    /*  is_escape =  (gs->hdr[0] & 0x40) != 0; */
 		gs->recordPadding = gs->hdr[2];
+	    }
+	    if (!gs->count) {
+		PORT_SetError(SSL_ERROR_RX_RECORD_TOO_LONG);
+		goto cleanup;
 	    }
 
 	    if (gs->count > gs->buf.space) {
@@ -265,7 +239,7 @@ ssl2_GatherData(sslSocket *ss, sslGather *gs, int flags)
 		goto spec_locked_done;
 	    }
 
-	    /* Decrypt the portion of data that we just recieved.
+	    /* Decrypt the portion of data that we just received.
 	    ** Decrypt it in place.
 	    */
 	    rv = (*ss->sec.dec)(ss->sec.readcx, pBuf, &nout, gs->offset,
@@ -281,7 +255,7 @@ ssl2_GatherData(sslSocket *ss, sslGather *gs, int flags)
 	    */
 	    macLen = ss->sec.hash->length;
 	    if (gs->offset >= macLen) {
-		uint32           sequenceNumber = ss->sec.rcvSequence++;
+		PRUint32           sequenceNumber = ss->sec.rcvSequence++;
 		unsigned char    seq[4];
 
 		seq[0] = (unsigned char) (sequenceNumber >> 24);
@@ -296,25 +270,25 @@ ssl2_GatherData(sslSocket *ss, sslGather *gs, int flags)
 				        gs->offset - macLen);
 		(*ss->sec.hash->update)(ss->sec.hashcx, seq, 4);
 		(*ss->sec.hash->end)(ss->sec.hashcx, mac, &macLen, macLen);
+
+		PORT_Assert(macLen == ss->sec.hash->length);
+
+		ssl_ReleaseSpecReadLock(ss);  /******************************/
+
+		if (NSS_SecureMemcmp(mac, pBuf, macLen) != 0) {
+		    /* MAC's didn't match... */
+		    SSL_DBG(("%d: SSL[%d]: mac check failed, seq=%d",
+			     SSL_GETPID(), ss->fd, ss->sec.rcvSequence));
+		    PRINT_BUF(1, (ss, "computed mac:", mac, macLen));
+		    PRINT_BUF(1, (ss, "received mac:", pBuf, macLen));
+		    PORT_SetError(SSL_ERROR_BAD_MAC_READ);
+		    rv = SECFailure;
+		    goto cleanup;
+		}
+	    } else {
+		ssl_ReleaseSpecReadLock(ss);  /******************************/
 	    }
 
-	    PORT_Assert(macLen == ss->sec.hash->length);
-
-	    ssl_ReleaseSpecReadLock(ss);  /******************************/
-
-	    if (PORT_Memcmp(mac, pBuf, macLen) != 0) {
-		/* MAC's didn't match... */
-		SSL_DBG(("%d: SSL[%d]: mac check failed, seq=%d",
-			 SSL_GETPID(), ss->fd, ss->sec.rcvSequence));
-		PRINT_BUF(1, (ss, "computed mac:", mac, macLen));
-		PRINT_BUF(1, (ss, "received mac:", pBuf, macLen));
-		PORT_SetError(SSL_ERROR_BAD_MAC_READ);
-		rv = SECFailure;
-		goto cleanup;
-	    }
-
-
-	    PORT_Assert(gs->recordPadding + macLen <= gs->offset);
 	    if (gs->recordPadding + macLen <= gs->offset) {
 		gs->recordOffset  = macLen;
 		gs->readOffset    = macLen;
@@ -404,7 +378,7 @@ ssl2_StartGatherBytes(sslSocket *ss, sslGather *gs, unsigned int count)
 {
     int rv;
 
-    PORT_Assert( ssl_HaveRecvBufLock(ss) );
+    PORT_Assert( ss->opt.noLocks || ssl_HaveRecvBufLock(ss) );
     gs->state     = GS_DATA;
     gs->remainder = count;
     gs->count     = count;
@@ -427,6 +401,8 @@ ssl_InitGather(sslGather *gs)
     gs->state = GS_INIT;
     gs->writeOffset = 0;
     gs->readOffset  = 0;
+    gs->dtlsPacketOffset = 0;
+    gs->dtlsPacket.len = 0;
     status = sslBuffer_Grow(&gs->buf, 4096);
     return status;
 }
@@ -438,6 +414,7 @@ ssl_DestroyGather(sslGather *gs)
     if (gs) {	/* the PORT_*Free functions check for NULL pointers. */
 	PORT_ZFree(gs->buf.buf, gs->buf.space);
 	PORT_Free(gs->inbuf.buf);
+	PORT_Free(gs->dtlsPacket.buf);
     }
 }
 
@@ -446,10 +423,9 @@ static SECStatus
 ssl2_HandleV3HandshakeRecord(sslSocket *ss)
 {
     SECStatus           rv;
-    SSL3ProtocolVersion version = (ss->gs.hdr[1] << 8) | ss->gs.hdr[2];
 
-    PORT_Assert( ssl_HaveRecvBufLock(ss) );
-    PORT_Assert( ssl_Have1stHandshakeLock(ss) );
+    PORT_Assert( ss->opt.noLocks || ssl_HaveRecvBufLock(ss) );
+    PORT_Assert( ss->opt.noLocks || ssl_Have1stHandshakeLock(ss) );
 
     /* We've read in 3 bytes, there are 2 more to go in an ssl3 header. */
     ss->gs.remainder         = 2;
@@ -465,7 +441,8 @@ ssl2_HandleV3HandshakeRecord(sslSocket *ss)
     ** ssl_GatherRecord1stHandshake to invoke ssl3_GatherCompleteHandshake() 
     ** the next time it is called.
     **/
-    rv = ssl3_NegotiateVersion(ss, version);
+    rv = ssl3_NegotiateVersion(ss, SSL_LIBRARY_VERSION_MAX_SUPPORTED,
+			       PR_TRUE);
     if (rv != SECSuccess) {
 	return rv;
     }

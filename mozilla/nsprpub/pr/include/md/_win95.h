@@ -1,36 +1,39 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 #ifndef nspr_win95_defs_h___
 #define nspr_win95_defs_h___
@@ -47,10 +50,56 @@
 
 #define PR_LINKER_ARCH      "win32"
 #define _PR_SI_SYSNAME        "WIN95"
-#define _PR_SI_ARCHITECTURE   "x86"    /* XXXMB hardcode for now */
+#if defined(_M_IX86) || defined(_X86_)
+#define _PR_SI_ARCHITECTURE   "x86"
+#elif defined(_AMD64_)
+#define _PR_SI_ARCHITECTURE   "x86-64"
+#elif defined(_IA64_)
+#define _PR_SI_ARCHITECTURE   "ia64"
+#else
+#error unknown processor architecture
+#endif
 
 #define HAVE_DLL
 #undef  HAVE_THREAD_AFFINITY
+#define _PR_HAVE_GETADDRINFO
+#define _PR_INET6_PROBE
+#ifndef _PR_INET6
+#define AF_INET6 23
+/* newer ws2tcpip.h provides these */
+#ifndef AI_CANONNAME
+#define AI_CANONNAME 0x2
+#define AI_NUMERICHOST 0x4
+#define NI_NUMERICHOST 0x02
+struct addrinfo {
+    int ai_flags;
+    int ai_family;
+    int ai_socktype;
+    int ai_protocol;
+    size_t ai_addrlen;
+    char *ai_canonname;
+    struct sockaddr *ai_addr;
+    struct addrinfo *ai_next;
+};
+#endif
+#define _PR_HAVE_MD_SOCKADDR_IN6
+/* isomorphic to struct in6_addr on Windows */
+struct _md_in6_addr {
+    union {
+        PRUint8  _S6_u8[16];
+        PRUint16 _S6_u16[8];
+    } _S6_un;
+};
+/* isomorphic to struct sockaddr_in6 on Windows */
+struct _md_sockaddr_in6 {
+    PRInt16 sin6_family;
+    PRUint16 sin6_port;
+    PRUint32 sin6_flowinfo;
+    struct _md_in6_addr sin6_addr;
+    PRUint32 sin6_scope_id;
+};
+#endif
+#define _PR_HAVE_THREADSAFE_GETHOST
 #define _PR_HAVE_ATOMIC_OPS
 #define PR_HAVE_WIN32_NAMED_SHARED_MEMORY
 
@@ -92,6 +141,9 @@ struct _MDThread {
     struct PRThread *prev, *next;       /* used by the cvar wait queue to
                                          * chain the PRThread structures
                                          * together */
+    void (*start)(void *);              /* used by _PR_MD_CREATE_THREAD to
+                                         * pass its 'start' argument to
+                                         * pr_root. */
 };
 
 struct _MDThreadStack {
@@ -166,7 +218,7 @@ struct _MDSemaphore {
 };
 
 struct _MDFileDesc {
-    PRInt32 osfd;    /* The osfd can come from one of three spaces:
+    PROsfd osfd;     /* The osfd can come from one of three spaces:
                       * - For stdin, stdout, and stderr, we are using
                       *   the libc file handle (0, 1, 2), which is an int.
                       * - For files and pipes, we are using Win32 HANDLE,
@@ -206,7 +258,7 @@ extern void _PR_NT_FreeSecurityDescriptorACL(
 #define _MD_WRITEV                    _PR_MD_WRITEV
 #define _MD_LSEEK                     _PR_MD_LSEEK
 #define _MD_LSEEK64                   _PR_MD_LSEEK64
-extern PRInt32 _MD_CloseFile(PRInt32 osfd);
+extern PRInt32 _MD_CloseFile(PROsfd osfd);
 #define _MD_CLOSE_FILE                _MD_CloseFile
 #define _MD_GETFILEINFO               _PR_MD_GETFILEINFO
 #define _MD_GETFILEINFO64             _PR_MD_GETFILEINFO64
@@ -223,8 +275,9 @@ extern PRInt32 _MD_CloseFile(PRInt32 osfd);
 #define _MD_TLOCKFILE                 _PR_MD_TLOCKFILE
 #define _MD_UNLOCKFILE                _PR_MD_UNLOCKFILE
 
-#ifdef MOZ_UNICODE
 /* --- UTF16 IO stuff --- */
+extern PRBool _pr_useUnicode;
+#ifdef MOZ_UNICODE
 #define _MD_OPEN_FILE_UTF16           _PR_MD_OPEN_FILE_UTF16
 #define _MD_OPEN_DIR_UTF16            _PR_MD_OPEN_DIR_UTF16
 #define _MD_READ_DIR_UTF16            _PR_MD_READ_DIR_UTF16
@@ -233,6 +286,8 @@ extern PRInt32 _MD_CloseFile(PRInt32 osfd);
 #endif /* MOZ_UNICODE */
 
 /* --- Socket IO stuff --- */
+extern void _PR_MD_InitSockets(void);
+extern void _PR_MD_CleanupSockets(void);
 #define _MD_EACCES                WSAEACCES
 #define _MD_EADDRINUSE            WSAEADDRINUSE
 #define _MD_EADDRNOTAVAIL         WSAEADDRNOTAVAIL
@@ -263,7 +318,7 @@ extern void _MD_MakeNonblock(PRFileDesc *f);
 #define _MD_QUERY_FD_INHERITABLE      _PR_MD_QUERY_FD_INHERITABLE
 #define _MD_SHUTDOWN                  _PR_MD_SHUTDOWN
 #define _MD_LISTEN                    _PR_MD_LISTEN
-extern PRInt32 _MD_CloseSocket(PRInt32 osfd);
+extern PRInt32 _MD_CloseSocket(PROsfd osfd);
 #define _MD_CLOSE_SOCKET              _MD_CloseSocket
 #define _MD_SENDTO                    _PR_MD_SENDTO
 #define _MD_RECVFROM                  _PR_MD_RECVFROM
@@ -299,7 +354,7 @@ extern PRInt32 _MD_SocketAvailable(PRFileDesc *fd);
 #define _MD_SOCKETAVAILABLE           _MD_SocketAvailable
 #define _MD_PIPEAVAILABLE             _PR_MD_PIPEAVAILABLE
 #define _MD_CONNECT                   _PR_MD_CONNECT
-extern PRInt32 _MD_Accept(PRFileDesc *fd, PRNetAddr *raddr, PRUint32 *rlen,
+extern PROsfd _MD_Accept(PRFileDesc *fd, PRNetAddr *raddr, PRUint32 *rlen,
         PRIntervalTime timeout);
 #define _MD_ACCEPT                    _MD_Accept
 #define _MD_BIND                      _PR_MD_BIND
@@ -413,7 +468,10 @@ extern PRStatus _PR_WaitWindowsProcess(struct PRProcess *process,
 extern PRStatus _PR_KillWindowsProcess(struct PRProcess *process);
 
 #define _MD_CLEANUP_BEFORE_EXIT           _PR_MD_CLEANUP_BEFORE_EXIT
-#define _MD_INIT_CONTEXT
+#define _MD_INIT_CONTEXT(_thread, _sp, _main, status) \
+    PR_BEGIN_MACRO \
+    *status = PR_TRUE; \
+    PR_END_MACRO
 #define _MD_SWITCH_CONTEXT
 #define _MD_RESTORE_CONTEXT
 

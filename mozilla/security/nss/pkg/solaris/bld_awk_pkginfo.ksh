@@ -1,9 +1,11 @@
 #!/usr/bin/ksh -p
 #
-#ident	"$Id: bld_awk_pkginfo.ksh,v 1.2 2002/10/02 23:11:27 kirk.erickson%sun.com Exp $"
-#
-# Copyright 2002 Sun Microsystems, Inc.  All rights reserved.
+# Copyright 2005 Sun Microsystems, Inc.  All rights reserved.
 # Use is subject to license terms.
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #
 # Simple script which builds the awk_pkginfo awk script.  This awk script
 # is used to convert the pkginfo.tmpl files into pkginfo files

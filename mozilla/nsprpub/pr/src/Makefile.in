@@ -1,35 +1,39 @@
 # 
-# The contents of this file are subject to the Mozilla Public
-# License Version 1.1 (the "License"); you may not use this file
-# except in compliance with the License. You may obtain a copy of
-# the License at http://www.mozilla.org/MPL/
-# 
-# Software distributed under the License is distributed on an "AS
-# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
-# implied. See the License for the specific language governing
-# rights and limitations under the License.
-# 
+# ***** BEGIN LICENSE BLOCK *****
+# Version: MPL 1.1/GPL 2.0/LGPL 2.1
+#
+# The contents of this file are subject to the Mozilla Public License Version
+# 1.1 (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+# http://www.mozilla.org/MPL/
+#
+# Software distributed under the License is distributed on an "AS IS" basis,
+# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+# for the specific language governing rights and limitations under the
+# License.
+#
 # The Original Code is the Netscape Portable Runtime (NSPR).
-# 
-# The Initial Developer of the Original Code is Netscape
-# Communications Corporation.  Portions created by Netscape are 
-# Copyright (C) 1998-2000 Netscape Communications Corporation.  All
-# Rights Reserved.
-# 
+#
+# The Initial Developer of the Original Code is
+# Netscape Communications Corporation.
+# Portions created by the Initial Developer are Copyright (C) 1998-2000
+# the Initial Developer. All Rights Reserved.
+#
 # Contributor(s):
-# 
-# Alternatively, the contents of this file may be used under the
-# terms of the GNU General Public License Version 2 or later (the
-# "GPL"), in which case the provisions of the GPL are applicable 
-# instead of those above.  If you wish to allow use of your 
-# version of this file only under the terms of the GPL and not to
-# allow others to use your version of this file under the MPL,
-# indicate your decision by deleting the provisions above and
-# replace them with the notice and other provisions required by
-# the GPL.  If you do not delete the provisions above, a recipient
-# may use your version of this file under either the MPL or the
-# GPL.
-# 
+#
+# Alternatively, the contents of this file may be used under the terms of
+# either the GNU General Public License Version 2 or later (the "GPL"), or
+# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+# in which case the provisions of the GPL or the LGPL are applicable instead
+# of those above. If you wish to allow use of your version of this file only
+# under the terms of either the GPL or the LGPL, and not to allow others to
+# use your version of this file under the terms of the MPL, indicate your
+# decision by deleting the provisions above and replace them with the notice
+# and other provisions required by the GPL or the LGPL. If you do not delete
+# the provisions above, a recipient may use your version of this file under
+# the terms of any one of the MPL, the GPL or the LGPL.
+#
+# ***** END LICENSE BLOCK *****
 
 #! gmake
 
@@ -43,11 +47,6 @@ include $(MOD_DEPTH)/config/autoconf.mk
 include $(topsrcdir)/config/config.mk
 
 DIRS = io linking malloc md memory misc threads
-
-# For VAC++ 4 geticcdata rule in config/OS2.mk
-ifeq ($(MOZ_OS2_TOOLS),VACPP)
-CSRCS = prvrsion.c
-endif
 
 ifeq ($(USE_PTHREADS), 1)
 	DIRS += pthreads
@@ -72,7 +71,11 @@ else	# 4.1.3_U1
 MAPFILE = $(OBJDIR)/nsprmap.sun
 GARBAGE += $(MAPFILE)
 ifdef NS_USE_GCC
+ifdef GCC_USE_GNU_LD
+MKSHLIB += -Wl,--version-script,$(MAPFILE)
+else
 MKSHLIB += -Wl,-M,$(MAPFILE)
+endif
 else
 MKSHLIB += -M $(MAPFILE)
 endif
@@ -87,19 +90,15 @@ LIBRT=-lposix4
 endif
 
 ifdef USE_PTHREADS
-OS_LIBS			= -lpthread -lthread ${LIBRT} -lsocket -lnsl -ldl -lc
+OS_LIBS			= -lpthread ${LIBRT} -lsocket -lnsl -ldl -lc
 else
-ifdef LOCAL_THREADS_ONLY
 OS_LIBS			= -lsocket -lnsl -ldl -lc
-else
-OS_LIBS			= -lthread ${LIBRT} -lsocket -lnsl -ldl -lc
-endif	# LOCAL_THREADS_ONLY
 endif	# USE_PTHREADS
-ifeq ($(OS_TEST),sun4u)
+ifeq ($(CPU_ARCH),sparc)
 ifndef USE_64
 DSO_LDOPTS	+= -Wl,-f,\$$ORIGIN/cpu/\$$ISALIST/lib$(ULTRASPARC_LIBRARY)$(LIBRARY_VERSION).so
 endif
-endif	# sun4u
+endif	# sparc
 endif	# 4.1.3_U1
 endif	# SunOS
 
@@ -111,17 +110,19 @@ OS_LIBS += -lc
 endif
 
 ifeq ($(OS_ARCH),AIX)
+DSO_LDOPTS	+= -binitfini::_PR_Fini
+OS_LIBS		= -lodm -lcfg
 ifeq ($(CLASSIC_NSPR),1)
 ifeq ($(OS_RELEASE),4.1)
-OS_LIBS		= -lsvld -lc
+OS_LIBS		+= -lsvld -lc
 else
-OS_LIBS		= -ldl -lc
+OS_LIBS		+= -ldl -lc
 endif
 else
 ifeq ($(OS_RELEASE),4.1)
-OS_LIBS		= -lpthreads -lsvld -lC_r -lC -lc_r -lm /usr/lib/libc.a
+OS_LIBS		+= -lpthreads -lsvld -lC_r -lC -lc_r -lm /usr/lib/libc.a
 else
-OS_LIBS		= -lpthreads -ldl -lC_r -lC -lc_r -lm /usr/lib/libc.a
+OS_LIBS		+= -lpthreads -ldl -lC_r -lC -lc_r -lm /usr/lib/libc.a
 endif
 endif
 endif
@@ -135,6 +136,13 @@ BUILD_AIX_RTL_LIBC = 1
 AIX_RTL_LIBC	= $(OBJDIR)/libc.a
 endif
 endif
+endif
+
+ifeq ($(OS_ARCH),OS2)
+MAPFILE = $(OBJDIR)/$(LIBRARY_NAME)$(LIBRARY_VERSION).def
+ADD_TO_DEF_FILE = cat $(srcdir)/os2extra.def >> $(MAPFILE)
+GARBAGE += $(MAPFILE)
+MKSHLIB += $(MAPFILE)
 endif
 
 ifeq ($(OS_ARCH),OSF1)
@@ -170,6 +178,11 @@ OS_LIBS		+= -ldld -L/lib/pa1.1 -lm
 else
 OS_LIBS		+= -ldld -lm -lc
 endif
+ifneq ($(OS_TEST),ia64)
+ifndef USE_64
+DSO_LDOPTS	+= +I PR_HPUX10xInit
+endif
+endif
 endif
 
 ifeq ($(OS_ARCH),UNIXWARE)
@@ -182,9 +195,9 @@ endif
 
 ifeq ($(OS_ARCH),WINNT)
 ifdef NS_USE_GCC
-OS_LIBS		= -ladvapi32 -lws2_32
+OS_LIBS		= -ladvapi32 -lwsock32 -lwinmm
 else
-OS_LIBS		= advapi32.lib wsock32.lib
+OS_LIBS		= advapi32.lib wsock32.lib winmm.lib
 endif
 endif
 
@@ -220,6 +233,7 @@ OBJS = \
 	threads/$(OBJDIR)/prrwlock.$(OBJ_SUFFIX) \
 	threads/$(OBJDIR)/prtpd.$(OBJ_SUFFIX) \
     linking/$(OBJDIR)/prlink.$(OBJ_SUFFIX) \
+    malloc/$(OBJDIR)/prmalloc.$(OBJ_SUFFIX) \
     malloc/$(OBJDIR)/prmem.$(OBJ_SUFFIX) \
     md/$(OBJDIR)/prosdep.$(OBJ_SUFFIX) \
     memory/$(OBJDIR)/prshm.$(OBJ_SUFFIX) \
@@ -246,11 +260,6 @@ OBJS = \
     misc/$(OBJDIR)/prtpool.$(OBJ_SUFFIX) \
     misc/$(OBJDIR)/prtrace.$(OBJ_SUFFIX) \
     misc/$(OBJDIR)/prtime.$(OBJ_SUFFIX)
-
-# ilib now rejects empty objects
-ifneq ($(MOZ_OS2_TOOLS),VACPP)
-OBJS += malloc/$(OBJDIR)/prmalloc.$(OBJ_SUFFIX)
-endif
 
 ifdef USE_PTHREADS
 OBJS += \
@@ -300,11 +309,6 @@ OBJS += memory/$(OBJDIR)/prgcleak.$(OBJ_SUFFIX)
 endif
 
 ifeq ($(OS_ARCH), WINNT)
-ifdef NS_USE_GCC
-DLLBASE=-Wl,--image-base -Wl,0x30000000
-else
-DLLBASE=/BASE:0x30000000
-endif # GCC
 RES=$(OBJDIR)/nspr.res
 RESNAME=nspr.rc
 endif # WINNT
@@ -368,11 +372,7 @@ $(OBJDIR)/prvrsion.$(OBJ_SUFFIX): prvrsion.c $(TINC)
 ifeq ($(NS_USE_GCC)_$(OS_ARCH),_WINNT)
 	$(CC) -Fo$@ -c $(CFLAGS) -I$(OBJDIR) $<
 else
-ifeq ($(MOZ_OS2_TOOLS), VACPP)
-	$(CC) -Fo$@ -c $(CFLAGS) -I$(OBJDIR) $<
-else
 	$(CC) -o $@ -c $(CFLAGS) -I$(OBJDIR) $<
-endif
 endif
 #
 # Version information generation (end)

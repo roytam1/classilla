@@ -1,40 +1,13 @@
 /*
  * alg2268.c - implementation of the algorithm in RFC 2268
  *
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- *
- * $Id: alg2268.c,v 1.4 2002/11/16 06:09:57 nelsonb%netscape.com Exp $
- */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#ifdef FREEBL_NO_DEPEND
+#include "stubs.h"
+#endif
 
 #include "blapi.h"
 #include "secerr.h"
@@ -98,7 +71,7 @@ struct RC2ContextStr {
     ((PRUint16 *)output)[2] =  R[2]; \
     ((PRUint16 *)output)[3] =  R[3];   
 
-#if defined (_X86_)
+#if defined (NSS_X86_OR_X64)
 #define LOAD(R)  LOAD_EASY(R)
 #define STORE(R) STORE_EASY(R)
 #elif !defined(IS_LITTLE_ENDIAN)
@@ -128,22 +101,15 @@ static const PRUint8 S[256] = {
 0305,0363,0333,0107,0345,0245,0234,0167,0012,0246,0040,0150,0376,0177,0301,0255
 };
 
-/*
-** Create a new RC2 context suitable for RC2 encryption/decryption.
-** 	"key" raw key data
-** 	"len" the number of bytes of key data
-** 	"iv" is the CBC initialization vector (if mode is NSS_RC2_CBC)
-** 	"mode" one of NSS_RC2 or NSS_RC2_CBC
-**	"effectiveKeyLen" in bytes, not bits.
-**
-** When mode is set to NSS_RC2_CBC the RC2 cipher is run in "cipher block
-** chaining" mode.
-*/
-RC2Context *
-RC2_CreateContext(const unsigned char *key, unsigned int len,
-		  const unsigned char *input, int mode, unsigned efLen8)
+RC2Context * RC2_AllocateContext(void)
 {
-    RC2Context *cx;
+    return PORT_ZNew(RC2Context);
+}
+SECStatus   
+RC2_InitContext(RC2Context *cx, const unsigned char *key, unsigned int len,
+	        const unsigned char *input, int mode, unsigned int efLen8, 
+		unsigned int unused)
+{
     PRUint8    *L,*L2;
     int         i;
 #if !defined(IS_LITTLE_ENDIAN)
@@ -151,22 +117,22 @@ RC2_CreateContext(const unsigned char *key, unsigned int len,
 #endif
     PRUint8     tmpB;
 
-    if (!key || len == 0 || len > (sizeof cx->B) || efLen8 > (sizeof cx->B)) {
-    	return NULL;
+    if (!key || !cx || !len || len > (sizeof cx->B) || 
+	efLen8 > (sizeof cx->B)) {
+	PORT_SetError(SEC_ERROR_INVALID_ARGS);
+    	return SECFailure;
     }
     if (mode == NSS_RC2) {
     	/* groovy */
     } else if (mode == NSS_RC2_CBC) {
     	if (!input) {
-	    return NULL;	/* not groovy */
+	    PORT_SetError(SEC_ERROR_INVALID_ARGS);
+	    return SECFailure;
 	}
     } else {
-    	return NULL;
+	PORT_SetError(SEC_ERROR_INVALID_ARGS);
+	return SECFailure;
     }
-
-    cx = PORT_ZNew(RC2Context);
-    if (!cx)
-    	return cx;
 
     if (mode == NSS_RC2_CBC) {
     	cx->enc = & rc2_EncryptCBC;
@@ -204,6 +170,32 @@ RC2_CreateContext(const unsigned char *key, unsigned int len,
         SWAPK(i);		/* candidate for unrolling */
     }
 #endif
+    return SECSuccess;
+}
+
+/*
+** Create a new RC2 context suitable for RC2 encryption/decryption.
+** 	"key" raw key data
+** 	"len" the number of bytes of key data
+** 	"iv" is the CBC initialization vector (if mode is NSS_RC2_CBC)
+** 	"mode" one of NSS_RC2 or NSS_RC2_CBC
+**	"effectiveKeyLen" in bytes, not bits.
+**
+** When mode is set to NSS_RC2_CBC the RC2 cipher is run in "cipher block
+** chaining" mode.
+*/
+RC2Context *
+RC2_CreateContext(const unsigned char *key, unsigned int len,
+		  const unsigned char *iv, int mode, unsigned efLen8)
+{
+    RC2Context *cx = PORT_ZNew(RC2Context);
+    if (cx) {
+	SECStatus rv = RC2_InitContext(cx, key, len, iv, mode, efLen8, 0);
+	if (rv != SECSuccess) {
+	    RC2_DestroyContext(cx, PR_TRUE);
+	    cx = NULL;
+	}
+    }
     return cx;
 }
 

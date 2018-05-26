@@ -1,40 +1,9 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * CMS attributes.
- *
- * $Id: cmsattr.c,v 1.5 2001/08/22 23:22:12 wtc%netscape.com Exp $
  */
 
 #include "cmslocal.h"
@@ -64,7 +33,7 @@
  * with NSS_CMSAttribute_AddValue.
  */
 NSSCMSAttribute *
-NSS_CMSAttribute_Create(PRArenaPool *poolp, SECOidTag oidtag, SECItem *value, PRBool encoded)
+NSS_CMSAttribute_Create(PLArenaPool *poolp, SECOidTag oidtag, SECItem *value, PRBool encoded)
 {
     NSSCMSAttribute *attr;
     SECItem *copiedvalue;
@@ -86,13 +55,11 @@ NSS_CMSAttribute_Create(PRArenaPool *poolp, SECOidTag oidtag, SECItem *value, PR
 	goto loser;
 
     if (value != NULL) {
-	if ((copiedvalue = SECITEM_AllocItem(poolp, NULL, value->len)) == NULL)
+	if ((copiedvalue = SECITEM_ArenaDupItem(poolp, value)) == NULL)
 	    goto loser;
 
-	if (SECITEM_CopyItem(poolp, copiedvalue, value) != SECSuccess)
+	if (NSS_CMSArray_Add(poolp, (void ***)&(attr->values), (void *)copiedvalue) != SECSuccess)
 	    goto loser;
-
-	NSS_CMSArray_Add(poolp, (void ***)&(attr->values), (void *)copiedvalue);
     }
 
     attr->encoded = encoded;
@@ -113,18 +80,22 @@ loser:
 SECStatus
 NSS_CMSAttribute_AddValue(PLArenaPool *poolp, NSSCMSAttribute *attr, SECItem *value)
 {
-    SECItem copiedvalue;
+    SECItem *copiedvalue;
     void *mark;
 
     PORT_Assert (poolp != NULL);
 
     mark = PORT_ArenaMark(poolp);
 
-    /* XXX we need an object memory model #$%#$%! */
-    if (SECITEM_CopyItem(poolp, &copiedvalue, value) != SECSuccess)
+    if (value == NULL) {
+	PORT_SetError(SEC_ERROR_INVALID_ARGS);
+	goto loser;
+    }
+
+    if ((copiedvalue = SECITEM_ArenaDupItem(poolp, value)) == NULL)
 	goto loser;
 
-    if (NSS_CMSArray_Add(poolp, (void ***)&(attr->values), (void *)&copiedvalue) != SECSuccess)
+    if (NSS_CMSArray_Add(poolp, (void ***)&(attr->values), (void *)copiedvalue) != SECSuccess)
 	goto loser;
 
     PORT_ArenaUnmark(poolp, mark);
@@ -217,9 +188,12 @@ cms_attr_choose_attr_value_template(void *src_or_dest, PRBool encoding)
 
     attribute = (NSSCMSAttribute *)src_or_dest;
 
-    if (encoding && attribute->encoded)
-	/* we're encoding, and the attribute value is already encoded. */
-	return SEC_ASN1_GET(SEC_AnyTemplate);
+    if (encoding && (!attribute->values || !attribute->values[0] ||
+        attribute->encoded)) {
+        /* we're encoding, and the attribute has no value or the attribute
+         * value is already encoded. */
+        return SEC_ASN1_GET(SEC_AnyTemplate);
+    }
 
     /* get attribute's typeTag */
     oiddata = attribute->typeTag;
@@ -259,7 +233,7 @@ cms_attr_choose_attr_value_template(void *src_or_dest, PRBool encoding)
 	    break;
 	case SEC_OID_PKCS9_SIGNING_TIME:
 	    encoded = PR_FALSE;
-	    theTemplate = SEC_ASN1_GET(SEC_UTCTimeTemplate);
+	    theTemplate = SEC_ASN1_GET(CERT_TimeChoiceTemplate);
 	    break;
 	  /* XXX Want other types here, too */
 	}
@@ -316,7 +290,7 @@ const SEC_ASN1Template nss_cms_set_of_attribute_template[] = {
  * do the reordering.)
  */
 SECItem *
-NSS_CMSAttributeArray_Encode(PRArenaPool *poolp, NSSCMSAttribute ***attrs, SECItem *dest)
+NSS_CMSAttributeArray_Encode(PLArenaPool *poolp, NSSCMSAttribute ***attrs, SECItem *dest)
 {
     return SEC_ASN1EncodeItem (poolp, dest, (void *)attrs, nss_cms_set_of_attribute_template);
 }

@@ -1,35 +1,6 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef _PKCS12T_H_
 #define _PKCS12T_H_
@@ -41,6 +12,15 @@
 #include "plarena.h"
 #include "secpkcs7.h"
 #include "secdig.h"	/* for SGNDigestInfo */
+
+typedef enum {
+  SECPKCS12TargetTokenNoCAs,		/* CA get loaded intothe fixed token,
+					 * User certs go to target token */
+  SECPKCS12TargetTokenIntermediateCAs,  /* User certs and intermediates go to
+					 * target token, root certs got to
+					 * fixed token */
+  SECPKCS12TargetTokenAllCAs		/* All certs go to target token */
+} SECPKCS12TargetTokenCAs;
 
 /* PKCS12 Structures */
 typedef struct SEC_PKCS12PFXItemStr SEC_PKCS12PFXItem;
@@ -72,7 +52,7 @@ typedef SECItem *(* SEC_PKCS12PasswordFunc)(SECItem *args);
 /* stores shrouded keys */
 struct SEC_PKCS12BaggageStr
 {
-    PRArenaPool     *poolp;
+    PLArenaPool     *poolp;
     SEC_PKCS12BaggageItem **bags;
 
     int luggage_size;		/* used locally */
@@ -83,7 +63,7 @@ struct SEC_PKCS12BaggageStr
  */
 struct SEC_PKCS12PVKAdditionalDataStr
 {
-    PRArenaPool	*poolp;
+    PLArenaPool	*poolp;
     SECOidData	*pvkAdditionalTypeTag;	/* used locally */
     SECItem     pvkAdditionalType;
     SECItem     pvkAdditionalContent;
@@ -94,7 +74,7 @@ struct SEC_PKCS12PVKAdditionalDataStr
  */
 struct SEC_PKCS12PVKSupportingDataStr
 {
-    PRArenaPool		*poolp;
+    PLArenaPool		*poolp;
     SGNDigestInfo 	**assocCerts;
     SECItem		regenerable;
     SECItem         	nickname;
@@ -111,7 +91,7 @@ struct SEC_PKCS12PVKSupportingDataStr
  */
 struct SEC_PKCS12ESPVKItemStr
 {
-    PRArenaPool *poolp;		/* used locally */
+    PLArenaPool *poolp;		/* used locally */
     SECOidData	*espvkTag;	/* used locally */
     SECItem	espvkOID;
     SEC_PKCS12PVKSupportingData espvkData;
@@ -132,7 +112,7 @@ struct SEC_PKCS12ESPVKItemStr
  */
 struct SEC_PKCS12SafeBagStr
 {
-    PRArenaPool *poolp;
+    PLArenaPool *poolp;
     SECOidData	*safeBagTypeTag;	/* used locally */
     SECItem     safeBagType;
     union
@@ -153,7 +133,7 @@ struct SEC_PKCS12SafeBagStr
  */
 struct SEC_PKCS12SafeContentsStr
 {
-    PRArenaPool     	*poolp;
+    PLArenaPool     	*poolp;
     SEC_PKCS12SafeBag	**contents;
 
     /* used for tracking purposes */
@@ -168,7 +148,7 @@ struct SEC_PKCS12SafeContentsStr
  */
 struct SEC_PKCS12PrivateKeyStr
 {
-    PRArenaPool *poolp;
+    PLArenaPool *poolp;
     SEC_PKCS12PVKSupportingData pvkData;
     SECKEYPrivateKeyInfo	pkcs8data;   /* borrowed from PKCS 8 */
 
@@ -184,7 +164,7 @@ struct SEC_PKCS12PrivateKeyStr
  */
 struct SEC_PKCS12PrivateKeyBagStr
 {
-    PRArenaPool     *poolp;
+    PLArenaPool     *poolp;
     SEC_PKCS12PrivateKey 	**privateKeys;
 
     int bag_size;	/* used locally */
@@ -195,7 +175,7 @@ struct SEC_PKCS12PrivateKeyBagStr
  */
 struct SEC_PKCS12CertAndCRLStr
 {
-    PRArenaPool     *poolp;
+    PLArenaPool     *poolp;
     SECOidData	    *BagTypeTag;    /* used locally */
     SECItem         BagID;
     union
@@ -215,7 +195,7 @@ struct SEC_PKCS12CertAndCRLStr
  */
 struct SEC_PKCS12X509CertCRLStr
 {
-    PRArenaPool     		*poolp;
+    PLArenaPool     		*poolp;
     SEC_PKCS7ContentInfo	certOrCRL;
     SGNDigestInfo		thumbprint;
 
@@ -228,7 +208,7 @@ struct SEC_PKCS12X509CertCRLStr
  */
 struct SEC_PKCS12SDSICertStr
 {
-    PRArenaPool     *poolp;
+    PLArenaPool     *poolp;
     SECItem         value;
     SGNDigestInfo   thumbprint;
 };
@@ -236,7 +216,7 @@ struct SEC_PKCS12SDSICertStr
 /* contains a null terminated list of certs and crls */
 struct SEC_PKCS12CertAndCRLBagStr
 {
-    PRArenaPool     		*poolp;
+    PLArenaPool     		*poolp;
     SEC_PKCS12CertAndCRL	**certAndCRLs;
 
     int bag_size;	/* used locally */
@@ -247,7 +227,7 @@ struct SEC_PKCS12CertAndCRLBagStr
  */
 struct SEC_PKCS12SecretAdditionalStr
 {
-    PRArenaPool     *poolp;
+    PLArenaPool     *poolp;
     SECOidData	    *secretTypeTag;         /* used locally */
     SECItem         secretAdditionalType;
     SECItem         secretAdditionalContent;
@@ -258,7 +238,7 @@ struct SEC_PKCS12SecretAdditionalStr
  */
 struct SEC_PKCS12SecretStr
 {
-    PRArenaPool     *poolp;
+    PLArenaPool     *poolp;
     SECItem	secretName;
     SECItem	value;
     SEC_PKCS12SecretAdditional	secretAdditional;
@@ -268,7 +248,7 @@ struct SEC_PKCS12SecretStr
 
 struct SEC_PKCS12SecretItemStr
 {
-    PRArenaPool     *poolp;
+    PLArenaPool     *poolp;
     SEC_PKCS12Secret	secret;
     SEC_PKCS12SafeBag	subFolder;
 };    
@@ -277,7 +257,7 @@ struct SEC_PKCS12SecretItemStr
  */
 struct SEC_PKCS12SecretBagStr
 {
-    PRArenaPool     	*poolp;
+    PLArenaPool     	*poolp;
     SEC_PKCS12SecretItem	**secrets;
 
     int bag_size;	/* used locally */
@@ -292,7 +272,7 @@ struct SEC_PKCS12MacDataStr
 /* outer transfer unit */
 struct SEC_PKCS12PFXItemStr
 {
-    PRArenaPool		*poolp;
+    PLArenaPool		*poolp;
     SEC_PKCS12MacData	macData;
     SEC_PKCS7ContentInfo	authSafe; 
 
@@ -306,7 +286,7 @@ struct SEC_PKCS12PFXItemStr
 };
 
 struct SEC_PKCS12BaggageItemStr {
-    PRArenaPool	    *poolp;
+    PLArenaPool	    *poolp;
     SEC_PKCS12ESPVKItem	**espvks;
     SEC_PKCS12SafeBag	**unencSecrets;
 
@@ -317,7 +297,7 @@ struct SEC_PKCS12BaggageItemStr {
 /* stores shrouded keys */
 struct SEC_PKCS12Baggage_OLDStr
 {
-    PRArenaPool     *poolp;
+    PLArenaPool     *poolp;
     SEC_PKCS12ESPVKItem **espvks;
 
     int luggage_size;		/* used locally */
@@ -326,7 +306,7 @@ struct SEC_PKCS12Baggage_OLDStr
 /* authenticated safe, stores certs, keys, and shrouded keys */
 struct SEC_PKCS12AuthenticatedSafeStr
 {
-    PRArenaPool     *poolp;
+    PLArenaPool     *poolp;
     SECItem         version;
     SECOidData	    *transportTypeTag;	/* local not part of encoding*/
     SECItem         transportMode;

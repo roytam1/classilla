@@ -1,35 +1,6 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* -r flag is interepreted as follows:
  *	1 -r  means request, not require, on initial handshake.
@@ -50,10 +21,7 @@
 #include <process.h>	/* for getpid() */
 #endif
 
-#ifdef XP_OS2_VACPP
-#include <Process.h>	/* for getpid() */
-#endif
-
+#include <signal.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -70,6 +38,9 @@
 #include "nss.h"
 #include "ssl.h"
 #include "sslproto.h"
+#include "cert.h"
+#include "certt.h"
+#include "ocsp.h"
 
 #ifndef PORT_Sprintf
 #define PORT_Sprintf sprintf
@@ -83,16 +54,45 @@
 #define PORT_Malloc PR_Malloc
 #endif
 
-#define NUM_SID_CACHE_ENTRIES 1024
+int NumSidCacheEntries = 1024;
 
 static int handle_connection( PRFileDesc *, PRFileDesc *, int );
 
 static const char envVarName[] = { SSL_ENV_VAR_NAME };
 static const char inheritableSockName[] = { "SELFSERV_LISTEN_SOCKET" };
 
-static PRBool logStats = PR_FALSE;
+#define DEFAULT_BULK_TEST 16384
+#define MAX_BULK_TEST     1048576 /* 1 MB */
+static PRBool testBulk;
+static PRUint32 testBulkSize       = DEFAULT_BULK_TEST;
+static PRUint32 testBulkTotal;
+static char* testBulkBuf;
+static PRDescIdentity log_layer_id = PR_INVALID_IO_LAYER;
+static PRFileDesc *loggingFD;
+static PRIOMethods loggingMethods;
+
+static PRBool logStats;
+static PRBool loggingLayer;
 static int logPeriod = 30;
-static PRUint32 loggerOps = 0;
+static PRUint32 loggerOps;
+static PRUint32 loggerBytes;
+static PRUint32 loggerBytesTCP;
+static PRUint32 bulkSentChunks;
+static enum ocspStaplingModeEnum {
+    osm_disabled,  /* server doesn't support stapling */
+    osm_good,      /* supply a signed good status */
+    osm_revoked,   /* supply a signed revoked status */
+    osm_unknown,   /* supply a signed unknown status */
+    osm_failure,   /* supply a unsigned failure status, "try later" */
+    osm_badsig,    /* supply a good status response with a bad signature */
+    osm_corrupted, /* supply a corrupted data block as the status */
+    osm_random,    /* use a random response for each connection */
+    osm_ocsp       /* retrieve ocsp status from external ocsp server,
+		      use empty status if server is unavailable */
+} ocspStaplingMode = osm_disabled;
+typedef enum ocspStaplingModeEnum ocspStaplingModeType;
+static char *ocspStaplingCA = NULL;
+static SECItemArray *certStatus[kt_kea_size] = { NULL };
 
 const int ssl2CipherSuites[] = {
     SSL_EN_RC4_128_WITH_MD5,			/* A */
@@ -105,30 +105,30 @@ const int ssl2CipherSuites[] = {
 };
 
 const int ssl3CipherSuites[] = {
-    SSL_FORTEZZA_DMS_WITH_FORTEZZA_CBC_SHA,	/* a */
-    SSL_FORTEZZA_DMS_WITH_RC4_128_SHA,		/* b */
+    -1, /* SSL_FORTEZZA_DMS_WITH_FORTEZZA_CBC_SHA* a */
+    -1, /* SSL_FORTEZZA_DMS_WITH_RC4_128_SHA	 * b */
     SSL_RSA_WITH_RC4_128_MD5,			/* c */
     SSL_RSA_WITH_3DES_EDE_CBC_SHA,		/* d */
     SSL_RSA_WITH_DES_CBC_SHA,			/* e */
     SSL_RSA_EXPORT_WITH_RC4_40_MD5,		/* f */
     SSL_RSA_EXPORT_WITH_RC2_CBC_40_MD5,		/* g */
-    SSL_FORTEZZA_DMS_WITH_NULL_SHA,		/* h */
+    -1, /* SSL_FORTEZZA_DMS_WITH_NULL_SHA,	 * h */
     SSL_RSA_WITH_NULL_MD5,			/* i */
     SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA,		/* j */
     SSL_RSA_FIPS_WITH_DES_CBC_SHA,		/* k */
     TLS_RSA_EXPORT1024_WITH_DES_CBC_SHA,	/* l */
     TLS_RSA_EXPORT1024_WITH_RC4_56_SHA,	        /* m */
     SSL_RSA_WITH_RC4_128_SHA,			/* n */
-    TLS_DHE_DSS_WITH_RC4_128_SHA,		/* o */
-    SSL_DHE_RSA_WITH_3DES_EDE_CBC_SHA,		/* p */
-    SSL_DHE_DSS_WITH_3DES_EDE_CBC_SHA,		/* q */
-    SSL_DHE_RSA_WITH_DES_CBC_SHA,		/* r */
-    SSL_DHE_DSS_WITH_DES_CBC_SHA,		/* s */
-    TLS_DHE_DSS_WITH_AES_128_CBC_SHA, 	    	/* t */
-    TLS_DHE_RSA_WITH_AES_128_CBC_SHA,       	/* u */
+    -1, /* TLS_DHE_DSS_WITH_RC4_128_SHA, 	 * o */
+    -1, /* SSL_DHE_RSA_WITH_3DES_EDE_CBC_SHA,	 * p */
+    -1, /* SSL_DHE_DSS_WITH_3DES_EDE_CBC_SHA,	 * q */
+    -1, /* SSL_DHE_RSA_WITH_DES_CBC_SHA,	 * r */
+    -1, /* SSL_DHE_DSS_WITH_DES_CBC_SHA,	 * s */
+    -1, /* TLS_DHE_DSS_WITH_AES_128_CBC_SHA,	 * t */
+    -1, /* TLS_DHE_RSA_WITH_AES_128_CBC_SHA,	 * u */
     TLS_RSA_WITH_AES_128_CBC_SHA,     	    	/* v */
-    TLS_DHE_DSS_WITH_AES_256_CBC_SHA, 	    	/* w */
-    TLS_DHE_RSA_WITH_AES_256_CBC_SHA,       	/* x */
+    -1, /* TLS_DHE_DSS_WITH_AES_256_CBC_SHA,	 * w */
+    -1, /* TLS_DHE_RSA_WITH_AES_256_CBC_SHA,	 * x */
     TLS_RSA_WITH_AES_256_CBC_SHA,     	    	/* y */
     SSL_RSA_WITH_NULL_SHA,			/* z */
     0
@@ -146,39 +146,43 @@ static PRThread * acceptorThread;
 
 static PRLogModuleInfo *lm;
 
-/* Add custom password handler because SECU_GetModulePassword 
- * makes automation of this program next to impossible.
- */
-
-char *
-ownPasswd(PK11SlotInfo *info, PRBool retry, void *arg)
-{
-	char * passwd = NULL;
-
-	if ( (!retry) && arg ) {
-		passwd = PL_strdup((char *)arg);
-	}
-
-	return passwd;
-}
-
 #define PRINTF  if (verbose)  printf
 #define FPRINTF if (verbose) fprintf
 #define FLUSH	if (verbose) { fflush(stdout); fflush(stderr); }
 #define VLOG(arg) PR_LOG(lm,PR_LOG_DEBUG,arg)
 
 static void
-Usage(const char *progName)
+PrintUsageHeader(const char *progName)
 {
     fprintf(stderr, 
+"Usage: %s -n rsa_nickname -p port [-BDENRbjlmrsuvx] [-w password]\n"
+"         [-t threads] [-i pid_file] [-c ciphers] [-Y] [-d dbdir] [-g numblocks]\n"
+"         [-f password_file] [-L [seconds]] [-M maxProcs] [-P dbprefix]\n"
+"         [-V [min-version]:[max-version]] [-a sni_name]\n"
+"         [ T <good|revoked|unknown|badsig|corrupted|none|ocsp>] [-A ca]\n"
+#ifdef NSS_ENABLE_ECC
+"         [-C SSLCacheEntries] [-e ec_nickname]\n"
+#else
+"         [-C SSLCacheEntries]\n"
+#endif /* NSS_ENABLE_ECC */
+        ,progName);
+}
 
-"Usage: %s -n rsa_nickname -p port [-3DRTbmrvx] [-w password] [-t threads]\n"
-"         [-i pid_file] [-c ciphers] [-d dbdir] [-f fortezza_nickname] \n"
-"         [-M maxProcs] [-l]\n"
-"-3 means disable SSL v3\n"
+static void
+PrintParameterUsage()
+{
+    fputs(
+"-V [min]:[max] restricts the set of enabled SSL/TLS protocol versions.\n"
+"   All versions are enabled by default.\n"
+"   Possible values for min/max: ssl2 ssl3 tls1.0 tls1.1 tls1.2\n"
+"   Example: \"-V ssl3:\" enables SSL 3 and newer.\n"
+"-B bypasses the PKCS11 layer for SSL encryption and MACing\n"
+"-q checks for bypassability\n"
 "-D means disable Nagle delays in TCP\n"
-"-T means disable TLS\n"
+"-E means disable export ciphersuites and SSL step down key gen\n"
 "-R means disable detection of rollback from TLS to SSL3\n"
+"-a configure server for SNI.\n"
+"-k expected name negotiated on server sockets\n"
 "-b means try binding to the port and exit\n"
 "-m means test the model-socket feature of SSL_ImportFD.\n"
 "-r flag is interepreted as follows:\n"
@@ -186,13 +190,50 @@ Usage(const char *progName)
 "    2 -r's mean request  and require, cert on initial handshake.\n"
 "    3 -r's mean request, not require, cert on second handshake.\n"
 "    4 -r's mean request  and require, cert on second handshake.\n"
+"-s means disable SSL socket locking for performance\n"
+"-u means enable Session Ticket extension for TLS.\n"
 "-v means verbose output\n"
 "-x means use export policy.\n"
+"-z means enable compression.\n"
+"-L seconds means log statistics every 'seconds' seconds (default=30).\n"
 "-M maxProcs tells how many processes to run in a multi-process server\n"
+"-N means do NOT use the server session cache.  Incompatible with -M.\n"
 "-t threads -- specify the number of threads to use for connections.\n"
 "-i pid_file file to write the process id of selfserve\n"
-"-c ciphers   Letter(s) chosen from the following list\n"
 "-l means use local threads instead of global threads\n"
+"-g numblocks means test throughput by sending total numblocks chunks\n"
+"    of size 16kb to the client, 0 means unlimited (default=0)\n"
+"-j means measure TCP throughput (for use with -g option)\n"
+"-C SSLCacheEntries sets the maximum number of entries in the SSL\n" 
+"    session cache\n"
+"-T <mode> enable OCSP stapling. Possible modes:\n"
+"   none: don't send cert status (default)\n"
+"   good, revoked, unknown: Include locally signed response. Requires: -A\n"
+"   failure: return a failure response (try later, unsigned)\n"
+"   badsig: use a good status but with an invalid signature\n"
+"   corrupted: stapled cert status is an invalid block of data\n"
+"   random: each connection uses a random status from this list:\n"
+"           good, revoked, unknown, failure, badsig, corrupted\n"
+"   ocsp: fetch from external OCSP server using AIA, or none\n"
+"-A <ca> Nickname of a CA used to sign a stapled cert status\n"
+"-c Restrict ciphers\n"
+"-Y prints cipher values allowed for parameter -c and exits\n"
+    , stderr);
+}
+
+static void
+Usage(const char *progName)
+{
+    PrintUsageHeader(progName);
+    PrintParameterUsage();
+}
+
+static void
+PrintCipherUsage(const char *progName)
+{
+    PrintUsageHeader(progName);
+    fputs(
+"-c ciphers   Letter(s) chosen from the following list\n"
 "A    SSL2 RC4 128 WITH MD5\n"
 "B    SSL2 RC4 128 EXPORT40 WITH MD5\n"
 "C    SSL2 RC2 128 CBC WITH MD5\n"
@@ -200,14 +241,11 @@ Usage(const char *progName)
 "E    SSL2 DES 64 CBC WITH MD5\n"
 "F    SSL2 DES 192 EDE3 CBC WITH MD5\n"
 "\n"
-"a    SSL3 FORTEZZA DMS WITH FORTEZZA CBC SHA\n"
-"b    SSL3 FORTEZZA DMS WITH RC4 128 SHA\n"
 "c    SSL3 RSA WITH RC4 128 MD5\n"
 "d    SSL3 RSA WITH 3DES EDE CBC SHA\n"
 "e    SSL3 RSA WITH DES CBC SHA\n"
 "f    SSL3 RSA EXPORT WITH RC4 40 MD5\n"
 "g    SSL3 RSA EXPORT WITH RC2 CBC 40 MD5\n"
-"h    SSL3 FORTEZZA DMS WITH NULL SHA\n"
 "i    SSL3 RSA WITH NULL MD5\n"
 "j    SSL3 RSA FIPS WITH 3DES EDE CBC SHA\n"
 "k    SSL3 RSA FIPS WITH DES CBC SHA\n"
@@ -217,7 +255,9 @@ Usage(const char *progName)
 "v    SSL3 RSA WITH AES 128 CBC SHA\n"
 "y    SSL3 RSA WITH AES 256 CBC SHA\n"
 "z    SSL3 RSA WITH NULL SHA\n"
-	,progName);
+"\n"
+":WXYZ  Use cipher with hex code { 0xWX , 0xYZ } in TLS\n"
+    , stderr);
 }
 
 static const char *
@@ -245,6 +285,7 @@ errExit(char * funcString)
 **
 **************************************************************************/
 
+/* disable all the SSL cipher suites */
 void
 disableAllSSLCiphers(void)
 {
@@ -252,17 +293,57 @@ disableAllSSLCiphers(void)
     int             i            = SSL_NumImplementedCiphers;
     SECStatus       rv;
 
-    /* disable all the SSL3 cipher suites */
     while (--i >= 0) {
 	PRUint16 suite = cipherSuites[i];
         rv = SSL_CipherPrefSetDefault(suite, PR_FALSE);
 	if (rv != SECSuccess) {
-	    printf("SSL_CipherPrefSetDefault didn't like value 0x%04x (i = %d)\n",
+	    printf("SSL_CipherPrefSetDefault rejected suite 0x%04x (i = %d)\n",
 	    	   suite, i);
 	    errWarn("SSL_CipherPrefSetDefault");
-	    exit(2);
 	}
     }
+}
+
+/* disable all the export SSL cipher suites */
+SECStatus
+disableExportSSLCiphers(void)
+{
+    const PRUint16 *cipherSuites = SSL_ImplementedCiphers;
+    int             i            = SSL_NumImplementedCiphers;
+    SECStatus       rv           = SECSuccess;
+    SSLCipherSuiteInfo info;
+
+    while (--i >= 0) {
+	PRUint16 suite = cipherSuites[i];
+	SECStatus status;
+	status = SSL_GetCipherSuiteInfo(suite, &info, sizeof info);
+	if (status != SECSuccess) {
+	    printf("SSL_GetCipherSuiteInfo rejected suite 0x%04x (i = %d)\n",
+		   suite, i);
+	    errWarn("SSL_GetCipherSuiteInfo");
+	    rv = SECFailure;
+	    continue;
+	}
+	if (info.cipherSuite != suite) {
+	    printf(
+"SSL_GetCipherSuiteInfo returned wrong suite! Wanted 0x%04x, Got 0x%04x\n",
+		   suite, i);
+	    PORT_SetError(SEC_ERROR_LIBRARY_FAILURE);
+	    rv = SECFailure;
+	    continue;
+	}
+	/* should check here that info.length >= offsetof isExportable */
+	if (info.isExportable) {
+	    status = SSL_CipherPolicySet(suite, SSL_NOT_ALLOWED);
+	    if (status != SECSuccess) {
+		printf("SSL_CipherPolicySet rejected suite 0x%04x (i = %d)\n",
+		       suite, i);
+		errWarn("SSL_CipherPolicySet");
+		rv = SECFailure;
+	    }
+	}
+    }
+    return rv;
 }
 
 static SECStatus
@@ -273,9 +354,12 @@ mySSLAuthCertificate(void *arg, PRFileDesc *fd, PRBool checkSig,
     CERTCertificate *    peerCert;
 
     peerCert = SSL_PeerCertificate(fd);
-
-    PRINTF("selfserv: Subject: %s\nselfserv: Issuer : %s\n",
-           peerCert->subjectName, peerCert->issuerName);
+    
+    if (peerCert) {
+        PRINTF("selfserv: Subject: %s\nselfserv: Issuer : %s\n",
+               peerCert->subjectName, peerCert->issuerName);
+        CERT_DestroyCertificate(peerCert);
+    }
 
     rv = SSL_AuthCertificate(arg, fd, checkSig, isServer);
 
@@ -286,24 +370,33 @@ mySSLAuthCertificate(void *arg, PRFileDesc *fd, PRBool checkSig,
 	FPRINTF(stderr, "selfserv: -- SSL3: Certificate Invalid, err %d.\n%s\n", 
                 err, SECU_Strerror(err));
     }
-    CERT_DestroyCertificate(peerCert);
     FLUSH;
     return rv;  
+}
+
+void
+printSSLStatistics()
+{
+    SSL3Statistics *  ssl3stats = SSL_GetStatistics();
+
+    printf(
+	"selfserv: %ld cache hits; %ld cache misses, %ld cache not reusable\n"
+	"          %ld stateless resumes, %ld ticket parse failures\n",
+	ssl3stats->hch_sid_cache_hits, ssl3stats->hch_sid_cache_misses,
+	ssl3stats->hch_sid_cache_not_ok, ssl3stats->hch_sid_stateless_resumes,
+	ssl3stats->hch_sid_ticket_parse_failures);
 }
 
 void 
 printSecurityInfo(PRFileDesc *fd)
 {
     CERTCertificate * cert      = NULL;
-    SSL3Statistics *  ssl3stats = SSL_GetStatistics();
     SECStatus         result;
     SSLChannelInfo    channel;
     SSLCipherSuiteInfo suite;
 
-    PRINTF(
-    	"selfserv: %ld cache hits; %ld cache misses, %ld cache not reusable\n",
-    	ssl3stats->hch_sid_cache_hits, ssl3stats->hch_sid_cache_misses,
-	ssl3stats->hch_sid_cache_not_ok);
+    if (verbose)
+	printSSLStatistics();
 
     result = SSL_GetChannelInfo(fd, &channel, sizeof channel);
     if (result == SECSuccess && 
@@ -318,10 +411,24 @@ printSecurityInfo(PRFileDesc *fd)
 	       suite.effectiveKeyBits, suite.symCipherName, 
 	       suite.macBits, suite.macAlgorithmName);
 	    FPRINTF(stderr, 
-	    "selfserv: Server Auth: %d-bit %s, Key Exchange: %d-bit %s\n",
+	    "selfserv: Server Auth: %d-bit %s, Key Exchange: %d-bit %s\n"
+	    "          Compression: %s\n",
 	       channel.authKeyBits, suite.authAlgorithmName,
-	       channel.keaKeyBits,  suite.keaTypeName);
+	       channel.keaKeyBits,  suite.keaTypeName,
+	       channel.compressionMethodName);
     	}
+    }
+    if (verbose) {
+        SECItem *hostInfo  = SSL_GetNegotiatedHostInfo(fd);
+        if (hostInfo) {
+            char namePref[] = "selfserv: Negotiated server name: ";
+
+            fprintf(stderr, "%s", namePref);
+            fwrite(hostInfo->data, hostInfo->len, 1, stderr);
+            SECITEM_FreeItem(hostInfo, PR_TRUE);
+            hostInfo = NULL;
+            fprintf(stderr, "\n");
+        }
     }
     if (requestCert)
 	cert = SSL_PeerCertificate(fd);
@@ -332,11 +439,11 @@ printSecurityInfo(PRFileDesc *fd)
 	char * sp = CERT_NameToAscii(&cert->subject);
         if (sp) {
 	    FPRINTF(stderr, "selfserv: subject DN: %s\n", sp);
-	    PR_Free(sp);
+	    PORT_Free(sp);
 	}
         if (ip) {
 	    FPRINTF(stderr, "selfserv: issuer  DN: %s\n", ip);
-	    PR_Free(ip);
+	    PORT_Free(ip);
 	}
 	CERT_DestroyCertificate(cert);
 	cert = NULL;
@@ -357,12 +464,77 @@ myBadCertHandler( void *arg, PRFileDesc *fd)
     return (MakeCertOK ? SECSuccess : SECFailure);
 }
 
+#define MAX_VIRT_SERVER_NAME_ARRAY_INDEX  10
+
+/* Simple SNI socket config function that does not use SSL_ReconfigFD.
+ * Only uses one server name but verifies that the names match. */
+PRInt32 
+mySSLSNISocketConfig(PRFileDesc *fd, const SECItem *sniNameArr,
+                     PRUint32 sniNameArrSize, void *arg)
+{
+    PRInt32        i = 0;
+    const SECItem *current = sniNameArr;
+    const char    **nameArr = (const char**)arg;
+    secuPWData *pwdata;
+    CERTCertificate *    cert = NULL;
+    SECKEYPrivateKey *   privKey = NULL;
+
+    PORT_Assert(fd && sniNameArr);
+    if (!fd || !sniNameArr) {
+	return SSL_SNI_SEND_ALERT;
+    }
+
+    pwdata = SSL_RevealPinArg(fd);
+
+    for (;current && i < sniNameArrSize;i++) {
+        int j = 0;
+        for (;j < MAX_VIRT_SERVER_NAME_ARRAY_INDEX && nameArr[j];j++) {
+            if (!PORT_Strncmp(nameArr[j],
+                              (const char *)current[i].data,
+                              current[i].len) &&
+                PORT_Strlen(nameArr[j]) == current[i].len) {
+                const char *nickName = nameArr[j];
+                if (j == 0) {
+                    /* default cert */
+                    return 0;
+                }
+                /* if pwdata is NULL, then we would not get the key and
+                 * return an error status. */
+                cert = PK11_FindCertFromNickname(nickName, &pwdata);
+                if (cert == NULL) {
+                    goto loser; /* Send alert */
+                }
+                privKey = PK11_FindKeyByAnyCert(cert, &pwdata);
+                if (privKey == NULL) {
+                    goto loser; /* Send alert */
+                }
+                if (SSL_ConfigSecureServer(fd, cert, privKey,
+                                           kt_rsa) != SECSuccess) {
+                    goto loser; /* Send alert */
+                }
+                SECKEY_DestroyPrivateKey(privKey);
+                CERT_DestroyCertificate(cert);
+                return i;
+            }
+        }
+    }
+loser:
+    if (privKey) {
+        SECKEY_DestroyPrivateKey(privKey);
+    }
+    if (cert) {
+        CERT_DestroyCertificate(cert);
+    }
+    return SSL_SNI_SEND_ALERT;
+}
+
+
 /**************************************************************************
 ** Begin thread management routines and data.
 **************************************************************************/
 #define MIN_THREADS 3
 #define DEFAULT_THREADS 8
-#define MAX_THREADS 128
+#define MAX_THREADS 4096
 #define MAX_PROCS 25
 static int  maxThreads = DEFAULT_THREADS;
 
@@ -375,6 +547,7 @@ typedef struct jobStr {
 } JOB;
 
 static PZLock    * qLock; /* this lock protects all data immediately below */
+static PRLock    * lastLoadedCrlLock; /* this lock protects lastLoadedCrl variable */
 static PZCondVar * jobQNotEmptyCv;
 static PZCondVar * freeListNotEmptyCv;
 static PZCondVar * threadCountChangeCv;
@@ -481,6 +654,9 @@ launch_threads(
     freeListNotEmptyCv  = PZ_NewCondVar(qLock);
     threadCountChangeCv = PZ_NewCondVar(qLock);
 
+    /* create monitor for crl reload procedure */
+    lastLoadedCrlLock   = PR_NewLock();
+
     /* allocate the array of thread slots */
     threads = PR_Calloc(maxThreads, sizeof(perThread));
     if ( NULL == threads )  {
@@ -537,12 +713,15 @@ terminateWorkerThreads(void)
     while (threadCount > 0) {
 	PZ_WaitCondVar(threadCountChangeCv, PR_INTERVAL_NO_TIMEOUT);
     }
+    /* The worker threads empty the jobQ before they terminate. */
+    PORT_Assert(PR_CLIST_IS_EMPTY(&jobQ));
     PZ_Unlock(qLock); 
 
     DESTROY_CONDVAR(jobQNotEmptyCv);
     DESTROY_CONDVAR(freeListNotEmptyCv);
     DESTROY_CONDVAR(threadCountChangeCv);
 
+    PR_DestroyLock(lastLoadedCrlLock);
     DESTROY_LOCK(qLock);
     PR_Free(jobTable);
     PR_Free(threads);
@@ -558,23 +737,69 @@ logger(void *arg)
     PRIntervalTime latestTime;
     PRUint32 previousOps;
     PRUint32 ops;
-    PRIntervalTime logPeriodTicks = PR_SecondsToInterval(logPeriod);
-    PRFloat64 secondsPerTick = 1.0 / (PRFloat64)PR_TicksPerSecond();
+    PRIntervalTime logPeriodTicks = PR_TicksPerSecond();
+    PRFloat64 secondsPerTick = 1.0 / (PRFloat64)logPeriodTicks;
+    int iterations = 0;
+    int secondsElapsed = 0;
+    static PRInt64 totalPeriodBytes = 0;
+    static PRInt64 totalPeriodBytesTCP = 0;
 
     previousOps = loggerOps;
     previousTime = PR_IntervalNow();
  
     for (;;) {
-    	PR_Sleep(logPeriodTicks);
+        /* OK, implementing a new sleep algorithm here... always sleep 
+         * for 1 second but print out info at the user-specified interval.
+         * This way, we don't overflow all of our PR_Atomic* functions and 
+         * we don't have to use locks. 
+         */
+        PR_Sleep(logPeriodTicks);
+        secondsElapsed++;
+        totalPeriodBytes +=  PR_ATOMIC_SET(&loggerBytes, 0);
+        totalPeriodBytesTCP += PR_ATOMIC_SET(&loggerBytesTCP, 0);
+        if (secondsElapsed != logPeriod) {
+            continue;
+        }
+        /* when we reach the user-specified logging interval, print out all
+         * data 
+         */
+        secondsElapsed = 0;
         latestTime = PR_IntervalNow();
         ops = loggerOps;
         period = latestTime - previousTime;
         seconds = (PRFloat64) period*secondsPerTick;
         opsPerSec = (ops - previousOps) / seconds;
-        printf("%.2f ops/second, %d threads\n", opsPerSec, threadCount);
+
+        if (testBulk) {
+            if (iterations == 0) {
+                if (loggingLayer == PR_TRUE) {
+                    printf("Conn.--------App Data--------TCP Data\n");
+                } else {
+                    printf("Conn.--------App Data\n");
+                }
+            }
+            if (loggingLayer == PR_TRUE) {
+                printf("%4.d       %5.3f MB/s      %5.3f MB/s\n", ops, 
+                    totalPeriodBytes / (seconds * 1048576.0), 
+                    totalPeriodBytesTCP / (seconds * 1048576.0));
+            } else {
+                printf("%4.d       %5.3f MB/s\n", ops, 
+                    totalPeriodBytes / (seconds * 1048576.0));
+            }
+            totalPeriodBytes = 0;
+            totalPeriodBytesTCP = 0;
+            /* Print the "legend" every 20 iterations */
+            iterations = (iterations + 1) % 20; 
+        } else {
+            printf("%.2f ops/second, %d threads\n", opsPerSec, threadCount);
+        }
+
         fflush(stdout);
         previousOps = ops;
         previousTime = latestTime;
+        if (stopping) {
+            break;
+        }
     }
 }
 
@@ -584,9 +809,21 @@ logger(void *arg)
 **************************************************************************/
 
 PRBool useModelSocket  = PR_FALSE;
-PRBool disableSSL3     = PR_FALSE;
-PRBool disableTLS      = PR_FALSE;
-PRBool disableRollBack  = PR_FALSE;
+static SSLVersionRange enabledVersions;
+PRBool enableSSL2      = PR_TRUE;
+PRBool disableRollBack = PR_FALSE;
+PRBool NoReuse         = PR_FALSE;
+PRBool hasSidCache     = PR_FALSE;
+PRBool disableStepDown = PR_FALSE;
+PRBool bypassPKCS11    = PR_FALSE;
+PRBool disableLocking  = PR_FALSE;
+PRBool testbypass      = PR_FALSE;
+PRBool enableSessionTickets = PR_FALSE;
+PRBool enableCompression    = PR_FALSE;
+PRBool failedToNegotiateName  = PR_FALSE;
+static char  *virtServerNameArray[MAX_VIRT_SERVER_NAME_ARRAY_INDEX];
+static int                  virtServerNameIndex = 1;
+
 
 static const char stopCmd[] = { "GET /stop " };
 static const char getCmd[]  = { "GET " };
@@ -598,6 +835,18 @@ static const char outHeader[] = {
     "Content-type: text/plain\r\n"
     "\r\n"
 };
+static const char crlCacheErr[]  = { "CRL ReCache Error: " };
+
+PRUint16 cipherlist[100];
+int nciphers;
+
+void
+savecipher(int c)
+{
+    if (nciphers < sizeof cipherlist / sizeof (cipherlist[0]))
+	cipherlist[nciphers++] = (PRUint16)c;
+}
+
 
 #ifdef FULL_DUPLEX_CAPABLE
 
@@ -751,16 +1000,238 @@ handle_fdx_connection(
     FLUSH;
 
 cleanup:
-    if (ssl_sock)
+    if (ssl_sock) {
 	PR_Close(ssl_sock);
-    else
+    } else if (tcp_sock) {
 	PR_Close(tcp_sock);
+    }
 
     VLOG(("selfserv: handle_fdx_connection: exiting"));
     return SECSuccess;
 }
 
 #endif
+
+static SECItem *lastLoadedCrl = NULL;
+
+static SECStatus
+reload_crl(PRFileDesc *crlFile)
+{
+    SECItem *crlDer;
+    CERTCertDBHandle *certHandle = CERT_GetDefaultCertDB();
+    SECStatus rv;
+
+    /* Read in the entire file specified with the -f argument */
+    crlDer = PORT_Malloc(sizeof(SECItem));
+    if (!crlDer) {
+        errWarn("Can not allocate memory.");
+        return SECFailure;
+    }
+
+    rv = SECU_ReadDERFromFile(crlDer, crlFile, PR_FALSE, PR_FALSE);
+    if (rv != SECSuccess) {
+        errWarn("Unable to read input file.");
+        PORT_Free(crlDer);
+        return SECFailure;
+    }
+
+    PR_Lock(lastLoadedCrlLock);
+    rv = CERT_CacheCRL(certHandle, crlDer);
+    if (rv == SECSuccess) {
+        SECItem *tempItem = crlDer;
+        if (lastLoadedCrl != NULL) {
+            rv = CERT_UncacheCRL(certHandle, lastLoadedCrl);
+            if (rv != SECSuccess) {
+                errWarn("Unable to uncache crl.");
+                goto loser;
+            }
+            crlDer = lastLoadedCrl;
+        } else {
+            crlDer = NULL;
+        }
+        lastLoadedCrl = tempItem;
+    }
+
+  loser:
+    PR_Unlock(lastLoadedCrlLock);
+    SECITEM_FreeItem(crlDer, PR_TRUE);
+    return rv;
+}
+
+void stop_server()
+{
+    stopping = 1;
+    PR_Interrupt(acceptorThread);
+    PZ_TraceFlush();
+}
+
+SECItemArray *
+makeTryLaterOCSPResponse(PLArenaPool *arena)
+{
+    SECItemArray *result = NULL;
+    SECItem *ocspResponse = NULL;
+
+    ocspResponse = CERT_CreateEncodedOCSPErrorResponse(arena,
+					SEC_ERROR_OCSP_TRY_SERVER_LATER);
+    if (!ocspResponse)
+	errExit("cannot created ocspResponse");
+
+    result = SECITEM_AllocArray(arena, NULL, 1);
+    if (!result)
+	errExit("cannot allocate multiOcspResponses");
+
+    result->items[0].data = ocspResponse->data;
+    result->items[0].len = ocspResponse->len;
+
+    return result;
+}
+
+SECItemArray *
+makeCorruptedOCSPResponse(PLArenaPool *arena)
+{
+    SECItemArray *result = NULL;
+    SECItem *ocspResponse = NULL;
+
+    ocspResponse = SECITEM_AllocItem(arena, NULL, 1);
+    if (!ocspResponse)
+	errExit("cannot created ocspResponse");
+
+    result = SECITEM_AllocArray(arena, NULL, 1);
+    if (!result)
+	errExit("cannot allocate multiOcspResponses");
+
+    result->items[0].data = ocspResponse->data;
+    result->items[0].len = ocspResponse->len;
+
+    return result;
+}
+
+SECItemArray *
+makeSignedOCSPResponse(PLArenaPool *arena, ocspStaplingModeType osm,
+		       CERTCertificate *cert, secuPWData *pwdata)
+{
+    SECItemArray *result = NULL;
+    SECItem *ocspResponse = NULL;
+    CERTOCSPSingleResponse **singleResponses;
+    CERTOCSPSingleResponse *sr;
+    CERTOCSPCertID *cid = NULL;
+    CERTCertificate *ca;
+    PRTime now = PR_Now();
+    PRTime nextUpdate;
+
+    PORT_Assert(cert != NULL);
+
+    ca = CERT_FindCertByNickname(CERT_GetDefaultCertDB(), ocspStaplingCA);
+    if (!ca)
+	errExit("cannot find CA");
+
+    cid = CERT_CreateOCSPCertID(cert, now);
+    if (!cid)
+	errExit("cannot created cid");
+
+    nextUpdate = now + 60*60*24 * PR_USEC_PER_SEC; /* plus 1 day */
+
+    switch (osm) {
+	case osm_good:
+	case osm_badsig:
+	    sr = CERT_CreateOCSPSingleResponseGood(arena, cid, now,
+						   &nextUpdate);
+	    break;
+	case osm_unknown:
+	    sr = CERT_CreateOCSPSingleResponseUnknown(arena, cid, now,
+						      &nextUpdate);
+	    break;
+	case osm_revoked:
+	    sr = CERT_CreateOCSPSingleResponseRevoked(arena, cid, now,
+		&nextUpdate,
+		now - 60*60*24 * PR_USEC_PER_SEC, /* minus 1 day */
+		NULL);
+	    break;
+	default:
+	    PORT_Assert(0);
+	    break;
+    }
+
+    if (!sr)
+	errExit("cannot create sr");
+
+    /* meaning of value 2: one entry + one end marker */
+    singleResponses = PORT_ArenaNewArray(arena, CERTOCSPSingleResponse*, 2);
+    if (singleResponses == NULL)
+	errExit("cannot allocate singleResponses");
+
+    singleResponses[0] = sr;
+    singleResponses[1] = NULL;
+
+    ocspResponse = CERT_CreateEncodedOCSPSuccessResponse(arena,
+			(osm == osm_badsig) ? NULL : ca,
+			ocspResponderID_byName, now, singleResponses,
+			&pwdata);
+    if (!ocspResponse)
+	errExit("cannot created ocspResponse");
+
+    CERT_DestroyCertificate(ca);
+    ca = NULL;
+
+    result = SECITEM_AllocArray(arena, NULL, 1);
+    if (!result)
+	errExit("cannot allocate multiOcspResponses");
+
+    result->items[0].data = ocspResponse->data;
+    result->items[0].len = ocspResponse->len;
+
+    CERT_DestroyOCSPCertID(cid);
+    cid = NULL;
+
+    return result;
+}
+
+void
+setupCertStatus(PLArenaPool *arena, enum ocspStaplingModeEnum ocspStaplingMode,
+		CERTCertificate *cert, SSLKEAType kea, secuPWData *pwdata)
+{
+    if (ocspStaplingMode == osm_random) {
+	/* 6 different responses */
+	int r = rand() % 6;
+	switch (r) {
+	    case 0: ocspStaplingMode = osm_good; break;
+	    case 1: ocspStaplingMode = osm_revoked; break;
+	    case 2: ocspStaplingMode = osm_unknown; break;
+	    case 3: ocspStaplingMode = osm_badsig; break;
+	    case 4: ocspStaplingMode = osm_corrupted; break;
+	    case 5: ocspStaplingMode = osm_failure; break;
+	    default: PORT_Assert(0); break;
+	}
+    }
+    if (ocspStaplingMode != osm_disabled) {
+	SECItemArray *multiOcspResponses = NULL;
+	switch (ocspStaplingMode) {
+	    case osm_good:
+	    case osm_revoked:
+	    case osm_unknown:
+	    case osm_badsig:
+		multiOcspResponses =
+		    makeSignedOCSPResponse(arena, ocspStaplingMode, cert,
+					   pwdata);
+		break;
+	    case osm_corrupted:
+		multiOcspResponses = makeCorruptedOCSPResponse(arena);
+		break;
+	    case osm_failure:
+		multiOcspResponses = makeTryLaterOCSPResponse(arena);
+		break;
+	    case osm_ocsp:
+		errExit("stapling mode \"ocsp\" not implemented");
+		break;
+		break;
+	    default:
+		break;
+	}
+	if (multiOcspResponses) {
+	   certStatus[kea] = multiOcspResponses;
+	}
+   }
+}
 
 int
 handle_connection( 
@@ -787,10 +1258,12 @@ handle_connection(
     char               msgBuf[160];
     char               buf[10240];
     char               fileName[513];
+    char               proto[128];
+    PRDescIdentity     aboveLayer = PR_INVALID_IO_LAYER;
+    SSLKEAType  kea;
 
     pBuf   = buf;
     bufRem = sizeof buf;
-    memset(buf, 0, sizeof buf);
 
     VLOG(("selfserv: handle_connection: starting"));
     opt.option             = PR_SockOpt_Nonblocking;
@@ -814,13 +1287,38 @@ handle_connection(
 	ssl_sock = tcp_sock;
     }
 
+    for (kea = kt_rsa; kea < kt_kea_size; kea++) {
+       if (certStatus[kea] != NULL) {
+           SSL_SetStapledOCSPResponses(ssl_sock, certStatus[kea], kea);
+       }
+    }
+
+    if (loggingLayer) {
+        /* find the layer where our new layer is to be pushed */
+        aboveLayer = PR_GetLayersIdentity(ssl_sock->lower);
+        if (aboveLayer == PR_INVALID_IO_LAYER) {
+            errExit("PRGetUniqueIdentity");
+        }
+        /* create the new layer - this is a very cheap operation */
+        loggingFD = PR_CreateIOLayerStub(log_layer_id, &loggingMethods);
+        if (!loggingFD)
+            errExit("PR_CreateIOLayerStub");
+        /* push the layer below ssl but above TCP */
+        rv = PR_PushIOLayer(ssl_sock, aboveLayer, loggingFD);
+        if (rv != PR_SUCCESS) {
+            errExit("PR_PushIOLayer");
+        }
+    }
+
     if (noDelay) {
 	opt.option         = PR_SockOpt_NoDelay;
 	opt.value.no_delay = PR_TRUE;
 	status = PR_SetSocketOption(ssl_sock, &opt);
 	if (status != PR_SUCCESS) {
 	    errWarn("PR_SetSocketOption(PR_SockOpt_NoDelay, PR_TRUE)");
-	    PR_Close(ssl_sock);
+            if (ssl_sock) {
+	        PR_Close(ssl_sock);
+            }
 	    return SECFailure;
 	}
     }
@@ -828,7 +1326,7 @@ handle_connection(
     while (1) {
 	newln = 0;
 	reqLen     = 0;
-	rv = PR_Read(ssl_sock, pBuf, bufRem);
+	rv = PR_Read(ssl_sock, pBuf, bufRem - 1);
 	if (rv == 0 || 
 	    (rv < 0 && PR_END_OF_FILE_ERROR == PR_GetError())) {
 	    if (verbose)
@@ -839,6 +1337,8 @@ handle_connection(
 	    errWarn("HDX PR_Read");
 	    goto cleanup;
 	}
+	/* NULL termination */
+	pBuf[rv] = 0;
 	if (firstTime) {
 	    firstTime = 0;
 	    printSecurityInfo(ssl_sock);
@@ -896,19 +1396,29 @@ handle_connection(
 	    char *      fnEnd;
 	    PRFileInfo  info;
 	    /* try to open the file named.  
-	     * If succesful, then write it to the client.
+	     * If successful, then write it to the client.
 	     */
 	    fnEnd = strpbrk(fnBegin, " \r\n");
 	    if (fnEnd) {
 		int fnLen = fnEnd - fnBegin;
 		if (fnLen < sizeof fileName) {
-		    strncpy(fileName, fnBegin, fnLen);
-		    fileName[fnLen] = 0;	/* null terminate */
-		    status = PR_GetFileInfo(fileName, &info);
+                    char *real_fileName = fileName;
+                    char *protoEnd = NULL;
+                    strncpy(fileName, fnBegin, fnLen);
+                    fileName[fnLen] = 0;	/* null terminate */
+                    if ((protoEnd = strstr(fileName, "://")) != NULL) {
+                        int protoLen = PR_MIN(protoEnd - fileName, sizeof(proto) - 1);
+                        PL_strncpy(proto, fileName, protoLen);
+                        proto[protoLen] = 0;
+                        real_fileName= protoEnd + 3;
+                    } else {
+                        proto[0] = 0;
+                    }
+		    status = PR_GetFileInfo(real_fileName, &info);
 		    if (status == PR_SUCCESS &&
 			info.type == PR_FILE_FILE &&
 			info.size >= 0 ) {
-			local_file_fd = PR_Open(fileName, PR_RDONLY, 0);
+			local_file_fd = PR_Open(real_fileName, PR_RDONLY, 0);
 		    }
 		}
 	    }
@@ -954,27 +1464,46 @@ handle_connection(
 	if (local_file_fd) {
 	    PRInt32     bytes;
 	    int         errLen;
-	    bytes = PR_TransmitFile(ssl_sock, local_file_fd, outHeader,
-				    sizeof outHeader - 1, 
-				    PR_TRANSMITFILE_KEEP_OPEN,
-				    PR_INTERVAL_NO_TIMEOUT);
-	    if (bytes >= 0) {
-		bytes -= sizeof outHeader - 1;
-		FPRINTF(stderr, 
-			"selfserv: PR_TransmitFile wrote %d bytes from %s\n",
-			bytes, fileName);
-		break;
-	    }
-	    errString = errWarn("PR_TransmitFile");
-	    errLen = PORT_Strlen(errString);
-	    if (errLen > sizeof msgBuf - 1) 
-	    	errLen = sizeof msgBuf - 1;
-	    PORT_Memcpy(msgBuf, errString, errLen);
-	    msgBuf[errLen] = 0;
-
-	    iovs[numIOVs].iov_base = msgBuf;
-	    iovs[numIOVs].iov_len  = PORT_Strlen(msgBuf);
-	    numIOVs++;
+	    if (!PL_strlen(proto) || !PL_strcmp(proto, "file")) {
+                bytes = PR_TransmitFile(ssl_sock, local_file_fd, outHeader,
+                                        sizeof outHeader - 1,
+                                        PR_TRANSMITFILE_KEEP_OPEN,
+                                        PR_INTERVAL_NO_TIMEOUT);
+                if (bytes >= 0) {
+                    bytes -= sizeof outHeader - 1;
+                    FPRINTF(stderr, 
+                            "selfserv: PR_TransmitFile wrote %d bytes from %s\n",
+                            bytes, fileName);
+                    break;
+                }
+                errString = errWarn("PR_TransmitFile");
+                errLen = PORT_Strlen(errString);
+                errLen = PR_MIN(errLen, sizeof msgBuf - 1);
+                PORT_Memcpy(msgBuf, errString, errLen);
+                msgBuf[errLen] = 0;
+                
+                iovs[numIOVs].iov_base = msgBuf;
+                iovs[numIOVs].iov_len  = PORT_Strlen(msgBuf);
+                numIOVs++;
+            }
+            if (!PL_strcmp(proto, "crl")) {
+                if (reload_crl(local_file_fd) == SECFailure) {
+                    errString = errWarn("CERT_CacheCRL");
+                    if (!errString)
+                        errString = "Unknow error";
+                    PR_snprintf(msgBuf, sizeof(msgBuf), "%s%s ",
+                                crlCacheErr, errString);
+                    
+                    iovs[numIOVs].iov_base = msgBuf;
+                    iovs[numIOVs].iov_len  = PORT_Strlen(msgBuf);
+                    numIOVs++;
+                } else {
+                    FPRINTF(stderr, 
+                            "selfserv: CRL %s reloaded.\n",
+                            fileName);
+                    break;
+                }
+            }
 	} else if (reqLen <= 0) {	/* hit eof */
 	    PORT_Sprintf(msgBuf, "Get or Post incomplete after %d bytes.\r\n",
 			 bufDat);
@@ -998,37 +1527,67 @@ handle_connection(
 	    iovs[numIOVs].iov_base = buf;
 	    iovs[numIOVs].iov_len  = reqLen;
 	    numIOVs++;
-
-/*	    printSecurityInfo(ssl_sock); */
 	}
 
-	iovs[numIOVs].iov_base = (char *)EOFmsg;
-	iovs[numIOVs].iov_len  = sizeof EOFmsg - 1;
-	numIOVs++;
+        /* Don't add the EOF if we want to test bulk encryption */
+        if (!testBulk) {
+            iovs[numIOVs].iov_base = (char *)EOFmsg;
+            iovs[numIOVs].iov_len  = sizeof EOFmsg - 1;
+            numIOVs++;
+        }
 
 	rv = PR_Writev(ssl_sock, iovs, numIOVs, PR_INTERVAL_NO_TIMEOUT);
 	if (rv < 0) {
 	    errWarn("PR_Writev");
 	    break;
 	}
+
+        /* Send testBulkTotal chunks to the client. Unlimited if 0. */
+        if (testBulk) {
+            while (0 < (rv = PR_Write(ssl_sock, testBulkBuf, testBulkSize))) {
+                PR_ATOMIC_ADD(&loggerBytes, rv);
+                PR_ATOMIC_INCREMENT(&bulkSentChunks);
+                if ((bulkSentChunks > testBulkTotal) && (testBulkTotal != 0))
+                    break;
+            }
+
+            /* There was a write error, so close this connection. */
+            if (bulkSentChunks <= testBulkTotal) {
+                errWarn("PR_Write");
+            }
+            PR_ATOMIC_DECREMENT(&loggerOps);
+            break;
+        }
     } while (0);
 
 cleanup:
-    PR_Close(ssl_sock);
+    if (ssl_sock) {
+        PR_Close(ssl_sock);
+    } else if (tcp_sock) {
+        PR_Close(tcp_sock);
+    }
     if (local_file_fd)
 	PR_Close(local_file_fd);
     VLOG(("selfserv: handle_connection: exiting\n"));
 
     /* do a nice shutdown if asked. */
     if (!strncmp(buf, stopCmd, sizeof stopCmd - 1)) {
-	stopping = 1;
         VLOG(("selfserv: handle_connection: stop command"));
-	PR_Interrupt(acceptorThread);
-        PZ_TraceFlush();
+        stop_server();
     }
     VLOG(("selfserv: handle_connection: exiting"));
     return SECSuccess;	/* success */
 }
+
+#ifdef XP_UNIX
+
+void sigusr1_handler(int sig)
+{
+    VLOG(("selfserv: sigusr1_handler: stop server"));
+    stop_server();
+}
+
+#endif
 
 SECStatus
 do_accepts(
@@ -1039,11 +1598,24 @@ do_accepts(
 {
     PRNetAddr   addr;
     PRErrorCode  perr;
+#ifdef XP_UNIX
+    struct sigaction act;
+#endif
 
     VLOG(("selfserv: do_accepts: starting"));
     PR_SetThreadPriority( PR_GetCurrentThread(), PR_PRIORITY_HIGH);
 
     acceptorThread = PR_GetCurrentThread();
+#ifdef XP_UNIX
+    /* set up the signal handler */
+    act.sa_handler = sigusr1_handler;
+    sigemptyset(&act.sa_mask);
+    act.sa_flags = 0;
+    if (sigaction(SIGUSR1, &act, NULL)) {
+        fprintf(stderr, "Error installing signal handler.\n");
+        exit(1);
+    }
+#endif
     while (!stopping) {
 	PRFileDesc *tcp_sock;
 	PRCList    *myLink;
@@ -1068,7 +1640,7 @@ do_accepts(
         VLOG(("selfserv: do_accept: Got connection\n"));
 
         if (logStats) {
-            loggerOps++;
+            PR_ATOMIC_INCREMENT(&loggerOps);
         }
 
 	PZ_Lock(qLock);
@@ -1077,7 +1649,9 @@ do_accepts(
 	}
 	if (stopping) {
 	    PZ_Unlock(qLock);
-	    PR_Close(tcp_sock);
+            if (tcp_sock) {
+	        PR_Close(tcp_sock);
+            }
 	    break;
 	}
 	myLink = PR_LIST_HEAD(&freeJobs);
@@ -1099,7 +1673,9 @@ do_accepts(
 
     FPRINTF(stderr, "selfserv: Closing listen socket.\n");
     VLOG(("selfserv: do_accepts: exiting"));
-    PR_Close(listen_sock);
+    if (listen_sock) {
+        PR_Close(listen_sock);
+    }
     return SECSuccess;
 }
 
@@ -1125,6 +1701,7 @@ getBoundListenSocket(unsigned short port)
     opt.value.non_blocking = PR_FALSE;
     prStatus = PR_SetSocketOption(listen_sock, &opt);
     if (prStatus < 0) {
+        PR_Close(listen_sock);
 	errExit("PR_SetSocketOption(PR_SockOpt_Nonblocking)");
     }
 
@@ -1132,19 +1709,110 @@ getBoundListenSocket(unsigned short port)
     opt.value.reuse_addr = PR_TRUE;
     prStatus = PR_SetSocketOption(listen_sock, &opt);
     if (prStatus < 0) {
+        PR_Close(listen_sock);
 	errExit("PR_SetSocketOption(PR_SockOpt_Reuseaddr)");
     }
 
+#ifndef WIN95
+    /* Set PR_SockOpt_Linger because it helps prevent a server bind issue
+     * after clean shutdown . See bug 331413 .
+     * Don't do it in the WIN95 build configuration because clean shutdown is
+     * not implemented, and PR_SockOpt_Linger causes a hang in ssl.sh .
+     * See bug 332348 */
+    opt.option=PR_SockOpt_Linger;
+    opt.value.linger.polarity = PR_TRUE;
+    opt.value.linger.linger = PR_SecondsToInterval(1);
+    prStatus = PR_SetSocketOption(listen_sock, &opt);
+    if (prStatus < 0) {
+        PR_Close(listen_sock);
+        errExit("PR_SetSocketOption(PR_SockOpt_Linger)");
+    }
+#endif
+
     prStatus = PR_Bind(listen_sock, &addr);
     if (prStatus < 0) {
+        PR_Close(listen_sock);
 	errExit("PR_Bind");
     }
 
     prStatus = PR_Listen(listen_sock, listenQueueDepth);
     if (prStatus < 0) {
+        PR_Close(listen_sock);
 	errExit("PR_Listen");
     }
     return listen_sock;
+}
+
+PRInt32 PR_CALLBACK 
+logWritev (
+    PRFileDesc     *fd,
+    const PRIOVec  *iov,
+    PRInt32         size, 
+    PRIntervalTime  timeout )
+{
+    PRInt32 rv = (fd->lower->methods->writev)(fd->lower, iov, size, 
+        timeout);
+    /* Add the amount written, but not if there's an error */
+    if (rv > 0) 
+        PR_ATOMIC_ADD(&loggerBytesTCP, rv);
+    return rv;
+}
+    
+PRInt32 PR_CALLBACK 
+logWrite (
+    PRFileDesc  *fd, 
+    const void  *buf, 
+    PRInt32      amount)
+{   
+    PRInt32 rv = (fd->lower->methods->write)(fd->lower, buf, amount);
+    /* Add the amount written, but not if there's an error */
+    if (rv > 0) 
+        PR_ATOMIC_ADD(&loggerBytesTCP, rv);
+    
+    return rv;
+}
+
+PRInt32 PR_CALLBACK 
+logSend (
+    PRFileDesc     *fd, 
+    const void     *buf, 
+    PRInt32         amount, 
+    PRIntn          flags, 
+    PRIntervalTime  timeout)
+{
+    PRInt32 rv = (fd->lower->methods->send)(fd->lower, buf, amount, 
+        flags, timeout);
+    /* Add the amount written, but not if there's an error */
+    if (rv > 0) 
+        PR_ATOMIC_ADD(&loggerBytesTCP, rv);
+    return rv;
+}
+ 
+void initLoggingLayer(void)
+{   
+    /* get a new layer ID */
+    log_layer_id = PR_GetUniqueIdentity("Selfserv Logging");
+    if (log_layer_id == PR_INVALID_IO_LAYER)
+        errExit("PR_GetUniqueIdentity");
+    
+    /* setup the default IO methods with my custom write methods */
+    memcpy(&loggingMethods, PR_GetDefaultIOMethods(), sizeof(PRIOMethods));
+    loggingMethods.writev = logWritev;
+    loggingMethods.write  = logWrite;
+    loggingMethods.send   = logSend;
+}
+
+void
+handshakeCallback(PRFileDesc *fd, void *client_data)
+{
+    const char *handshakeName = (const char *)client_data;
+    if (handshakeName && !failedToNegotiateName) {
+        SECItem *hostInfo  = SSL_GetNegotiatedHostInfo(fd);
+        if (!hostInfo || PORT_Strncmp(handshakeName, (char*)hostInfo->data,
+                                      hostInfo->len)) {
+            failedToNegotiateName = PR_TRUE;
+        }
+    }
 }
 
 void
@@ -1152,7 +1820,8 @@ server_main(
     PRFileDesc *        listen_sock,
     int                 requestCert, 
     SECKEYPrivateKey ** privKey,
-    CERTCertificate **  cert)
+    CERTCertificate **  cert,
+    const char *expectedHostNameVal)
 {
     PRFileDesc *model_sock	= NULL;
     int         rv;
@@ -1176,32 +1845,64 @@ server_main(
     }
 
     /* do SSL configuration. */
-    /* all suites except RSA_NULL_MD5 are enabled by default */
-
-#if 0
-    /* This is supposed to be true by default.
-    ** Setting it explicitly should not be necessary.
-    ** Let's test and make sure that's true.
-    */
-    rv = SSL_OptionSet(model_sock, SSL_SECURITY, 1);
+    rv = SSL_OptionSet(model_sock, SSL_SECURITY, 
+                       enableSSL2 || enabledVersions.min != 0);
     if (rv < 0) {
 	errExit("SSL_OptionSet SSL_SECURITY");
     }
-#endif
 
-    rv = SSL_OptionSet(model_sock, SSL_ENABLE_SSL3, !disableSSL3);
+    rv = SSL_VersionRangeSet(model_sock, &enabledVersions);
     if (rv != SECSuccess) {
-	errExit("error enabling SSLv3 ");
+	errExit("error setting SSL/TLS version range ");
     }
 
-    rv = SSL_OptionSet(model_sock, SSL_ENABLE_TLS, !disableTLS);
+    rv = SSL_OptionSet(model_sock, SSL_ENABLE_SSL2, enableSSL2);
     if (rv != SECSuccess) {
-	errExit("error enabling TLS ");
+       errExit("error enabling SSLv2 ");
     }
 
     rv = SSL_OptionSet(model_sock, SSL_ROLLBACK_DETECTION, !disableRollBack);
     if (rv != SECSuccess) {
 	errExit("error enabling RollBack detection ");
+    }
+    if (disableStepDown) {
+	rv = SSL_OptionSet(model_sock, SSL_NO_STEP_DOWN, PR_TRUE);
+	if (rv != SECSuccess) {
+	    errExit("error disabling SSL StepDown ");
+	}
+    }
+    if (bypassPKCS11) {
+       rv = SSL_OptionSet(model_sock, SSL_BYPASS_PKCS11, PR_TRUE);
+	if (rv != SECSuccess) {
+	    errExit("error enabling PKCS11 bypass ");
+	}
+    }
+    if (disableLocking) {
+       rv = SSL_OptionSet(model_sock, SSL_NO_LOCKS, PR_TRUE);
+	if (rv != SECSuccess) {
+	    errExit("error disabling SSL socket locking ");
+	}
+    } 
+    if (enableSessionTickets) {
+	rv = SSL_OptionSet(model_sock, SSL_ENABLE_SESSION_TICKETS, PR_TRUE);
+	if (rv != SECSuccess) {
+	    errExit("error enabling Session Ticket extension ");
+	}
+    }
+
+    if (enableCompression) {
+	rv = SSL_OptionSet(model_sock, SSL_ENABLE_DEFLATE, PR_TRUE);
+	if (rv != SECSuccess) {
+	    errExit("error enabling compression ");
+	}
+    }
+
+    if (virtServerNameIndex >1) {
+        rv = SSL_SNISocketConfigHook(model_sock, mySSLSNISocketConfig,
+                                     (void*)&virtServerNameArray);
+        if (rv != SECSuccess) {
+            errExit("error enabling SNI extension ");
+        }
     }
 
     for (kea = kt_rsa; kea < kt_kea_size; kea++) {
@@ -1220,6 +1921,13 @@ server_main(
 	}
     }
 
+    if (NoReuse) {
+        rv = SSL_OptionSet(model_sock, SSL_NO_CACHE, 1);
+        if (rv < 0) {
+            errExit("SSL_OptionSet SSL_NO_CACHE");
+        }
+    }
+
     /* This cipher is not on by default. The Acceptance test
      * would like it to be. Turn this cipher on.
      */
@@ -1229,6 +1937,10 @@ server_main(
 	errExit("SSL_CipherPrefSetDefault:SSL_RSA_WITH_NULL_MD5");
     }
 
+    if (expectedHostNameVal) {
+        SSL_HandshakeCallback(model_sock, handshakeCallback,
+                              (void*)expectedHostNameVal);
+    }
 
     if (requestCert) {
 	SSL_AuthCertificateHook(model_sock, mySSLAuthCertificate, 
@@ -1258,7 +1970,9 @@ server_main(
     terminateWorkerThreads();
 
     if (useModelSocket && model_sock) {
-    	PR_Close(model_sock);
+        if (model_sock) {
+            PR_Close(model_sock);
+        }
     }
 
 }
@@ -1297,7 +2011,9 @@ readBigFile(const char * fileName)
 	}
 	rv = SECSuccess;
 done:
-	PR_Close(local_file_fd);
+        if (local_file_fd) {
+            PR_Close(local_file_fd);
+        }
     }
     return rv;
 }
@@ -1360,45 +2076,71 @@ beAGoodParent(int argc, char **argv, int maxProcs, PRFileDesc * listen_sock)
     exit(0);
 }
 
-#ifdef DEBUG_nelsonb
+#define HEXCHAR_TO_INT(c, i) \
+    if (((c) >= '0') && ((c) <= '9')) { \
+	i = (c) - '0'; \
+    } else if (((c) >= 'a') && ((c) <= 'f')) { \
+	i = (c) - 'a' + 10; \
+    } else if (((c) >= 'A') && ((c) <= 'F')) { \
+	i = (c) - 'A' + 10; \
+    } else if ((c) == '\0') { \
+	fprintf(stderr, "Invalid length of cipher string (-c :WXYZ).\n"); \
+	exit(9); \
+    } else { \
+	fprintf(stderr, "Non-hex char in cipher string (-c :WXYZ).\n"); \
+	exit(9); \
+    } 
 
-#if defined(XP_UNIX) || defined(XP_OS2) || defined(XP_BEOS)
-#define SSL_GETPID getpid
-#elif defined(_WIN32_WCE)
-#define SSL_GETPID GetCurrentProcessId
-#elif defined(WIN32)
-extern int __cdecl _getpid(void);
-#define SSL_GETPID _getpid
-#else
-#define SSL_GETPID() 0   
-#endif
-
-void
-WaitForDebugger(void)
+SECStatus enableOCSPStapling(const char* mode)
 {
-
-    int waiting       = 12;
-    int myPid         = SSL_GETPID();
-    PRIntervalTime    nrval = PR_SecondsToInterval(5);
-
-    while (waiting) {
-    	printf("child %d is waiting to be debugged!\n", myPid);
-	PR_Sleep(nrval); 
-	--waiting;
+    if (!strcmp(mode, "good")) {
+	ocspStaplingMode = osm_good;
+	return SECSuccess;
     }
+    if (!strcmp(mode, "unknown")) {
+	ocspStaplingMode = osm_unknown;
+	return SECSuccess;
+    }
+    if (!strcmp(mode, "revoked")) {
+	ocspStaplingMode = osm_revoked;
+	return SECSuccess;
+    }
+    if (!strcmp(mode, "badsig")) {
+	ocspStaplingMode = osm_badsig;
+	return SECSuccess;
+    }
+    if (!strcmp(mode, "corrupted")) {
+	ocspStaplingMode = osm_corrupted;
+	return SECSuccess;
+    }
+    if (!strcmp(mode, "failure")) {
+	ocspStaplingMode = osm_failure;
+	return SECSuccess;
+    }
+    if (!strcmp(mode, "random")) {
+	ocspStaplingMode = osm_random;
+	return SECSuccess;
+    }
+    if (!strcmp(mode, "ocsp")) {
+	ocspStaplingMode = osm_ocsp;
+	return SECSuccess;
+    }
+    return SECFailure;
 }
-#endif
 
 int
 main(int argc, char **argv)
 {
     char *               progName    = NULL;
     char *               nickName    = NULL;
-    char *               fNickName   = NULL;
+#ifdef NSS_ENABLE_ECC
+    char *               ecNickName   = NULL;
+#endif
     const char *         fileName    = NULL;
     char *               cipherString= NULL;
     const char *         dir         = ".";
     char *               passwd      = NULL;
+    char *               pwfile      = NULL;
     const char *         pidFile     = NULL;
     char *               tmp;
     char *               envString;
@@ -1415,9 +2157,16 @@ main(int argc, char **argv)
     PRBool               useLocalThreads = PR_FALSE;
     PLOptState		*optstate;
     PLOptStatus          status;
-    PRThread             *loggerThread;
+    PRThread             *loggerThread = NULL;
     PRBool               debugCache = PR_FALSE; /* bug 90518 */
-
+    char                 emptyString[] = { "" };
+    char*                certPrefix = emptyString;
+    PRUint32             protos = 0;
+    SSL3Statistics      *ssl3stats;
+    PRUint32             i;
+    secuPWData  pwdata = { PW_NONE, 0 };
+    char                *expectedHostNameVal = NULL;
+    PLArenaPool         *certStatusArena = NULL;
 
     tmp = strrchr(argv[0], '/');
     tmp = tmp ? tmp + 1 : argv[0];
@@ -1425,25 +2174,37 @@ main(int argc, char **argv)
     progName = progName ? progName + 1 : tmp;
 
     PR_Init( PR_SYSTEM_THREAD, PR_PRIORITY_NORMAL, 1);
+    SSL_VersionRangeGetSupported(ssl_variant_stream, &enabledVersions);
 
     /* please keep this list of options in ASCII collating sequence.
     ** numbers, then capital letters, then lower case, alphabetical. 
     */
     optstate = PL_CreateOptState(argc, argv, 
-    	"2:3DL:M:RTbc:d:f:hi:lmn:op:rt:vw:xy");
+        "2:A:BC:DEL:M:NP:RT:V:Ya:bc:d:e:f:g:hi:jk:lmn:op:qrst:uvw:xyz");
     while ((status = PL_GetNextOpt(optstate)) == PL_OPT_OK) {
 	++optionsFound;
 	switch(optstate->option) {
 	case '2': fileName = optstate->value; break;
 
-	case '3': disableSSL3 = PR_TRUE; break;
+	case 'A': ocspStaplingCA = PORT_Strdup(optstate->value); break;
+
+	case 'B': bypassPKCS11 = PR_TRUE; break;
+
+        case 'C': if (optstate->value) NumSidCacheEntries = PORT_Atoi(optstate->value); break;
 
 	case 'D': noDelay = PR_TRUE; break;
+	case 'E': disableStepDown = PR_TRUE; break;
+
+	case 'I': /* reserved for OCSP multi-stapling */ break;
 
         case 'L':
             logStats = PR_TRUE;
-            logPeriod  = PORT_Atoi(optstate->value);
-            if (logPeriod < 0) logPeriod = 30;
+	    if (optstate->value == NULL) {
+	    	logPeriod = 30;
+	    } else {
+                logPeriod  = PORT_Atoi(optstate->value);
+                if (logPeriod <= 0) logPeriod = 30;
+	    }
             break;
 
 	case 'M': 
@@ -1452,33 +2213,84 @@ main(int argc, char **argv)
 	    if (maxProcs > MAX_PROCS) maxProcs = MAX_PROCS;
 	    break;
 
+	case 'N': NoReuse = PR_TRUE; break;
+
 	case 'R': disableRollBack = PR_TRUE; break;
 
-	case 'T': disableTLS = PR_TRUE; break;
+	case 'T':
+	    if (enableOCSPStapling(optstate->value) != SECSuccess) {
+		fprintf(stderr, "Invalid OCSP stapling mode.\n");
+		fprintf(stderr, "Run '%s -h' for usage information.\n", progName);
+		exit(53);
+	    }
+	    break;
+
+        case 'V': if (SECU_ParseSSLVersionRangeString(optstate->value,
+                          enabledVersions, enableSSL2,
+                          &enabledVersions, &enableSSL2) != SECSuccess) {
+                      Usage(progName);
+                  }
+                  break;
+
+        case 'Y': PrintCipherUsage(progName); exit(0); break;
+        
+	case 'a': if (virtServerNameIndex >= MAX_VIRT_SERVER_NAME_ARRAY_INDEX) {
+                      Usage(progName);
+                  }
+                  virtServerNameArray[virtServerNameIndex++] =
+                      PORT_Strdup(optstate->value); break;
 
 	case 'b': bindOnly = PR_TRUE; break;
 
-	case 'c': cipherString = strdup(optstate->value); break;
+	case 'c': cipherString = PORT_Strdup(optstate->value); break;
 
 	case 'd': dir = optstate->value; break;
 
-	case 'f': fNickName = strdup(optstate->value); break;
+#ifdef NSS_ENABLE_ECC
+	case 'e': ecNickName = PORT_Strdup(optstate->value); break;
+#endif /* NSS_ENABLE_ECC */
+
+	case 'f':
+            pwdata.source = PW_FROMFILE;
+            pwdata.data = pwfile = PORT_Strdup(optstate->value);
+            break;
+
+        case 'g': 
+            testBulk = PR_TRUE;
+            testBulkTotal = PORT_Atoi(optstate->value);
+            break;
 
 	case 'h': Usage(progName); exit(0); break;
 
 	case 'i': pidFile = optstate->value; break;
 
+        case 'j': 
+            initLoggingLayer(); 
+            loggingLayer = PR_TRUE;
+            break;
+
+        case 'k': expectedHostNameVal = PORT_Strdup(optstate->value);
+                  break;
+
         case 'l': useLocalThreads = PR_TRUE; break;
 
 	case 'm': useModelSocket = PR_TRUE; break;
 
-	case 'n': nickName = strdup(optstate->value); break;
+	case 'n': nickName = PORT_Strdup(optstate->value);
+                  virtServerNameArray[0] = PORT_Strdup(optstate->value);
+                  break;
+
+	case 'P': certPrefix = PORT_Strdup(optstate->value); break;
 
 	case 'o': MakeCertOK = 1; break;
 
 	case 'p': port = PORT_Atoi(optstate->value); break;
 
+	case 'q': testbypass = PR_TRUE; break;
+
 	case 'r': ++requestCert; break;
+
+	case 's': disableLocking = PR_TRUE; break;
 
 	case 't':
 	    maxThreads = PORT_Atoi(optstate->value);
@@ -1486,13 +2298,20 @@ main(int argc, char **argv)
 	    if ( maxThreads < MIN_THREADS ) maxThreads = MIN_THREADS;
 	    break;
 
+	case 'u': enableSessionTickets = PR_TRUE; break;
+
 	case 'v': verbose++; break;
 
-	case 'w': passwd = strdup(optstate->value); break;
+	case 'w':
+            pwdata.source = PW_PLAINTEXT;
+            pwdata.data = passwd = PORT_Strdup(optstate->value);
+            break;
 
 	case 'x': useExportPolicy = PR_TRUE; break;
 
 	case 'y': debugCache = PR_TRUE; break;
+
+	case 'z': enableCompression = PR_TRUE; break;
 
 	default:
 	case '?':
@@ -1511,7 +2330,21 @@ main(int argc, char **argv)
     if (!optionsFound) {
 	Usage(progName);
 	exit(51);
-    } 
+    }
+    switch (ocspStaplingMode) {
+	case osm_good:
+	case osm_revoked:
+	case osm_unknown:
+	case osm_random:
+	    if (!ocspStaplingCA) {
+		fprintf(stderr, "Selected stapling response requires the -A parameter.\n");
+		fprintf(stderr, "Run '%s -h' for usage information.\n", progName);
+		exit(52);
+	    }
+	    break;
+	default:
+	    break;
+    }
 
     /* The -b (bindOnly) option is only used by the ssl.sh test
      * script on Linux to determine whether a previous selfserv
@@ -1522,11 +2355,18 @@ main(int argc, char **argv)
 	if (!listen_sock) {
 	    exit(1);
 	}
-	PR_Close(listen_sock);
+        if (listen_sock) {
+            PR_Close(listen_sock);
+        }
 	exit(0);
     }
 
-    if ((nickName == NULL) && (fNickName == NULL)) {
+    if ((nickName == NULL)
+ #ifdef NSS_ENABLE_ECC
+						&& (ecNickName == NULL)
+ #endif
+    ) {
+
 	fprintf(stderr, "Required arg '-n' (rsa nickname) not supplied.\n");
 	fprintf(stderr, "Run '%s -h' for usage information.\n", progName);
         exit(6);
@@ -1537,6 +2377,11 @@ main(int argc, char **argv)
 	exit(7);
     }
 
+    if (NoReuse && maxProcs > 1) {
+	fprintf(stderr, "-M and -N options are mutually exclusive.\n");
+	exit(14);
+    }
+
     if (pidFile) {
 	FILE *tmpfile=fopen(pidFile,"w+");
 
@@ -1544,6 +2389,15 @@ main(int argc, char **argv)
 	    fprintf(tmpfile,"%d",getpid());
 	    fclose(tmpfile);
 	}
+    }
+
+    /* allocate and initialize app data for bulk encryption testing */
+    if (testBulk) {
+        testBulkBuf = PORT_Malloc(testBulkSize);
+        if (testBulkBuf == NULL)
+            errExit("Out of memory: testBulkBuf");
+        for (i = 0; i < testBulkSize; i++)
+            testBulkBuf[i] = i;
     }
 
     envString = getenv(envVarName);
@@ -1570,18 +2424,17 @@ main(int argc, char **argv)
 	if (prStatus != PR_SUCCESS)
 	    errExit("PR_SetFDInheritable");
 #endif
-#ifdef DEBUG_nelsonb
-	WaitForDebugger();
-#endif
 	rv = SSL_InheritMPServerSIDCache(envString);
 	if (rv != SECSuccess)
 	    errExit("SSL_InheritMPServerSIDCache");
+    	hasSidCache = PR_TRUE;
     } else if (maxProcs > 1) {
 	/* we're going to be the parent in a multi-process server.  */
 	listen_sock = getBoundListenSocket(port);
-	rv = SSL_ConfigMPServerSIDCache(NUM_SID_CACHE_ENTRIES, 0, 0, tmp);
+	rv = SSL_ConfigMPServerSIDCache(NumSidCacheEntries, 0, 0, tmp);
 	if (rv != SECSuccess)
 	    errExit("SSL_ConfigMPServerSIDCache");
+    	hasSidCache = PR_TRUE;
 	beAGoodParent(argc, argv, maxProcs, listen_sock);
 	exit(99); /* should never get here */
     } else {
@@ -1590,9 +2443,13 @@ main(int argc, char **argv)
 	prStatus = PR_SetFDInheritable(listen_sock, PR_FALSE);
 	if (prStatus != PR_SUCCESS)
 	    errExit("PR_SetFDInheritable");
-	rv = SSL_ConfigServerSessionIDCache(NUM_SID_CACHE_ENTRIES, 0, 0, tmp);
-	if (rv != SECSuccess)
-	    errExit("SSL_ConfigServerSessionIDCache");
+	if (!NoReuse) {
+	    rv = SSL_ConfigServerSessionIDCache(NumSidCacheEntries, 
+	                                        0, 0, tmp);
+	    if (rv != SECSuccess)
+		errExit("SSL_ConfigServerSessionIDCache");
+	    hasSidCache = PR_TRUE;
+	}
     }
 
     lm = PR_NewLogModule("TestCase");
@@ -1601,79 +2458,181 @@ main(int argc, char **argv)
     	readBigFile(fileName);
 
     /* set our password function */
-    PK11_SetPasswordFunc( passwd ? ownPasswd : SECU_GetModulePassword);
+    PK11_SetPasswordFunc(SECU_GetModulePassword);
 
-    /* Call the libsec initialization routines */
-    rv = NSS_Init(dir);
+    /* Call the NSS initialization routines */
+    rv = NSS_Initialize(dir, certPrefix, certPrefix, SECMOD_DB, NSS_INIT_READONLY);
     if (rv != SECSuccess) {
     	fputs("NSS_Init failed.\n", stderr);
 		exit(8);
     }
 
     /* set the policy bits true for all the cipher suites. */
-    if (useExportPolicy)
+    if (useExportPolicy) {
 	NSS_SetExportPolicy();
-    else
+	if (disableStepDown) {
+	    fputs("selfserv: -x and -E options may not be used together\n", 
+	          stderr);
+	    exit(98);
+	}
+    } else {
 	NSS_SetDomesticPolicy();
+	if (disableStepDown) {
+	    rv = disableExportSSLCiphers();
+	    if (rv != SECSuccess) {
+		errExit("error disabling export ciphersuites ");
+	    }
+    	}
+    }
 
     /* all the SSL2 and SSL3 cipher suites are enabled by default. */
     if (cipherString) {
+    	char *cstringSaved = cipherString;
     	int ndx;
 
 	/* disable all the ciphers, then enable the ones we want. */
 	disableAllSSLCiphers();
 
 	while (0 != (ndx = *cipherString++)) {
-	    const int *cptr;
 	    int  cipher;
 
-	    if (! isalpha(ndx)) {
-		fprintf(stderr, 
-			"Non-alphabetic char in cipher string (-c arg).\n");
-		exit(9);
+	    if (ndx == ':') {
+		int ctmp;
+
+		cipher = 0;
+		HEXCHAR_TO_INT(*cipherString, ctmp)
+		cipher |= (ctmp << 12);
+		cipherString++;
+		HEXCHAR_TO_INT(*cipherString, ctmp)
+		cipher |= (ctmp << 8);
+		cipherString++;
+		HEXCHAR_TO_INT(*cipherString, ctmp)
+		cipher |= (ctmp << 4);
+		cipherString++;
+		HEXCHAR_TO_INT(*cipherString, ctmp)
+		cipher |= ctmp;
+		cipherString++;
+	    } else {
+		const int *cptr;
+
+		if (! isalpha(ndx)) {
+		    fprintf(stderr, 
+			    "Non-alphabetic char in cipher string (-c arg).\n");
+		    exit(9);
+		}
+		cptr = islower(ndx) ? ssl3CipherSuites : ssl2CipherSuites;
+		for (ndx &= 0x1f; (cipher = *cptr++) != 0 && --ndx > 0; ) 
+		    /* do nothing */;
 	    }
-	    cptr = islower(ndx) ? ssl3CipherSuites : ssl2CipherSuites;
-	    for (ndx &= 0x1f; (cipher = *cptr++) != 0 && --ndx > 0; ) 
-		/* do nothing */;
-	    if (cipher) {
+	    if (cipher > 0) {
 		SECStatus status;
 		status = SSL_CipherPrefSetDefault(cipher, SSL_ALLOWED);
 		if (status != SECSuccess) 
 		    SECU_PrintError(progName, "SSL_CipherPrefSet()");
+	    } else {
+		fprintf(stderr, 
+			"Invalid cipher specification (-c arg).\n");
+		exit(9);
 	    }
 	}
+	PORT_Free(cstringSaved);
     }
 
+    if (testbypass) {
+	const PRUint16 *cipherSuites = SSL_ImplementedCiphers;
+	int             i            = SSL_NumImplementedCiphers;
+	PRBool		enabled;
+
+	for (i=0; i < SSL_NumImplementedCiphers; i++, cipherSuites++) {
+	    if (SSL_CipherPrefGetDefault(*cipherSuites, &enabled) == SECSuccess
+				    && enabled)
+		savecipher(*cipherSuites);		    
+	}
+        protos = 0;
+        if (enabledVersions.min <= SSL_LIBRARY_VERSION_3_0 &&
+            enabledVersions.max >= SSL_LIBRARY_VERSION_3_0) {
+            protos |= SSL_CBP_SSL3;
+        }
+        if (enabledVersions.min <= SSL_LIBRARY_VERSION_TLS_1_0 &&
+            enabledVersions.max >= SSL_LIBRARY_VERSION_TLS_1_0) {
+            protos |= SSL_CBP_TLS1_0;
+        }
+        /* TLS 1.1 has the same SSL Bypass mode requirements as TLS 1.0 */
+        if (enabledVersions.min <= SSL_LIBRARY_VERSION_TLS_1_1 &&
+            enabledVersions.max >= SSL_LIBRARY_VERSION_TLS_1_1) {
+            protos |= SSL_CBP_TLS1_0;
+        }
+    }
+
+    certStatusArena = PORT_NewArena(DER_DEFAULT_CHUNKSIZE);
+    if (!certStatusArena)
+	errExit("cannot allocate certStatusArena");
+
     if (nickName) {
-	cert[kt_rsa] = PK11_FindCertFromNickname(nickName, passwd);
+	cert[kt_rsa] = PK11_FindCertFromNickname(nickName, &pwdata);
 	if (cert[kt_rsa] == NULL) {
 	    fprintf(stderr, "selfserv: Can't find certificate %s\n", nickName);
 	    exit(10);
 	}
-	privKey[kt_rsa] = PK11_FindKeyByAnyCert(cert[kt_rsa], passwd);
+	privKey[kt_rsa] = PK11_FindKeyByAnyCert(cert[kt_rsa], &pwdata);
 	if (privKey[kt_rsa] == NULL) {
 	    fprintf(stderr, "selfserv: Can't find Private Key for cert %s\n", 
 	            nickName);
 	    exit(11);
 	}
-    }
-    if (fNickName) {
-	cert[kt_fortezza] = PK11_FindCertFromNickname(fNickName, NULL);
-	if (cert[kt_fortezza] == NULL) {
-	    fprintf(stderr, "selfserv: Can't find certificate %s\n", fNickName);
-	    exit(12);
+	if (testbypass) {
+	    PRBool bypassOK;
+	    if (SSL_CanBypass(cert[kt_rsa], privKey[kt_rsa], protos, cipherlist, 
+	                      nciphers, &bypassOK, &pwdata) != SECSuccess) {
+		SECU_PrintError(progName, "Bypass test failed %s\n", nickName);
+		exit(14);
+	    }
+	    fprintf(stderr, "selfserv: %s can%s bypass\n", nickName,
+		    bypassOK ? "" : "not");
 	}
-	privKey[kt_fortezza] = PK11_FindKeyByAnyCert(cert[kt_fortezza], NULL);
+	setupCertStatus(certStatusArena, ocspStaplingMode, cert[kt_rsa], kt_rsa,
+			&pwdata);
     }
+#ifdef NSS_ENABLE_ECC
+    if (ecNickName) {
+	cert[kt_ecdh] = PK11_FindCertFromNickname(ecNickName, &pwdata);
+	if (cert[kt_ecdh] == NULL) {
+	    fprintf(stderr, "selfserv: Can't find certificate %s\n",
+		    ecNickName);
+	    exit(13);
+	}
+	privKey[kt_ecdh] = PK11_FindKeyByAnyCert(cert[kt_ecdh], &pwdata);
+	if (privKey[kt_ecdh] == NULL) {
+	    fprintf(stderr, "selfserv: Can't find Private Key for cert %s\n", 
+	            ecNickName);
+	    exit(11);
+	}	    
+	if (testbypass) {
+	    PRBool bypassOK;
+	    if (SSL_CanBypass(cert[kt_ecdh], privKey[kt_ecdh], protos, cipherlist,
+			      nciphers, &bypassOK, &pwdata) != SECSuccess) {
+		SECU_PrintError(progName, "Bypass test failed %s\n", ecNickName);
+		exit(15);
+	    }
+	    fprintf(stderr, "selfserv: %s can%s bypass\n", ecNickName,
+		    bypassOK ? "" : "not");
+	}
+	setupCertStatus(certStatusArena, ocspStaplingMode, cert[kt_ecdh], kt_ecdh,
+			&pwdata);
+    }
+#endif /* NSS_ENABLE_ECC */
 
-    /* allocate the array of thread slots, and launch the worker threads. */
+    if (testbypass)
+	goto cleanup;
+
+/* allocate the array of thread slots, and launch the worker threads. */
     rv = launch_threads(&jobLoop, 0, 0, requestCert, useLocalThreads);
 
     if (rv == SECSuccess && logStats) {
 	loggerThread = PR_CreateThread(PR_SYSTEM_THREAD, 
 			logger, NULL, PR_PRIORITY_NORMAL, 
                         useLocalThreads ? PR_LOCAL_THREAD:PR_GLOBAL_THREAD,
-                        PR_UNJOINABLE_THREAD, 0);
+                        PR_JOINABLE_THREAD, 0);
 	if (loggerThread == NULL) {
 	    fprintf(stderr, "selfserv: Failed to launch logger thread!\n");
 	    rv = SECFailure;
@@ -1681,10 +2640,23 @@ main(int argc, char **argv)
     }
 
     if (rv == SECSuccess) {
-	server_main(listen_sock, requestCert, privKey, cert);
+	server_main(listen_sock, requestCert, privKey, cert,
+                    expectedHostNameVal);
     }
 
     VLOG(("selfserv: server_thread: exiting"));
+
+cleanup:
+    printSSLStatistics();
+    ssl3stats = SSL_GetStatistics();
+    if (ssl3stats->hch_sid_ticket_parse_failures != 0) {
+	fprintf(stderr, "selfserv: Experienced ticket parse failure(s)\n");
+	exit(1);
+    }
+    if (failedToNegotiateName) {
+        fprintf(stderr, "selfserv: Failed properly negotiate server name\n");
+        exit(1);
+    }
 
     {
 	int i;
@@ -1696,19 +2668,46 @@ main(int argc, char **argv)
 		SECKEY_DestroyPrivateKey(privKey[i]);
 	    }
 	}
+        for (i = 0;virtServerNameArray[i];i++) {
+            PORT_Free(virtServerNameArray[i]);
+        }
     }
 
     if (debugCache) {
 	nss_DumpCertificateCacheInfo();
     }
+    if (nickName) {
+        PORT_Free(nickName);
+    }
+    if (expectedHostNameVal) {
+        PORT_Free(expectedHostNameVal);
+    }
+    if (passwd) {
+        PORT_Free(passwd);
+    }
+    if (pwfile) {
+        PORT_Free(pwfile);
+    }
+    if (certPrefix && certPrefix != emptyString) {                            
+        PORT_Free(certPrefix);
+    }
+ #ifdef NSS_ENABLE_ECC
+    if (ecNickName) {
+        PORT_Free(ecNickName);
+    }
+ #endif
 
-    free(nickName);
-    free(passwd);
-
-    SSL_ShutdownServerSessionIDCache();
-
+    if (hasSidCache) {
+	SSL_ShutdownServerSessionIDCache();
+    }
+    if (certStatusArena) {
+	PORT_FreeArena(certStatusArena, PR_FALSE);
+    }
     if (NSS_Shutdown() != SECSuccess) {
 	SECU_PrintError(progName, "NSS_Shutdown");
+        if (loggerThread) {
+            PR_JoinThread(loggerThread);
+        }
 	PR_Cleanup();
 	exit(1);
     }

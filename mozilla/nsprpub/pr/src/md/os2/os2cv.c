@@ -1,36 +1,39 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 /*
  *  os2cv.c -- OS/2 Machine-Dependent Code for Condition Variables
@@ -47,38 +50,6 @@
  */
  
 #include "primpl.h"
-
-#ifdef USE_RAMSEM
-ULONG _Far16 _Pascal Dos16GetInfoSeg(PSEL pselGlobal, PSEL pselLocal);
-
-typedef struct _LINFOSEG
-{
-    USHORT  pidCurrent;
-    USHORT  pidParent;
-    USHORT  prtyCurrent;
-    USHORT  tidCurrent;
-    USHORT  sgCurrent;
-    UCHAR   rfProcStatus;
-    UCHAR   dummy1;
-    BOOL16  fForeground;
-    UCHAR   typProcess;
-    UCHAR   dummy2;
-    SEL     selEnvironment;
-    USHORT  offCmdLine;
-    USHORT  cbDataSegment;
-    USHORT  cbStack;
-    USHORT  cbHeap;
-    USHORT  hmod;
-    SEL     selDS;
-    SEL     selPack;
-    SEL     selPackShr;
-    SEL     selPackPck;
-    ULONG   ulReserved;
-} LINFOSEG;
-typedef LINFOSEG FAR *PLINFOSEG;
-
-PLINFOSEG plisCurrent = NULL;
-#endif
 
 /*
  * AddThreadToCVWaitQueueInternal --
@@ -195,11 +166,7 @@ md_UnlockAndPostNotifies(
     }
 
     /* Release the lock before notifying */
-#ifdef USE_RAMSEM
-      SemReleasex86(&lock->mutex, 0);
-#else
-      DosReleaseMutexSem(lock->mutex);
-#endif
+    DosReleaseMutexSem(lock->mutex);
 
     notified = &post;  /* this is where we start */
     do {
@@ -306,11 +273,7 @@ _PR_MD_WAIT_CV(_MDCVar *cv, _MDLock *lock, PRIntervalTime timeout )
         md_UnlockAndPostNotifies(lock, thred, cv);
     } else {
         AddThreadToCVWaitQueueInternal(thred, cv);
-#ifdef USE_RAMSEM
-        SemReleasex86( &lock->mutex, 0 );
-#else
         DosReleaseMutexSem(lock->mutex); 
-#endif
     }
 
     /* Wait for notification or timeout; don't really care which */
@@ -319,11 +282,7 @@ _PR_MD_WAIT_CV(_MDCVar *cv, _MDLock *lock, PRIntervalTime timeout )
         DosResetEventSem(thred->md.blocked_sema, &count);
     }
 
-#ifdef USE_RAMSEM
-    SemRequest486(&(lock->mutex), -1);
-#else
     DosRequestMutexSem((lock->mutex), SEM_INDEFINITE_WAIT);
-#endif
 
     PR_ASSERT(rv == NO_ERROR || rv == ERROR_TIMEOUT);
 
@@ -380,41 +339,10 @@ _PR_MD_NOTIFY_CV(_MDCVar *cv, _MDLock *lock)
 PRStatus
 _PR_MD_NEW_LOCK(_MDLock *lock)
 {
-#ifdef USE_RAMSEM
-    // It's better if this API traps when pCriticalSect is not a valid
-    // pointer, because we can't return an error code and if we just return
-    // the API caller will have nasty bugs that are hard to find.
-   
-    PRAMSEM pramsem = (PRAMSEM)(&(lock->mutex));
-    /* First time, set up addresses of processor specific functions
-     */
-    if (plisCurrent == NULL)
-    {
-        SEL selGlobal = 0, selLocal = 0;
-   
-        /* Convert 16 bit global information segment to 32 bit address
-         * by performing CRMA on the 16 bit address: "shift" operation
-         * to convert sel to flat, "and" operation to mask the address
-         * to 32-bit
-         */
-        Dos16GetInfoSeg(&selGlobal, &selLocal);
-        plisCurrent = (PLINFOSEG)(((ULONG)selLocal << 13) &
-                      (ULONG)0x1fff0000);
-   
-    }
-   
-    memset(pramsem, 0, sizeof(pramsem));
-    DosCreateEventSem(0, &pramsem->hevSem, DC_SEM_SHARED, 0);
-   
-    lock->notified.length=0;
-    lock->notified.link=NULL;
-    return PR_SUCCESS;
-#else
     DosCreateMutexSem(0, &(lock->mutex), 0, 0);
     (lock)->notified.length=0;
     (lock)->notified.link=NULL;
     return PR_SUCCESS;
-#endif
 }
 
 void
@@ -422,4 +350,13 @@ _PR_MD_NOTIFYALL_CV(_MDCVar *cv, _MDLock *lock)
 {
     md_PostNotifyToCvar(cv, lock, PR_TRUE);
     return;
+}
+
+void _PR_MD_UNLOCK(_MDLock *lock)
+{
+    if (0 != lock->notified.length) {
+        md_UnlockAndPostNotifies(lock, NULL, NULL);
+    } else {
+        DosReleaseMutexSem(lock->mutex);
+    }
 }

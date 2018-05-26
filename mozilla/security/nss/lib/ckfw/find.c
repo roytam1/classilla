@@ -1,39 +1,6 @@
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
-
-#ifdef DEBUG
-static const char CVS_ID[] = "@(#) $RCSfile: find.c,v $ $Revision: 1.4 $ $Date: 2002/09/06 00:27:33 $ $Name:  $";
-#endif /* DEBUG */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * find.c
@@ -144,7 +111,7 @@ nssCKFWFindObjects_Create
   mdInstance = nssCKFWInstance_GetMDInstance(fwInstance);
 
   fwFindObjects = nss_ZNEW(NULL, NSSCKFWFindObjects);
-  if( (NSSCKFWFindObjects *)NULL == fwFindObjects ) {
+  if (!fwFindObjects) {
     *pError = CKR_HOST_MEMORY;
     goto loser;
   }
@@ -159,7 +126,7 @@ nssCKFWFindObjects_Create
   fwFindObjects->mdInstance = mdInstance;
 
   fwFindObjects->mutex = nssCKFWInstance_CreateMutex(fwInstance, NULL, pError);
-  if( (NSSCKFWMutex *)NULL == fwFindObjects->mutex ) {
+  if (!fwFindObjects->mutex) {
     goto loser;
   }
 
@@ -173,22 +140,24 @@ nssCKFWFindObjects_Create
   return fwFindObjects;
 
  loser:
-  nss_ZFreeIf(fwFindObjects);
-
-  if( (NSSCKMDFindObjects *)NULL != mdFindObjects1 ) {
-    if( (void *)NULL != (void *)mdFindObjects1->Final ) {
-      fwFindObjects->mdFindObjects = mdFindObjects1;
-      mdFindObjects1->Final(mdFindObjects1, fwFindObjects, mdSession, 
-        fwSession, mdToken, fwToken, mdInstance, fwInstance);
+  if( fwFindObjects ) {
+    if( NULL != mdFindObjects1 ) {
+      if( NULL != mdFindObjects1->Final ) {
+        fwFindObjects->mdFindObjects = mdFindObjects1;
+        mdFindObjects1->Final(mdFindObjects1, fwFindObjects, mdSession, 
+          fwSession, mdToken, fwToken, mdInstance, fwInstance);
+      }
     }
-  }
 
-  if( (NSSCKMDFindObjects *)NULL != mdFindObjects2 ) {
-    if( (void *)NULL != (void *)mdFindObjects2->Final ) {
-      fwFindObjects->mdFindObjects = mdFindObjects2;
-      mdFindObjects2->Final(mdFindObjects2, fwFindObjects, mdSession, 
-        fwSession, mdToken, fwToken, mdInstance, fwInstance);
+    if( NULL != mdFindObjects2 ) {
+      if( NULL != mdFindObjects2->Final ) {
+        fwFindObjects->mdFindObjects = mdFindObjects2;
+        mdFindObjects2->Final(mdFindObjects2, fwFindObjects, mdSession, 
+          fwSession, mdToken, fwToken, mdInstance, fwInstance);
+      }
     }
+
+    nss_ZFreeIf(fwFindObjects);
   }
 
   if( CKR_OK == *pError ) {
@@ -217,8 +186,8 @@ nssCKFWFindObjects_Destroy
 
   (void)nssCKFWMutex_Destroy(fwFindObjects->mutex);
 
-  if( (NSSCKMDFindObjects *)NULL != fwFindObjects->mdfo1 ) {
-    if( (void *)NULL != (void *)fwFindObjects->mdfo1->Final ) {
+  if (fwFindObjects->mdfo1) {
+    if (fwFindObjects->mdfo1->Final) {
       fwFindObjects->mdFindObjects = fwFindObjects->mdfo1;
       fwFindObjects->mdfo1->Final(fwFindObjects->mdfo1, fwFindObjects,
         fwFindObjects->mdSession, fwFindObjects->fwSession, 
@@ -227,8 +196,8 @@ nssCKFWFindObjects_Destroy
     }
   }
 
-  if( (NSSCKMDFindObjects *)NULL != fwFindObjects->mdfo2 ) {
-    if( (void *)NULL != (void *)fwFindObjects->mdfo2->Final ) {
+  if (fwFindObjects->mdfo2) {
+    if (fwFindObjects->mdfo2->Final) {
       fwFindObjects->mdFindObjects = fwFindObjects->mdfo2;
       fwFindObjects->mdfo2->Final(fwFindObjects->mdfo2, fwFindObjects,
         fwFindObjects->mdSession, fwFindObjects->fwSession, 
@@ -282,7 +251,7 @@ nssCKFWFindObjects_Next
   NSSArena *objArena;
 
 #ifdef NSSDEBUG
-  if( (CK_RV *)NULL == pError ) {
+  if (!pError) {
     return (NSSCKFWObject *)NULL;
   }
 
@@ -297,15 +266,15 @@ nssCKFWFindObjects_Next
     return (NSSCKFWObject *)NULL;
   }
 
-  if( (NSSCKMDFindObjects *)NULL != fwFindObjects->mdfo1 ) {
-    if( (void *)NULL != (void *)fwFindObjects->mdfo1->Next ) {
+  if (fwFindObjects->mdfo1) {
+    if (fwFindObjects->mdfo1->Next) {
       fwFindObjects->mdFindObjects = fwFindObjects->mdfo1;
       mdObject = fwFindObjects->mdfo1->Next(fwFindObjects->mdfo1,
         fwFindObjects, fwFindObjects->mdSession, fwFindObjects->fwSession,
         fwFindObjects->mdToken, fwFindObjects->fwToken, 
         fwFindObjects->mdInstance, fwFindObjects->fwInstance,
         arenaOpt, pError);
-      if( (NSSCKMDObject *)NULL == mdObject ) {
+      if (!mdObject) {
         if( CKR_OK != *pError ) {
           goto done;
         }
@@ -322,15 +291,15 @@ nssCKFWFindObjects_Next
     }
   }
 
-  if( (NSSCKMDFindObjects *)NULL != fwFindObjects->mdfo2 ) {
-    if( (void *)NULL != (void *)fwFindObjects->mdfo2->Next ) {
+  if (fwFindObjects->mdfo2) {
+    if (fwFindObjects->mdfo2->Next) {
       fwFindObjects->mdFindObjects = fwFindObjects->mdfo2;
       mdObject = fwFindObjects->mdfo2->Next(fwFindObjects->mdfo2,
         fwFindObjects, fwFindObjects->mdSession, fwFindObjects->fwSession,
         fwFindObjects->mdToken, fwFindObjects->fwToken, 
         fwFindObjects->mdInstance, fwFindObjects->fwInstance,
         arenaOpt, pError);
-      if( (NSSCKMDObject *)NULL == mdObject ) {
+      if (!mdObject) {
         if( CKR_OK != *pError ) {
           goto done;
         }
@@ -353,14 +322,22 @@ nssCKFWFindObjects_Next
 
  wrap:
   /*
-   * This is less than ideal-- we should determine if it's a token
+   * This seems is less than ideal-- we should determine if it's a token
    * object or a session object, and use the appropriate arena.
    * But that duplicates logic in nssCKFWObject_IsTokenObject.
-   * Worry about that later.  For now, be conservative, and use
-   * the token arena.
+   * Also we should lookup the real session the object was created on
+   * if the object was a session object... however this code is actually
+   * correct because nssCKFWObject_Create will return a cached version of
+   * the object from it's hash. This is necessary because 1) we don't want
+   * to create an arena style leak (where our arena grows with every search),
+   * and 2) we want the same object to always have the same ID. This means
+   * the only case the nssCKFWObject_Create() will need the objArena and the
+   * Session is in the case of token objects (session objects should already
+   * exist in the cache from their initial creation). So this code is correct,
+   * but it depends on nssCKFWObject_Create caching all objects.
    */
   objArena = nssCKFWToken_GetArena(fwFindObjects->fwToken, pError);
-  if( (NSSArena *)NULL == objArena ) {
+  if (!objArena) {
     if( CKR_OK == *pError ) {
       *pError = CKR_HOST_MEMORY;
     }
@@ -368,9 +345,9 @@ nssCKFWFindObjects_Next
   }
 
   fwObject = nssCKFWObject_Create(objArena, mdObject,
-               fwFindObjects->fwSession, fwFindObjects->fwToken, 
+               NULL, fwFindObjects->fwToken, 
                fwFindObjects->fwInstance, pError);
-  if( (NSSCKFWObject *)NULL == fwObject ) {
+  if (!fwObject) {
     if( CKR_OK == *pError ) {
       *pError = CKR_GENERAL_ERROR;
     }

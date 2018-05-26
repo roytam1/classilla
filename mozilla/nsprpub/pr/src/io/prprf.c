@@ -1,36 +1,39 @@
-/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 /*
 ** Portable safe sprintf code.
@@ -46,19 +49,6 @@
 #include "prlong.h"
 #include "prlog.h"
 #include "prmem.h"
-
-/*
-** Note: on some platforms va_list is defined as an array,
-** and requires array notation.
-*/
-#if (defined(LINUX) && defined(__powerpc__)) || defined(WIN16) || \
-    defined(QNX) || \
-    (defined(__NetBSD__) && defined(__powerpc__) && \
-    __NetBSD_Version__ < 105000000)
-#define VARARGS_ASSIGN(foo, bar) foo[0] = bar[0]
-#else
-#define VARARGS_ASSIGN(foo, bar) (foo) = (bar)
-#endif
 
 /*
 ** WARNING: This code may *NOT* call PR_LOG (because PR_LOG calls it)
@@ -82,14 +72,24 @@ struct SprintfStateStr {
 };
 
 /*
-** Numbered Arguement State
+** Numbered Argument
 */
-struct NumArgState{
-    int	    type;		/* type of the current ap                    */
-    va_list ap;			/* point to the corresponding position on ap */
+struct NumArg {
+    int type;           /* type of the numbered argument    */
+    union {             /* the numbered argument            */
+	int i;
+	unsigned int ui;
+	PRInt32 i32;
+	PRUint32 ui32;
+	PRInt64 ll;
+	PRUint64 ull;
+	double d;
+	const char *s;
+	int *ip;
+    } u;
 };
 
-#define NAS_DEFAULT_NUM 20  /* default number of NumberedArgumentState array */
+#define NAS_DEFAULT_NUM 20  /* default number of NumberedArgument array */
 
 
 #define TYPE_INT16	0
@@ -373,7 +373,7 @@ static int cvt_f(SprintfState *ss, double d, const char *fmt0, const char *fmt1)
 ** width. "prec" is the maximum number of characters of "s" to output,
 ** where -1 means until NUL.
 */
-static int cvt_s(SprintfState *ss, const char *s, int width, int prec,
+static int cvt_s(SprintfState *ss, const char *str, int width, int prec,
 		 int flags)
 {
     int slen;
@@ -382,35 +382,42 @@ static int cvt_s(SprintfState *ss, const char *s, int width, int prec,
 	return 0;
 
     /* Limit string length by precision value */
-    slen = s ? strlen(s) : 6;
+    if (!str) {
+    	str = "(null)";
+    } 
     if (prec > 0) {
-	if (prec < slen) {
-	    slen = prec;
-	}
+	/* this is:  slen = strnlen(str, prec); */
+	register const char *s;
+
+	for(s = str; prec && *s; s++, prec-- )
+	    ;
+	slen = s - str;
+    } else {
+	slen = strlen(str);
     }
 
     /* and away we go */
-    return fill2(ss, s ? s : "(null)", slen, width, flags);
+    return fill2(ss, str, slen, width, flags);
 }
 
 /*
-** BiuldArgArray stands for Numbered Argument list Sprintf
+** BuildArgArray stands for Numbered Argument list Sprintf
 ** for example,  
 **	fmp = "%4$i, %2$d, %3s, %1d";
 ** the number must start from 1, and no gap among them
 */
 
-static struct NumArgState* BuildArgArray( const char *fmt, va_list ap, int* rv, struct NumArgState* nasArray )
+static struct NumArg* BuildArgArray( const char *fmt, va_list ap, int* rv, struct NumArg* nasArray )
 {
     int number = 0, cn = 0, i;
     const char* p;
     char  c;
-    struct NumArgState* nas;
+    struct NumArg* nas;
     
 
     /*
     **	first pass:
-    **	detemine how many legal % I have got, then allocate space
+    **	determine how many legal % I have got, then allocate space
     */
 
     p = fmt;
@@ -424,7 +431,7 @@ static struct NumArgState* BuildArgArray( const char *fmt, va_list ap, int* rv, 
 
 	while( c != 0 ){
 	    if( c > '9' || c < '0' ){
-		if( c == '$' ){		/* numbered argument csae */
+		if( c == '$' ){		/* numbered argument case */
 		    if( i > 0 ){
 			*rv = -1;
 			return NULL;
@@ -450,7 +457,7 @@ static struct NumArgState* BuildArgArray( const char *fmt, va_list ap, int* rv, 
 
     
     if( number > NAS_DEFAULT_NUM ){
-	nas = (struct NumArgState*)PR_MALLOC( number * sizeof( struct NumArgState ) );
+	nas = (struct NumArg*)PR_MALLOC( number * sizeof( struct NumArg ) );
 	if( !nas ){
 	    *rv = -1;
 	    return NULL;
@@ -615,27 +622,44 @@ static struct NumArgState* BuildArgArray( const char *fmt, va_list ap, int* rv, 
 	    continue;
 	}
 
-	VARARGS_ASSIGN(nas[cn].ap, ap);
-
 	switch( nas[cn].type ){
 	case TYPE_INT16:
 	case TYPE_UINT16:
 	case TYPE_INTN:
-	case TYPE_UINTN:		(void)va_arg( ap, PRIntn );		break;
+	    nas[cn].u.i = va_arg( ap, int );
+	    break;
 
-	case TYPE_INT32:		(void)va_arg( ap, PRInt32 );		break;
+	case TYPE_UINTN:
+	    nas[cn].u.ui = va_arg( ap, unsigned int );
+	    break;
 
-	case TYPE_UINT32:	(void)va_arg( ap, PRUint32 );	break;
+	case TYPE_INT32:
+	    nas[cn].u.i32 = va_arg( ap, PRInt32 );
+	    break;
 
-	case TYPE_INT64:	(void)va_arg( ap, PRInt64 );		break;
+	case TYPE_UINT32:
+	    nas[cn].u.ui32 = va_arg( ap, PRUint32 );
+	    break;
 
-	case TYPE_UINT64:	(void)va_arg( ap, PRUint64 );		break;
+	case TYPE_INT64:
+	    nas[cn].u.ll = va_arg( ap, PRInt64 );
+	    break;
 
-	case TYPE_STRING:	(void)va_arg( ap, char* );		break;
+	case TYPE_UINT64:
+	    nas[cn].u.ull = va_arg( ap, PRUint64 );
+	    break;
 
-	case TYPE_INTSTR:	(void)va_arg( ap, PRIntn* );		break;
+	case TYPE_STRING:
+	    nas[cn].u.s = va_arg( ap, char* );
+	    break;
 
-	case TYPE_DOUBLE:	(void)va_arg( ap, double );		break;
+	case TYPE_INTSTR:
+	    nas[cn].u.ip = va_arg( ap, int* );
+	    break;
+
+	case TYPE_DOUBLE:
+	    nas[cn].u.d = va_arg( ap, double );
+	    break;
 
 	default:
 	    if( nas != nasArray )
@@ -672,10 +696,11 @@ static int dosprintf(SprintfState *ss, const char *fmt, va_list ap)
     static char *HEX = "0123456789ABCDEF";
     char *hexp;
     int rv, i;
-    struct NumArgState* nas = NULL;
-    struct NumArgState  nasArray[ NAS_DEFAULT_NUM ];
+    struct NumArg* nas = NULL;
+    struct NumArg* nap;
+    struct NumArg  nasArray[ NAS_DEFAULT_NUM ];
     char  pattern[20];
-    const char* dolPt = NULL;  /* in "%4$.2f", dolPt will poiont to . */
+    const char* dolPt = NULL;  /* in "%4$.2f", dolPt will point to . */
 
 
     /*
@@ -729,7 +754,7 @@ static int dosprintf(SprintfState *ss, const char *fmt, va_list ap)
 		return -1;
 	    }
 
-	    ap = nas[i-1].ap;
+	    nap = &nas[i-1];
 	    dolPt = fmt;
 	    c = *fmt++;
 	}
@@ -828,35 +853,35 @@ static int dosprintf(SprintfState *ss, const char *fmt, va_list ap)
 	  fetch_and_convert:
 	    switch (type) {
 	      case TYPE_INT16:
-		u.l = va_arg(ap, int);
+		u.l = nas ? nap->u.i : va_arg(ap, int);
 		if (u.l < 0) {
 		    u.l = -u.l;
 		    flags |= FLAG_NEG;
 		}
 		goto do_long;
 	      case TYPE_UINT16:
-		u.l = va_arg(ap, int) & 0xffff;
+		u.l = (nas ? nap->u.i : va_arg(ap, int)) & 0xffff;
 		goto do_long;
 	      case TYPE_INTN:
-		u.l = va_arg(ap, int);
+		u.l = nas ? nap->u.i : va_arg(ap, int);
 		if (u.l < 0) {
 		    u.l = -u.l;
 		    flags |= FLAG_NEG;
 		}
 		goto do_long;
 	      case TYPE_UINTN:
-		u.l = (long)va_arg(ap, unsigned int);
+		u.l = (long)(nas ? nap->u.ui : va_arg(ap, unsigned int));
 		goto do_long;
 
 	      case TYPE_INT32:
-		u.l = va_arg(ap, PRInt32);
+		u.l = nas ? nap->u.i32 : va_arg(ap, PRInt32);
 		if (u.l < 0) {
 		    u.l = -u.l;
 		    flags |= FLAG_NEG;
 		}
 		goto do_long;
 	      case TYPE_UINT32:
-		u.l = (long)va_arg(ap, PRUint32);
+		u.l = (long)(nas ? nap->u.ui32 : va_arg(ap, PRUint32));
 	      do_long:
 		rv = cvt_l(ss, u.l, width, prec, radix, type, flags, hexp);
 		if (rv < 0) {
@@ -865,14 +890,14 @@ static int dosprintf(SprintfState *ss, const char *fmt, va_list ap)
 		break;
 
 	      case TYPE_INT64:
-		u.ll = va_arg(ap, PRInt64);
+		u.ll = nas ? nap->u.ll : va_arg(ap, PRInt64);
 		if (!LL_GE_ZERO(u.ll)) {
 		    LL_NEG(u.ll, u.ll);
 		    flags |= FLAG_NEG;
 		}
 		goto do_longlong;
 	      case TYPE_UINT64:
-		u.ll = va_arg(ap, PRUint64);
+		u.ll = nas ? nap->u.ull : va_arg(ap, PRUint64);
 	      do_longlong:
 		rv = cvt_ll(ss, u.ll, width, prec, radix, type, flags, hexp);
 		if (rv < 0) {
@@ -886,7 +911,7 @@ static int dosprintf(SprintfState *ss, const char *fmt, va_list ap)
 	  case 'E':
 	  case 'f':
 	  case 'g':
-	    u.d = va_arg(ap, double);
+	    u.d = nas ? nap->u.d : va_arg(ap, double);
 	    if( nas != NULL ){
 		i = fmt - dolPt;
 		if( i < sizeof( pattern ) ){
@@ -903,7 +928,7 @@ static int dosprintf(SprintfState *ss, const char *fmt, va_list ap)
 	    break;
 
 	  case 'c':
-	    u.ch = va_arg(ap, int);
+	    u.ch = nas ? nap->u.i : va_arg(ap, int);
             if ((flags & FLAG_LEFT) == 0) {
                 while (width-- > 1) {
                     rv = (*ss->stuff)(ss, " ", 1);
@@ -951,7 +976,7 @@ static int dosprintf(SprintfState *ss, const char *fmt, va_list ap)
 #endif
 
 	  case 's':
-	    u.s = va_arg(ap, const char*);
+	    u.s = nas ? nap->u.s : va_arg(ap, const char*);
 	    rv = cvt_s(ss, u.s, width, prec, flags);
 	    if (rv < 0) {
 		return rv;
@@ -959,7 +984,7 @@ static int dosprintf(SprintfState *ss, const char *fmt, va_list ap)
 	    break;
 
 	  case 'n':
-	    u.ip = va_arg(ap, int*);
+	    u.ip = nas ? nap->u.ip : va_arg(ap, int*);
 	    if (u.ip) {
 		*u.ip = ss->cur - ss->base;
 	    }
@@ -1009,7 +1034,7 @@ PR_IMPLEMENT(PRUint32) PR_sxprintf(PRStuffFunc func, void *arg,
                                  const char *fmt, ...)
 {
     va_list ap;
-    int rv;
+    PRUint32 rv;
 
     va_start(ap, fmt);
     rv = PR_vsxprintf(func, arg, fmt, ap);
@@ -1133,12 +1158,7 @@ static int LimitStuff(SprintfState *ss, const char *sp, PRUint32 len)
 PR_IMPLEMENT(PRUint32) PR_snprintf(char *out, PRUint32 outlen, const char *fmt, ...)
 {
     va_list ap;
-    int rv;
-
-    PR_ASSERT((PRInt32)outlen > 0);
-    if ((PRInt32)outlen <= 0) {
-	return 0;
-    }
+    PRUint32 rv;
 
     va_start(ap, fmt);
     rv = PR_vsnprintf(out, outlen, fmt, ap);
@@ -1165,7 +1185,7 @@ PR_IMPLEMENT(PRUint32) PR_vsnprintf(char *out, PRUint32 outlen,const char *fmt,
 
     /* If we added chars, and we didn't append a null, do it now. */
     if( (ss.cur != ss.base) && (*(ss.cur - 1) != '\0') )
-        *(--ss.cur) = '\0';
+        *(ss.cur - 1) = '\0';
 
     n = ss.cur - ss.base;
     return n ? n - 1 : n;

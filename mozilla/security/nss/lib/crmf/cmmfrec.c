@@ -1,43 +1,13 @@
 /* -*- Mode: C; tab-width: 8 -*-*/
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * This file will implement the functions related to key recovery in 
  * CMMF
  */
 
-#include "nssrenam.h"
 #include "cmmf.h"
 #include "cmmfi.h"
 #include "secitem.h"
@@ -46,7 +16,7 @@
 CMMFKeyRecRepContent*
 CMMF_CreateKeyRecRepContent(void)
 {
-    PRArenaPool          *poolp;
+    PLArenaPool          *poolp;
     CMMFKeyRecRepContent *keyRecContent;
 
     poolp = PORT_NewArena(CRMF_DEFAULT_ARENA_SIZE);
@@ -67,22 +37,22 @@ CMMF_DestroyKeyRecRepContent(CMMFKeyRecRepContent *inKeyRecRep)
 {
     PORT_Assert(inKeyRecRep != NULL);
     if (inKeyRecRep != NULL && inKeyRecRep->poolp != NULL) {
-        if (!inKeyRecRep->isDecoded) {
-	    int i;
+	int i;
 
+	if (!inKeyRecRep->isDecoded && inKeyRecRep->newSigCert != NULL) {
 	    CERT_DestroyCertificate(inKeyRecRep->newSigCert);
-	    if (inKeyRecRep->caCerts != NULL) {
-	        for (i=0; inKeyRecRep->caCerts[i] != NULL; i++) {
-		    CERT_DestroyCertificate(inKeyRecRep->caCerts[i]);
-		}
+	}
+	if (inKeyRecRep->caCerts != NULL) {
+	    for (i=0; inKeyRecRep->caCerts[i] != NULL; i++) {
+		CERT_DestroyCertificate(inKeyRecRep->caCerts[i]);
 	    }
-	    if (inKeyRecRep->keyPairHist != NULL) {
-	        for (i=0; inKeyRecRep->keyPairHist[i] != NULL; i++) {
-		    if (inKeyRecRep->keyPairHist[i]->certOrEncCert.choice ==
+	}
+	if (inKeyRecRep->keyPairHist != NULL) {
+	    for (i=0; inKeyRecRep->keyPairHist[i] != NULL; i++) {
+	        if (inKeyRecRep->keyPairHist[i]->certOrEncCert.choice ==
 			cmmfCertificate) {
-		        CERT_DestroyCertificate(inKeyRecRep->keyPairHist[i]->
+		    CERT_DestroyCertificate(inKeyRecRep->keyPairHist[i]->
 					       certOrEncCert.cert.certificate);
-		    }
 		}
 	    }
 	}
@@ -114,6 +84,10 @@ CMMF_KeyRecRepContentSetNewSignCert(CMMFKeyRecRepContent *inKeyRecRep,
     if (inKeyRecRep == NULL || inNewSignCert == NULL) {
         return SECFailure;
     }
+    if (!inKeyRecRep->isDecoded && inKeyRecRep->newSigCert) {
+	CERT_DestroyCertificate(inKeyRecRep->newSigCert);
+    }
+    inKeyRecRep->isDecoded = PR_FALSE;
     inKeyRecRep->newSigCert = CERT_DupCertificate(inNewSignCert);
     return (inKeyRecRep->newSigCert == NULL) ? SECFailure : SECSuccess;    
 }
@@ -148,7 +122,7 @@ CMMF_KeyRecRepContentSetCertifiedKeyPair(CMMFKeyRecRepContent *inKeyRecRep,
 {
     CMMFCertifiedKeyPair *keyPair;
     CRMFEncryptedValue   *dummy;
-    PRArenaPool          *poolp;
+    PLArenaPool          *poolp;
     void                 *mark;
     SECStatus             rv;
 
@@ -194,7 +168,7 @@ CMMF_KeyRecRepContentSetCertifiedKeyPair(CMMFKeyRecRepContent *inKeyRecRep,
     }
     dummy = crmf_create_encrypted_value_wrapped_privkey(inPrivKey, inPubKey, 
 							keyPair->privateKey);
-    PORT_Assert(dummy = keyPair->privateKey);
+    PORT_Assert(dummy == keyPair->privateKey);
     if (dummy != keyPair->privateKey) {
         crmf_destroy_encrypted_value(dummy, PR_TRUE);
 	goto loser;
@@ -228,6 +202,12 @@ CMMF_KeyRecRepContentGetNewSignCert(CMMFKeyRecRepContent *inKeyRecRep)
 	inKeyRecRep->newSigCert == NULL) {
         return NULL;
     }
+    /* newSigCert may not be a real certificate, it may be a hand decoded
+     * cert structure. This code makes sure we hand off a real, fully formed
+     * CERTCertificate to the caller. TODO: This should move into the decode
+     * portion so that we never wind up with a half formed CERTCertificate
+     * here. In this case the call would be to CERT_DupCertificate.
+     */
     return CERT_NewTempCertificate(CERT_GetDefaultCertDB(), 
 			          &inKeyRecRep->newSigCert->signatureWrap.data,
 				   NULL, PR_FALSE, PR_TRUE);

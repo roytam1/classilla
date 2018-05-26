@@ -1,38 +1,10 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "install.h"
 #include "install-ds.h"
+#include <prerror.h>
 #include <prlock.h>
 #include <prio.h>
 #include <prmem.h>
@@ -58,7 +30,7 @@ extern /*"C"*/
 short Pk11Install_UserVerifyJar(JAR *jar, PRFileDesc *out,
 	PRBool query);
 extern /*"C"*/
-const char* mySECU_ErrorString(int16);
+const char* mySECU_ErrorString(PRErrorCode errnum);
 extern 
 int Pk11Install_yyparse();
 
@@ -415,7 +387,7 @@ Pk11Install_DoInstall(char *jarFile, const char *installDir,
 			error(PK11_INSTALL_JAR_ERROR, jarFile, JAR_get_error(status));
 		} else {
 			error(PK11_INSTALL_JAR_ERROR, jarFile,
-			  mySECU_ErrorString((int16) PORT_GetError()) );
+			  mySECU_ErrorString(PORT_GetError()));
 		}
 		ret=PK11_INSTALL_JAR_ERROR;
 		goto loser;
@@ -467,7 +439,7 @@ Pk11Install_DoInstall(char *jarFile, const char *installDir,
 			error(PK11_INSTALL_JAR_EXTRACT, installer, JAR_get_error(status));
 		} else {
 			error(PK11_INSTALL_JAR_EXTRACT, installer,
-			  mySECU_ErrorString((int16) PORT_GetError()) );
+			  mySECU_ErrorString(PORT_GetError()));
 		}
 		ret = PK11_INSTALL_JAR_EXTRACT;
 		goto loser;
@@ -689,7 +661,7 @@ DoInstall(JAR *jar, const char *installDir, const char *tempDir,
                   JAR_get_error(status));
 			} else {
 				error(PK11_INSTALL_JAR_EXTRACT, file->jarPath,
-				  mySECU_ErrorString((int16) PORT_GetError()) );
+				  mySECU_ErrorString(PORT_GetError()));
 			}
 			ret=PK11_INSTALL_JAR_EXTRACT;
 			goto loser;

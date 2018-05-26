@@ -1,40 +1,6 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s): 
- *	Dr Stephen Henson <stephen.henson@gemplus.com>
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- *
- * key.h - public data structures and prototypes for the private key library
- *
- * $Id: keyhi.h,v 1.7 2002/02/03 03:37:17 relyea%netscape.com Exp $
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef _KEYHI_H_
 #define _KEYHI_H_
@@ -60,39 +26,42 @@ extern void SECKEY_DestroySubjectPublicKeyInfo(CERTSubjectPublicKeyInfo *spki);
 ** Copy subject-public-key-info "src" to "dst". "dst" is filled in
 ** appropriately (memory is allocated for each of the sub objects).
 */
-extern SECStatus SECKEY_CopySubjectPublicKeyInfo(PRArenaPool *arena,
+extern SECStatus SECKEY_CopySubjectPublicKeyInfo(PLArenaPool *arena,
 					     CERTSubjectPublicKeyInfo *dst,
 					     CERTSubjectPublicKeyInfo *src);
 
 /*
 ** Update the PQG parameters for a cert's public key.
-** Only done for DSA and Fortezza certs
+** Only done for DSA certs
 */
 extern SECStatus
 SECKEY_UpdateCertPQG(CERTCertificate * subjectCert);
 
 
-/* Compare the KEA parameters of two public keys.  
- * Only used by fortezza.      */
-
-extern SECStatus
-SECKEY_KEAParamCompare(CERTCertificate *cert1,CERTCertificate *cert2);
+/*
+** Return the strength of the public key in bytes
+*/
+extern unsigned SECKEY_PublicKeyStrength(const SECKEYPublicKey *pubk);
 
 /*
-** Return the strength of the public key
+** Return the strength of the public key in bits
 */
-extern unsigned SECKEY_PublicKeyStrength(SECKEYPublicKey *pubk);
+extern unsigned SECKEY_PublicKeyStrengthInBits(const SECKEYPublicKey *pubk);
 
+/*
+** Return the length of the signature in bytes
+*/
+extern unsigned SECKEY_SignatureLen(const SECKEYPublicKey *pubk);
 
 /*
 ** Make a copy of the private key "privKey"
 */
-extern SECKEYPrivateKey *SECKEY_CopyPrivateKey(SECKEYPrivateKey *privKey);
+extern SECKEYPrivateKey *SECKEY_CopyPrivateKey(const SECKEYPrivateKey *privKey);
 
 /*
 ** Make a copy of the public key "pubKey"
 */
-extern SECKEYPublicKey *SECKEY_CopyPublicKey(SECKEYPublicKey *pubKey);
+extern SECKEYPublicKey *SECKEY_CopyPublicKey(const SECKEYPublicKey *pubKey);
 
 /*
 ** Convert a private key "privateKey" into a public key
@@ -110,6 +79,13 @@ SECKEYPrivateKey *SECKEY_CreateRSAPrivateKey(int keySizeInBits,
  */
 SECKEYPrivateKey *SECKEY_CreateDHPrivateKey(SECKEYDHParams *param,
 					   SECKEYPublicKey **pubk, void *cx);
+
+/*
+ * create a new EC key pair. The private Key is returned...
+ */
+SECKEYPrivateKey *SECKEY_CreateECPrivateKey(SECKEYECParams *param,
+                                           SECKEYPublicKey **pubk, void *cx);
+
 /*
 ** Create a subject-public-key-info based on a public key.
 */
@@ -119,12 +95,12 @@ SECKEY_CreateSubjectPublicKeyInfo(SECKEYPublicKey *k);
 /*
 ** Decode a DER encoded public key into an SECKEYPublicKey structure.
 */
-extern SECKEYPublicKey *SECKEY_DecodeDERPublicKey(SECItem *pubkder);
+extern SECKEYPublicKey *SECKEY_DecodeDERPublicKey(const SECItem *pubkder);
 
 /*
 ** Convert a base64 ascii encoded DER public key to our internal format.
 */
-extern SECKEYPublicKey *SECKEY_ConvertAndDecodePublicKey(char *pubkstr);
+extern SECKEYPublicKey *SECKEY_ConvertAndDecodePublicKey(const char *pubkstr);
 
 /*
 ** Convert a base64 ascii encoded DER public key and challenge to spki,
@@ -146,21 +122,21 @@ SECKEY_EncodeDERSubjectPublicKeyInfo(SECKEYPublicKey *pubk);
 ** CERTSubjectPublicKeyInfo structure.
 */
 extern CERTSubjectPublicKeyInfo *
-SECKEY_DecodeDERSubjectPublicKeyInfo(SECItem *spkider);
+SECKEY_DecodeDERSubjectPublicKeyInfo(const SECItem *spkider);
 
 /*
 ** Convert a base64 ascii encoded DER subject public key info to our
 ** internal format.
 */
 extern CERTSubjectPublicKeyInfo *
-SECKEY_ConvertAndDecodeSubjectPublicKeyInfo(char *spkistr);
+SECKEY_ConvertAndDecodeSubjectPublicKeyInfo(const char *spkistr);
 
 /*
  * extract the public key from a subject Public Key info structure.
  * (used by JSS).
  */
 extern SECKEYPublicKey *
-SECKEY_ExtractPublicKey(CERTSubjectPublicKeyInfo *);
+SECKEY_ExtractPublicKey(const CERTSubjectPublicKeyInfo *);
 
 /*
 ** Destroy a private key object.
@@ -205,9 +181,12 @@ SECKEY_DestroyEncryptedPrivateKeyInfo(SECKEYEncryptedPrivateKeyInfo *epki,
  * returned.  otherwise, SECSuccess is returned.
  */
 extern SECStatus
-SECKEY_CopyPrivateKeyInfo(PRArenaPool *poolp,
+SECKEY_CopyPrivateKeyInfo(PLArenaPool *poolp,
 			  SECKEYPrivateKeyInfo *to,
-			  SECKEYPrivateKeyInfo *from);
+			  const SECKEYPrivateKeyInfo *from);
+
+extern SECStatus
+SECKEY_CacheStaticFlags(SECKEYPrivateKey* key);
 
 /* Copy encrypted private key info structure.  
  *  poolp is the arena into which the contents of from is to be copied.
@@ -218,21 +197,21 @@ SECKEY_CopyPrivateKeyInfo(PRArenaPool *poolp,
  * returned.  otherwise, SECSuccess is returned.
  */
 extern SECStatus
-SECKEY_CopyEncryptedPrivateKeyInfo(PRArenaPool *poolp,
+SECKEY_CopyEncryptedPrivateKeyInfo(PLArenaPool *poolp,
 				   SECKEYEncryptedPrivateKeyInfo *to,
-				   SECKEYEncryptedPrivateKeyInfo *from);
+				   const SECKEYEncryptedPrivateKeyInfo *from);
 /*
  * Accessor functions for key type of public and private keys.
  */
-KeyType SECKEY_GetPrivateKeyType(SECKEYPrivateKey *privKey);
-KeyType SECKEY_GetPublicKeyType(SECKEYPublicKey *pubKey);
+KeyType SECKEY_GetPrivateKeyType(const SECKEYPrivateKey *privKey);
+KeyType SECKEY_GetPublicKeyType(const SECKEYPublicKey *pubKey);
 
 /*
  * Creates a PublicKey from its DER encoding.
  * Currently only supports RSA and DSA keys.
  */
 SECKEYPublicKey*
-SECKEY_ImportDERPublicKey(SECItem *derKey, CK_KEY_TYPE type);
+SECKEY_ImportDERPublicKey(const SECItem *derKey, CK_KEY_TYPE type);
 
 SECKEYPrivateKeyList*
 SECKEY_NewPrivateKeyList(void);
@@ -267,6 +246,24 @@ SECKEY_AddPublicKeyToListTail( SECKEYPublicKeyList *list,
 #define PUBKEY_LIST_HEAD(l) ((SECKEYPublicKeyListNode*)PR_LIST_HEAD(&l->list))
 #define PUBKEY_LIST_NEXT(n) ((SECKEYPublicKeyListNode *)n->links.next)
 #define PUBKEY_LIST_END(n,l) (((void *)n) == ((void *)&l->list))
+
+/*
+ * Length in bits of the EC's field size.  This is also the length of
+ * the x and y coordinates of EC points, such as EC public keys and
+ * base points.
+ *
+ * Return 0 on failure (unknown EC domain parameters).
+ */
+extern int SECKEY_ECParamsToKeySize(const SECItem *params);
+
+/*
+ * Length in bits of the EC base point order, usually denoted n.  This
+ * is also the length of EC private keys and ECDSA signature components
+ * r and s.
+ *
+ * Return 0 on failure (unknown EC domain parameters).
+ */
+extern int SECKEY_ECParamsToBasePointOrderLen(const SECItem *params);
 
 SEC_END_PROTOS
 

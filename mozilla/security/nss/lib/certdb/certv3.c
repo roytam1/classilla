@@ -1,40 +1,9 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Code for dealing with X509.V3 extensions.
- *
- * $Id: certv3.c,v 1.3.10.1 2002/12/17 05:34:50 wtc%netscape.com Exp $
  */
 
 #include "cert.h"
@@ -54,7 +23,7 @@ CERT_FindCertExtensionByOID(CERTCertificate *cert, SECItem *oid,
     
 
 SECStatus
-CERT_FindCertExtension(CERTCertificate *cert, int tag, SECItem *value)
+CERT_FindCertExtension(const CERTCertificate *cert, int tag, SECItem *value)
 {
     return (cert_FindExtension (cert->extensions, tag, value));
 }
@@ -99,11 +68,11 @@ char *
 CERT_FindCertURLExtension(CERTCertificate *cert, int tag, int catag)
 {
     SECStatus rv;
-    SECItem urlitem;
-    SECItem baseitem;
+    SECItem urlitem = {siBuffer,0};
+    SECItem baseitem = {siBuffer,0};
     SECItem urlstringitem = {siBuffer,0};
     SECItem basestringitem = {siBuffer,0};
-    PRArenaPool *arena = NULL;
+    PLArenaPool *arena = NULL;
     PRBool hasbase;
     char *urlstring;
     char *str;
@@ -118,8 +87,6 @@ CERT_FindCertURLExtension(CERTCertificate *cert, int tag, int catag)
     }
     
     hasbase = PR_FALSE;
-    urlitem.data = NULL;
-    baseitem.data = NULL;
     
     rv = cert_FindExtension(cert->extensions, tag, &urlitem);
     if ( rv == SECSuccess ) {
@@ -144,15 +111,16 @@ CERT_FindCertURLExtension(CERTCertificate *cert, int tag, int catag)
 	goto loser;
     }
 
-    rv = SEC_QuickDERDecodeItem(arena, &urlstringitem, SEC_IA5StringTemplate, 
-			    &urlitem);
+    rv = SEC_QuickDERDecodeItem(arena, &urlstringitem,
+                                SEC_ASN1_GET(SEC_IA5StringTemplate), &urlitem);
 
     if ( rv != SECSuccess ) {
 	goto loser;
     }
     if ( hasbase ) {
-	rv = SEC_QuickDERDecodeItem(arena, &basestringitem, SEC_IA5StringTemplate,
-				&baseitem);
+	rv = SEC_QuickDERDecodeItem(arena, &basestringitem,
+                                    SEC_ASN1_GET(SEC_IA5StringTemplate),
+                                    &baseitem);
 
 	if ( rv != SECSuccess ) {
 	    goto loser;
@@ -231,7 +199,7 @@ CERT_FindNSStringExtension(CERTCertificate *cert, int oidtag)
 {
     SECItem wrapperItem, tmpItem = {siBuffer,0};
     SECStatus rv;
-    PRArenaPool *arena = NULL;
+    PLArenaPool *arena = NULL;
     char *retstring = NULL;
     
     wrapperItem.data = NULL;
@@ -249,8 +217,8 @@ CERT_FindNSStringExtension(CERTCertificate *cert, int oidtag)
 	goto loser;
     }
 
-    rv = SEC_QuickDERDecodeItem(arena, &tmpItem, SEC_IA5StringTemplate, 
-			    &wrapperItem);
+    rv = SEC_QuickDERDecodeItem(arena, &tmpItem,
+                            SEC_ASN1_GET(SEC_IA5StringTemplate), &wrapperItem);
 
     if ( rv != SECSuccess ) {
 	goto loser;
@@ -294,19 +262,28 @@ SECStatus
 CERT_FindSubjectKeyIDExtension(CERTCertificate *cert, SECItem *retItem)
 {
 
-    SECItem encodedValue;
     SECStatus rv;
+    SECItem encodedValue = {siBuffer, NULL, 0 };
+    SECItem decodedValue = {siBuffer, NULL, 0 };
 
-    encodedValue.data = NULL;
     rv = cert_FindExtension
 	 (cert->extensions, SEC_OID_X509_SUBJECT_KEY_ID, &encodedValue);
-    if (rv != SECSuccess)
-	return (rv);
-    rv = SEC_ASN1DecodeItem (NULL, retItem, SEC_OctetStringTemplate,
-			     &encodedValue);
-    PORT_Free (encodedValue.data);
-
-    return (rv);
+    if (rv == SECSuccess) {
+	PLArenaPool * tmpArena = PORT_NewArena(DER_DEFAULT_CHUNKSIZE);
+	if (tmpArena) {
+	    rv = SEC_QuickDERDecodeItem(tmpArena, &decodedValue, 
+	                                SEC_ASN1_GET(SEC_OctetStringTemplate), 
+					&encodedValue);
+	    if (rv == SECSuccess) {
+	        rv = SECITEM_CopyItem(NULL, retItem, &decodedValue);
+	    }
+	    PORT_FreeArena(tmpArena, PR_FALSE);
+	} else {
+	    rv = SECFailure;
+	}
+    }
+    SECITEM_FreeItem(&encodedValue, PR_FALSE);
+    return rv;
 }
 
 SECStatus
@@ -335,7 +312,7 @@ CERT_FindBasicConstraintExten(CERTCertificate *cert,
 }
 
 CERTAuthKeyID *
-CERT_FindAuthKeyIDExten (PRArenaPool *arena, CERTCertificate *cert)
+CERT_FindAuthKeyIDExten (PLArenaPool *arena, CERTCertificate *cert)
 {
     SECItem encodedExtenValue;
     SECStatus rv;
@@ -361,7 +338,6 @@ CERT_FindAuthKeyIDExten (PRArenaPool *arena, CERTCertificate *cert)
 SECStatus
 CERT_CheckCertUsage(CERTCertificate *cert, unsigned char usage)
 {
-    PRBool critical;    
     SECItem keyUsage;
     SECStatus rv;
 
@@ -372,35 +348,18 @@ CERT_CheckCertUsage(CERTCertificate *cert, unsigned char usage)
     
     keyUsage.data = NULL;
 
-    do {
-	/* if the keyUsage extension exists and is critical, make sure that the
-	   CA certificate is used for certificate signing purpose only. If the
-	   extension does not exist, we will assum that it can be used for
-	   certificate signing purpose.
-	*/
-	rv = CERT_GetExtenCriticality(cert->extensions,
-				      SEC_OID_X509_KEY_USAGE,
-				      &critical);
-	if (rv == SECFailure) {
-	    rv = (PORT_GetError () == SEC_ERROR_EXTENSION_NOT_FOUND) ?
-		SECSuccess : SECFailure;
-	    break;
-	}
-
-	if (critical == PR_FALSE) {
-	    rv = SECSuccess;
-	    break;
-	}
-
-	rv = CERT_FindKeyUsageExtension(cert, &keyUsage);
-	if (rv != SECSuccess) {
-	    break;
-	}	
-	if (!(keyUsage.data[0] & usage)) {
-	    PORT_SetError (SEC_ERROR_CERT_USAGES_INVALID);
-	    rv = SECFailure;
-	}
-    }while (0);
+    /* This code formerly ignored the Key Usage extension if it was
+    ** marked non-critical.  That was wrong.  Since we do understand it,
+    ** we are obligated to honor it, whether or not it is critical.
+    */
+    rv = CERT_FindKeyUsageExtension(cert, &keyUsage);
+    if (rv == SECFailure) {
+        rv = (PORT_GetError () == SEC_ERROR_EXTENSION_NOT_FOUND) ?
+	    SECSuccess : SECFailure;
+    } else if (!(keyUsage.data[0] & usage)) {
+	PORT_SetError (SEC_ERROR_CERT_USAGES_INVALID);
+	rv = SECFailure;
+    }
     PORT_Free (keyUsage.data);
     return (rv);
 }

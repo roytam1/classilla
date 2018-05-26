@@ -1,37 +1,10 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- *
- * $Id: rijndael.c,v 1.16 2002/11/16 06:09:58 nelsonb%netscape.com Exp $
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#ifdef FREEBL_NO_DEPEND
+#include "stubs.h"
+#endif
 
 #include "prinit.h"
 #include "prerr.h"
@@ -40,6 +13,22 @@
 #include "prtypes.h"
 #include "blapi.h"
 #include "rijndael.h"
+
+#include "cts.h"
+#include "ctr.h"
+#include "gcm.h"
+
+#if USE_HW_AES
+#include "intel-gcm.h"
+#include "intel-aes.h"
+#include "mpi.h"
+
+static int has_intel_aes = 0;
+static int has_intel_avx = 0;
+static int has_intel_clmul = 0;
+static PRBool use_hw_aes = PR_FALSE;
+static PRBool use_hw_gcm = PR_FALSE;
+#endif
 
 /*
  * There are currently five ways to build this code, varying in performance
@@ -552,7 +541,7 @@ rijndael_encryptBlock128(AESContext *cx,
     PRUint32 *roundkeyw;
     rijndael_state state;
     PRUint32 C0, C1, C2, C3;
-#if defined(_X86_)
+#if defined(NSS_X86_OR_X64)
 #define pIn input
 #define pOut output
 #else
@@ -628,7 +617,7 @@ rijndael_encryptBlock128(AESContext *cx,
     *((PRUint32 *)(pOut + 4))  = C1;
     *((PRUint32 *)(pOut + 8))  = C2;
     *((PRUint32 *)(pOut + 12)) = C3;
-#if defined(_X86_)
+#if defined(NSS_X86_OR_X64)
 #undef pIn
 #undef pOut
 #else
@@ -648,7 +637,7 @@ rijndael_decryptBlock128(AESContext *cx,
     PRUint32 *roundkeyw;
     rijndael_state state;
     PRUint32 C0, C1, C2, C3;
-#if defined(_X86_)
+#if defined(NSS_X86_OR_X64)
 #define pIn input
 #define pOut output
 #else
@@ -720,7 +709,7 @@ rijndael_decryptBlock128(AESContext *cx,
     *((PRUint32 *)(pOut +  8)) ^= *roundkeyw--;
     *((PRUint32 *)(pOut +  4)) ^= *roundkeyw--;
     *((PRUint32 *) pOut      ) ^= *roundkeyw--;
-#if defined(_X86_)
+#if defined(NSS_X86_OR_X64)
 #undef pIn
 #undef pOut
 #else
@@ -843,6 +832,8 @@ rijndael_encryptECB(AESContext *cx, unsigned char *output,
 {
     SECStatus rv;
     AESBlockFunc *encryptor;
+
+
     encryptor = (blocksize == RIJNDAEL_MIN_BLOCKSIZE) 
 				  ? &rijndael_encryptBlock128 
 				  : &rijndael_encryptBlock;
@@ -901,6 +892,7 @@ rijndael_decryptECB(AESContext *cx, unsigned char *output,
 {
     SECStatus rv;
     AESBlockFunc *decryptor;
+
     decryptor = (blocksize == RIJNDAEL_MIN_BLOCKSIZE) 
 				  ? &rijndael_decryptBlock128 
 				  : &rijndael_decryptBlock;
@@ -927,6 +919,7 @@ rijndael_decryptCBC(AESContext *cx, unsigned char *output,
     unsigned char *out;
     unsigned int j;
     unsigned char newIV[RIJNDAEL_MAX_BLOCKSIZE];
+
 
     if (!inputLen) 
 	return SECSuccess;
@@ -967,16 +960,41 @@ rijndael_decryptCBC(AESContext *cx, unsigned char *output,
  *
  ***********************************************************************/
 
-/* AES_CreateContext
- *
- * create a new context for Rijndael operations
- */
-AESContext *
-AES_CreateContext(const unsigned char *key, const unsigned char *iv, 
-                  int mode, int encrypt,
-                  unsigned int keysize, unsigned int blocksize)
+AESContext * AES_AllocateContext(void)
 {
-    AESContext *cx;
+    return PORT_ZNew(AESContext);
+}
+
+
+#if USE_HW_AES
+/*
+ * Adapted from the example code in "How to detect New Instruction support in
+ * the 4th generation Intel Core processor family" by Max Locktyukhin.
+ */
+static PRBool
+check_xcr0_ymm()
+{
+    PRUint32 xcr0;
+#if defined(_MSC_VER)
+    xcr0 = (PRUint32)_xgetbv(0);  /* Requires VS2010 SP1 or later. */
+#else
+    __asm__ ("xgetbv" : "=a" (xcr0) : "c" (0) : "%edx");
+#endif
+    /* Check if xmm and ymm state are enabled in XCR0. */
+    return (xcr0 & 6) == 6;
+}
+#endif
+
+/*
+** Initialize a new AES context suitable for AES encryption/decryption in
+** the ECB or CBC mode.
+** 	"mode" the mode of operation, which must be NSS_AES or NSS_AES_CBC
+*/
+static SECStatus   
+aes_InitContext(AESContext *cx, const unsigned char *key, unsigned int keysize, 
+	        const unsigned char *iv, int mode, unsigned int encrypt,
+	        unsigned int blocksize)
+{
     unsigned int Nk;
     /* According to Rijndael AES Proposal, section 12.1, block and key
      * lengths between 128 and 256 bits are supported, as long as the
@@ -990,21 +1008,46 @@ AES_CreateContext(const unsigned char *key, const unsigned char *iv,
 	blocksize > RIJNDAEL_MAX_BLOCKSIZE || 
 	blocksize % 4 != 0) {
 	PORT_SetError(SEC_ERROR_INVALID_ARGS);
-	return NULL;
+	return SECFailure;
     }
     if (mode != NSS_AES && mode != NSS_AES_CBC) {
 	PORT_SetError(SEC_ERROR_INVALID_ARGS);
-	return NULL;
+	return SECFailure;
     }
     if (mode == NSS_AES_CBC && iv == NULL) {
 	PORT_SetError(SEC_ERROR_INVALID_ARGS);
-	return NULL;
+	return SECFailure;
     }
-    cx = PORT_ZNew(AESContext);
     if (!cx) {
-	PORT_SetError(SEC_ERROR_NO_MEMORY);
-    	return NULL;
+	PORT_SetError(SEC_ERROR_INVALID_ARGS);
+    	return SECFailure;
     }
+#if USE_HW_AES
+    if (has_intel_aes == 0) {
+	unsigned long eax, ebx, ecx, edx;
+	char *disable_hw_aes = getenv("NSS_DISABLE_HW_AES");
+
+	if (disable_hw_aes == NULL) {
+	    freebl_cpuid(1, &eax, &ebx, &ecx, &edx);
+	    has_intel_aes = (ecx & (1 << 25)) != 0 ? 1 : -1;
+	    has_intel_clmul = (ecx & (1 << 1)) != 0 ? 1 : -1;
+	    if ((ecx & (1 << 27)) != 0 && (ecx & (1 << 28)) != 0 &&
+		check_xcr0_ymm()) {
+		has_intel_avx = 1;
+	    } else {
+		has_intel_avx = -1;
+	    }
+	} else {
+	    has_intel_aes = -1;
+	    has_intel_avx = -1;
+	    has_intel_clmul = -1;
+	}
+    }
+    use_hw_aes = (PRBool)
+		(has_intel_aes > 0 && (keysize % 8) == 0 && blocksize == 16);
+    use_hw_gcm = (PRBool)
+		(use_hw_aes && has_intel_avx>0 && has_intel_clmul>0);
+#endif
     /* Nb = (block size in bits) / 32 */
     cx->Nb = blocksize / 4;
     /* Nk = (key size in bits) / 32 */
@@ -1014,30 +1057,159 @@ AES_CreateContext(const unsigned char *key, const unsigned char *iv,
     /* copy in the iv, if neccessary */
     if (mode == NSS_AES_CBC) {
 	memcpy(cx->iv, iv, blocksize);
-	cx->worker = (encrypt) ? &rijndael_encryptCBC : &rijndael_decryptCBC;
+#if USE_HW_AES
+	if (use_hw_aes) {
+	    cx->worker = (freeblCipherFunc)
+				intel_aes_cbc_worker(encrypt, keysize);
+	} else
+#endif
+	    cx->worker = (freeblCipherFunc) (encrypt
+			  ? &rijndael_encryptCBC : &rijndael_decryptCBC);
     } else {
-	cx->worker = (encrypt) ? &rijndael_encryptECB : &rijndael_decryptECB;
+#if  USE_HW_AES
+	if (use_hw_aes) {
+	    cx->worker = (freeblCipherFunc) 
+				intel_aes_ecb_worker(encrypt, keysize);
+	} else
+#endif
+	    cx->worker = (freeblCipherFunc) (encrypt
+			  ? &rijndael_encryptECB : &rijndael_decryptECB);
     }
-    /* Allocate memory for the expanded key */
-    cx->expandedKey = PORT_ZNewArray(PRUint32, cx->Nb * (cx->Nr + 1));
-    if (!cx->expandedKey) {
-	PORT_SetError(SEC_ERROR_NO_MEMORY);
+    PORT_Assert((cx->Nb * (cx->Nr + 1)) <= RIJNDAEL_MAX_EXP_KEY_SIZE);
+    if ((cx->Nb * (cx->Nr + 1)) > RIJNDAEL_MAX_EXP_KEY_SIZE) {
+	PORT_SetError(SEC_ERROR_LIBRARY_FAILURE);
 	goto cleanup;
     }
-    /* Generate expanded key */
-    if (encrypt) {
-	if (rijndael_key_expansion(cx, key, Nk) != SECSuccess)
-	    goto cleanup;
-    } else {
-	if (rijndael_invkey_expansion(cx, key, Nk) != SECSuccess)
-	    goto cleanup;
+#ifdef USE_HW_AES
+    if (use_hw_aes) {
+	intel_aes_init(encrypt, keysize);
+    } else
+#endif
+    {
+
+#if defined(RIJNDAEL_GENERATE_TABLES) ||  \
+	defined(RIJNDAEL_GENERATE_TABLES_MACRO)
+	if (rijndaelTables == NULL) {
+	    if (PR_CallOnce(&coRTInit, init_rijndael_tables)
+	      != PR_SUCCESS) {
+		return SecFailure;
+	    }
+	}
+#endif
+	/* Generate expanded key */
+	if (encrypt) {
+	    if (rijndael_key_expansion(cx, key, Nk) != SECSuccess)
+		goto cleanup;
+	} else {
+	    if (rijndael_invkey_expansion(cx, key, Nk) != SECSuccess)
+		goto cleanup;
+	}
+    }
+    cx->worker_cx = cx;
+    cx->destroy = NULL;
+    cx->isBlock = PR_TRUE;
+    return SECSuccess;
+cleanup:
+    return SECFailure;
+}
+
+SECStatus   
+AES_InitContext(AESContext *cx, const unsigned char *key, unsigned int keysize, 
+	        const unsigned char *iv, int mode, unsigned int encrypt,
+	        unsigned int blocksize)
+{
+    int basemode = mode;
+    PRBool baseencrypt = encrypt;
+    SECStatus rv;
+
+    switch (mode) {
+    case NSS_AES_CTS:
+	basemode = NSS_AES_CBC;
+	break;
+    case NSS_AES_GCM:
+    case NSS_AES_CTR:
+	basemode = NSS_AES;
+	baseencrypt = PR_TRUE;
+	break;
+    }
+    /* make sure enough is initializes so we can safely call Destroy */
+    cx->worker_cx = NULL;
+    cx->destroy = NULL;
+    rv = aes_InitContext(cx, key, keysize, iv, basemode, 
+					baseencrypt, blocksize);
+    if (rv != SECSuccess) {
+	AES_DestroyContext(cx, PR_FALSE);
+	return rv;
+    }
+
+    /* finally, set up any mode specific contexts */
+    switch (mode) {
+    case NSS_AES_CTS:
+	cx->worker_cx = CTS_CreateContext(cx, cx->worker, iv, blocksize);
+	cx->worker = (freeblCipherFunc) 
+			(encrypt ?  CTS_EncryptUpdate : CTS_DecryptUpdate);
+	cx->destroy = (freeblDestroyFunc) CTS_DestroyContext;
+	cx->isBlock = PR_FALSE;
+	break;
+    case NSS_AES_GCM:
+#if USE_HW_AES
+	if(use_hw_gcm) {
+        	cx->worker_cx = intel_AES_GCM_CreateContext(cx, cx->worker, iv, blocksize);
+		cx->worker = (freeblCipherFunc)
+			(encrypt ? intel_AES_GCM_EncryptUpdate : intel_AES_GCM_DecryptUpdate);
+		cx->destroy = (freeblDestroyFunc) intel_AES_GCM_DestroyContext;
+		cx->isBlock = PR_FALSE;
+    	} else
+#endif
+	{
+	cx->worker_cx = GCM_CreateContext(cx, cx->worker, iv, blocksize);
+	cx->worker = (freeblCipherFunc)
+			(encrypt ? GCM_EncryptUpdate : GCM_DecryptUpdate);
+	cx->destroy = (freeblDestroyFunc) GCM_DestroyContext;
+	cx->isBlock = PR_FALSE;
+	}
+	break;
+    case NSS_AES_CTR:
+	cx->worker_cx = CTR_CreateContext(cx, cx->worker, iv, blocksize);
+	cx->worker = (freeblCipherFunc) CTR_Update ;
+	cx->destroy = (freeblDestroyFunc) CTR_DestroyContext;
+	cx->isBlock = PR_FALSE;
+	break;
+    default:
+	/* everything has already been set up by aes_InitContext, just
+	 * return */
+	return SECSuccess;
+    }
+    /* check to see if we succeeded in getting the worker context */
+    if (cx->worker_cx == NULL) {
+	/* no, just destroy the existing context */
+	cx->destroy = NULL; /* paranoia, though you can see a dozen lines */
+			    /* below that this isn't necessary */
+	AES_DestroyContext(cx, PR_FALSE);
+	return SECFailure;
+    }
+    return SECSuccess;
+}
+
+/* AES_CreateContext
+ *
+ * create a new context for Rijndael operations
+ */
+AESContext *
+AES_CreateContext(const unsigned char *key, const unsigned char *iv, 
+                  int mode, int encrypt,
+                  unsigned int keysize, unsigned int blocksize)
+{
+    AESContext *cx = AES_AllocateContext();
+    if (cx) {
+	SECStatus rv = AES_InitContext(cx, key, keysize, iv, mode, encrypt,
+				       blocksize);
+	if (rv != SECSuccess) {
+	    AES_DestroyContext(cx, PR_TRUE);
+	    cx = NULL;
+	}
     }
     return cx;
-cleanup:
-    if (cx->expandedKey)
-	PORT_ZFree(cx->expandedKey, cx->Nb * (cx->Nr + 1));
-    PORT_ZFree(cx, sizeof *cx);
-    return NULL;
 }
 
 /*
@@ -1049,8 +1221,11 @@ cleanup:
 void 
 AES_DestroyContext(AESContext *cx, PRBool freeit)
 {
-    PORT_ZFree(cx->expandedKey, cx->Nb * (cx->Nr + 1));
-    memset(cx, 0, sizeof *cx);
+    if (cx->worker_cx && cx->destroy) {
+	(*cx->destroy)(cx->worker_cx, PR_TRUE);
+	cx->worker_cx = NULL;
+	cx->destroy = NULL;
+    }
     if (freeit)
 	PORT_Free(cx);
 }
@@ -1068,12 +1243,12 @@ AES_Encrypt(AESContext *cx, unsigned char *output,
 {
     int blocksize;
     /* Check args */
-    if (cx == NULL || output == NULL || input == NULL) {
+    if (cx == NULL || output == NULL || (input == NULL && inputLen != 0)) {
 	PORT_SetError(SEC_ERROR_INVALID_ARGS);
 	return SECFailure;
     }
     blocksize = 4 * cx->Nb;
-    if (inputLen % blocksize != 0) {
+    if (cx->isBlock && (inputLen % blocksize != 0)) {
 	PORT_SetError(SEC_ERROR_INPUT_LEN);
 	return SECFailure;
     }
@@ -1082,16 +1257,7 @@ AES_Encrypt(AESContext *cx, unsigned char *output,
 	return SECFailure;
     }
     *outputLen = inputLen;
-#if defined(RIJNDAEL_GENERATE_TABLES) ||  \
-    defined(RIJNDAEL_GENERATE_TABLES_MACRO)
-    if (rijndaelTables == NULL) {
-	if (PR_CallOnce(&coRTInit, init_rijndael_tables) 
-	      != PR_SUCCESS) {
-	    return PR_FAILURE;
-	}
-    }
-#endif
-    return (*cx->worker)(cx, output, outputLen, maxOutputLen,	
+    return (*cx->worker)(cx->worker_cx, output, outputLen, maxOutputLen,	
                              input, inputLen, blocksize);
 }
 
@@ -1108,12 +1274,12 @@ AES_Decrypt(AESContext *cx, unsigned char *output,
 {
     int blocksize;
     /* Check args */
-    if (cx == NULL || output == NULL || input == NULL) {
+    if (cx == NULL || output == NULL || (input == NULL && inputLen != 0)) {
 	PORT_SetError(SEC_ERROR_INVALID_ARGS);
 	return SECFailure;
     }
     blocksize = 4 * cx->Nb;
-    if (inputLen % blocksize != 0) {
+    if (cx->isBlock && (inputLen % blocksize != 0)) {
 	PORT_SetError(SEC_ERROR_INPUT_LEN);
 	return SECFailure;
     }
@@ -1122,16 +1288,6 @@ AES_Decrypt(AESContext *cx, unsigned char *output,
 	return SECFailure;
     }
     *outputLen = inputLen;
-#if defined(RIJNDAEL_GENERATE_TABLES) ||  \
-    defined(RIJNDAEL_GENERATE_TABLES_MACRO)
-    if (rijndaelTables == NULL) {
-	if (PR_CallOnce(&coRTInit, init_rijndael_tables) 
-	      != PR_SUCCESS) {
-	    return PR_FAILURE;
-	}
-    }
-#endif
-    return (*cx->worker)(cx, output, outputLen, maxOutputLen,	
+    return (*cx->worker)(cx->worker_cx, output, outputLen, maxOutputLen,	
                              input, inputLen, blocksize);
 }
-

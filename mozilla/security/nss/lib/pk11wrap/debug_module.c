@@ -1,37 +1,9 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include "prlog.h"
 #include <stdio.h>
+#include "cert.h"  /* for CERT_DerNameToAscii & CERT_Hexify */
 
 static PRLogModuleInfo *modlog = NULL;
 
@@ -41,217 +13,719 @@ static CK_FUNCTION_LIST debug_functions;
 
 static void print_final_statistics(void);
 
-/* The AIX 64-bit compiler chokes on large switch statements (see
- * bug #63815).  I tried the trick recommended there, using -O2 in
- * debug builds, and it didn't work.  Instead, I'll suppress some of
- * the verbose output and just dump values.
- */
+#define STRING static const char 
+
+STRING fmt_flags[]                = "  flags = 0x%x";
+STRING fmt_hKey[]                 = "  hKey = 0x%x";
+STRING fmt_hObject[]              = "  hObject = 0x%x";
+STRING fmt_hSession[]             = "  hSession = 0x%x";
+STRING fmt_manufacturerID[]       = "  manufacturerID = \"%.32s\"";
+STRING fmt_pData[]                = "  pData = 0x%p";
+STRING fmt_pDigest[]              = "  pDigest = 0x%p";
+STRING fmt_pEncryptedData[]       = "  pEncryptedData = 0x%p";
+STRING fmt_pEncryptedPart[]       = "  pEncryptedPart = 0x%p";
+STRING fmt_pInfo[]                = "  pInfo = 0x%p";
+STRING fmt_pMechanism[]           = "  pMechanism = 0x%p";
+STRING fmt_pOperationState[]      = "  pOperationState = 0x%p";
+STRING fmt_pPart[]                = "  pPart = 0x%p";
+STRING fmt_pPin[]                 = "  pPin = 0x%p";
+STRING fmt_pSignature[]           = "  pSignature = 0x%p";
+STRING fmt_pTemplate[]            = "  pTemplate = 0x%p";
+STRING fmt_pWrappedKey[]          = "  pWrappedKey = 0x%p";
+STRING fmt_phKey[]                = "  phKey = 0x%p";
+STRING fmt_phObject[]             = "  phObject = 0x%p";
+STRING fmt_pulCount[]             = "  pulCount = 0x%p";
+STRING fmt_pulDataLen[]           = "  pulDataLen = 0x%p";
+STRING fmt_pulDigestLen[]         = "  pulDigestLen = 0x%p";
+STRING fmt_pulEncryptedPartLen[]  = "  pulEncryptedPartLen = 0x%p";
+STRING fmt_pulPartLen[]           = "  pulPartLen = 0x%p";
+STRING fmt_pulSignatureLen[]      = "  pulSignatureLen = 0x%p";
+STRING fmt_slotID[]               = "  slotID = 0x%x";
+STRING fmt_sphKey[]               = "  *phKey = 0x%x";
+STRING fmt_spulCount[]            = "  *pulCount = 0x%x";
+STRING fmt_spulDataLen[]          = "  *pulDataLen = 0x%x";
+STRING fmt_spulDigestLen[]        = "  *pulDigestLen = 0x%x";
+STRING fmt_spulEncryptedPartLen[] = "  *pulEncryptedPartLen = 0x%x";
+STRING fmt_spulPartLen[]          = "  *pulPartLen = 0x%x";
+STRING fmt_spulSignatureLen[]     = "  *pulSignatureLen = 0x%x";
+STRING fmt_ulAttributeCount[]     = "  ulAttributeCount = %d";
+STRING fmt_ulCount[]              = "  ulCount = %d";
+STRING fmt_ulDataLen[]            = "  ulDataLen = %d";
+STRING fmt_ulEncryptedPartLen[]   = "  ulEncryptedPartLen = %d";
+STRING fmt_ulPartLen[]            = "  ulPartLen = %d";
+STRING fmt_ulPinLen[]             = "  ulPinLen = %d";
+STRING fmt_ulSignatureLen[]       = "  ulSignatureLen = %d";
+
+STRING fmt_fwVersion[]            = "  firmware version: %d.%d";
+STRING fmt_hwVersion[]            = "  hardware version: %d.%d";
+STRING fmt_s_qsq_d[]              = "    %s = \"%s\" [%d]";
+STRING fmt_s_s_d[]                = "    %s = %s [%d]";
+STRING fmt_s_lu[]                 = "    %s = %lu";
+STRING fmt_invalid_handle[]       = " (CK_INVALID_HANDLE)";
+
 
 static void get_attr_type_str(CK_ATTRIBUTE_TYPE atype, char *str, int len)
 {
-#define SETA(attr) \
-    PR_snprintf(str, len, "%s", attr); break;
+#define CASE(attr) case attr: a = #attr ; break
+
+    const char * a = NULL;
+
     switch (atype) {
-#ifndef AIX_64BIT
-    case CKA_CLASS: SETA("CKA_CLASS");
-    case CKA_TOKEN: SETA("CKA_TOKEN");
-    case CKA_PRIVATE: SETA("CKA_PRIVATE");
-    case CKA_LABEL: SETA("CKA_LABEL");
-    case CKA_APPLICATION: SETA("CKA_APPLICATION");
-    case CKA_VALUE: SETA("CKA_VALUE");
-    case CKA_OBJECT_ID: SETA("CKA_OBJECT_ID");
-    case CKA_CERTIFICATE_TYPE: SETA("CKA_CERTIFICATE_TYPE");
-    case CKA_ISSUER: SETA("CKA_ISSUER");
-    case CKA_SERIAL_NUMBER: SETA("CKA_SERIAL_NUMBER");
-    case CKA_AC_ISSUER: SETA("CKA_AC_ISSUER");
-    case CKA_OWNER: SETA("CKA_OWNER");
-    case CKA_ATTR_TYPES: SETA("CKA_ATTR_TYPES");
-    case CKA_TRUSTED: SETA("CKA_TRUSTED");
-    case CKA_KEY_TYPE: SETA("CKA_KEY_TYPE");
-    case CKA_SUBJECT: SETA("CKA_SUBJECT");
-    case CKA_ID: SETA("CKA_ID");
-    case CKA_SENSITIVE: SETA("CKA_SENSITIVE");
-    case CKA_ENCRYPT: SETA("CKA_ENCRYPT");
-    case CKA_DECRYPT: SETA("CKA_DECRYPT");
-    case CKA_WRAP: SETA("CKA_WRAP");
-    case CKA_UNWRAP: SETA("CKA_UNWRAP");
-    case CKA_SIGN: SETA("CKA_SIGN");
-    case CKA_SIGN_RECOVER: SETA("CKA_SIGN_RECOVER");
-    case CKA_VERIFY: SETA("CKA_VERIFY");
-    case CKA_VERIFY_RECOVER: SETA("CKA_VERIFY_RECOVER");
-    case CKA_DERIVE: SETA("CKA_DERIVE");
-    case CKA_START_DATE: SETA("CKA_START_DATE");
-    case CKA_END_DATE: SETA("CKA_END_DATE");
-    case CKA_MODULUS: SETA("CKA_MODULUS");
-    case CKA_MODULUS_BITS: SETA("CKA_MODULUS_BITS");
-    case CKA_PUBLIC_EXPONENT: SETA("CKA_PUBLIC_EXPONENT");
-    case CKA_PRIVATE_EXPONENT: SETA("CKA_PRIVATE_EXPONENT");
-    case CKA_PRIME_1: SETA("CKA_PRIME_1");
-    case CKA_PRIME_2: SETA("CKA_PRIME_2");
-    case CKA_EXPONENT_1: SETA("CKA_EXPONENT_1");
-    case CKA_EXPONENT_2: SETA("CKA_EXPONENT_2");
-    case CKA_COEFFICIENT: SETA("CKA_COEFFICIENT");
-    case CKA_PRIME: SETA("CKA_PRIME");
-    case CKA_SUBPRIME: SETA("CKA_SUBPRIME");
-    case CKA_BASE: SETA("CKA_BASE");
-    case CKA_PRIME_BITS: SETA("CKA_PRIME_BITS");
-    case CKA_SUB_PRIME_BITS: SETA("CKA_SUB_PRIME_BITS");
-    case CKA_VALUE_BITS: SETA("CKA_VALUE_BITS");
-    case CKA_VALUE_LEN: SETA("CKA_VALUE_LEN");
-    case CKA_EXTRACTABLE: SETA("CKA_EXTRACTABLE");
-    case CKA_LOCAL: SETA("CKA_LOCAL");
-    case CKA_NEVER_EXTRACTABLE: SETA("CKA_NEVER_EXTRACTABLE");
-    case CKA_ALWAYS_SENSITIVE: SETA("CKA_ALWAYS_SENSITIVE");
-    case CKA_KEY_GEN_MECHANISM: SETA("CKA_KEY_GEN_MECHANISM");
-    case CKA_MODIFIABLE: SETA("CKA_MODIFIABLE");
-    case CKA_ECDSA_PARAMS: SETA("CKA_ECDSA_PARAMS");
-    case CKA_EC_POINT: SETA("CKA_EC_POINT");
-    case CKA_SECONDARY_AUTH: SETA("CKA_SECONDARY_AUTH");
-    case CKA_AUTH_PIN_FLAGS: SETA("CKA_AUTH_PIN_FLAGS");
-    case CKA_HW_FEATURE_TYPE: SETA("CKA_HW_FEATURE_TYPE");
-    case CKA_RESET_ON_INIT: SETA("CKA_RESET_ON_INIT");
-    case CKA_HAS_RESET: SETA("CKA_HAS_RESET");
-    case CKA_VENDOR_DEFINED: SETA("CKA_VENDOR_DEFINED");
-    case CKA_NETSCAPE_URL: SETA("CKA_NETSCAPE_URL");
-    case CKA_NETSCAPE_EMAIL: SETA("CKA_NETSCAPE_EMAIL");
-    case CKA_NETSCAPE_SMIME_INFO: SETA("CKA_NETSCAPE_SMIME_INFO");
-    case CKA_NETSCAPE_SMIME_TIMESTAMP: SETA("CKA_NETSCAPE_SMIME_TIMESTAMP");
-    case CKA_NETSCAPE_PKCS8_SALT: SETA("CKA_NETSCAPE_PKCS8_SALT");
-    case CKA_NETSCAPE_PASSWORD_CHECK: SETA("CKA_NETSCAPE_PASSWORD_CHECK");
-    case CKA_NETSCAPE_EXPIRES: SETA("CKA_NETSCAPE_EXPIRES");
-    case CKA_NETSCAPE_KRL: SETA("CKA_NETSCAPE_KRL");
-    case CKA_NETSCAPE_PQG_COUNTER: SETA("CKA_NETSCAPE_PQG_COUNTER");
-    case CKA_NETSCAPE_PQG_SEED: SETA("CKA_NETSCAPE_PQG_SEED");
-    case CKA_NETSCAPE_PQG_H: SETA("CKA_NETSCAPE_PQG_H");
-    case CKA_NETSCAPE_PQG_SEED_BITS: SETA("CKA_NETSCAPE_PQG_SEED_BITS");
-    case CKA_TRUST: SETA("CKA_TRUST");
-    case CKA_TRUST_DIGITAL_SIGNATURE: SETA("CKA_TRUST_DIGITAL_SIGNATURE");
-    case CKA_TRUST_NON_REPUDIATION: SETA("CKA_TRUST_NON_REPUDIATION");
-    case CKA_TRUST_KEY_ENCIPHERMENT: SETA("CKA_TRUST_KEY_ENCIPHERMENT");
-    case CKA_TRUST_DATA_ENCIPHERMENT: SETA("CKA_TRUST_DATA_ENCIPHERMENT");
-    case CKA_TRUST_KEY_AGREEMENT: SETA("CKA_TRUST_KEY_AGREEMENT");
-    case CKA_TRUST_KEY_CERT_SIGN: SETA("CKA_TRUST_KEY_CERT_SIGN");
-    case CKA_TRUST_CRL_SIGN: SETA("CKA_TRUST_CRL_SIGN");
-    case CKA_TRUST_SERVER_AUTH: SETA("CKA_TRUST_SERVER_AUTH");
-    case CKA_TRUST_CLIENT_AUTH: SETA("CKA_TRUST_CLIENT_AUTH");
-    case CKA_TRUST_CODE_SIGNING: SETA("CKA_TRUST_CODE_SIGNING");
-    case CKA_TRUST_EMAIL_PROTECTION: SETA("CKA_TRUST_EMAIL_PROTECTION");
-    case CKA_TRUST_IPSEC_END_SYSTEM: SETA("CKA_TRUST_IPSEC_END_SYSTEM");
-    case CKA_TRUST_IPSEC_TUNNEL: SETA("CKA_TRUST_IPSEC_TUNNEL");
-    case CKA_TRUST_IPSEC_USER: SETA("CKA_TRUST_IPSEC_USER");
-    case CKA_TRUST_TIME_STAMPING: SETA("CKA_TRUST_TIME_STAMPING");
-    case CKA_CERT_SHA1_HASH: SETA("CKA_CERT_SHA1_HASH");
-    case CKA_CERT_MD5_HASH: SETA("CKA_CERT_MD5_HASH");
-    case CKA_NETSCAPE_DB: SETA("CKA_NETSCAPE_DB");
-    case CKA_NETSCAPE_TRUST: SETA("CKA_NETSCAPE_TRUST");
-#endif
-    default: PR_snprintf(str, len, "0x%p", atype); break;
+    CASE(CKA_CLASS);
+    CASE(CKA_TOKEN);
+    CASE(CKA_PRIVATE);
+    CASE(CKA_LABEL);
+    CASE(CKA_APPLICATION);
+    CASE(CKA_VALUE);
+    CASE(CKA_OBJECT_ID);
+    CASE(CKA_CERTIFICATE_TYPE);
+    CASE(CKA_CERTIFICATE_CATEGORY);
+    CASE(CKA_ISSUER);
+    CASE(CKA_SERIAL_NUMBER);
+    CASE(CKA_AC_ISSUER);
+    CASE(CKA_OWNER);
+    CASE(CKA_ATTR_TYPES);
+    CASE(CKA_TRUSTED);
+    CASE(CKA_KEY_TYPE);
+    CASE(CKA_SUBJECT);
+    CASE(CKA_ID);
+    CASE(CKA_SENSITIVE);
+    CASE(CKA_ENCRYPT);
+    CASE(CKA_DECRYPT);
+    CASE(CKA_WRAP);
+    CASE(CKA_UNWRAP);
+    CASE(CKA_SIGN);
+    CASE(CKA_SIGN_RECOVER);
+    CASE(CKA_VERIFY);
+    CASE(CKA_VERIFY_RECOVER);
+    CASE(CKA_DERIVE);
+    CASE(CKA_START_DATE);
+    CASE(CKA_END_DATE);
+    CASE(CKA_MODULUS);
+    CASE(CKA_MODULUS_BITS);
+    CASE(CKA_PUBLIC_EXPONENT);
+    CASE(CKA_PRIVATE_EXPONENT);
+    CASE(CKA_PRIME_1);
+    CASE(CKA_PRIME_2);
+    CASE(CKA_EXPONENT_1);
+    CASE(CKA_EXPONENT_2);
+    CASE(CKA_COEFFICIENT);
+    CASE(CKA_PRIME);
+    CASE(CKA_SUBPRIME);
+    CASE(CKA_BASE);
+    CASE(CKA_PRIME_BITS);
+    CASE(CKA_SUBPRIME_BITS);
+    CASE(CKA_VALUE_BITS);
+    CASE(CKA_VALUE_LEN);
+    CASE(CKA_EXTRACTABLE);
+    CASE(CKA_LOCAL);
+    CASE(CKA_NEVER_EXTRACTABLE);
+    CASE(CKA_ALWAYS_SENSITIVE);
+    CASE(CKA_KEY_GEN_MECHANISM);
+    CASE(CKA_MODIFIABLE);
+    CASE(CKA_ECDSA_PARAMS);
+    CASE(CKA_EC_POINT);
+    CASE(CKA_SECONDARY_AUTH);
+    CASE(CKA_AUTH_PIN_FLAGS);
+    CASE(CKA_HW_FEATURE_TYPE);
+    CASE(CKA_RESET_ON_INIT);
+    CASE(CKA_HAS_RESET);
+    CASE(CKA_VENDOR_DEFINED);
+    CASE(CKA_NSS_URL);
+    CASE(CKA_NSS_EMAIL);
+    CASE(CKA_NSS_SMIME_INFO);
+    CASE(CKA_NSS_SMIME_TIMESTAMP);
+    CASE(CKA_NSS_PKCS8_SALT);
+    CASE(CKA_NSS_PASSWORD_CHECK);
+    CASE(CKA_NSS_EXPIRES);
+    CASE(CKA_NSS_KRL);
+    CASE(CKA_NSS_PQG_COUNTER);
+    CASE(CKA_NSS_PQG_SEED);
+    CASE(CKA_NSS_PQG_H);
+    CASE(CKA_NSS_PQG_SEED_BITS);
+    CASE(CKA_TRUST);
+    CASE(CKA_TRUST_DIGITAL_SIGNATURE);
+    CASE(CKA_TRUST_NON_REPUDIATION);
+    CASE(CKA_TRUST_KEY_ENCIPHERMENT);
+    CASE(CKA_TRUST_DATA_ENCIPHERMENT);
+    CASE(CKA_TRUST_KEY_AGREEMENT);
+    CASE(CKA_TRUST_KEY_CERT_SIGN);
+    CASE(CKA_TRUST_CRL_SIGN);
+    CASE(CKA_TRUST_SERVER_AUTH);
+    CASE(CKA_TRUST_CLIENT_AUTH);
+    CASE(CKA_TRUST_CODE_SIGNING);
+    CASE(CKA_TRUST_EMAIL_PROTECTION);
+    CASE(CKA_TRUST_IPSEC_END_SYSTEM);
+    CASE(CKA_TRUST_IPSEC_TUNNEL);
+    CASE(CKA_TRUST_IPSEC_USER);
+    CASE(CKA_TRUST_TIME_STAMPING);
+    CASE(CKA_CERT_SHA1_HASH);
+    CASE(CKA_CERT_MD5_HASH);
+    CASE(CKA_NETSCAPE_DB);
+    CASE(CKA_NETSCAPE_TRUST);
+    default: break;
     }
+    if (a)
+	PR_snprintf(str, len, "%s", a);
+    else
+	PR_snprintf(str, len, "0x%p", atype);
 }
 
-static void get_obj_class(CK_OBJECT_CLASS class, char *str, int len)
+static void get_obj_class(CK_OBJECT_CLASS objClass, char *str, int len)
 {
-#define SETO(objc) \
-    PR_snprintf(str, len, "%s", objc); break;
-    switch (class) {
-#ifndef AIX_64BIT
-    case CKO_DATA: SETO("CKO_DATA");
-    case CKO_CERTIFICATE: SETO("CKO_CERTIFICATE");
-    case CKO_PUBLIC_KEY: SETO("CKO_PUBLIC_KEY");
-    case CKO_PRIVATE_KEY: SETO("CKO_PRIVATE_KEY");
-    case CKO_SECRET_KEY: SETO("CKO_SECRET_KEY");
-    case CKO_HW_FEATURE: SETO("CKO_HW_FEATURE");
-    case CKO_DOMAIN_PARAMETERS: SETO("CKO_DOMAIN_PARAMETERS");
-    case CKO_NETSCAPE_CRL: SETO("CKO_NETSCAPE_CRL");
-    case CKO_NETSCAPE_SMIME: SETO("CKO_NETSCAPE_SMIME");
-    case CKO_NETSCAPE_TRUST: SETO("CKO_NETSCAPE_TRUST");
-    case CKO_NETSCAPE_BUILTIN_ROOT_LIST: SETO("CKO_NETSCAPE_BUILTIN_ROOT_LIST");
-#endif
-    default: PR_snprintf(str, len, "0x%p", class); break;
+
+    const char * a = NULL;
+
+    switch (objClass) {
+    CASE(CKO_DATA);
+    CASE(CKO_CERTIFICATE);
+    CASE(CKO_PUBLIC_KEY);
+    CASE(CKO_PRIVATE_KEY);
+    CASE(CKO_SECRET_KEY);
+    CASE(CKO_HW_FEATURE);
+    CASE(CKO_DOMAIN_PARAMETERS);
+    CASE(CKO_NSS_CRL);
+    CASE(CKO_NSS_SMIME);
+    CASE(CKO_NSS_TRUST);
+    CASE(CKO_NSS_BUILTIN_ROOT_LIST);
+    default: break;
     }
+    if (a)
+	PR_snprintf(str, len, "%s", a);
+    else
+	PR_snprintf(str, len, "0x%p", objClass);
 }
 
 static void get_trust_val(CK_TRUST trust, char *str, int len)
 {
-#define SETT(objc) \
-    PR_snprintf(str, len, "%s", objc); break;
+    const char * a = NULL;
+
     switch (trust) {
-#ifndef AIX_64BIT
-    case CKT_NETSCAPE_TRUSTED: SETT("CKT_NETSCAPE_TRUSTED");
-    case CKT_NETSCAPE_TRUSTED_DELEGATOR: SETT("CKT_NETSCAPE_TRUSTED_DELEGATOR");
-    case CKT_NETSCAPE_UNTRUSTED: SETT("CKT_NETSCAPE_UNTRUSTED");
-    case CKT_NETSCAPE_MUST_VERIFY: SETT("CKT_NETSCAPE_MUST_VERIFY");
-    case CKT_NETSCAPE_TRUST_UNKNOWN: SETT("CKT_NETSCAPE_TRUST_UNKNOWN");
-    case CKT_NETSCAPE_VALID: SETT("CKT_NETSCAPE_VALID");
-    case CKT_NETSCAPE_VALID_DELEGATOR: SETT("CKT_NETSCAPE_VALID_DELEGATOR");
-#endif
-    default: PR_snprintf(str, len, "0x%p", trust); break;
+    CASE(CKT_NSS_TRUSTED);
+    CASE(CKT_NSS_TRUSTED_DELEGATOR);
+    CASE(CKT_NSS_NOT_TRUSTED);
+    CASE(CKT_NSS_MUST_VERIFY_TRUST);
+    CASE(CKT_NSS_TRUST_UNKNOWN);
+    CASE(CKT_NSS_VALID_DELEGATOR);
+    default: break;
     }
+    if (a)
+	PR_snprintf(str, len, "%s", a);
+    else
+	PR_snprintf(str, len, "0x%p", trust);
+}
+
+static void log_rv(CK_RV rv)
+{
+    const char * a = NULL;
+
+    switch (rv) {
+    CASE(CKR_OK);
+    CASE(CKR_CANCEL);
+    CASE(CKR_HOST_MEMORY);
+    CASE(CKR_SLOT_ID_INVALID);
+    CASE(CKR_GENERAL_ERROR);
+    CASE(CKR_FUNCTION_FAILED);
+    CASE(CKR_ARGUMENTS_BAD);
+    CASE(CKR_NO_EVENT);
+    CASE(CKR_NEED_TO_CREATE_THREADS);
+    CASE(CKR_CANT_LOCK);
+    CASE(CKR_ATTRIBUTE_READ_ONLY);
+    CASE(CKR_ATTRIBUTE_SENSITIVE);
+    CASE(CKR_ATTRIBUTE_TYPE_INVALID);
+    CASE(CKR_ATTRIBUTE_VALUE_INVALID);
+    CASE(CKR_DATA_INVALID);
+    CASE(CKR_DATA_LEN_RANGE);
+    CASE(CKR_DEVICE_ERROR);
+    CASE(CKR_DEVICE_MEMORY);
+    CASE(CKR_DEVICE_REMOVED);
+    CASE(CKR_ENCRYPTED_DATA_INVALID);
+    CASE(CKR_ENCRYPTED_DATA_LEN_RANGE);
+    CASE(CKR_FUNCTION_CANCELED);
+    CASE(CKR_FUNCTION_NOT_PARALLEL);
+    CASE(CKR_FUNCTION_NOT_SUPPORTED);
+    CASE(CKR_KEY_HANDLE_INVALID);
+    CASE(CKR_KEY_SIZE_RANGE);
+    CASE(CKR_KEY_TYPE_INCONSISTENT);
+    CASE(CKR_KEY_NOT_NEEDED);
+    CASE(CKR_KEY_CHANGED);
+    CASE(CKR_KEY_NEEDED);
+    CASE(CKR_KEY_INDIGESTIBLE);
+    CASE(CKR_KEY_FUNCTION_NOT_PERMITTED);
+    CASE(CKR_KEY_NOT_WRAPPABLE);
+    CASE(CKR_KEY_UNEXTRACTABLE);
+    CASE(CKR_MECHANISM_INVALID);
+    CASE(CKR_MECHANISM_PARAM_INVALID);
+    CASE(CKR_OBJECT_HANDLE_INVALID);
+    CASE(CKR_OPERATION_ACTIVE);
+    CASE(CKR_OPERATION_NOT_INITIALIZED);
+    CASE(CKR_PIN_INCORRECT);
+    CASE(CKR_PIN_INVALID);
+    CASE(CKR_PIN_LEN_RANGE);
+    CASE(CKR_PIN_EXPIRED);
+    CASE(CKR_PIN_LOCKED);
+    CASE(CKR_SESSION_CLOSED);
+    CASE(CKR_SESSION_COUNT);
+    CASE(CKR_SESSION_HANDLE_INVALID);
+    CASE(CKR_SESSION_PARALLEL_NOT_SUPPORTED);
+    CASE(CKR_SESSION_READ_ONLY);
+    CASE(CKR_SESSION_EXISTS);
+    CASE(CKR_SESSION_READ_ONLY_EXISTS);
+    CASE(CKR_SESSION_READ_WRITE_SO_EXISTS);
+    CASE(CKR_SIGNATURE_INVALID);
+    CASE(CKR_SIGNATURE_LEN_RANGE);
+    CASE(CKR_TEMPLATE_INCOMPLETE);
+    CASE(CKR_TEMPLATE_INCONSISTENT);
+    CASE(CKR_TOKEN_NOT_PRESENT);
+    CASE(CKR_TOKEN_NOT_RECOGNIZED);
+    CASE(CKR_TOKEN_WRITE_PROTECTED);
+    CASE(CKR_UNWRAPPING_KEY_HANDLE_INVALID);
+    CASE(CKR_UNWRAPPING_KEY_SIZE_RANGE);
+    CASE(CKR_UNWRAPPING_KEY_TYPE_INCONSISTENT);
+    CASE(CKR_USER_ALREADY_LOGGED_IN);
+    CASE(CKR_USER_NOT_LOGGED_IN);
+    CASE(CKR_USER_PIN_NOT_INITIALIZED);
+    CASE(CKR_USER_TYPE_INVALID);
+    CASE(CKR_USER_ANOTHER_ALREADY_LOGGED_IN);
+    CASE(CKR_USER_TOO_MANY_TYPES);
+    CASE(CKR_WRAPPED_KEY_INVALID);
+    CASE(CKR_WRAPPED_KEY_LEN_RANGE);
+    CASE(CKR_WRAPPING_KEY_HANDLE_INVALID);
+    CASE(CKR_WRAPPING_KEY_SIZE_RANGE);
+    CASE(CKR_WRAPPING_KEY_TYPE_INCONSISTENT);
+    CASE(CKR_RANDOM_SEED_NOT_SUPPORTED);
+    CASE(CKR_RANDOM_NO_RNG);
+    CASE(CKR_DOMAIN_PARAMS_INVALID);
+    CASE(CKR_BUFFER_TOO_SMALL);
+    CASE(CKR_SAVED_STATE_INVALID);
+    CASE(CKR_INFORMATION_SENSITIVE);
+    CASE(CKR_STATE_UNSAVEABLE);
+    CASE(CKR_CRYPTOKI_NOT_INITIALIZED);
+    CASE(CKR_CRYPTOKI_ALREADY_INITIALIZED);
+    CASE(CKR_MUTEX_BAD);
+    CASE(CKR_MUTEX_NOT_LOCKED);
+    CASE(CKR_FUNCTION_REJECTED);
+    CASE(CKR_KEY_PARAMS_INVALID);
+    default: break;
+    }
+    if (a)
+	PR_LOG(modlog, 1, ("  rv = %s\n", a));
+    else
+	PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+}
+
+static void log_state(CK_STATE state)
+{
+    const char * a = NULL;
+
+    switch (state) {
+    CASE(CKS_RO_PUBLIC_SESSION);
+    CASE(CKS_RO_USER_FUNCTIONS);
+    CASE(CKS_RW_PUBLIC_SESSION);
+    CASE(CKS_RW_USER_FUNCTIONS);
+    CASE(CKS_RW_SO_FUNCTIONS);
+    default: break;
+    }
+    if (a)
+	PR_LOG(modlog, 1, ("  state = %s\n", a));
+    else
+	PR_LOG(modlog, 1, ("  state = 0x%x\n", state));
+}
+
+static void log_handle(int level, const char * format, CK_ULONG handle)
+{
+    char fmtBuf[80];
+    if (handle)
+	PR_LOG(modlog, level, (format, handle));
+    else {
+	PL_strncpyz(fmtBuf, format, sizeof fmtBuf);
+	PL_strcatn(fmtBuf, sizeof fmtBuf, fmt_invalid_handle);
+	PR_LOG(modlog, level, (fmtBuf, handle));
+    }
+}
+
+static void print_mechanism(CK_MECHANISM_PTR m)
+{
+
+    const char * a = NULL;
+
+    switch (m->mechanism) {
+    CASE(CKM_AES_CBC);
+    CASE(CKM_AES_CBC_ENCRYPT_DATA);
+    CASE(CKM_AES_CBC_PAD);
+    CASE(CKM_AES_CCM);
+    CASE(CKM_AES_CTR);
+    CASE(CKM_AES_CTS);
+    CASE(CKM_AES_GCM);
+    CASE(CKM_AES_ECB);
+    CASE(CKM_AES_ECB_ENCRYPT_DATA);
+    CASE(CKM_AES_KEY_GEN);
+    CASE(CKM_AES_MAC);
+    CASE(CKM_AES_MAC_GENERAL);
+    CASE(CKM_CAMELLIA_CBC);
+    CASE(CKM_CAMELLIA_CBC_ENCRYPT_DATA);
+    CASE(CKM_CAMELLIA_CBC_PAD);
+    CASE(CKM_CAMELLIA_ECB);
+    CASE(CKM_CAMELLIA_ECB_ENCRYPT_DATA);
+    CASE(CKM_CAMELLIA_KEY_GEN);
+    CASE(CKM_CAMELLIA_MAC);
+    CASE(CKM_CAMELLIA_MAC_GENERAL);
+    CASE(CKM_CDMF_CBC);
+    CASE(CKM_CDMF_CBC_PAD);
+    CASE(CKM_CDMF_ECB);
+    CASE(CKM_CDMF_KEY_GEN);
+    CASE(CKM_CDMF_MAC);
+    CASE(CKM_CDMF_MAC_GENERAL);
+    CASE(CKM_CMS_SIG);
+    CASE(CKM_CONCATENATE_BASE_AND_DATA);
+    CASE(CKM_CONCATENATE_BASE_AND_KEY);
+    CASE(CKM_CONCATENATE_DATA_AND_BASE);
+    CASE(CKM_DES2_KEY_GEN);
+    CASE(CKM_DES3_CBC);
+    CASE(CKM_DES3_CBC_ENCRYPT_DATA);
+    CASE(CKM_DES3_CBC_PAD);
+    CASE(CKM_DES3_ECB);
+    CASE(CKM_DES3_ECB_ENCRYPT_DATA);
+    CASE(CKM_DES3_KEY_GEN);
+    CASE(CKM_DES3_MAC);
+    CASE(CKM_DES3_MAC_GENERAL);
+    CASE(CKM_DES_CBC);
+    CASE(CKM_DES_CBC_ENCRYPT_DATA);
+    CASE(CKM_DES_CBC_PAD);
+    CASE(CKM_DES_CFB64);
+    CASE(CKM_DES_CFB8);
+    CASE(CKM_DES_ECB);
+    CASE(CKM_DES_ECB_ENCRYPT_DATA);
+    CASE(CKM_DES_KEY_GEN);
+    CASE(CKM_DES_MAC);
+    CASE(CKM_DES_MAC_GENERAL);
+    CASE(CKM_DES_OFB64);
+    CASE(CKM_DES_OFB8);
+    CASE(CKM_DH_PKCS_DERIVE);
+    CASE(CKM_DH_PKCS_KEY_PAIR_GEN);
+    CASE(CKM_DH_PKCS_PARAMETER_GEN);
+    CASE(CKM_DSA);
+    CASE(CKM_DSA_KEY_PAIR_GEN);
+    CASE(CKM_DSA_PARAMETER_GEN);
+    CASE(CKM_DSA_SHA1);
+    CASE(CKM_ECDH1_COFACTOR_DERIVE);
+    CASE(CKM_ECDH1_DERIVE);
+    CASE(CKM_ECDSA);
+    CASE(CKM_ECDSA_SHA1);
+    CASE(CKM_ECMQV_DERIVE);
+    CASE(CKM_EC_KEY_PAIR_GEN);	     /* also CASE(CKM_ECDSA_KEY_PAIR_GEN); */
+    CASE(CKM_EXTRACT_KEY_FROM_KEY);
+    CASE(CKM_FASTHASH);
+    CASE(CKM_FORTEZZA_TIMESTAMP);
+    CASE(CKM_GENERIC_SECRET_KEY_GEN);
+    CASE(CKM_IDEA_CBC);
+    CASE(CKM_IDEA_CBC_PAD);
+    CASE(CKM_IDEA_ECB);
+    CASE(CKM_IDEA_KEY_GEN);
+    CASE(CKM_IDEA_MAC);
+    CASE(CKM_IDEA_MAC_GENERAL);
+    CASE(CKM_KEA_KEY_DERIVE);
+    CASE(CKM_KEA_KEY_PAIR_GEN);
+    CASE(CKM_KEY_WRAP_LYNKS);
+    CASE(CKM_KEY_WRAP_SET_OAEP);
+    CASE(CKM_MD2);
+    CASE(CKM_MD2_HMAC);
+    CASE(CKM_MD2_HMAC_GENERAL);
+    CASE(CKM_MD2_KEY_DERIVATION);
+    CASE(CKM_MD2_RSA_PKCS);
+    CASE(CKM_MD5);
+    CASE(CKM_MD5_HMAC);
+    CASE(CKM_MD5_HMAC_GENERAL);
+    CASE(CKM_MD5_KEY_DERIVATION);
+    CASE(CKM_MD5_RSA_PKCS);
+    CASE(CKM_PBA_SHA1_WITH_SHA1_HMAC);
+    CASE(CKM_PBE_MD2_DES_CBC);
+    CASE(CKM_PBE_MD5_DES_CBC);
+    CASE(CKM_PBE_SHA1_DES2_EDE_CBC);
+    CASE(CKM_PBE_SHA1_DES3_EDE_CBC);
+    CASE(CKM_PBE_SHA1_RC2_128_CBC);
+    CASE(CKM_PBE_SHA1_RC2_40_CBC);
+    CASE(CKM_PBE_SHA1_RC4_128);
+    CASE(CKM_PBE_SHA1_RC4_40);
+    CASE(CKM_PKCS5_PBKD2);
+    CASE(CKM_RC2_CBC);
+    CASE(CKM_RC2_CBC_PAD);
+    CASE(CKM_RC2_ECB);
+    CASE(CKM_RC2_KEY_GEN);
+    CASE(CKM_RC2_MAC);
+    CASE(CKM_RC2_MAC_GENERAL);
+    CASE(CKM_RC4);
+    CASE(CKM_RC4_KEY_GEN);
+    CASE(CKM_RC5_CBC);
+    CASE(CKM_RC5_CBC_PAD);
+    CASE(CKM_RC5_ECB);
+    CASE(CKM_RC5_KEY_GEN);
+    CASE(CKM_RC5_MAC);
+    CASE(CKM_RC5_MAC_GENERAL);
+    CASE(CKM_RIPEMD128);
+    CASE(CKM_RIPEMD128_HMAC);
+    CASE(CKM_RIPEMD128_HMAC_GENERAL);
+    CASE(CKM_RIPEMD128_RSA_PKCS);
+    CASE(CKM_RIPEMD160);
+    CASE(CKM_RIPEMD160_HMAC);
+    CASE(CKM_RIPEMD160_HMAC_GENERAL);
+    CASE(CKM_RIPEMD160_RSA_PKCS);
+    CASE(CKM_RSA_9796);
+    CASE(CKM_RSA_PKCS);
+    CASE(CKM_RSA_PKCS_KEY_PAIR_GEN);
+    CASE(CKM_RSA_PKCS_OAEP);
+    CASE(CKM_RSA_PKCS_PSS);
+    CASE(CKM_RSA_X9_31);
+    CASE(CKM_RSA_X9_31_KEY_PAIR_GEN);
+    CASE(CKM_RSA_X_509);
+    CASE(CKM_SHA1_KEY_DERIVATION);
+    CASE(CKM_SHA1_RSA_PKCS);
+    CASE(CKM_SHA1_RSA_PKCS_PSS);
+    CASE(CKM_SHA1_RSA_X9_31);
+    CASE(CKM_SHA224);
+    CASE(CKM_SHA224_HMAC);
+    CASE(CKM_SHA224_HMAC_GENERAL);
+    CASE(CKM_SHA224_KEY_DERIVATION);
+    CASE(CKM_SHA224_RSA_PKCS);
+    CASE(CKM_SHA224_RSA_PKCS_PSS);
+    CASE(CKM_SHA256);
+    CASE(CKM_SHA256_HMAC);
+    CASE(CKM_SHA256_HMAC_GENERAL);
+    CASE(CKM_SHA256_KEY_DERIVATION);
+    CASE(CKM_SHA256_RSA_PKCS);
+    CASE(CKM_SHA256_RSA_PKCS_PSS);
+    CASE(CKM_SHA384);
+    CASE(CKM_SHA384_HMAC);
+    CASE(CKM_SHA384_HMAC_GENERAL);
+    CASE(CKM_SHA384_KEY_DERIVATION);
+    CASE(CKM_SHA384_RSA_PKCS);
+    CASE(CKM_SHA384_RSA_PKCS_PSS);
+    CASE(CKM_SHA512);
+    CASE(CKM_SHA512_HMAC);
+    CASE(CKM_SHA512_HMAC_GENERAL);
+    CASE(CKM_SHA512_KEY_DERIVATION);
+    CASE(CKM_SHA512_RSA_PKCS);
+    CASE(CKM_SHA512_RSA_PKCS_PSS);
+    CASE(CKM_SHA_1);
+    CASE(CKM_SHA_1_HMAC);
+    CASE(CKM_SHA_1_HMAC_GENERAL);
+    CASE(CKM_SKIPJACK_CBC64);
+    CASE(CKM_SKIPJACK_CFB16);
+    CASE(CKM_SKIPJACK_CFB32);
+    CASE(CKM_SKIPJACK_CFB64);
+    CASE(CKM_SKIPJACK_CFB8);
+    CASE(CKM_SKIPJACK_ECB64);
+    CASE(CKM_SKIPJACK_KEY_GEN);
+    CASE(CKM_SKIPJACK_OFB64);
+    CASE(CKM_SKIPJACK_PRIVATE_WRAP);
+    CASE(CKM_SKIPJACK_RELAYX);
+    CASE(CKM_SKIPJACK_WRAP);
+    CASE(CKM_SSL3_KEY_AND_MAC_DERIVE);
+    CASE(CKM_SSL3_MASTER_KEY_DERIVE);
+    CASE(CKM_SSL3_MASTER_KEY_DERIVE_DH);
+    CASE(CKM_SSL3_MD5_MAC);
+    CASE(CKM_SSL3_PRE_MASTER_KEY_GEN);
+    CASE(CKM_SSL3_SHA1_MAC);
+    CASE(CKM_TLS_KEY_AND_MAC_DERIVE);
+    CASE(CKM_TLS_MASTER_KEY_DERIVE);
+    CASE(CKM_TLS_MASTER_KEY_DERIVE_DH);
+    CASE(CKM_TLS_PRE_MASTER_KEY_GEN);
+    CASE(CKM_TLS_PRF);
+    CASE(CKM_TWOFISH_CBC);
+    CASE(CKM_TWOFISH_KEY_GEN);
+    CASE(CKM_X9_42_DH_DERIVE);
+    CASE(CKM_X9_42_DH_HYBRID_DERIVE);
+    CASE(CKM_X9_42_DH_KEY_PAIR_GEN);
+    CASE(CKM_X9_42_DH_PARAMETER_GEN);
+    CASE(CKM_X9_42_MQV_DERIVE);
+    CASE(CKM_XOR_BASE_AND_DATA);
+    default: break;
+    }
+    if (a)
+	PR_LOG(modlog, 4, ("      mechanism = %s", a));
+    else
+	PR_LOG(modlog, 4, ("      mechanism = 0x%p", m->mechanism));
+}
+
+static void get_key_type(CK_KEY_TYPE keyType, char *str, int len)
+{
+
+    const char * a = NULL;
+
+    switch (keyType) {
+    CASE(CKK_AES);
+    CASE(CKK_CAMELLIA);
+    CASE(CKK_CDMF);
+    CASE(CKK_DES);
+    CASE(CKK_DES2);
+    CASE(CKK_DES3);
+    CASE(CKK_DH);
+    CASE(CKK_DSA);
+    CASE(CKK_EC);		/* also CASE(CKK_ECDSA); */
+    CASE(CKK_GENERIC_SECRET);
+    CASE(CKK_IDEA);
+    CASE(CKK_INVALID_KEY_TYPE);
+    CASE(CKK_KEA);
+    CASE(CKK_RC2);
+    CASE(CKK_RC4);
+    CASE(CKK_RC5);
+    CASE(CKK_RSA);
+    CASE(CKK_SKIPJACK);
+    CASE(CKK_TWOFISH);
+    CASE(CKK_X9_42_DH);
+    default: break;
+    }
+    if (a)
+	PR_snprintf(str, len, "%s", a);
+    else
+	PR_snprintf(str, len, "0x%p", keyType);
 }
 
 static void print_attr_value(CK_ATTRIBUTE_PTR attr)
 {
     char atype[48];
-    char valstr[48];
+    char valstr[49];
     int len;
+
     get_attr_type_str(attr->type, atype, sizeof atype);
     switch (attr->type) {
-    case CKA_TOKEN:
-    case CKA_PRIVATE:
-    case CKA_SENSITIVE:
-    case CKA_ENCRYPT:
+    case CKA_ALWAYS_SENSITIVE:
     case CKA_DECRYPT:
-    case CKA_WRAP:
-    case CKA_UNWRAP:
-    case CKA_SIGN:
-    case CKA_SIGN_RECOVER:
-    case CKA_VERIFY:
-    case CKA_VERIFY_RECOVER:
     case CKA_DERIVE:
+    case CKA_ENCRYPT:
     case CKA_EXTRACTABLE:
     case CKA_LOCAL:
-    case CKA_NEVER_EXTRACTABLE:
-    case CKA_ALWAYS_SENSITIVE:
     case CKA_MODIFIABLE:
+    case CKA_NEVER_EXTRACTABLE:
+    case CKA_PRIVATE:
+    case CKA_SENSITIVE:
+    case CKA_SIGN:
+    case CKA_SIGN_RECOVER:
+    case CKA_TOKEN:
+    case CKA_UNWRAP:
+    case CKA_VERIFY:
+    case CKA_VERIFY_RECOVER:
+    case CKA_WRAP:
 	if (attr->ulValueLen > 0 && attr->pValue) {
 	    CK_BBOOL tf = *((CK_BBOOL *)attr->pValue);
-	    len = sizeof(valstr);
-	    PR_snprintf(valstr, len, "%s", tf ? "CK_TRUE" : "CK_FALSE");
-	    PR_LOG(modlog, 4, ("    %s = %s [%d]", 
-	           atype, valstr, attr->ulValueLen));
+	    PR_LOG(modlog, 4, (fmt_s_s_d, 
+	           atype, tf ? "CK_TRUE" : "CK_FALSE", attr->ulValueLen));
 	    break;
 	}
     case CKA_CLASS:
 	if (attr->ulValueLen > 0 && attr->pValue) {
-	    CK_OBJECT_CLASS class = *((CK_OBJECT_CLASS *)attr->pValue);
-	    get_obj_class(class, valstr, sizeof valstr);
-	    PR_LOG(modlog, 4, ("    %s = %s [%d]", 
+	    CK_OBJECT_CLASS objClass = *((CK_OBJECT_CLASS *)attr->pValue);
+	    get_obj_class(objClass, valstr, sizeof valstr);
+	    PR_LOG(modlog, 4, (fmt_s_s_d, 
 	           atype, valstr, attr->ulValueLen));
 	    break;
 	}
-    case CKA_TRUST_SERVER_AUTH:
     case CKA_TRUST_CLIENT_AUTH:
     case CKA_TRUST_CODE_SIGNING:
     case CKA_TRUST_EMAIL_PROTECTION:
+    case CKA_TRUST_SERVER_AUTH:
 	if (attr->ulValueLen > 0 && attr->pValue) {
 	    CK_TRUST trust = *((CK_TRUST *)attr->pValue);
 	    get_trust_val(trust, valstr, sizeof valstr);
-	    PR_LOG(modlog, 4, ("    %s = %s [%d]", 
+	    PR_LOG(modlog, 4, (fmt_s_s_d, 
 	           atype, valstr, attr->ulValueLen));
+	    break;
+	}
+    case CKA_KEY_TYPE:
+	if (attr->ulValueLen > 0 && attr->pValue) {
+	    CK_KEY_TYPE keyType = *((CK_KEY_TYPE *)attr->pValue);
+	    get_key_type(keyType, valstr, sizeof valstr);
+	    PR_LOG(modlog, 4, (fmt_s_s_d, 
+	           atype, valstr, attr->ulValueLen));
+	    break;
+	}
+    case CKA_PIXEL_X:
+    case CKA_PIXEL_Y:
+    case CKA_RESOLUTION:
+    case CKA_CHAR_ROWS:
+    case CKA_CHAR_COLUMNS:
+    case CKA_BITS_PER_PIXEL:
+    case CKA_CERTIFICATE_CATEGORY:  /* should print as enum/string */
+    case CKA_JAVA_MIDP_SECURITY_DOMAIN:  /* should print as enum/string */
+    case CKA_MODULUS_BITS:
+    case CKA_PRIME_BITS:
+    case CKA_SUBPRIME_BITS:
+    case CKA_VALUE_BITS:
+    case CKA_VALUE_LEN:
+	if (attr->ulValueLen > 0 && attr->pValue) {
+	    CK_ULONG valueLen = *((CK_ULONG *)attr->pValue);
+	    /* XXX check for the special value CK_UNAVAILABLE_INFORMATION */
+	    PR_LOG(modlog, 4, (fmt_s_lu, atype, (PRUint32)valueLen));
 	    break;
 	}
     case CKA_LABEL:
-    case CKA_NETSCAPE_EMAIL:
-    case CKA_NETSCAPE_URL:
+    case CKA_NSS_EMAIL:
+    case CKA_NSS_URL:
 	if (attr->ulValueLen > 0 && attr->pValue) {
 	    len = PR_MIN(attr->ulValueLen + 1, sizeof valstr);
 	    PR_snprintf(valstr, len, "%s", attr->pValue);
-	    PR_LOG(modlog, 4, ("    %s = %s [%d]", 
+	    PR_LOG(modlog, 4, (fmt_s_qsq_d, 
 	           atype, valstr, attr->ulValueLen));
 	    break;
 	}
+    case CKA_ISSUER:
+    case CKA_SUBJECT:
+	if (attr->ulValueLen > 0 && attr->pValue) {
+	    char * asciiName;
+	    SECItem derName;
+	    derName.type = siDERNameBuffer;
+	    derName.data = attr->pValue;
+	    derName.len  = attr->ulValueLen;
+	    asciiName = CERT_DerNameToAscii(&derName);
+	    if (asciiName) {
+		PR_LOG(modlog, 4, (fmt_s_s_d, 
+		       atype, asciiName, attr->ulValueLen));
+	    	PORT_Free(asciiName);
+		break;
+	    }
+	    /* else treat like a binary buffer */
+	    goto binary_buffer;
+	}
+    case CKA_ID:
+	if (attr->ulValueLen > 0 && attr->pValue) {
+	    unsigned char * pV = attr->pValue;
+	    for (len = (int)attr->ulValueLen; len > 0; --len) {
+		unsigned int ch = *pV++;
+		if (ch >= 0x20 && ch < 0x7f) 
+		    continue;
+		if (!ch && len == 1)  /* will ignore NUL if last character */
+		    continue;
+		break;
+	    }
+	    if (!len) {	/* entire string is printable */
+		len = PR_MIN(attr->ulValueLen + 1, sizeof valstr);
+		PR_snprintf(valstr, len, "%s", attr->pValue);
+		PR_LOG(modlog, 4, (fmt_s_qsq_d, 
+		       atype, valstr, attr->ulValueLen));
+		break;
+	    }
+	    /* else fall through and treat like a binary buffer */
+	}
+binary_buffer:
+    case CKA_SERIAL_NUMBER:
     default:
-	PR_LOG(modlog, 4, ("    %s = 0x%p [%d]", 
+	if (attr->ulValueLen > 0 && attr->pValue) {
+	    char * hexBuf;
+	    SECItem attrBuf;
+	    attrBuf.type = siDERNameBuffer;
+	    attrBuf.data = attr->pValue;
+	    attrBuf.len  = PR_MIN(attr->ulValueLen, (sizeof valstr)/2);
+
+	    hexBuf = CERT_Hexify(&attrBuf, PR_FALSE);
+	    if (hexBuf) {
+		PR_LOG(modlog, 4, (fmt_s_s_d, 
+		       atype, hexBuf, attr->ulValueLen));
+	    	PORT_Free(hexBuf);
+		break;
+	    }
+	    /* else fall through and show only the address. :( */
+	}
+	PR_LOG(modlog, 4, ("    %s = [0x%p] [%d]", 
 	       atype, attr->pValue, attr->ulValueLen));
 	break;
     }
@@ -265,224 +739,388 @@ static void print_template(CK_ATTRIBUTE_PTR templ, CK_ULONG tlen)
     }
 }
 
-static void print_mechanism(CK_MECHANISM_PTR m)
-{
-    PR_LOG(modlog, 4, ("      mechanism = 0x%p", m->mechanism));
-}
+struct nssdbg_prof_str {
+    PRUint32 time;
+    PRUint32 calls;
+    char *function;
+};
 
-#define MAX_UINT32 0xffffffff
+#define NSSDBG_DEFINE(func) { 0, 0, #func }
 
-static void nssdbg_finish_time(PRInt32 *counter, PRIntervalTime start)
+struct nssdbg_prof_str nssdbg_prof_data[] = {
+#define FUNC_C_INITIALIZE 0
+    NSSDBG_DEFINE(C_Initialize),
+#define FUNC_C_FINALIZE 1
+    NSSDBG_DEFINE(C_Finalize),
+#define FUNC_C_GETINFO 2
+    NSSDBG_DEFINE(C_GetInfo),
+#define FUNC_C_GETFUNCITONLIST 3
+    NSSDBG_DEFINE(C_GetFunctionList),
+#define FUNC_C_GETSLOTLIST 4
+    NSSDBG_DEFINE(C_GetSlotList),
+#define FUNC_C_GETSLOTINFO 5
+    NSSDBG_DEFINE(C_GetSlotInfo),
+#define FUNC_C_GETTOKENINFO 6
+    NSSDBG_DEFINE(C_GetTokenInfo),
+#define FUNC_C_GETMECHANISMLIST 7
+    NSSDBG_DEFINE(C_GetMechanismList),
+#define FUNC_C_GETMECHANISMINFO 8
+    NSSDBG_DEFINE(C_GetMechanismInfo),
+#define FUNC_C_INITTOKEN 9
+    NSSDBG_DEFINE(C_InitToken),
+#define FUNC_C_INITPIN 10
+    NSSDBG_DEFINE(C_InitPIN),
+#define FUNC_C_SETPIN 11
+    NSSDBG_DEFINE(C_SetPIN),
+#define FUNC_C_OPENSESSION 12
+    NSSDBG_DEFINE(C_OpenSession),
+#define FUNC_C_CLOSESESSION 13
+    NSSDBG_DEFINE(C_CloseSession),
+#define FUNC_C_CLOSEALLSESSIONS 14
+    NSSDBG_DEFINE(C_CloseAllSessions),
+#define FUNC_C_GETSESSIONINFO 15
+    NSSDBG_DEFINE(C_GetSessionInfo),
+#define FUNC_C_GETOPERATIONSTATE 16
+    NSSDBG_DEFINE(C_GetOperationState),
+#define FUNC_C_SETOPERATIONSTATE 17
+    NSSDBG_DEFINE(C_SetOperationState),
+#define FUNC_C_LOGIN 18
+    NSSDBG_DEFINE(C_Login),
+#define FUNC_C_LOGOUT 19
+    NSSDBG_DEFINE(C_Logout),
+#define FUNC_C_CREATEOBJECT 20
+    NSSDBG_DEFINE(C_CreateObject),
+#define FUNC_C_COPYOBJECT 21
+    NSSDBG_DEFINE(C_CopyObject),
+#define FUNC_C_DESTROYOBJECT 22
+    NSSDBG_DEFINE(C_DestroyObject),
+#define FUNC_C_GETOBJECTSIZE  23
+    NSSDBG_DEFINE(C_GetObjectSize),
+#define FUNC_C_GETATTRIBUTEVALUE 24
+    NSSDBG_DEFINE(C_GetAttributeValue),
+#define FUNC_C_SETATTRIBUTEVALUE 25
+    NSSDBG_DEFINE(C_SetAttributeValue),
+#define FUNC_C_FINDOBJECTSINIT 26
+    NSSDBG_DEFINE(C_FindObjectsInit),
+#define FUNC_C_FINDOBJECTS 27
+    NSSDBG_DEFINE(C_FindObjects),
+#define FUNC_C_FINDOBJECTSFINAL 28
+    NSSDBG_DEFINE(C_FindObjectsFinal),
+#define FUNC_C_ENCRYPTINIT 29
+    NSSDBG_DEFINE(C_EncryptInit),
+#define FUNC_C_ENCRYPT 30
+    NSSDBG_DEFINE(C_Encrypt),
+#define FUNC_C_ENCRYPTUPDATE 31
+    NSSDBG_DEFINE(C_EncryptUpdate),
+#define FUNC_C_ENCRYPTFINAL 32
+    NSSDBG_DEFINE(C_EncryptFinal),
+#define FUNC_C_DECRYPTINIT 33
+    NSSDBG_DEFINE(C_DecryptInit),
+#define FUNC_C_DECRYPT 34
+    NSSDBG_DEFINE(C_Decrypt),
+#define FUNC_C_DECRYPTUPDATE 35
+    NSSDBG_DEFINE(C_DecryptUpdate),
+#define FUNC_C_DECRYPTFINAL 36
+    NSSDBG_DEFINE(C_DecryptFinal),
+#define FUNC_C_DIGESTINIT 37
+    NSSDBG_DEFINE(C_DigestInit),
+#define FUNC_C_DIGEST 38
+    NSSDBG_DEFINE(C_Digest),
+#define FUNC_C_DIGESTUPDATE 39
+    NSSDBG_DEFINE(C_DigestUpdate),
+#define FUNC_C_DIGESTKEY 40
+    NSSDBG_DEFINE(C_DigestKey),
+#define FUNC_C_DIGESTFINAL 41
+    NSSDBG_DEFINE(C_DigestFinal),
+#define FUNC_C_SIGNINIT 42
+    NSSDBG_DEFINE(C_SignInit),
+#define FUNC_C_SIGN 43
+    NSSDBG_DEFINE(C_Sign),
+#define FUNC_C_SIGNUPDATE 44
+    NSSDBG_DEFINE(C_SignUpdate),
+#define FUNC_C_SIGNFINAL 45
+    NSSDBG_DEFINE(C_SignFinal),
+#define FUNC_C_SIGNRECOVERINIT 46
+    NSSDBG_DEFINE(C_SignRecoverInit),
+#define FUNC_C_SIGNRECOVER 47
+    NSSDBG_DEFINE(C_SignRecover),
+#define FUNC_C_VERIFYINIT 48
+    NSSDBG_DEFINE(C_VerifyInit),
+#define FUNC_C_VERIFY 49
+    NSSDBG_DEFINE(C_Verify),
+#define FUNC_C_VERIFYUPDATE 50
+    NSSDBG_DEFINE(C_VerifyUpdate),
+#define FUNC_C_VERIFYFINAL 51
+    NSSDBG_DEFINE(C_VerifyFinal),
+#define FUNC_C_VERIFYRECOVERINIT 52
+    NSSDBG_DEFINE(C_VerifyRecoverInit),
+#define FUNC_C_VERIFYRECOVER 53
+    NSSDBG_DEFINE(C_VerifyRecover),
+#define FUNC_C_DIGESTENCRYPTUPDATE 54
+    NSSDBG_DEFINE(C_DigestEncryptUpdate),
+#define FUNC_C_DECRYPTDIGESTUPDATE 55
+    NSSDBG_DEFINE(C_DecryptDigestUpdate),
+#define FUNC_C_SIGNENCRYPTUPDATE 56
+    NSSDBG_DEFINE(C_SignEncryptUpdate),
+#define FUNC_C_DECRYPTVERIFYUPDATE 57
+    NSSDBG_DEFINE(C_DecryptVerifyUpdate),
+#define FUNC_C_GENERATEKEY 58
+    NSSDBG_DEFINE(C_GenerateKey),
+#define FUNC_C_GENERATEKEYPAIR 59
+    NSSDBG_DEFINE(C_GenerateKeyPair),
+#define FUNC_C_WRAPKEY 60
+    NSSDBG_DEFINE(C_WrapKey),
+#define FUNC_C_UNWRAPKEY 61
+    NSSDBG_DEFINE(C_UnWrapKey),
+#define FUNC_C_DERIVEKEY 62 
+    NSSDBG_DEFINE(C_DeriveKey),
+#define FUNC_C_SEEDRANDOM 63
+    NSSDBG_DEFINE(C_SeedRandom),
+#define FUNC_C_GENERATERANDOM 64
+    NSSDBG_DEFINE(C_GenerateRandom),
+#define FUNC_C_GETFUNCTIONSTATUS 65
+    NSSDBG_DEFINE(C_GetFunctionStatus),
+#define FUNC_C_CANCELFUNCTION 66
+    NSSDBG_DEFINE(C_CancelFunction),
+#define FUNC_C_WAITFORSLOTEVENT 67
+    NSSDBG_DEFINE(C_WaitForSlotEvent)
+};
+
+int nssdbg_prof_size = sizeof(nssdbg_prof_data)/sizeof(nssdbg_prof_data[0]);
+    
+
+static void nssdbg_finish_time(PRInt32 fun_number, PRIntervalTime start)
 {
     PRIntervalTime ival;
     PRIntervalTime end = PR_IntervalNow();
 
-    if (end >= start) {
-	ival = PR_IntervalToMilliseconds(end-start);
-    } else {
-	/* the interval timer rolled over. presume it only tripped once */
-	ival = PR_IntervalToMilliseconds(MAX_UINT32-start) +
-			PR_IntervalToMilliseconds(end);
-    }
-    PR_AtomicAdd(counter, ival);
+    ival = end-start;
+    /* sigh, lie to PRAtomic add and say we are using signed values */
+    PR_ATOMIC_ADD((PRInt32 *)&nssdbg_prof_data[fun_number].time, (PRInt32)ival);
 }
 
-static PRInt32 counter_C_Initialize = 0;
-static PRInt32 calls_C_Initialize = 0;
+static void nssdbg_start_time(PRInt32 fun_number, PRIntervalTime *start)
+{
+    PR_ATOMIC_INCREMENT((PRInt32 *)&nssdbg_prof_data[fun_number].calls);
+    *start = PR_IntervalNow();
+}
+
+#define COMMON_DEFINITIONS \
+    CK_RV rv; \
+    PRIntervalTime start
+
 CK_RV NSSDBGC_Initialize(
   CK_VOID_PTR pInitArgs
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_Initialize);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_Initialize"));
     PR_LOG(modlog, 3, ("  pInitArgs = 0x%p", pInitArgs));
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_INITIALIZE,&start);
     rv = module_functions->C_Initialize(pInitArgs);
-    nssdbg_finish_time(&counter_C_Initialize,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_INITIALIZE,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_Finalize = 0;
-static PRInt32 calls_C_Finalize = 0;
 CK_RV NSSDBGC_Finalize(
   CK_VOID_PTR pReserved
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_Finalize);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_Finalize"));
     PR_LOG(modlog, 3, ("  pReserved = 0x%p", pReserved));
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_FINALIZE,&start);
     rv = module_functions->C_Finalize(pReserved);
-    nssdbg_finish_time(&counter_C_Finalize,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_FINALIZE,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_GetInfo = 0;
-static PRInt32 calls_C_GetInfo = 0;
 CK_RV NSSDBGC_GetInfo(
   CK_INFO_PTR pInfo
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_GetInfo);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_GetInfo"));
-    PR_LOG(modlog, 3, ("  pInfo = 0x%p", pInfo));
-    start = PR_IntervalNow();
+    PR_LOG(modlog, 3, (fmt_pInfo, pInfo));
+    nssdbg_start_time(FUNC_C_GETINFO,&start);
     rv = module_functions->C_GetInfo(pInfo);
-    nssdbg_finish_time(&counter_C_GetInfo,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_GETINFO,start);
+    if (rv == CKR_OK) {
+	PR_LOG(modlog, 4, ("  cryptoki version: %d.%d", 
+			   pInfo->cryptokiVersion.major,
+			   pInfo->cryptokiVersion.minor));
+	PR_LOG(modlog, 4, (fmt_manufacturerID, pInfo->manufacturerID));
+	PR_LOG(modlog, 4, ("  library description = \"%.32s\"", 
+	                   pInfo->libraryDescription));
+	PR_LOG(modlog, 4, ("  library version: %d.%d", 
+			   pInfo->libraryVersion.major,
+			   pInfo->libraryVersion.minor));
+    }
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_GetFunctionList = 0;
-static PRInt32 calls_C_GetFunctionList = 0;
 CK_RV NSSDBGC_GetFunctionList(
   CK_FUNCTION_LIST_PTR_PTR ppFunctionList
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_GetFunctionList);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_GetFunctionList"));
     PR_LOG(modlog, 3, ("  ppFunctionList = 0x%p", ppFunctionList));
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_GETFUNCITONLIST,&start);
     rv = module_functions->C_GetFunctionList(ppFunctionList);
-    nssdbg_finish_time(&counter_C_GetFunctionList,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_GETFUNCITONLIST,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_GetSlotList = 0;
-static PRInt32 calls_C_GetSlotList = 0;
 CK_RV NSSDBGC_GetSlotList(
   CK_BBOOL       tokenPresent,
   CK_SLOT_ID_PTR pSlotList,
   CK_ULONG_PTR   pulCount
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
+    COMMON_DEFINITIONS;
+
     CK_ULONG i;
-    PR_AtomicIncrement(&calls_C_GetSlotList);
     PR_LOG(modlog, 1, ("C_GetSlotList"));
     PR_LOG(modlog, 3, ("  tokenPresent = 0x%x", tokenPresent));
     PR_LOG(modlog, 3, ("  pSlotList = 0x%p", pSlotList));
-    PR_LOG(modlog, 3, ("  pulCount = 0x%p", pulCount));
-    start = PR_IntervalNow();
-    rv = module_functions->C_GetSlotList(tokenPresent,
-                                 pSlotList,
-                                 pulCount);
-    nssdbg_finish_time(&counter_C_GetSlotList,start);
-    PR_LOG(modlog, 4, ("  *pulCount = 0x%x", *pulCount));
+    PR_LOG(modlog, 3, (fmt_pulCount, pulCount));
+    nssdbg_start_time(FUNC_C_GETSLOTLIST,&start);
+    rv = module_functions->C_GetSlotList(tokenPresent, pSlotList, pulCount);
+    nssdbg_finish_time(FUNC_C_GETSLOTLIST,start);
+    PR_LOG(modlog, 4, (fmt_spulCount, *pulCount));
     if (pSlotList) {
 	for (i=0; i<*pulCount; i++) {
 	    PR_LOG(modlog, 4, ("  slotID[%d] = %x", i, pSlotList[i]));
 	}
     }
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_GetSlotInfo = 0;
-static PRInt32 calls_C_GetSlotInfo = 0;
 CK_RV NSSDBGC_GetSlotInfo(
   CK_SLOT_ID       slotID,
   CK_SLOT_INFO_PTR pInfo
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_GetSlotInfo);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_GetSlotInfo"));
-    PR_LOG(modlog, 3, ("  slotID = 0x%x", slotID));
-    PR_LOG(modlog, 3, ("  pInfo = 0x%p", pInfo));
-    start = PR_IntervalNow();
-    rv = module_functions->C_GetSlotInfo(slotID,
-                                 pInfo);
-    nssdbg_finish_time(&counter_C_GetSlotInfo,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    PR_LOG(modlog, 3, (fmt_slotID, slotID));
+    PR_LOG(modlog, 3, (fmt_pInfo, pInfo));
+    nssdbg_start_time(FUNC_C_GETSLOTINFO,&start);
+    rv = module_functions->C_GetSlotInfo(slotID, pInfo);
+    nssdbg_finish_time(FUNC_C_GETSLOTINFO,start);
+    if (rv == CKR_OK) {
+	PR_LOG(modlog, 4, ("  slotDescription = \"%.64s\"", 
+	                   pInfo->slotDescription));
+	PR_LOG(modlog, 4, (fmt_manufacturerID, pInfo->manufacturerID));
+	PR_LOG(modlog, 4, ("  flags = %s %s %s",
+	    pInfo->flags & CKF_HW_SLOT          ? "CKF_HW_SLOT" : "",
+	    pInfo->flags & CKF_REMOVABLE_DEVICE ? "CKF_REMOVABLE_DEVICE" : "",
+	    pInfo->flags & CKF_TOKEN_PRESENT    ? "CKF_TOKEN_PRESENT" : ""));
+	PR_LOG(modlog, 4, (fmt_hwVersion, 
+			    pInfo->hardwareVersion.major,
+			    pInfo->hardwareVersion.minor));
+	PR_LOG(modlog, 4, (fmt_fwVersion, 
+			    pInfo->firmwareVersion.major,
+			    pInfo->firmwareVersion.minor));
+    }
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_GetTokenInfo = 0;
-static PRInt32 calls_C_GetTokenInfo = 0;
 CK_RV NSSDBGC_GetTokenInfo(
   CK_SLOT_ID        slotID,
   CK_TOKEN_INFO_PTR pInfo
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_GetTokenInfo);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_GetTokenInfo"));
-    PR_LOG(modlog, 3, ("  slotID = 0x%x", slotID));
-    PR_LOG(modlog, 3, ("  pInfo = 0x%p", pInfo));
-    start = PR_IntervalNow();
-    rv = module_functions->C_GetTokenInfo(slotID,
-                                 pInfo);
-    nssdbg_finish_time(&counter_C_GetTokenInfo,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    PR_LOG(modlog, 3, (fmt_slotID, slotID));
+    PR_LOG(modlog, 3, (fmt_pInfo, pInfo));
+    nssdbg_start_time(FUNC_C_GETTOKENINFO,&start);
+    rv = module_functions->C_GetTokenInfo(slotID, pInfo);
+    nssdbg_finish_time(FUNC_C_GETTOKENINFO,start);
+    if (rv == CKR_OK) {
+    	PR_LOG(modlog, 4, ("  label = \"%.32s\"", pInfo->label));
+	PR_LOG(modlog, 4, (fmt_manufacturerID, pInfo->manufacturerID));
+    	PR_LOG(modlog, 4, ("  model = \"%.16s\"", pInfo->model));
+    	PR_LOG(modlog, 4, ("  serial = \"%.16s\"", pInfo->serialNumber));
+	PR_LOG(modlog, 4, ("  flags = %s %s %s %s",
+	    pInfo->flags & CKF_RNG             ? "CKF_RNG" : "",
+	    pInfo->flags & CKF_WRITE_PROTECTED ? "CKF_WRITE_PROTECTED" : "",
+	    pInfo->flags & CKF_LOGIN_REQUIRED  ? "CKF_LOGIN_REQUIRED" : "",
+	    pInfo->flags & CKF_USER_PIN_INITIALIZED ? "CKF_USER_PIN_INIT" : ""));
+	PR_LOG(modlog, 4, ("  maxSessions = %u, Sessions = %u", 
+	                   pInfo->ulMaxSessionCount, pInfo->ulSessionCount));
+	PR_LOG(modlog, 4, ("  maxRwSessions = %u, RwSessions = %u", 
+	                   pInfo->ulMaxRwSessionCount, 
+			   pInfo->ulRwSessionCount));
+	/* ignore Max & Min Pin Len, Public and Private Memory */
+	PR_LOG(modlog, 4, (fmt_hwVersion, 
+			    pInfo->hardwareVersion.major,
+			    pInfo->hardwareVersion.minor));
+	PR_LOG(modlog, 4, (fmt_fwVersion, 
+			    pInfo->firmwareVersion.major,
+			    pInfo->firmwareVersion.minor));
+    }
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_GetMechanismList = 0;
-static PRInt32 calls_C_GetMechanismList = 0;
 CK_RV NSSDBGC_GetMechanismList(
   CK_SLOT_ID            slotID,
   CK_MECHANISM_TYPE_PTR pMechanismList,
   CK_ULONG_PTR          pulCount
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_GetMechanismList);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_GetMechanismList"));
-    PR_LOG(modlog, 3, ("  slotID = 0x%x", slotID));
+    PR_LOG(modlog, 3, (fmt_slotID, slotID));
     PR_LOG(modlog, 3, ("  pMechanismList = 0x%p", pMechanismList));
-    PR_LOG(modlog, 3, ("  pulCount = 0x%p", pulCount));
-    start = PR_IntervalNow();
+    PR_LOG(modlog, 3, (fmt_pulCount, pulCount));
+    nssdbg_start_time(FUNC_C_GETMECHANISMLIST,&start);
     rv = module_functions->C_GetMechanismList(slotID,
                                  pMechanismList,
                                  pulCount);
-    nssdbg_finish_time(&counter_C_GetMechanismList,start);
-    PR_LOG(modlog, 4, ("  *pulCount = 0x%x", *pulCount));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_GETMECHANISMLIST,start);
+    PR_LOG(modlog, 4, (fmt_spulCount, *pulCount));
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_GetMechanismInfo = 0;
-static PRInt32 calls_C_GetMechanismInfo = 0;
 CK_RV NSSDBGC_GetMechanismInfo(
   CK_SLOT_ID            slotID,
   CK_MECHANISM_TYPE     type,
   CK_MECHANISM_INFO_PTR pInfo
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_GetMechanismInfo);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_GetMechanismInfo"));
-    PR_LOG(modlog, 3, ("  slotID = 0x%x", slotID));
+    PR_LOG(modlog, 3, (fmt_slotID, slotID));
     PR_LOG(modlog, 3, ("  type = 0x%x", type));
-    PR_LOG(modlog, 3, ("  pInfo = 0x%p", pInfo));
-    start = PR_IntervalNow();
+    PR_LOG(modlog, 3, (fmt_pInfo, pInfo));
+    nssdbg_start_time(FUNC_C_GETMECHANISMINFO,&start);
     rv = module_functions->C_GetMechanismInfo(slotID,
                                  type,
                                  pInfo);
-    nssdbg_finish_time(&counter_C_GetMechanismInfo,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_GETMECHANISMINFO,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_InitToken = 0;
-static PRInt32 calls_C_InitToken = 0;
 CK_RV NSSDBGC_InitToken(
   CK_SLOT_ID  slotID,
   CK_CHAR_PTR pPin,
@@ -490,50 +1128,44 @@ CK_RV NSSDBGC_InitToken(
   CK_CHAR_PTR pLabel
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_InitToken);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_InitToken"));
-    PR_LOG(modlog, 3, ("  slotID = 0x%x", slotID));
-    PR_LOG(modlog, 3, ("  pPin = 0x%p", pPin));
-    PR_LOG(modlog, 3, ("  ulPinLen = %d", ulPinLen));
+    PR_LOG(modlog, 3, (fmt_slotID, slotID));
+    PR_LOG(modlog, 3, (fmt_pPin, pPin));
+    PR_LOG(modlog, 3, (fmt_ulPinLen, ulPinLen));
     PR_LOG(modlog, 3, ("  pLabel = 0x%p", pLabel));
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_INITTOKEN,&start);
     rv = module_functions->C_InitToken(slotID,
                                  pPin,
                                  ulPinLen,
                                  pLabel);
-    nssdbg_finish_time(&counter_C_InitToken,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_INITTOKEN,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_InitPIN = 0;
-static PRInt32 calls_C_InitPIN = 0;
 CK_RV NSSDBGC_InitPIN(
   CK_SESSION_HANDLE hSession,
   CK_CHAR_PTR       pPin,
   CK_ULONG          ulPinLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_InitPIN);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_InitPIN"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pPin = 0x%p", pPin));
-    PR_LOG(modlog, 3, ("  ulPinLen = %d", ulPinLen));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pPin, pPin));
+    PR_LOG(modlog, 3, (fmt_ulPinLen, ulPinLen));
+    nssdbg_start_time(FUNC_C_INITPIN,&start);
     rv = module_functions->C_InitPIN(hSession,
                                  pPin,
                                  ulPinLen);
-    nssdbg_finish_time(&counter_C_InitPIN,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_INITPIN,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_SetPIN = 0;
-static PRInt32 calls_C_SetPIN = 0;
 CK_RV NSSDBGC_SetPIN(
   CK_SESSION_HANDLE hSession,
   CK_CHAR_PTR       pOldPin,
@@ -542,30 +1174,28 @@ CK_RV NSSDBGC_SetPIN(
   CK_ULONG          ulNewLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_SetPIN);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_SetPIN"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
+    log_handle(3, fmt_hSession, hSession);
     PR_LOG(modlog, 3, ("  pOldPin = 0x%p", pOldPin));
     PR_LOG(modlog, 3, ("  ulOldLen = %d", ulOldLen));
     PR_LOG(modlog, 3, ("  pNewPin = 0x%p", pNewPin));
     PR_LOG(modlog, 3, ("  ulNewLen = %d", ulNewLen));
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_SETPIN,&start);
     rv = module_functions->C_SetPIN(hSession,
                                  pOldPin,
                                  ulOldLen,
                                  pNewPin,
                                  ulNewLen);
-    nssdbg_finish_time(&counter_C_SetPIN,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_SETPIN,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_OpenSession = 0;
-static PRInt32 calls_C_OpenSession = 0;
-static PRInt32 numOpenSessions = 0;
-static PRInt32 maxOpenSessions = 0;
+static PRUint32 numOpenSessions = 0;
+static PRUint32 maxOpenSessions = 0;
+
 CK_RV NSSDBGC_OpenSession(
   CK_SLOT_ID            slotID,
   CK_FLAGS              flags,
@@ -574,114 +1204,107 @@ CK_RV NSSDBGC_OpenSession(
   CK_SESSION_HANDLE_PTR phSession
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_OpenSession);
-    PR_AtomicIncrement(&numOpenSessions);
+    COMMON_DEFINITIONS;
+
+    PR_ATOMIC_INCREMENT((PRInt32 *)&numOpenSessions);
     maxOpenSessions = PR_MAX(numOpenSessions, maxOpenSessions);
     PR_LOG(modlog, 1, ("C_OpenSession"));
-    PR_LOG(modlog, 3, ("  slotID = 0x%x", slotID));
-    PR_LOG(modlog, 3, ("  flags = 0x%x", flags));
+    PR_LOG(modlog, 3, (fmt_slotID, slotID));
+    PR_LOG(modlog, 3, (fmt_flags, flags));
     PR_LOG(modlog, 3, ("  pApplication = 0x%p", pApplication));
     PR_LOG(modlog, 3, ("  Notify = 0x%x", Notify));
     PR_LOG(modlog, 3, ("  phSession = 0x%p", phSession));
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_OPENSESSION,&start);
     rv = module_functions->C_OpenSession(slotID,
                                  flags,
                                  pApplication,
                                  Notify,
                                  phSession);
-    nssdbg_finish_time(&counter_C_OpenSession,start);
-    PR_LOG(modlog, 4, ("  *phSession = 0x%x", *phSession));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_OPENSESSION,start);
+    log_handle(4, "  *phSession = 0x%x", *phSession);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_CloseSession = 0;
-static PRInt32 calls_C_CloseSession = 0;
 CK_RV NSSDBGC_CloseSession(
   CK_SESSION_HANDLE hSession
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_CloseSession);
-    PR_AtomicDecrement(&numOpenSessions);
+    COMMON_DEFINITIONS;
+
+    PR_ATOMIC_DECREMENT((PRInt32 *)&numOpenSessions);
     PR_LOG(modlog, 1, ("C_CloseSession"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    nssdbg_start_time(FUNC_C_CLOSESESSION,&start);
     rv = module_functions->C_CloseSession(hSession);
-    nssdbg_finish_time(&counter_C_CloseSession,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_CLOSESESSION,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_CloseAllSessions = 0;
-static PRInt32 calls_C_CloseAllSessions = 0;
 CK_RV NSSDBGC_CloseAllSessions(
   CK_SLOT_ID slotID
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_CloseAllSessions);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_CloseAllSessions"));
-    PR_LOG(modlog, 3, ("  slotID = 0x%x", slotID));
-    start = PR_IntervalNow();
+    PR_LOG(modlog, 3, (fmt_slotID, slotID));
+    nssdbg_start_time(FUNC_C_CLOSEALLSESSIONS,&start);
     rv = module_functions->C_CloseAllSessions(slotID);
-    nssdbg_finish_time(&counter_C_CloseAllSessions,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_CLOSEALLSESSIONS,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_GetSessionInfo = 0;
-static PRInt32 calls_C_GetSessionInfo = 0;
 CK_RV NSSDBGC_GetSessionInfo(
   CK_SESSION_HANDLE   hSession,
   CK_SESSION_INFO_PTR pInfo
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_GetSessionInfo);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_GetSessionInfo"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pInfo = 0x%p", pInfo));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pInfo, pInfo));
+    nssdbg_start_time(FUNC_C_GETSESSIONINFO,&start);
     rv = module_functions->C_GetSessionInfo(hSession,
                                  pInfo);
-    nssdbg_finish_time(&counter_C_GetSessionInfo,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_GETSESSIONINFO,start);
+    if (rv == CKR_OK) {
+	PR_LOG(modlog, 4, (fmt_slotID, pInfo->slotID));
+	log_state(pInfo->state);
+	PR_LOG(modlog, 4, ("  flags = %s %s",
+	    pInfo->flags & CKF_RW_SESSION     ? "CKF_RW_SESSION" : "",
+	    pInfo->flags & CKF_SERIAL_SESSION ? "CKF_SERIAL_SESSION" : ""));
+	PR_LOG(modlog, 4, ("  deviceError = 0x%x", pInfo->ulDeviceError));
+    }
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_GetOperationState = 0;
-static PRInt32 calls_C_GetOperationState = 0;
 CK_RV NSSDBGC_GetOperationState(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       pOperationState,
   CK_ULONG_PTR      pulOperationStateLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_GetOperationState);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_GetOperationState"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pOperationState = 0x%p", pOperationState));
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pOperationState, pOperationState));
     PR_LOG(modlog, 3, ("  pulOperationStateLen = 0x%p", pulOperationStateLen));
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_GETOPERATIONSTATE,&start);
     rv = module_functions->C_GetOperationState(hSession,
                                  pOperationState,
                                  pulOperationStateLen);
-    nssdbg_finish_time(&counter_C_GetOperationState,start);
+    nssdbg_finish_time(FUNC_C_GETOPERATIONSTATE,start);
     PR_LOG(modlog, 4, ("  *pulOperationStateLen = 0x%x", *pulOperationStateLen));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_SetOperationState = 0;
-static PRInt32 calls_C_SetOperationState = 0;
 CK_RV NSSDBGC_SetOperationState(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR      pOperationState,
@@ -690,28 +1313,25 @@ CK_RV NSSDBGC_SetOperationState(
   CK_OBJECT_HANDLE hAuthenticationKey
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_SetOperationState);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_SetOperationState"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pOperationState = 0x%p", pOperationState));
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pOperationState, pOperationState));
     PR_LOG(modlog, 3, ("  ulOperationStateLen = %d", ulOperationStateLen));
-    PR_LOG(modlog, 3, ("  hEncryptionKey = 0x%x", hEncryptionKey));
-    PR_LOG(modlog, 3, ("  hAuthenticationKey = 0x%x", hAuthenticationKey));
-    start = PR_IntervalNow();
+    log_handle(3, "  hEncryptionKey = 0x%x", hEncryptionKey);
+    log_handle(3, "  hAuthenticationKey = 0x%x", hAuthenticationKey);
+    nssdbg_start_time(FUNC_C_SETOPERATIONSTATE,&start);
     rv = module_functions->C_SetOperationState(hSession,
                                  pOperationState,
                                  ulOperationStateLen,
                                  hEncryptionKey,
                                  hAuthenticationKey);
-    nssdbg_finish_time(&counter_C_SetOperationState,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_SETOPERATIONSTATE,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_Login = 0;
-static PRInt32 calls_C_Login = 0;
 CK_RV NSSDBGC_Login(
   CK_SESSION_HANDLE hSession,
   CK_USER_TYPE      userType,
@@ -719,44 +1339,38 @@ CK_RV NSSDBGC_Login(
   CK_ULONG          ulPinLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_Login);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_Login"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
+    log_handle(3, fmt_hSession, hSession);
     PR_LOG(modlog, 3, ("  userType = 0x%x", userType));
-    PR_LOG(modlog, 3, ("  pPin = 0x%p", pPin));
-    PR_LOG(modlog, 3, ("  ulPinLen = %d", ulPinLen));
-    start = PR_IntervalNow();
+    PR_LOG(modlog, 3, (fmt_pPin, pPin));
+    PR_LOG(modlog, 3, (fmt_ulPinLen, ulPinLen));
+    nssdbg_start_time(FUNC_C_LOGIN,&start);
     rv = module_functions->C_Login(hSession,
                                  userType,
                                  pPin,
                                  ulPinLen);
-    nssdbg_finish_time(&counter_C_Login,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_LOGIN,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_Logout = 0;
-static PRInt32 calls_C_Logout = 0;
 CK_RV NSSDBGC_Logout(
   CK_SESSION_HANDLE hSession
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_Logout);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_Logout"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    nssdbg_start_time(FUNC_C_LOGOUT,&start);
     rv = module_functions->C_Logout(hSession);
-    nssdbg_finish_time(&counter_C_Logout,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_LOGOUT,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_CreateObject = 0;
-static PRInt32 calls_C_CreateObject = 0;
 CK_RV NSSDBGC_CreateObject(
   CK_SESSION_HANDLE    hSession,
   CK_ATTRIBUTE_PTR     pTemplate,
@@ -764,28 +1378,25 @@ CK_RV NSSDBGC_CreateObject(
   CK_OBJECT_HANDLE_PTR phObject
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_CreateObject);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_CreateObject"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pTemplate = 0x%p", pTemplate));
-    PR_LOG(modlog, 3, ("  ulCount = %d", ulCount));
-    PR_LOG(modlog, 3, ("  phObject = 0x%p", phObject));
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pTemplate, pTemplate));
+    PR_LOG(modlog, 3, (fmt_ulCount, ulCount));
+    PR_LOG(modlog, 3, (fmt_phObject, phObject));
     print_template(pTemplate, ulCount);
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_CREATEOBJECT,&start);
     rv = module_functions->C_CreateObject(hSession,
                                  pTemplate,
                                  ulCount,
                                  phObject);
-    nssdbg_finish_time(&counter_C_CreateObject,start);
-    PR_LOG(modlog, 4, ("  *phObject = 0x%x", *phObject));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_CREATEOBJECT,start);
+    log_handle(4, "  *phObject = 0x%x", *phObject);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_CopyObject = 0;
-static PRInt32 calls_C_CopyObject = 0;
 CK_RV NSSDBGC_CopyObject(
   CK_SESSION_HANDLE    hSession,
   CK_OBJECT_HANDLE     hObject,
@@ -794,76 +1405,67 @@ CK_RV NSSDBGC_CopyObject(
   CK_OBJECT_HANDLE_PTR phNewObject
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_CopyObject);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_CopyObject"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  hObject = 0x%x", hObject));
-    PR_LOG(modlog, 3, ("  pTemplate = 0x%p", pTemplate));
-    PR_LOG(modlog, 3, ("  ulCount = %d", ulCount));
+    log_handle(3, fmt_hSession, hSession);
+    log_handle(3, fmt_hObject, hObject);
+    PR_LOG(modlog, 3, (fmt_pTemplate, pTemplate));
+    PR_LOG(modlog, 3, (fmt_ulCount, ulCount));
     PR_LOG(modlog, 3, ("  phNewObject = 0x%p", phNewObject));
     print_template(pTemplate, ulCount);
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_COPYOBJECT,&start);
     rv = module_functions->C_CopyObject(hSession,
                                  hObject,
                                  pTemplate,
                                  ulCount,
                                  phNewObject);
-    nssdbg_finish_time(&counter_C_CopyObject,start);
-    PR_LOG(modlog, 4, ("  *phNewObject = 0x%x", *phNewObject));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_COPYOBJECT,start);
+    log_handle(4, "  *phNewObject = 0x%x", *phNewObject);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_DestroyObject = 0;
-static PRInt32 calls_C_DestroyObject = 0;
 CK_RV NSSDBGC_DestroyObject(
   CK_SESSION_HANDLE hSession,
   CK_OBJECT_HANDLE  hObject
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_DestroyObject);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_DestroyObject"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  hObject = 0x%x", hObject));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    log_handle(3, fmt_hObject, hObject);
+    nssdbg_start_time(FUNC_C_DESTROYOBJECT,&start);
     rv = module_functions->C_DestroyObject(hSession,
                                  hObject);
-    nssdbg_finish_time(&counter_C_DestroyObject,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_DESTROYOBJECT,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_GetObjectSize = 0;
-static PRInt32 calls_C_GetObjectSize = 0;
 CK_RV NSSDBGC_GetObjectSize(
   CK_SESSION_HANDLE hSession,
   CK_OBJECT_HANDLE  hObject,
   CK_ULONG_PTR      pulSize
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_GetObjectSize);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_GetObjectSize"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  hObject = 0x%x", hObject));
+    log_handle(3, fmt_hSession, hSession);
+    log_handle(3, fmt_hObject, hObject);
     PR_LOG(modlog, 3, ("  pulSize = 0x%p", pulSize));
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_GETOBJECTSIZE,&start);
     rv = module_functions->C_GetObjectSize(hSession,
                                  hObject,
                                  pulSize);
-    nssdbg_finish_time(&counter_C_GetObjectSize,start);
+    nssdbg_finish_time(FUNC_C_GETOBJECTSIZE,start);
     PR_LOG(modlog, 4, ("  *pulSize = 0x%x", *pulSize));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_GetAttributeValue = 0;
-static PRInt32 calls_C_GetAttributeValue = 0;
 CK_RV NSSDBGC_GetAttributeValue(
   CK_SESSION_HANDLE hSession,
   CK_OBJECT_HANDLE  hObject,
@@ -871,27 +1473,24 @@ CK_RV NSSDBGC_GetAttributeValue(
   CK_ULONG          ulCount
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_GetAttributeValue);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_GetAttributeValue"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  hObject = 0x%x", hObject));
-    PR_LOG(modlog, 3, ("  pTemplate = 0x%p", pTemplate));
-    PR_LOG(modlog, 3, ("  ulCount = %d", ulCount));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    log_handle(3, fmt_hObject, hObject);
+    PR_LOG(modlog, 3, (fmt_pTemplate, pTemplate));
+    PR_LOG(modlog, 3, (fmt_ulCount, ulCount));
+    nssdbg_start_time(FUNC_C_GETATTRIBUTEVALUE,&start);
     rv = module_functions->C_GetAttributeValue(hSession,
                                  hObject,
                                  pTemplate,
                                  ulCount);
-    nssdbg_finish_time(&counter_C_GetAttributeValue,start);
+    nssdbg_finish_time(FUNC_C_GETATTRIBUTEVALUE,start);
     print_template(pTemplate, ulCount);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_SetAttributeValue = 0;
-static PRInt32 calls_C_SetAttributeValue = 0;
 CK_RV NSSDBGC_SetAttributeValue(
   CK_SESSION_HANDLE hSession,
   CK_OBJECT_HANDLE  hObject,
@@ -899,52 +1498,46 @@ CK_RV NSSDBGC_SetAttributeValue(
   CK_ULONG          ulCount
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_SetAttributeValue);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_SetAttributeValue"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  hObject = 0x%x", hObject));
-    PR_LOG(modlog, 3, ("  pTemplate = 0x%p", pTemplate));
-    PR_LOG(modlog, 3, ("  ulCount = %d", ulCount));
+    log_handle(3, fmt_hSession, hSession);
+    log_handle(3, fmt_hObject, hObject);
+    PR_LOG(modlog, 3, (fmt_pTemplate, pTemplate));
+    PR_LOG(modlog, 3, (fmt_ulCount, ulCount));
     print_template(pTemplate, ulCount);
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_SETATTRIBUTEVALUE,&start);
     rv = module_functions->C_SetAttributeValue(hSession,
                                  hObject,
                                  pTemplate,
                                  ulCount);
-    nssdbg_finish_time(&counter_C_SetAttributeValue,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_SETATTRIBUTEVALUE,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_FindObjectsInit = 0;
-static PRInt32 calls_C_FindObjectsInit = 0;
 CK_RV NSSDBGC_FindObjectsInit(
   CK_SESSION_HANDLE hSession,
   CK_ATTRIBUTE_PTR  pTemplate,
   CK_ULONG          ulCount
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_FindObjectsInit);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_FindObjectsInit"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pTemplate = 0x%p", pTemplate));
-    PR_LOG(modlog, 3, ("  ulCount = %d", ulCount));
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pTemplate, pTemplate));
+    PR_LOG(modlog, 3, (fmt_ulCount, ulCount));
     print_template(pTemplate, ulCount);
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_FINDOBJECTSINIT,&start);
     rv = module_functions->C_FindObjectsInit(hSession,
                                  pTemplate,
                                  ulCount);
-    nssdbg_finish_time(&counter_C_FindObjectsInit,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_FINDOBJECTSINIT,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_FindObjects = 0;
-static PRInt32 calls_C_FindObjects = 0;
 CK_RV NSSDBGC_FindObjects(
   CK_SESSION_HANDLE    hSession,
   CK_OBJECT_HANDLE_PTR phObject,
@@ -952,74 +1545,66 @@ CK_RV NSSDBGC_FindObjects(
   CK_ULONG_PTR         pulObjectCount
 )
 {
-    CK_RV rv;
+    COMMON_DEFINITIONS;
     CK_ULONG i;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_FindObjects);
+
     PR_LOG(modlog, 1, ("C_FindObjects"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  phObject = 0x%p", phObject));
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_phObject, phObject));
     PR_LOG(modlog, 3, ("  ulMaxObjectCount = %d", ulMaxObjectCount));
     PR_LOG(modlog, 3, ("  pulObjectCount = 0x%p", pulObjectCount));
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_FINDOBJECTS,&start);
     rv = module_functions->C_FindObjects(hSession,
                                  phObject,
                                  ulMaxObjectCount,
                                  pulObjectCount);
-    nssdbg_finish_time(&counter_C_FindObjects,start);
+    nssdbg_finish_time(FUNC_C_FINDOBJECTS,start);
     PR_LOG(modlog, 4, ("  *pulObjectCount = 0x%x", *pulObjectCount));
     for (i=0; i<*pulObjectCount; i++) {
-	PR_LOG(modlog, 4, ("  phObject[%d] = 0x%x", i, phObject[i]));
+	PR_LOG(modlog, 4, ("  phObject[%d] = 0x%x%s", i, phObject[i],
+	       phObject[i] ? "" : fmt_invalid_handle));
     }
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_FindObjectsFinal = 0;
-static PRInt32 calls_C_FindObjectsFinal = 0;
 CK_RV NSSDBGC_FindObjectsFinal(
   CK_SESSION_HANDLE hSession
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_FindObjectsFinal);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_FindObjectsFinal"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    nssdbg_start_time(FUNC_C_FINDOBJECTSFINAL,&start);
     rv = module_functions->C_FindObjectsFinal(hSession);
-    nssdbg_finish_time(&counter_C_FindObjectsFinal,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_FINDOBJECTSFINAL,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_EncryptInit = 0;
-static PRInt32 calls_C_EncryptInit = 0;
 CK_RV NSSDBGC_EncryptInit(
   CK_SESSION_HANDLE hSession,
   CK_MECHANISM_PTR  pMechanism,
   CK_OBJECT_HANDLE  hKey
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_EncryptInit);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_EncryptInit"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pMechanism = 0x%p", pMechanism));
-    PR_LOG(modlog, 3, ("  hKey = 0x%x", hKey));
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pMechanism, pMechanism));
+    log_handle(3, fmt_hKey, hKey);
     print_mechanism(pMechanism);
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_ENCRYPTINIT,&start);
     rv = module_functions->C_EncryptInit(hSession,
                                  pMechanism,
                                  hKey);
-    nssdbg_finish_time(&counter_C_EncryptInit,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_ENCRYPTINIT,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_Encrypt = 0;
-static PRInt32 calls_C_Encrypt = 0;
 CK_RV NSSDBGC_Encrypt(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       pData,
@@ -1028,29 +1613,26 @@ CK_RV NSSDBGC_Encrypt(
   CK_ULONG_PTR      pulEncryptedDataLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_Encrypt);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_Encrypt"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pData = 0x%p", pData));
-    PR_LOG(modlog, 3, ("  ulDataLen = %d", ulDataLen));
-    PR_LOG(modlog, 3, ("  pEncryptedData = 0x%p", pEncryptedData));
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pData, pData));
+    PR_LOG(modlog, 3, (fmt_ulDataLen, ulDataLen));
+    PR_LOG(modlog, 3, (fmt_pEncryptedData, pEncryptedData));
     PR_LOG(modlog, 3, ("  pulEncryptedDataLen = 0x%p", pulEncryptedDataLen));
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_ENCRYPT,&start);
     rv = module_functions->C_Encrypt(hSession,
                                  pData,
                                  ulDataLen,
                                  pEncryptedData,
                                  pulEncryptedDataLen);
-    nssdbg_finish_time(&counter_C_Encrypt,start);
+    nssdbg_finish_time(FUNC_C_ENCRYPT,start);
     PR_LOG(modlog, 4, ("  *pulEncryptedDataLen = 0x%x", *pulEncryptedDataLen));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_EncryptUpdate = 0;
-static PRInt32 calls_C_EncryptUpdate = 0;
 CK_RV NSSDBGC_EncryptUpdate(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       pPart,
@@ -1059,79 +1641,70 @@ CK_RV NSSDBGC_EncryptUpdate(
   CK_ULONG_PTR      pulEncryptedPartLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_EncryptUpdate);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_EncryptUpdate"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pPart = 0x%p", pPart));
-    PR_LOG(modlog, 3, ("  ulPartLen = %d", ulPartLen));
-    PR_LOG(modlog, 3, ("  pEncryptedPart = 0x%p", pEncryptedPart));
-    PR_LOG(modlog, 3, ("  pulEncryptedPartLen = 0x%p", pulEncryptedPartLen));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pPart, pPart));
+    PR_LOG(modlog, 3, (fmt_ulPartLen, ulPartLen));
+    PR_LOG(modlog, 3, (fmt_pEncryptedPart, pEncryptedPart));
+    PR_LOG(modlog, 3, (fmt_pulEncryptedPartLen, pulEncryptedPartLen));
+    nssdbg_start_time(FUNC_C_ENCRYPTUPDATE,&start);
     rv = module_functions->C_EncryptUpdate(hSession,
                                  pPart,
                                  ulPartLen,
                                  pEncryptedPart,
                                  pulEncryptedPartLen);
-    nssdbg_finish_time(&counter_C_EncryptUpdate,start);
-    PR_LOG(modlog, 4, ("  *pulEncryptedPartLen = 0x%x", *pulEncryptedPartLen));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_ENCRYPTUPDATE,start);
+    PR_LOG(modlog, 4, (fmt_spulEncryptedPartLen, *pulEncryptedPartLen));
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_EncryptFinal = 0;
-static PRInt32 calls_C_EncryptFinal = 0;
 CK_RV NSSDBGC_EncryptFinal(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       pLastEncryptedPart,
   CK_ULONG_PTR      pulLastEncryptedPartLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_EncryptFinal);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_EncryptFinal"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
+    log_handle(3, fmt_hSession, hSession);
     PR_LOG(modlog, 3, ("  pLastEncryptedPart = 0x%p", pLastEncryptedPart));
     PR_LOG(modlog, 3, ("  pulLastEncryptedPartLen = 0x%p", pulLastEncryptedPartLen));
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_ENCRYPTFINAL,&start);
     rv = module_functions->C_EncryptFinal(hSession,
                                  pLastEncryptedPart,
                                  pulLastEncryptedPartLen);
-    nssdbg_finish_time(&counter_C_EncryptFinal,start);
+    nssdbg_finish_time(FUNC_C_ENCRYPTFINAL,start);
     PR_LOG(modlog, 4, ("  *pulLastEncryptedPartLen = 0x%x", *pulLastEncryptedPartLen));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_DecryptInit = 0;
-static PRInt32 calls_C_DecryptInit = 0;
 CK_RV NSSDBGC_DecryptInit(
   CK_SESSION_HANDLE hSession,
   CK_MECHANISM_PTR  pMechanism,
   CK_OBJECT_HANDLE  hKey
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_DecryptInit);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_DecryptInit"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pMechanism = 0x%p", pMechanism));
-    PR_LOG(modlog, 3, ("  hKey = 0x%x", hKey));
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pMechanism, pMechanism));
+    log_handle(3, fmt_hKey, hKey);
     print_mechanism(pMechanism);
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_DECRYPTINIT,&start);
     rv = module_functions->C_DecryptInit(hSession,
                                  pMechanism,
                                  hKey);
-    nssdbg_finish_time(&counter_C_DecryptInit,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_DECRYPTINIT,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_Decrypt = 0;
-static PRInt32 calls_C_Decrypt = 0;
 CK_RV NSSDBGC_Decrypt(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       pEncryptedData,
@@ -1140,29 +1713,26 @@ CK_RV NSSDBGC_Decrypt(
   CK_ULONG_PTR      pulDataLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_Decrypt);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_Decrypt"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pEncryptedData = 0x%p", pEncryptedData));
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pEncryptedData, pEncryptedData));
     PR_LOG(modlog, 3, ("  ulEncryptedDataLen = %d", ulEncryptedDataLen));
-    PR_LOG(modlog, 3, ("  pData = 0x%p", pData));
-    PR_LOG(modlog, 3, ("  pulDataLen = 0x%p", pulDataLen));
-    start = PR_IntervalNow();
+    PR_LOG(modlog, 3, (fmt_pData, pData));
+    PR_LOG(modlog, 3, (fmt_pulDataLen, pulDataLen));
+    nssdbg_start_time(FUNC_C_DECRYPT,&start);
     rv = module_functions->C_Decrypt(hSession,
                                  pEncryptedData,
                                  ulEncryptedDataLen,
                                  pData,
                                  pulDataLen);
-    nssdbg_finish_time(&counter_C_Decrypt,start);
-    PR_LOG(modlog, 4, ("  *pulDataLen = 0x%x", *pulDataLen));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_DECRYPT,start);
+    PR_LOG(modlog, 4, (fmt_spulDataLen, *pulDataLen));
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_DecryptUpdate = 0;
-static PRInt32 calls_C_DecryptUpdate = 0;
 CK_RV NSSDBGC_DecryptUpdate(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       pEncryptedPart,
@@ -1171,76 +1741,67 @@ CK_RV NSSDBGC_DecryptUpdate(
   CK_ULONG_PTR      pulPartLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_DecryptUpdate);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_DecryptUpdate"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pEncryptedPart = 0x%p", pEncryptedPart));
-    PR_LOG(modlog, 3, ("  ulEncryptedPartLen = %d", ulEncryptedPartLen));
-    PR_LOG(modlog, 3, ("  pPart = 0x%p", pPart));
-    PR_LOG(modlog, 3, ("  pulPartLen = 0x%p", pulPartLen));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pEncryptedPart, pEncryptedPart));
+    PR_LOG(modlog, 3, (fmt_ulEncryptedPartLen, ulEncryptedPartLen));
+    PR_LOG(modlog, 3, (fmt_pPart, pPart));
+    PR_LOG(modlog, 3, (fmt_pulPartLen, pulPartLen));
+    nssdbg_start_time(FUNC_C_DECRYPTUPDATE,&start);
     rv = module_functions->C_DecryptUpdate(hSession,
                                  pEncryptedPart,
                                  ulEncryptedPartLen,
                                  pPart,
                                  pulPartLen);
-    nssdbg_finish_time(&counter_C_DecryptUpdate,start);
-    PR_LOG(modlog, 4, ("  *pulPartLen = 0x%x", *pulPartLen));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_DECRYPTUPDATE,start);
+    PR_LOG(modlog, 4, (fmt_spulPartLen, *pulPartLen));
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_DecryptFinal = 0;
-static PRInt32 calls_C_DecryptFinal = 0;
 CK_RV NSSDBGC_DecryptFinal(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       pLastPart,
   CK_ULONG_PTR      pulLastPartLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_DecryptFinal);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_DecryptFinal"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
+    log_handle(3, fmt_hSession, hSession);
     PR_LOG(modlog, 3, ("  pLastPart = 0x%p", pLastPart));
     PR_LOG(modlog, 3, ("  pulLastPartLen = 0x%p", pulLastPartLen));
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_DECRYPTFINAL,&start);
     rv = module_functions->C_DecryptFinal(hSession,
                                  pLastPart,
                                  pulLastPartLen);
-    nssdbg_finish_time(&counter_C_DecryptFinal,start);
+    nssdbg_finish_time(FUNC_C_DECRYPTFINAL,start);
     PR_LOG(modlog, 4, ("  *pulLastPartLen = 0x%x", *pulLastPartLen));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_DigestInit = 0;
-static PRInt32 calls_C_DigestInit = 0;
 CK_RV NSSDBGC_DigestInit(
   CK_SESSION_HANDLE hSession,
   CK_MECHANISM_PTR  pMechanism
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_DigestInit);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_DigestInit"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pMechanism = 0x%p", pMechanism));
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pMechanism, pMechanism));
     print_mechanism(pMechanism);
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_DIGESTINIT,&start);
     rv = module_functions->C_DigestInit(hSession,
                                  pMechanism);
-    nssdbg_finish_time(&counter_C_DigestInit,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_DIGESTINIT,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_Digest = 0;
-static PRInt32 calls_C_Digest = 0;
 CK_RV NSSDBGC_Digest(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       pData,
@@ -1249,124 +1810,108 @@ CK_RV NSSDBGC_Digest(
   CK_ULONG_PTR      pulDigestLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_Digest);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_Digest"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pData = 0x%p", pData));
-    PR_LOG(modlog, 3, ("  ulDataLen = %d", ulDataLen));
-    PR_LOG(modlog, 3, ("  pDigest = 0x%p", pDigest));
-    PR_LOG(modlog, 3, ("  pulDigestLen = 0x%p", pulDigestLen));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pData, pData));
+    PR_LOG(modlog, 3, (fmt_ulDataLen, ulDataLen));
+    PR_LOG(modlog, 3, (fmt_pDigest, pDigest));
+    PR_LOG(modlog, 3, (fmt_pulDigestLen, pulDigestLen));
+    nssdbg_start_time(FUNC_C_DIGEST,&start);
     rv = module_functions->C_Digest(hSession,
                                  pData,
                                  ulDataLen,
                                  pDigest,
                                  pulDigestLen);
-    nssdbg_finish_time(&counter_C_Digest,start);
-    PR_LOG(modlog, 4, ("  *pulDigestLen = 0x%x", *pulDigestLen));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_DIGEST,start);
+    PR_LOG(modlog, 4, (fmt_spulDigestLen, *pulDigestLen));
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_DigestUpdate = 0;
-static PRInt32 calls_C_DigestUpdate = 0;
 CK_RV NSSDBGC_DigestUpdate(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       pPart,
   CK_ULONG          ulPartLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_DigestUpdate);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_DigestUpdate"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pPart = 0x%p", pPart));
-    PR_LOG(modlog, 3, ("  ulPartLen = %d", ulPartLen));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pPart, pPart));
+    PR_LOG(modlog, 3, (fmt_ulPartLen, ulPartLen));
+    nssdbg_start_time(FUNC_C_DIGESTUPDATE,&start);
     rv = module_functions->C_DigestUpdate(hSession,
                                  pPart,
                                  ulPartLen);
-    nssdbg_finish_time(&counter_C_DigestUpdate,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_DIGESTUPDATE,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_DigestKey = 0;
-static PRInt32 calls_C_DigestKey = 0;
 CK_RV NSSDBGC_DigestKey(
   CK_SESSION_HANDLE hSession,
   CK_OBJECT_HANDLE  hKey
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_DigestKey);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_DigestKey"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  hKey = 0x%x", hKey));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    nssdbg_start_time(FUNC_C_DIGESTKEY,&start);
     rv = module_functions->C_DigestKey(hSession,
                                  hKey);
-    nssdbg_finish_time(&counter_C_DigestKey,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_DIGESTKEY,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_DigestFinal = 0;
-static PRInt32 calls_C_DigestFinal = 0;
 CK_RV NSSDBGC_DigestFinal(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       pDigest,
   CK_ULONG_PTR      pulDigestLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_DigestFinal);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_DigestFinal"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pDigest = 0x%p", pDigest));
-    PR_LOG(modlog, 3, ("  pulDigestLen = 0x%p", pulDigestLen));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pDigest, pDigest));
+    PR_LOG(modlog, 3, (fmt_pulDigestLen, pulDigestLen));
+    nssdbg_start_time(FUNC_C_DIGESTFINAL,&start);
     rv = module_functions->C_DigestFinal(hSession,
                                  pDigest,
                                  pulDigestLen);
-    nssdbg_finish_time(&counter_C_DigestFinal,start);
-    PR_LOG(modlog, 4, ("  *pulDigestLen = 0x%x", *pulDigestLen));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_DIGESTFINAL,start);
+    PR_LOG(modlog, 4, (fmt_spulDigestLen, *pulDigestLen));
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_SignInit = 0;
-static PRInt32 calls_C_SignInit = 0;
 CK_RV NSSDBGC_SignInit(
   CK_SESSION_HANDLE hSession,
   CK_MECHANISM_PTR  pMechanism,
   CK_OBJECT_HANDLE  hKey
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_SignInit);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_SignInit"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pMechanism = 0x%p", pMechanism));
-    PR_LOG(modlog, 3, ("  hKey = 0x%x", hKey));
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pMechanism, pMechanism));
+    log_handle(3, fmt_hKey, hKey);
     print_mechanism(pMechanism);
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_SIGNINIT,&start);
     rv = module_functions->C_SignInit(hSession,
                                  pMechanism,
                                  hKey);
-    nssdbg_finish_time(&counter_C_SignInit,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_SIGNINIT,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_Sign = 0;
-static PRInt32 calls_C_Sign = 0;
 CK_RV NSSDBGC_Sign(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       pData,
@@ -1375,103 +1920,91 @@ CK_RV NSSDBGC_Sign(
   CK_ULONG_PTR      pulSignatureLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_Sign);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_Sign"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pData = 0x%p", pData));
-    PR_LOG(modlog, 3, ("  ulDataLen = %d", ulDataLen));
-    PR_LOG(modlog, 3, ("  pSignature = 0x%p", pSignature));
-    PR_LOG(modlog, 3, ("  pulSignatureLen = 0x%p", pulSignatureLen));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pData, pData));
+    PR_LOG(modlog, 3, (fmt_ulDataLen, ulDataLen));
+    PR_LOG(modlog, 3, (fmt_pSignature, pSignature));
+    PR_LOG(modlog, 3, (fmt_pulSignatureLen, pulSignatureLen));
+    nssdbg_start_time(FUNC_C_SIGN,&start);
     rv = module_functions->C_Sign(hSession,
                                  pData,
                                  ulDataLen,
                                  pSignature,
                                  pulSignatureLen);
-    nssdbg_finish_time(&counter_C_Sign,start);
-    PR_LOG(modlog, 4, ("  *pulSignatureLen = 0x%x", *pulSignatureLen));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_SIGN,start);
+    PR_LOG(modlog, 4, (fmt_spulSignatureLen, *pulSignatureLen));
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_SignUpdate = 0;
-static PRInt32 calls_C_SignUpdate = 0;
 CK_RV NSSDBGC_SignUpdate(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       pPart,
   CK_ULONG          ulPartLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_SignUpdate);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_SignUpdate"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pPart = 0x%p", pPart));
-    PR_LOG(modlog, 3, ("  ulPartLen = %d", ulPartLen));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pPart, pPart));
+    PR_LOG(modlog, 3, (fmt_ulPartLen, ulPartLen));
+    nssdbg_start_time(FUNC_C_SIGNUPDATE,&start);
     rv = module_functions->C_SignUpdate(hSession,
                                  pPart,
                                  ulPartLen);
-    nssdbg_finish_time(&counter_C_SignUpdate,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_SIGNUPDATE,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_SignFinal = 0;
-static PRInt32 calls_C_SignFinal = 0;
 CK_RV NSSDBGC_SignFinal(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       pSignature,
   CK_ULONG_PTR      pulSignatureLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_SignFinal);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_SignFinal"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pSignature = 0x%p", pSignature));
-    PR_LOG(modlog, 3, ("  pulSignatureLen = 0x%p", pulSignatureLen));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pSignature, pSignature));
+    PR_LOG(modlog, 3, (fmt_pulSignatureLen, pulSignatureLen));
+    nssdbg_start_time(FUNC_C_SIGNFINAL,&start);
     rv = module_functions->C_SignFinal(hSession,
                                  pSignature,
                                  pulSignatureLen);
-    nssdbg_finish_time(&counter_C_SignFinal,start);
-    PR_LOG(modlog, 4, ("  *pulSignatureLen = 0x%x", *pulSignatureLen));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_SIGNFINAL,start);
+    PR_LOG(modlog, 4, (fmt_spulSignatureLen, *pulSignatureLen));
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_SignRecoverInit = 0;
-static PRInt32 calls_C_SignRecoverInit = 0;
 CK_RV NSSDBGC_SignRecoverInit(
   CK_SESSION_HANDLE hSession,
   CK_MECHANISM_PTR  pMechanism,
   CK_OBJECT_HANDLE  hKey
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_SignRecoverInit);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_SignRecoverInit"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pMechanism = 0x%p", pMechanism));
-    PR_LOG(modlog, 3, ("  hKey = 0x%x", hKey));
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pMechanism, pMechanism));
+    log_handle(3, fmt_hKey, hKey);
     print_mechanism(pMechanism);
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_SIGNRECOVERINIT,&start);
     rv = module_functions->C_SignRecoverInit(hSession,
                                  pMechanism,
                                  hKey);
-    nssdbg_finish_time(&counter_C_SignRecoverInit,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_SIGNRECOVERINIT,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_SignRecover = 0;
-static PRInt32 calls_C_SignRecover = 0;
 CK_RV NSSDBGC_SignRecover(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       pData,
@@ -1480,54 +2013,48 @@ CK_RV NSSDBGC_SignRecover(
   CK_ULONG_PTR      pulSignatureLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_SignRecover);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_SignRecover"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pData = 0x%p", pData));
-    PR_LOG(modlog, 3, ("  ulDataLen = %d", ulDataLen));
-    PR_LOG(modlog, 3, ("  pSignature = 0x%p", pSignature));
-    PR_LOG(modlog, 3, ("  pulSignatureLen = 0x%p", pulSignatureLen));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pData, pData));
+    PR_LOG(modlog, 3, (fmt_ulDataLen, ulDataLen));
+    PR_LOG(modlog, 3, (fmt_pSignature, pSignature));
+    PR_LOG(modlog, 3, (fmt_pulSignatureLen, pulSignatureLen));
+    nssdbg_start_time(FUNC_C_SIGNRECOVER,&start);
     rv = module_functions->C_SignRecover(hSession,
                                  pData,
                                  ulDataLen,
                                  pSignature,
                                  pulSignatureLen);
-    nssdbg_finish_time(&counter_C_SignRecover,start);
-    PR_LOG(modlog, 4, ("  *pulSignatureLen = 0x%x", *pulSignatureLen));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_SIGNRECOVER,start);
+    PR_LOG(modlog, 4, (fmt_spulSignatureLen, *pulSignatureLen));
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_VerifyInit = 0;
-static PRInt32 calls_C_VerifyInit = 0;
 CK_RV NSSDBGC_VerifyInit(
   CK_SESSION_HANDLE hSession,
   CK_MECHANISM_PTR  pMechanism,
   CK_OBJECT_HANDLE  hKey
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_VerifyInit);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_VerifyInit"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pMechanism = 0x%p", pMechanism));
-    PR_LOG(modlog, 3, ("  hKey = 0x%x", hKey));
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pMechanism, pMechanism));
+    log_handle(3, fmt_hKey, hKey);
     print_mechanism(pMechanism);
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_VERIFYINIT,&start);
     rv = module_functions->C_VerifyInit(hSession,
                                  pMechanism,
                                  hKey);
-    nssdbg_finish_time(&counter_C_VerifyInit,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_VERIFYINIT,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_Verify = 0;
-static PRInt32 calls_C_Verify = 0;
 CK_RV NSSDBGC_Verify(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       pData,
@@ -1536,101 +2063,89 @@ CK_RV NSSDBGC_Verify(
   CK_ULONG          ulSignatureLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_Verify);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_Verify"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pData = 0x%p", pData));
-    PR_LOG(modlog, 3, ("  ulDataLen = %d", ulDataLen));
-    PR_LOG(modlog, 3, ("  pSignature = 0x%p", pSignature));
-    PR_LOG(modlog, 3, ("  ulSignatureLen = %d", ulSignatureLen));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pData, pData));
+    PR_LOG(modlog, 3, (fmt_ulDataLen, ulDataLen));
+    PR_LOG(modlog, 3, (fmt_pSignature, pSignature));
+    PR_LOG(modlog, 3, (fmt_ulSignatureLen, ulSignatureLen));
+    nssdbg_start_time(FUNC_C_VERIFY,&start);
     rv = module_functions->C_Verify(hSession,
                                  pData,
                                  ulDataLen,
                                  pSignature,
                                  ulSignatureLen);
-    nssdbg_finish_time(&counter_C_Verify,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_VERIFY,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_VerifyUpdate = 0;
-static PRInt32 calls_C_VerifyUpdate = 0;
 CK_RV NSSDBGC_VerifyUpdate(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       pPart,
   CK_ULONG          ulPartLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_VerifyUpdate);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_VerifyUpdate"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pPart = 0x%p", pPart));
-    PR_LOG(modlog, 3, ("  ulPartLen = %d", ulPartLen));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pPart, pPart));
+    PR_LOG(modlog, 3, (fmt_ulPartLen, ulPartLen));
+    nssdbg_start_time(FUNC_C_VERIFYUPDATE,&start);
     rv = module_functions->C_VerifyUpdate(hSession,
                                  pPart,
                                  ulPartLen);
-    nssdbg_finish_time(&counter_C_VerifyUpdate,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_VERIFYUPDATE,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_VerifyFinal = 0;
-static PRInt32 calls_C_VerifyFinal = 0;
 CK_RV NSSDBGC_VerifyFinal(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       pSignature,
   CK_ULONG          ulSignatureLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_VerifyFinal);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_VerifyFinal"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pSignature = 0x%p", pSignature));
-    PR_LOG(modlog, 3, ("  ulSignatureLen = %d", ulSignatureLen));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pSignature, pSignature));
+    PR_LOG(modlog, 3, (fmt_ulSignatureLen, ulSignatureLen));
+    nssdbg_start_time(FUNC_C_VERIFYFINAL,&start);
     rv = module_functions->C_VerifyFinal(hSession,
                                  pSignature,
                                  ulSignatureLen);
-    nssdbg_finish_time(&counter_C_VerifyFinal,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_VERIFYFINAL,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_VerifyRecoverInit = 0;
-static PRInt32 calls_C_VerifyRecoverInit = 0;
 CK_RV NSSDBGC_VerifyRecoverInit(
   CK_SESSION_HANDLE hSession,
   CK_MECHANISM_PTR  pMechanism,
   CK_OBJECT_HANDLE  hKey
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_VerifyRecoverInit);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_VerifyRecoverInit"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pMechanism = 0x%p", pMechanism));
-    PR_LOG(modlog, 3, ("  hKey = 0x%x", hKey));
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pMechanism, pMechanism));
+    log_handle(3, fmt_hKey, hKey);
     print_mechanism(pMechanism);
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_VERIFYRECOVERINIT,&start);
     rv = module_functions->C_VerifyRecoverInit(hSession,
                                  pMechanism,
                                  hKey);
-    nssdbg_finish_time(&counter_C_VerifyRecoverInit,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_VERIFYRECOVERINIT,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_VerifyRecover = 0;
-static PRInt32 calls_C_VerifyRecover = 0;
 CK_RV NSSDBGC_VerifyRecover(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       pSignature,
@@ -1639,29 +2154,26 @@ CK_RV NSSDBGC_VerifyRecover(
   CK_ULONG_PTR      pulDataLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_VerifyRecover);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_VerifyRecover"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pSignature = 0x%p", pSignature));
-    PR_LOG(modlog, 3, ("  ulSignatureLen = %d", ulSignatureLen));
-    PR_LOG(modlog, 3, ("  pData = 0x%p", pData));
-    PR_LOG(modlog, 3, ("  pulDataLen = 0x%p", pulDataLen));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pSignature, pSignature));
+    PR_LOG(modlog, 3, (fmt_ulSignatureLen, ulSignatureLen));
+    PR_LOG(modlog, 3, (fmt_pData, pData));
+    PR_LOG(modlog, 3, (fmt_pulDataLen, pulDataLen));
+    nssdbg_start_time(FUNC_C_VERIFYRECOVER,&start);
     rv = module_functions->C_VerifyRecover(hSession,
                                  pSignature,
                                  ulSignatureLen,
                                  pData,
                                  pulDataLen);
-    nssdbg_finish_time(&counter_C_VerifyRecover,start);
-    PR_LOG(modlog, 4, ("  *pulDataLen = 0x%x", *pulDataLen));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_VERIFYRECOVER,start);
+    PR_LOG(modlog, 4, (fmt_spulDataLen, *pulDataLen));
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_DigestEncryptUpdate = 0;
-static PRInt32 calls_C_DigestEncryptUpdate = 0;
 CK_RV NSSDBGC_DigestEncryptUpdate(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       pPart,
@@ -1670,29 +2182,26 @@ CK_RV NSSDBGC_DigestEncryptUpdate(
   CK_ULONG_PTR      pulEncryptedPartLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_DigestEncryptUpdate);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_DigestEncryptUpdate"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pPart = 0x%p", pPart));
-    PR_LOG(modlog, 3, ("  ulPartLen = %d", ulPartLen));
-    PR_LOG(modlog, 3, ("  pEncryptedPart = 0x%p", pEncryptedPart));
-    PR_LOG(modlog, 3, ("  pulEncryptedPartLen = 0x%p", pulEncryptedPartLen));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pPart, pPart));
+    PR_LOG(modlog, 3, (fmt_ulPartLen, ulPartLen));
+    PR_LOG(modlog, 3, (fmt_pEncryptedPart, pEncryptedPart));
+    PR_LOG(modlog, 3, (fmt_pulEncryptedPartLen, pulEncryptedPartLen));
+    nssdbg_start_time(FUNC_C_DIGESTENCRYPTUPDATE,&start);
     rv = module_functions->C_DigestEncryptUpdate(hSession,
                                  pPart,
                                  ulPartLen,
                                  pEncryptedPart,
                                  pulEncryptedPartLen);
-    nssdbg_finish_time(&counter_C_DigestEncryptUpdate,start);
-    PR_LOG(modlog, 4, ("  *pulEncryptedPartLen = 0x%x", *pulEncryptedPartLen));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_DIGESTENCRYPTUPDATE,start);
+    PR_LOG(modlog, 4, (fmt_spulEncryptedPartLen, *pulEncryptedPartLen));
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_DecryptDigestUpdate = 0;
-static PRInt32 calls_C_DecryptDigestUpdate = 0;
 CK_RV NSSDBGC_DecryptDigestUpdate(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       pEncryptedPart,
@@ -1701,29 +2210,26 @@ CK_RV NSSDBGC_DecryptDigestUpdate(
   CK_ULONG_PTR      pulPartLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_DecryptDigestUpdate);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_DecryptDigestUpdate"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pEncryptedPart = 0x%p", pEncryptedPart));
-    PR_LOG(modlog, 3, ("  ulEncryptedPartLen = %d", ulEncryptedPartLen));
-    PR_LOG(modlog, 3, ("  pPart = 0x%p", pPart));
-    PR_LOG(modlog, 3, ("  pulPartLen = 0x%p", pulPartLen));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pEncryptedPart, pEncryptedPart));
+    PR_LOG(modlog, 3, (fmt_ulEncryptedPartLen, ulEncryptedPartLen));
+    PR_LOG(modlog, 3, (fmt_pPart, pPart));
+    PR_LOG(modlog, 3, (fmt_pulPartLen, pulPartLen));
+    nssdbg_start_time(FUNC_C_DECRYPTDIGESTUPDATE,&start);
     rv = module_functions->C_DecryptDigestUpdate(hSession,
                                  pEncryptedPart,
                                  ulEncryptedPartLen,
                                  pPart,
                                  pulPartLen);
-    nssdbg_finish_time(&counter_C_DecryptDigestUpdate,start);
-    PR_LOG(modlog, 4, ("  *pulPartLen = 0x%x", *pulPartLen));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_DECRYPTDIGESTUPDATE,start);
+    PR_LOG(modlog, 4, (fmt_spulPartLen, *pulPartLen));
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_SignEncryptUpdate = 0;
-static PRInt32 calls_C_SignEncryptUpdate = 0;
 CK_RV NSSDBGC_SignEncryptUpdate(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       pPart,
@@ -1732,29 +2238,26 @@ CK_RV NSSDBGC_SignEncryptUpdate(
   CK_ULONG_PTR      pulEncryptedPartLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_SignEncryptUpdate);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_SignEncryptUpdate"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pPart = 0x%p", pPart));
-    PR_LOG(modlog, 3, ("  ulPartLen = %d", ulPartLen));
-    PR_LOG(modlog, 3, ("  pEncryptedPart = 0x%p", pEncryptedPart));
-    PR_LOG(modlog, 3, ("  pulEncryptedPartLen = 0x%p", pulEncryptedPartLen));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pPart, pPart));
+    PR_LOG(modlog, 3, (fmt_ulPartLen, ulPartLen));
+    PR_LOG(modlog, 3, (fmt_pEncryptedPart, pEncryptedPart));
+    PR_LOG(modlog, 3, (fmt_pulEncryptedPartLen, pulEncryptedPartLen));
+    nssdbg_start_time(FUNC_C_SIGNENCRYPTUPDATE,&start);
     rv = module_functions->C_SignEncryptUpdate(hSession,
                                  pPart,
                                  ulPartLen,
                                  pEncryptedPart,
                                  pulEncryptedPartLen);
-    nssdbg_finish_time(&counter_C_SignEncryptUpdate,start);
-    PR_LOG(modlog, 4, ("  *pulEncryptedPartLen = 0x%x", *pulEncryptedPartLen));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_SIGNENCRYPTUPDATE,start);
+    PR_LOG(modlog, 4, (fmt_spulEncryptedPartLen, *pulEncryptedPartLen));
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_DecryptVerifyUpdate = 0;
-static PRInt32 calls_C_DecryptVerifyUpdate = 0;
 CK_RV NSSDBGC_DecryptVerifyUpdate(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       pEncryptedPart,
@@ -1763,29 +2266,26 @@ CK_RV NSSDBGC_DecryptVerifyUpdate(
   CK_ULONG_PTR      pulPartLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_DecryptVerifyUpdate);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_DecryptVerifyUpdate"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pEncryptedPart = 0x%p", pEncryptedPart));
-    PR_LOG(modlog, 3, ("  ulEncryptedPartLen = %d", ulEncryptedPartLen));
-    PR_LOG(modlog, 3, ("  pPart = 0x%p", pPart));
-    PR_LOG(modlog, 3, ("  pulPartLen = 0x%p", pulPartLen));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pEncryptedPart, pEncryptedPart));
+    PR_LOG(modlog, 3, (fmt_ulEncryptedPartLen, ulEncryptedPartLen));
+    PR_LOG(modlog, 3, (fmt_pPart, pPart));
+    PR_LOG(modlog, 3, (fmt_pulPartLen, pulPartLen));
+    nssdbg_start_time(FUNC_C_DECRYPTVERIFYUPDATE,&start);
     rv = module_functions->C_DecryptVerifyUpdate(hSession,
                                  pEncryptedPart,
                                  ulEncryptedPartLen,
                                  pPart,
                                  pulPartLen);
-    nssdbg_finish_time(&counter_C_DecryptVerifyUpdate,start);
-    PR_LOG(modlog, 4, ("  *pulPartLen = 0x%x", *pulPartLen));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_DECRYPTVERIFYUPDATE,start);
+    PR_LOG(modlog, 4, (fmt_spulPartLen, *pulPartLen));
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_GenerateKey = 0;
-static PRInt32 calls_C_GenerateKey = 0;
 CK_RV NSSDBGC_GenerateKey(
   CK_SESSION_HANDLE    hSession,
   CK_MECHANISM_PTR     pMechanism,
@@ -1794,31 +2294,28 @@ CK_RV NSSDBGC_GenerateKey(
   CK_OBJECT_HANDLE_PTR phKey
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_GenerateKey);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_GenerateKey"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pMechanism = 0x%p", pMechanism));
-    PR_LOG(modlog, 3, ("  pTemplate = 0x%p", pTemplate));
-    PR_LOG(modlog, 3, ("  ulCount = %d", ulCount));
-    PR_LOG(modlog, 3, ("  phKey = 0x%p", phKey));
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pMechanism, pMechanism));
+    PR_LOG(modlog, 3, (fmt_pTemplate, pTemplate));
+    PR_LOG(modlog, 3, (fmt_ulCount, ulCount));
+    PR_LOG(modlog, 3, (fmt_phKey, phKey));
     print_template(pTemplate, ulCount);
     print_mechanism(pMechanism);
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_GENERATEKEY,&start);
     rv = module_functions->C_GenerateKey(hSession,
                                  pMechanism,
                                  pTemplate,
                                  ulCount,
                                  phKey);
-    nssdbg_finish_time(&counter_C_GenerateKey,start);
-    PR_LOG(modlog, 4, ("  *phKey = 0x%x", *phKey));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_GENERATEKEY,start);
+    log_handle(4, fmt_sphKey, *phKey);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_GenerateKeyPair = 0;
-static PRInt32 calls_C_GenerateKeyPair = 0;
 CK_RV NSSDBGC_GenerateKeyPair(
   CK_SESSION_HANDLE    hSession,
   CK_MECHANISM_PTR     pMechanism,
@@ -1830,22 +2327,21 @@ CK_RV NSSDBGC_GenerateKeyPair(
   CK_OBJECT_HANDLE_PTR phPrivateKey
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_GenerateKeyPair);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_GenerateKeyPair"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pMechanism = 0x%p", pMechanism));
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pMechanism, pMechanism));
     PR_LOG(modlog, 3, ("  pPublicKeyTemplate = 0x%p", pPublicKeyTemplate));
     PR_LOG(modlog, 3, ("  ulPublicKeyAttributeCount = %d", ulPublicKeyAttributeCount));
     PR_LOG(modlog, 3, ("  pPrivateKeyTemplate = 0x%p", pPrivateKeyTemplate));
     PR_LOG(modlog, 3, ("  ulPrivateKeyAttributeCount = %d", ulPrivateKeyAttributeCount));
     PR_LOG(modlog, 3, ("  phPublicKey = 0x%p", phPublicKey));
-    PR_LOG(modlog, 3, ("  phPrivateKey = 0x%p", phPrivateKey));
     print_template(pPublicKeyTemplate, ulPublicKeyAttributeCount);
+    PR_LOG(modlog, 3, ("  phPrivateKey = 0x%p", phPrivateKey));
     print_template(pPrivateKeyTemplate, ulPrivateKeyAttributeCount);
     print_mechanism(pMechanism);
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_GENERATEKEYPAIR,&start);
     rv = module_functions->C_GenerateKeyPair(hSession,
                                  pMechanism,
                                  pPublicKeyTemplate,
@@ -1854,15 +2350,13 @@ CK_RV NSSDBGC_GenerateKeyPair(
                                  ulPrivateKeyAttributeCount,
                                  phPublicKey,
                                  phPrivateKey);
-    nssdbg_finish_time(&counter_C_GenerateKeyPair,start);
-    PR_LOG(modlog, 4, ("  *phPublicKey = 0x%x", *phPublicKey));
-    PR_LOG(modlog, 4, ("  *phPrivateKey = 0x%x", *phPrivateKey));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_GENERATEKEYPAIR,start);
+    log_handle(4, "  *phPublicKey = 0x%x", *phPublicKey);
+    log_handle(4, "  *phPrivateKey = 0x%x", *phPrivateKey);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_WrapKey = 0;
-static PRInt32 calls_C_WrapKey = 0;
 CK_RV NSSDBGC_WrapKey(
   CK_SESSION_HANDLE hSession,
   CK_MECHANISM_PTR  pMechanism,
@@ -1872,32 +2366,29 @@ CK_RV NSSDBGC_WrapKey(
   CK_ULONG_PTR      pulWrappedKeyLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_WrapKey);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_WrapKey"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pMechanism = 0x%p", pMechanism));
-    PR_LOG(modlog, 3, ("  hWrappingKey = 0x%x", hWrappingKey));
-    PR_LOG(modlog, 3, ("  hKey = 0x%x", hKey));
-    PR_LOG(modlog, 3, ("  pWrappedKey = 0x%p", pWrappedKey));
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pMechanism, pMechanism));
+    log_handle(3, "  hWrappingKey = 0x%x", hWrappingKey);
+    log_handle(3, fmt_hKey, hKey);
+    PR_LOG(modlog, 3, (fmt_pWrappedKey, pWrappedKey));
     PR_LOG(modlog, 3, ("  pulWrappedKeyLen = 0x%p", pulWrappedKeyLen));
     print_mechanism(pMechanism);
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_WRAPKEY,&start);
     rv = module_functions->C_WrapKey(hSession,
                                  pMechanism,
                                  hWrappingKey,
                                  hKey,
                                  pWrappedKey,
                                  pulWrappedKeyLen);
-    nssdbg_finish_time(&counter_C_WrapKey,start);
+    nssdbg_finish_time(FUNC_C_WRAPKEY,start);
     PR_LOG(modlog, 4, ("  *pulWrappedKeyLen = 0x%x", *pulWrappedKeyLen));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_UnwrapKey = 0;
-static PRInt32 calls_C_UnwrapKey = 0;
 CK_RV NSSDBGC_UnwrapKey(
   CK_SESSION_HANDLE    hSession,
   CK_MECHANISM_PTR     pMechanism,
@@ -1909,21 +2400,20 @@ CK_RV NSSDBGC_UnwrapKey(
   CK_OBJECT_HANDLE_PTR phKey
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_UnwrapKey);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_UnwrapKey"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pMechanism = 0x%p", pMechanism));
-    PR_LOG(modlog, 3, ("  hUnwrappingKey = 0x%x", hUnwrappingKey));
-    PR_LOG(modlog, 3, ("  pWrappedKey = 0x%p", pWrappedKey));
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pMechanism, pMechanism));
+    log_handle(3, "  hUnwrappingKey = 0x%x", hUnwrappingKey);
+    PR_LOG(modlog, 3, (fmt_pWrappedKey, pWrappedKey));
     PR_LOG(modlog, 3, ("  ulWrappedKeyLen = %d", ulWrappedKeyLen));
-    PR_LOG(modlog, 3, ("  pTemplate = 0x%p", pTemplate));
-    PR_LOG(modlog, 3, ("  ulAttributeCount = %d", ulAttributeCount));
-    PR_LOG(modlog, 3, ("  phKey = 0x%p", phKey));
+    PR_LOG(modlog, 3, (fmt_pTemplate, pTemplate));
+    PR_LOG(modlog, 3, (fmt_ulAttributeCount, ulAttributeCount));
+    PR_LOG(modlog, 3, (fmt_phKey, phKey));
     print_template(pTemplate, ulAttributeCount);
     print_mechanism(pMechanism);
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_UNWRAPKEY,&start);
     rv = module_functions->C_UnwrapKey(hSession,
                                  pMechanism,
                                  hUnwrappingKey,
@@ -1932,14 +2422,12 @@ CK_RV NSSDBGC_UnwrapKey(
                                  pTemplate,
                                  ulAttributeCount,
                                  phKey);
-    nssdbg_finish_time(&counter_C_UnwrapKey,start);
-    PR_LOG(modlog, 4, ("  *phKey = 0x%x", *phKey));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_UNWRAPKEY,start);
+    log_handle(4, fmt_sphKey, *phKey);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_DeriveKey = 0;
-static PRInt32 calls_C_DeriveKey = 0;
 CK_RV NSSDBGC_DeriveKey(
   CK_SESSION_HANDLE    hSession,
   CK_MECHANISM_PTR     pMechanism,
@@ -1949,136 +2437,120 @@ CK_RV NSSDBGC_DeriveKey(
   CK_OBJECT_HANDLE_PTR phKey
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_DeriveKey);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_DeriveKey"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    PR_LOG(modlog, 3, ("  pMechanism = 0x%p", pMechanism));
-    PR_LOG(modlog, 3, ("  hBaseKey = 0x%x", hBaseKey));
-    PR_LOG(modlog, 3, ("  pTemplate = 0x%p", pTemplate));
-    PR_LOG(modlog, 3, ("  ulAttributeCount = %d", ulAttributeCount));
-    PR_LOG(modlog, 3, ("  phKey = 0x%p", phKey));
+    log_handle(3, fmt_hSession, hSession);
+    PR_LOG(modlog, 3, (fmt_pMechanism, pMechanism));
+    log_handle(3, "  hBaseKey = 0x%x", hBaseKey);
+    PR_LOG(modlog, 3, (fmt_pTemplate, pTemplate));
+    PR_LOG(modlog, 3, (fmt_ulAttributeCount, ulAttributeCount));
+    PR_LOG(modlog, 3, (fmt_phKey, phKey));
     print_template(pTemplate, ulAttributeCount);
     print_mechanism(pMechanism);
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_DERIVEKEY,&start);
     rv = module_functions->C_DeriveKey(hSession,
                                  pMechanism,
                                  hBaseKey,
                                  pTemplate,
                                  ulAttributeCount,
                                  phKey);
-    nssdbg_finish_time(&counter_C_DeriveKey,start);
-    PR_LOG(modlog, 4, ("  *phKey = 0x%x", *phKey));
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_DERIVEKEY,start);
+    log_handle(4, fmt_sphKey, *phKey);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_SeedRandom = 0;
-static PRInt32 calls_C_SeedRandom = 0;
 CK_RV NSSDBGC_SeedRandom(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       pSeed,
   CK_ULONG          ulSeedLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_SeedRandom);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_SeedRandom"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
+    log_handle(3, fmt_hSession, hSession);
     PR_LOG(modlog, 3, ("  pSeed = 0x%p", pSeed));
     PR_LOG(modlog, 3, ("  ulSeedLen = %d", ulSeedLen));
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_SEEDRANDOM,&start);
     rv = module_functions->C_SeedRandom(hSession,
                                  pSeed,
                                  ulSeedLen);
-    nssdbg_finish_time(&counter_C_SeedRandom,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_SEEDRANDOM,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_GenerateRandom = 0;
-static PRInt32 calls_C_GenerateRandom = 0;
 CK_RV NSSDBGC_GenerateRandom(
   CK_SESSION_HANDLE hSession,
   CK_BYTE_PTR       RandomData,
   CK_ULONG          ulRandomLen
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_GenerateRandom);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_GenerateRandom"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
+    log_handle(3, fmt_hSession, hSession);
     PR_LOG(modlog, 3, ("  RandomData = 0x%p", RandomData));
     PR_LOG(modlog, 3, ("  ulRandomLen = %d", ulRandomLen));
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_GENERATERANDOM,&start);
     rv = module_functions->C_GenerateRandom(hSession,
                                  RandomData,
                                  ulRandomLen);
-    nssdbg_finish_time(&counter_C_GenerateRandom,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_GENERATERANDOM,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_GetFunctionStatus = 0;
-static PRInt32 calls_C_GetFunctionStatus = 0;
 CK_RV NSSDBGC_GetFunctionStatus(
   CK_SESSION_HANDLE hSession
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_GetFunctionStatus);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_GetFunctionStatus"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    nssdbg_start_time(FUNC_C_GETFUNCTIONSTATUS,&start);
     rv = module_functions->C_GetFunctionStatus(hSession);
-    nssdbg_finish_time(&counter_C_GetFunctionStatus,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_GETFUNCTIONSTATUS,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_CancelFunction = 0;
-static PRInt32 calls_C_CancelFunction = 0;
 CK_RV NSSDBGC_CancelFunction(
   CK_SESSION_HANDLE hSession
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_CancelFunction);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_CancelFunction"));
-    PR_LOG(modlog, 3, ("  hSession = 0x%x", hSession));
-    start = PR_IntervalNow();
+    log_handle(3, fmt_hSession, hSession);
+    nssdbg_start_time(FUNC_C_CANCELFUNCTION,&start);
     rv = module_functions->C_CancelFunction(hSession);
-    nssdbg_finish_time(&counter_C_CancelFunction,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_CANCELFUNCTION,start);
+    log_rv(rv);
     return rv;
 }
 
-static PRInt32 counter_C_WaitForSlotEvent = 0;
-static PRInt32 calls_C_WaitForSlotEvent = 0;
 CK_RV NSSDBGC_WaitForSlotEvent(
   CK_FLAGS       flags,
   CK_SLOT_ID_PTR pSlot,
   CK_VOID_PTR    pRserved
 )
 {
-    CK_RV rv;
-    PRIntervalTime start;
-    PR_AtomicIncrement(&calls_C_WaitForSlotEvent);
+    COMMON_DEFINITIONS;
+
     PR_LOG(modlog, 1, ("C_WaitForSlotEvent"));
-    PR_LOG(modlog, 3, ("  flags = 0x%x", flags));
+    PR_LOG(modlog, 3, (fmt_flags, flags));
     PR_LOG(modlog, 3, ("  pSlot = 0x%p", pSlot));
     PR_LOG(modlog, 3, ("  pRserved = 0x%p", pRserved));
-    start = PR_IntervalNow();
+    nssdbg_start_time(FUNC_C_WAITFORSLOTEVENT,&start);
     rv = module_functions->C_WaitForSlotEvent(flags,
                                  pSlot,
                                  pRserved);
-    nssdbg_finish_time(&counter_C_WaitForSlotEvent,start);
-    PR_LOG(modlog, 1, ("  rv = 0x%x\n", rv));
+    nssdbg_finish_time(FUNC_C_WAITFORSLOTEVENT,start);
+    log_rv(rv);
     return rv;
 }
 
@@ -2159,15 +2631,63 @@ CK_FUNCTION_LIST_PTR nss_InsertDeviceLog(
     return &debug_functions;
 }
 
+/*
+ * scale the time factor up accordingly.
+ * This routine tries to keep at least 2 significant figures on output.
+ *    If the time is 0, then indicate that with a 'z' for units.
+ *    If the time is greater than 10 minutes, output the time in minutes.
+ *    If the time is less than 10 minutes but greater than 10 seconds output 
+ * the time in second.
+ *    If the time is less than 10 seconds but greater than 10 milliseconds 
+ * output * the time in millisecond.
+ *    If the time is less than 10 milliseconds but greater than 0 ticks output 
+ * the time in microsecond.
+ *
+ */
+static PRUint32 getPrintTime(PRIntervalTime time ,char **type)
+{
+	PRUint32 prTime;
+
+        /* detect a programming error by outputting 'bu' to the output stream
+	 * rather than crashing */
+ 	*type = "bug";
+	if (time == 0) {
+	    *type = "z";
+	    return 0;
+	}
+
+	prTime = PR_IntervalToSeconds(time);
+
+	if (prTime >= 600) {
+	    *type="m";
+	    return prTime/60;
+	}
+        if (prTime >= 10) {
+	    *type="s";
+	    return prTime;
+	} 
+	prTime = PR_IntervalToMilliseconds(time);
+        if (prTime >= 10) {
+	    *type="ms";
+	    return prTime;
+	} 
+ 	*type = "us";
+	return PR_IntervalToMicroseconds(time);
+}
+
 static void print_final_statistics(void)
 {
     int total_calls = 0;
-    PRInt32 total_time = 0;
+    PRIntervalTime total_time = 0;
+    PRUint32 pr_total_time;
+    char *type;
     char *fname;
     FILE *outfile = NULL;
+    int i;
 
     fname = PR_GetEnv("NSS_OUTPUT_FILE");
     if (fname) {
+	/* need to add an optional process id to the filename */
 	outfile = fopen(fname,"w+");
     }
     if (!outfile) {
@@ -2175,692 +2695,40 @@ static void print_final_statistics(void)
     }
 	
 
-    fprintf(outfile,"%-25s %10s %11s %10s %10s\n", "Function", "# Calls", "Time (ms)", "Avg. (ms)", "% Time");
-    fprintf(outfile,"\n");
-    total_calls += calls_C_CancelFunction;
-    total_time += counter_C_CancelFunction;
-    total_calls += calls_C_CloseAllSessions;
-    total_time += counter_C_CloseAllSessions;
-    total_calls += calls_C_CloseSession;
-    total_time += counter_C_CloseSession;
-    total_calls += calls_C_CopyObject;
-    total_time += counter_C_CopyObject;
-    total_calls += calls_C_CreateObject;
-    total_time += counter_C_CreateObject;
-    total_calls += calls_C_Decrypt;
-    total_time += counter_C_Decrypt;
-    total_calls += calls_C_DecryptDigestUpdate;
-    total_time += counter_C_DecryptDigestUpdate;
-    total_calls += calls_C_DecryptFinal;
-    total_time += counter_C_DecryptFinal;
-    total_calls += calls_C_DecryptInit;
-    total_time += counter_C_DecryptInit;
-    total_calls += calls_C_DecryptUpdate;
-    total_time += counter_C_DecryptUpdate;
-    total_calls += calls_C_DecryptVerifyUpdate;
-    total_time += counter_C_DecryptVerifyUpdate;
-    total_calls += calls_C_DeriveKey;
-    total_time += counter_C_DeriveKey;
-    total_calls += calls_C_DestroyObject;
-    total_time += counter_C_DestroyObject;
-    total_calls += calls_C_Digest;
-    total_time += counter_C_Digest;
-    total_calls += calls_C_DigestEncryptUpdate;
-    total_time += counter_C_DigestEncryptUpdate;
-    total_calls += calls_C_DigestFinal;
-    total_time += counter_C_DigestFinal;
-    total_calls += calls_C_DigestInit;
-    total_time += counter_C_DigestInit;
-    total_calls += calls_C_DigestKey;
-    total_time += counter_C_DigestKey;
-    total_calls += calls_C_DigestUpdate;
-    total_time += counter_C_DigestUpdate;
-    total_calls += calls_C_Encrypt;
-    total_time += counter_C_Encrypt;
-    total_calls += calls_C_EncryptFinal;
-    total_time += counter_C_EncryptFinal;
-    total_calls += calls_C_EncryptInit;
-    total_time += counter_C_EncryptInit;
-    total_calls += calls_C_EncryptUpdate;
-    total_time += counter_C_EncryptUpdate;
-    total_calls += calls_C_Finalize;
-    total_time += counter_C_Finalize;
-    total_calls += calls_C_FindObjects;
-    total_time += counter_C_FindObjects;
-    total_calls += calls_C_FindObjectsFinal;
-    total_time += counter_C_FindObjectsFinal;
-    total_calls += calls_C_FindObjectsInit;
-    total_time += counter_C_FindObjectsInit;
-    total_calls += calls_C_GenerateKey;
-    total_time += counter_C_GenerateKey;
-    total_calls += calls_C_GenerateKeyPair;
-    total_time += counter_C_GenerateKeyPair;
-    total_calls += calls_C_GenerateRandom;
-    total_time += counter_C_GenerateRandom;
-    total_calls += calls_C_GetAttributeValue;
-    total_time += counter_C_GetAttributeValue;
-    total_calls += calls_C_GetFunctionList;
-    total_time += counter_C_GetFunctionList;
-    total_calls += calls_C_GetFunctionStatus;
-    total_time += counter_C_GetFunctionStatus;
-    total_calls += calls_C_GetInfo;
-    total_time += counter_C_GetInfo;
-    total_calls += calls_C_GetMechanismInfo;
-    total_time += counter_C_GetMechanismInfo;
-    total_calls += calls_C_GetMechanismList;
-    total_time += counter_C_GetMechanismList;
-    total_calls += calls_C_GetObjectSize;
-    total_time += counter_C_GetObjectSize;
-    total_calls += calls_C_GetOperationState;
-    total_time += counter_C_GetOperationState;
-    total_calls += calls_C_GetSessionInfo;
-    total_time += counter_C_GetSessionInfo;
-    total_calls += calls_C_GetSlotInfo;
-    total_time += counter_C_GetSlotInfo;
-    total_calls += calls_C_GetSlotList;
-    total_time += counter_C_GetSlotList;
-    total_calls += calls_C_GetTokenInfo;
-    total_time += counter_C_GetTokenInfo;
-    total_calls += calls_C_InitPIN;
-    total_time += counter_C_InitPIN;
-    total_calls += calls_C_InitToken;
-    total_time += counter_C_InitToken;
-    total_calls += calls_C_Initialize;
-    total_time += counter_C_Initialize;
-    total_calls += calls_C_Login;
-    total_time += counter_C_Login;
-    total_calls += calls_C_Logout;
-    total_time += counter_C_Logout;
-    total_calls += calls_C_OpenSession;
-    total_time += counter_C_OpenSession;
-    total_calls += calls_C_SeedRandom;
-    total_time += counter_C_SeedRandom;
-    total_calls += calls_C_SetAttributeValue;
-    total_time += counter_C_SetAttributeValue;
-    total_calls += calls_C_SetOperationState;
-    total_time += counter_C_SetOperationState;
-    total_calls += calls_C_SetPIN;
-    total_time += counter_C_SetPIN;
-    total_calls += calls_C_Sign;
-    total_time += counter_C_Sign;
-    total_calls += calls_C_SignEncryptUpdate;
-    total_time += counter_C_SignEncryptUpdate;
-    total_calls += calls_C_SignFinal;
-    total_time += counter_C_SignFinal;
-    total_calls += calls_C_SignInit;
-    total_time += counter_C_SignInit;
-    total_calls += calls_C_SignRecover;
-    total_time += counter_C_SignRecover;
-    total_calls += calls_C_SignRecoverInit;
-    total_time += counter_C_SignRecoverInit;
-    total_calls += calls_C_SignUpdate;
-    total_time += counter_C_SignUpdate;
-    total_calls += calls_C_UnwrapKey;
-    total_time += counter_C_UnwrapKey;
-    total_calls += calls_C_Verify;
-    total_time += counter_C_Verify;
-    total_calls += calls_C_VerifyFinal;
-    total_time += counter_C_VerifyFinal;
-    total_calls += calls_C_VerifyInit;
-    total_time += counter_C_VerifyInit;
-    total_calls += calls_C_VerifyRecover;
-    total_time += counter_C_VerifyRecover;
-    total_calls += calls_C_VerifyRecoverInit;
-    total_time += counter_C_VerifyRecoverInit;
-    total_calls += calls_C_VerifyUpdate;
-    total_time += counter_C_VerifyUpdate;
-    total_calls += calls_C_WaitForSlotEvent;
-    total_time += counter_C_WaitForSlotEvent;
-    total_calls += calls_C_WrapKey;
-    total_time += counter_C_WrapKey;
-    fprintf(outfile,"%-25s %10d %10d ", "C_CancelFunction", calls_C_CancelFunction, counter_C_CancelFunction);
-    if (calls_C_CancelFunction > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_CancelFunction / (float)calls_C_CancelFunction);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_CancelFunction / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_CloseAllSessions", calls_C_CloseAllSessions, counter_C_CloseAllSessions);
-    if (calls_C_CloseAllSessions > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_CloseAllSessions / (float)calls_C_CloseAllSessions);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_CloseAllSessions / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_CloseSession", calls_C_CloseSession, counter_C_CloseSession);
-    if (calls_C_CloseSession > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_CloseSession / (float)calls_C_CloseSession);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_CloseSession / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_CopyObject", calls_C_CopyObject, counter_C_CopyObject);
-    if (calls_C_CopyObject > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_CopyObject / (float)calls_C_CopyObject);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_CopyObject / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_CreateObject", calls_C_CreateObject, counter_C_CreateObject);
-    if (calls_C_CreateObject > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_CreateObject / (float)calls_C_CreateObject);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_CreateObject / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_Decrypt", calls_C_Decrypt, counter_C_Decrypt);
-    if (calls_C_Decrypt > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_Decrypt / (float)calls_C_Decrypt);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_Decrypt / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_DecryptDigestUpdate", calls_C_DecryptDigestUpdate, counter_C_DecryptDigestUpdate);
-    if (calls_C_DecryptDigestUpdate > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_DecryptDigestUpdate / (float)calls_C_DecryptDigestUpdate);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_DecryptDigestUpdate / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_DecryptFinal", calls_C_DecryptFinal, counter_C_DecryptFinal);
-    if (calls_C_DecryptFinal > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_DecryptFinal / (float)calls_C_DecryptFinal);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_DecryptFinal / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_DecryptInit", calls_C_DecryptInit, counter_C_DecryptInit);
-    if (calls_C_DecryptInit > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_DecryptInit / (float)calls_C_DecryptInit);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_DecryptInit / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_DecryptUpdate", calls_C_DecryptUpdate, counter_C_DecryptUpdate);
-    if (calls_C_DecryptUpdate > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_DecryptUpdate / (float)calls_C_DecryptUpdate);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_DecryptUpdate / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_DecryptVerifyUpdate", calls_C_DecryptVerifyUpdate, counter_C_DecryptVerifyUpdate);
-    if (calls_C_DecryptVerifyUpdate > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_DecryptVerifyUpdate / (float)calls_C_DecryptVerifyUpdate);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_DecryptVerifyUpdate / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_DeriveKey", calls_C_DeriveKey, counter_C_DeriveKey);
-    if (calls_C_DeriveKey > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_DeriveKey / (float)calls_C_DeriveKey);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_DeriveKey / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_DestroyObject", calls_C_DestroyObject, counter_C_DestroyObject);
-    if (calls_C_DestroyObject > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_DestroyObject / (float)calls_C_DestroyObject);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_DestroyObject / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_Digest", calls_C_Digest, counter_C_Digest);
-    if (calls_C_Digest > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_Digest / (float)calls_C_Digest);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_Digest / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_DigestEncryptUpdate", calls_C_DigestEncryptUpdate, counter_C_DigestEncryptUpdate);
-    if (calls_C_DigestEncryptUpdate > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_DigestEncryptUpdate / (float)calls_C_DigestEncryptUpdate);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_DigestEncryptUpdate / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_DigestFinal", calls_C_DigestFinal, counter_C_DigestFinal);
-    if (calls_C_DigestFinal > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_DigestFinal / (float)calls_C_DigestFinal);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_DigestFinal / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_DigestInit", calls_C_DigestInit, counter_C_DigestInit);
-    if (calls_C_DigestInit > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_DigestInit / (float)calls_C_DigestInit);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_DigestInit / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_DigestKey", calls_C_DigestKey, counter_C_DigestKey);
-    if (calls_C_DigestKey > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_DigestKey / (float)calls_C_DigestKey);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_DigestKey / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_DigestUpdate", calls_C_DigestUpdate, counter_C_DigestUpdate);
-    if (calls_C_DigestUpdate > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_DigestUpdate / (float)calls_C_DigestUpdate);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_DigestUpdate / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_Encrypt", calls_C_Encrypt, counter_C_Encrypt);
-    if (calls_C_Encrypt > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_Encrypt / (float)calls_C_Encrypt);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_Encrypt / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_EncryptFinal", calls_C_EncryptFinal, counter_C_EncryptFinal);
-    if (calls_C_EncryptFinal > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_EncryptFinal / (float)calls_C_EncryptFinal);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_EncryptFinal / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_EncryptInit", calls_C_EncryptInit, counter_C_EncryptInit);
-    if (calls_C_EncryptInit > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_EncryptInit / (float)calls_C_EncryptInit);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_EncryptInit / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_EncryptUpdate", calls_C_EncryptUpdate, counter_C_EncryptUpdate);
-    if (calls_C_EncryptUpdate > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_EncryptUpdate / (float)calls_C_EncryptUpdate);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_EncryptUpdate / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_Finalize", calls_C_Finalize, counter_C_Finalize);
-    if (calls_C_Finalize > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_Finalize / (float)calls_C_Finalize);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_Finalize / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_FindObjects", calls_C_FindObjects, counter_C_FindObjects);
-    if (calls_C_FindObjects > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_FindObjects / (float)calls_C_FindObjects);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_FindObjects / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_FindObjectsFinal", calls_C_FindObjectsFinal, counter_C_FindObjectsFinal);
-    if (calls_C_FindObjectsFinal > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_FindObjectsFinal / (float)calls_C_FindObjectsFinal);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_FindObjectsFinal / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_FindObjectsInit", calls_C_FindObjectsInit, counter_C_FindObjectsInit);
-    if (calls_C_FindObjectsInit > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_FindObjectsInit / (float)calls_C_FindObjectsInit);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_FindObjectsInit / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_GenerateKey", calls_C_GenerateKey, counter_C_GenerateKey);
-    if (calls_C_GenerateKey > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_GenerateKey / (float)calls_C_GenerateKey);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_GenerateKey / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_GenerateKeyPair", calls_C_GenerateKeyPair, counter_C_GenerateKeyPair);
-    if (calls_C_GenerateKeyPair > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_GenerateKeyPair / (float)calls_C_GenerateKeyPair);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_GenerateKeyPair / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_GenerateRandom", calls_C_GenerateRandom, counter_C_GenerateRandom);
-    if (calls_C_GenerateRandom > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_GenerateRandom / (float)calls_C_GenerateRandom);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_GenerateRandom / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_GetAttributeValue", calls_C_GetAttributeValue, counter_C_GetAttributeValue);
-    if (calls_C_GetAttributeValue > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_GetAttributeValue / (float)calls_C_GetAttributeValue);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_GetAttributeValue / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_GetFunctionList", calls_C_GetFunctionList, counter_C_GetFunctionList);
-    if (calls_C_GetFunctionList > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_GetFunctionList / (float)calls_C_GetFunctionList);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_GetFunctionList / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_GetFunctionStatus", calls_C_GetFunctionStatus, counter_C_GetFunctionStatus);
-    if (calls_C_GetFunctionStatus > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_GetFunctionStatus / (float)calls_C_GetFunctionStatus);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_GetFunctionStatus / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_GetInfo", calls_C_GetInfo, counter_C_GetInfo);
-    if (calls_C_GetInfo > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_GetInfo / (float)calls_C_GetInfo);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_GetInfo / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_GetMechanismInfo", calls_C_GetMechanismInfo, counter_C_GetMechanismInfo);
-    if (calls_C_GetMechanismInfo > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_GetMechanismInfo / (float)calls_C_GetMechanismInfo);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_GetMechanismInfo / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_GetMechanismList", calls_C_GetMechanismList, counter_C_GetMechanismList);
-    if (calls_C_GetMechanismList > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_GetMechanismList / (float)calls_C_GetMechanismList);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_GetMechanismList / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_GetObjectSize", calls_C_GetObjectSize, counter_C_GetObjectSize);
-    if (calls_C_GetObjectSize > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_GetObjectSize / (float)calls_C_GetObjectSize);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_GetObjectSize / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_GetOperationState", calls_C_GetOperationState, counter_C_GetOperationState);
-    if (calls_C_GetOperationState > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_GetOperationState / (float)calls_C_GetOperationState);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_GetOperationState / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_GetSessionInfo", calls_C_GetSessionInfo, counter_C_GetSessionInfo);
-    if (calls_C_GetSessionInfo > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_GetSessionInfo / (float)calls_C_GetSessionInfo);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_GetSessionInfo / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_GetSlotInfo", calls_C_GetSlotInfo, counter_C_GetSlotInfo);
-    if (calls_C_GetSlotInfo > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_GetSlotInfo / (float)calls_C_GetSlotInfo);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_GetSlotInfo / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_GetSlotList", calls_C_GetSlotList, counter_C_GetSlotList);
-    if (calls_C_GetSlotList > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_GetSlotList / (float)calls_C_GetSlotList);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_GetSlotList / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_GetTokenInfo", calls_C_GetTokenInfo, counter_C_GetTokenInfo);
-    if (calls_C_GetTokenInfo > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_GetTokenInfo / (float)calls_C_GetTokenInfo);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_GetTokenInfo / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_InitPIN", calls_C_InitPIN, counter_C_InitPIN);
-    if (calls_C_InitPIN > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_InitPIN / (float)calls_C_InitPIN);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_InitPIN / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_InitToken", calls_C_InitToken, counter_C_InitToken);
-    if (calls_C_InitToken > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_InitToken / (float)calls_C_InitToken);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_InitToken / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_Initialize", calls_C_Initialize, counter_C_Initialize);
-    if (calls_C_Initialize > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_Initialize / (float)calls_C_Initialize);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_Initialize / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_Login", calls_C_Login, counter_C_Login);
-    if (calls_C_Login > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_Login / (float)calls_C_Login);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_Login / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_Logout", calls_C_Logout, counter_C_Logout);
-    if (calls_C_Logout > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_Logout / (float)calls_C_Logout);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_Logout / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_OpenSession", calls_C_OpenSession, counter_C_OpenSession);
-    if (calls_C_OpenSession > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_OpenSession / (float)calls_C_OpenSession);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_OpenSession / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_SeedRandom", calls_C_SeedRandom, counter_C_SeedRandom);
-    if (calls_C_SeedRandom > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_SeedRandom / (float)calls_C_SeedRandom);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_SeedRandom / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_SetAttributeValue", calls_C_SetAttributeValue, counter_C_SetAttributeValue);
-    if (calls_C_SetAttributeValue > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_SetAttributeValue / (float)calls_C_SetAttributeValue);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_SetAttributeValue / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_SetOperationState", calls_C_SetOperationState, counter_C_SetOperationState);
-    if (calls_C_SetOperationState > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_SetOperationState / (float)calls_C_SetOperationState);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_SetOperationState / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_SetPIN", calls_C_SetPIN, counter_C_SetPIN);
-    if (calls_C_SetPIN > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_SetPIN / (float)calls_C_SetPIN);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_SetPIN / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_Sign", calls_C_Sign, counter_C_Sign);
-    if (calls_C_Sign > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_Sign / (float)calls_C_Sign);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_Sign / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_SignEncryptUpdate", calls_C_SignEncryptUpdate, counter_C_SignEncryptUpdate);
-    if (calls_C_SignEncryptUpdate > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_SignEncryptUpdate / (float)calls_C_SignEncryptUpdate);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_SignEncryptUpdate / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_SignFinal", calls_C_SignFinal, counter_C_SignFinal);
-    if (calls_C_SignFinal > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_SignFinal / (float)calls_C_SignFinal);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_SignFinal / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_SignInit", calls_C_SignInit, counter_C_SignInit);
-    if (calls_C_SignInit > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_SignInit / (float)calls_C_SignInit);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_SignInit / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_SignRecover", calls_C_SignRecover, counter_C_SignRecover);
-    if (calls_C_SignRecover > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_SignRecover / (float)calls_C_SignRecover);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_SignRecover / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_SignRecoverInit", calls_C_SignRecoverInit, counter_C_SignRecoverInit);
-    if (calls_C_SignRecoverInit > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_SignRecoverInit / (float)calls_C_SignRecoverInit);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_SignRecoverInit / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_SignUpdate", calls_C_SignUpdate, counter_C_SignUpdate);
-    if (calls_C_SignUpdate > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_SignUpdate / (float)calls_C_SignUpdate);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_SignUpdate / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_UnwrapKey", calls_C_UnwrapKey, counter_C_UnwrapKey);
-    if (calls_C_UnwrapKey > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_UnwrapKey / (float)calls_C_UnwrapKey);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
+    fprintf(outfile,"%-25s %10s %12s %12s %10s\n", "Function", "# Calls", 
+				"Time", "Avg.", "% Time");
+    fprintf(outfile,"\n");
+    for (i=0; i < nssdbg_prof_size; i++) {
+	total_calls += nssdbg_prof_data[i].calls;
+	total_time += nssdbg_prof_data[i].time;
+    }
+    for (i=0; i < nssdbg_prof_size; i++) {
+	PRIntervalTime time = nssdbg_prof_data[i].time;
+	PRUint32 usTime = PR_IntervalToMicroseconds(time);
+	PRUint32 prTime = 0;
+	PRUint32 calls = nssdbg_prof_data[i].calls;
+	/* don't print out functions that weren't even called */
+	if (calls == 0) {
+	    continue;
+	}
+
+	prTime = getPrintTime(time,&type);
+
+	fprintf(outfile,"%-25s %10d %10d%2s ", nssdbg_prof_data[i].function, 
+						calls, prTime, type);
+	/* for now always output the average in microseconds */
+	fprintf(outfile,"%10.2f%2s", (float)usTime / (float)calls, "us" );
+	fprintf(outfile,"%10.2f%%", ((float)time / (float)total_time) * 100);
+	fprintf(outfile,"\n");
     }
-    fprintf(outfile,"%10.2f", (float)counter_C_UnwrapKey / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_Verify", calls_C_Verify, counter_C_Verify);
-    if (calls_C_Verify > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_Verify / (float)calls_C_Verify);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_Verify / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_VerifyFinal", calls_C_VerifyFinal, counter_C_VerifyFinal);
-    if (calls_C_VerifyFinal > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_VerifyFinal / (float)calls_C_VerifyFinal);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_VerifyFinal / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_VerifyInit", calls_C_VerifyInit, counter_C_VerifyInit);
-    if (calls_C_VerifyInit > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_VerifyInit / (float)calls_C_VerifyInit);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_VerifyInit / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_VerifyRecover", calls_C_VerifyRecover, counter_C_VerifyRecover);
-    if (calls_C_VerifyRecover > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_VerifyRecover / (float)calls_C_VerifyRecover);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_VerifyRecover / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_VerifyRecoverInit", calls_C_VerifyRecoverInit, counter_C_VerifyRecoverInit);
-    if (calls_C_VerifyRecoverInit > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_VerifyRecoverInit / (float)calls_C_VerifyRecoverInit);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_VerifyRecoverInit / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_VerifyUpdate", calls_C_VerifyUpdate, counter_C_VerifyUpdate);
-    if (calls_C_VerifyUpdate > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_VerifyUpdate / (float)calls_C_VerifyUpdate);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_VerifyUpdate / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_WaitForSlotEvent", calls_C_WaitForSlotEvent, counter_C_WaitForSlotEvent);
-    if (calls_C_WaitForSlotEvent > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_WaitForSlotEvent / (float)calls_C_WaitForSlotEvent);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_WaitForSlotEvent / (float)total_time * 100);
-    fprintf(outfile,"\n");
-    fprintf(outfile,"%-25s %10d %10d ", "C_WrapKey", calls_C_WrapKey, counter_C_WrapKey);
-    if (calls_C_WrapKey > 0) {
-        fprintf(outfile,"%10.2f", (float)counter_C_WrapKey / (float)calls_C_WrapKey);
-    } else {
-        fprintf(outfile,"%10.2f", 0.0);
-    }
-    fprintf(outfile,"%10.2f", (float)counter_C_WrapKey / (float)total_time * 100);
-    fprintf(outfile,"\n");
     fprintf(outfile,"\n");
 
-    fprintf(outfile,"%25s %10d %10d\n", "Totals", total_calls, total_time);
-    fprintf(outfile,"\n\nMaximum number of concurrent open sessions: %d\n\n", maxOpenSessions);
+    pr_total_time = getPrintTime(total_time,&type);
+
+    fprintf(outfile,"%25s %10d %10d%2s\n", "Totals", total_calls, 
+							pr_total_time, type);
+    fprintf(outfile,"\n\nMaximum number of concurrent open sessions: %d\n\n",
+							 maxOpenSessions);
     fflush (outfile);
     if (outfile != stdout) {
 	fclose(outfile);

@@ -1,36 +1,39 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 /*
  * ntmisc.c
@@ -65,8 +68,6 @@ PRIntn _PR_MD_PUT_ENV(const char *name)
  **************************************************************************
  */
 
-#include <sys/timeb.h>
-
 /*
  *-----------------------------------------------------------------------
  *
@@ -93,71 +94,6 @@ PR_Now(void)
 }
 
 /*
- * The following code works around a bug in NT (Netscape Bugsplat
- * Defect ID 47942).
- *
- * In Windows NT 3.51 and 4.0, if the local time zone does not practice
- * daylight savings time, e.g., Arizona, Taiwan, and Japan, the global
- * variables that _ftime() and localtime() depend on have the wrong
- * default values:
- *     _tzname[0]  "PST"
- *     _tzname[1]  "PDT"
- *     _daylight   1
- *     _timezone   28800
- *
- * So at startup time, we need to invoke _PR_Win32InitTimeZone(), which
- * on NT sets these global variables to the correct values (obtained by
- * calling GetTimeZoneInformation().
- */
-
-#include <time.h>     /* for _tzname, _daylight, _timezone */
-
-void
-_PR_Win32InitTimeZone(void)
-{
-    OSVERSIONINFO version;
-    TIME_ZONE_INFORMATION tzinfo;
-
-    version.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
-    if (GetVersionEx(&version) != FALSE) {
-        /* Only Windows NT needs this hack */
-        if (version.dwPlatformId != VER_PLATFORM_WIN32_NT) {
-            return;
-        }
-    }
-
-    if (GetTimeZoneInformation(&tzinfo) == 0xffffffff) {
-        return;  /* not much we can do if this failed */
-    }
- 
-    /* 
-     * I feel nervous about modifying these globals.  I hope that no
-     * other thread is reading or modifying these globals simultaneously
-     * during nspr initialization.
-     *
-     * I am assuming that _tzname[0] and _tzname[1] point to static buffers
-     * and that the buffers are at least 32 byte long.  My experiments show
-     * this is true, but of course this is undocumented.  --wtc
-     *
-     * Convert time zone names from WCHAR to CHAR and copy them to
-     * the static buffers pointed to by _tzname[0] and _tzname[1].
-     * Ignore conversion errors, because it is _timezone and _daylight
-     * that _ftime() and localtime() really depend on.
-     */
-
-    WideCharToMultiByte(CP_ACP, 0, tzinfo.StandardName, -1, _tzname[0],
-            32, NULL, NULL);
-    WideCharToMultiByte(CP_ACP, 0, tzinfo.DaylightName, -1, _tzname[1],
-            32, NULL, NULL);
-
-    /* _timezone is in seconds.  tzinfo.Bias is in minutes. */
-
-    _timezone = tzinfo.Bias * 60;
-    _daylight = tzinfo.DaylightBias ? 1 : 0;
-    return;
-}
-
-/*
  ***********************************************************************
  ***********************************************************************
  *
@@ -176,7 +112,7 @@ static int assembleCmdLine(char *const *argv, char **cmdLine)
 {
     char *const *arg;
     char *p, *q;
-    int cmdLineSize;
+    size_t cmdLineSize;
     int numBackslashes;
     int i;
     int argNeedQuotes;
@@ -197,7 +133,7 @@ static int assembleCmdLine(char *const *argv, char **cmdLine)
                 + 2                      /* we quote every argument */
                 + 1;                     /* space in between, or final null */
     }
-    p = *cmdLine = PR_MALLOC(cmdLineSize);
+    p = *cmdLine = PR_MALLOC((PRUint32) cmdLineSize);
     if (p == NULL) {
         return -1;
     }
@@ -211,8 +147,11 @@ static int assembleCmdLine(char *const *argv, char **cmdLine)
         numBackslashes = 0;
         argNeedQuotes = 0;
 
-        /* If the argument contains white space, it needs to be quoted. */
-        if (strpbrk(*arg, " \f\n\r\t\v")) {
+        /*
+         * If the argument is empty or contains white space, it needs to
+         * be quoted.
+         */
+        if (**arg == '\0' || strpbrk(*arg, " \f\n\r\t\v")) {
             argNeedQuotes = 1;
         }
 
@@ -290,7 +229,7 @@ static int assembleEnvBlock(char **envp, char **envBlock)
     char **env;
     char *curEnv;
     char *cwdStart, *cwdEnd;
-    int envBlockSize;
+    size_t envBlockSize;
 
     if (envp == NULL) {
         *envBlock = NULL;
@@ -325,7 +264,7 @@ static int assembleEnvBlock(char **envp, char **envBlock)
     }
     envBlockSize++;
 
-    p = *envBlock = PR_MALLOC(envBlockSize);
+    p = *envBlock = PR_MALLOC((PRUint32) envBlockSize);
     if (p == NULL) {
         FreeEnvironmentStrings(curEnv);
         return -1;
@@ -371,6 +310,7 @@ PRProcess * _PR_CreateWindowsProcess(
     char **newEnvp = NULL;
     const char *cwd = NULL; /* current working directory */
     PRProcess *proc = NULL;
+    PRBool hasFdInheritBuffer;
 
     proc = PR_NEW(PRProcess);
     if (!proc) {
@@ -387,33 +327,34 @@ PRProcess * _PR_CreateWindowsProcess(
      * If attr->fdInheritBuffer is not NULL, we need to insert
      * it into the envp array, so envp cannot be NULL.
      */
-    if ((envp == NULL) && attr && attr->fdInheritBuffer) {
+    hasFdInheritBuffer = (attr && attr->fdInheritBuffer);
+    if ((envp == NULL) && hasFdInheritBuffer) {
         envp = environ;
     }
 
     if (envp != NULL) {
         int idx;
         int numEnv;
-        int newEnvpSize;
+        PRBool found = PR_FALSE;
 
         numEnv = 0;
         while (envp[numEnv]) {
             numEnv++;
         }
-        newEnvpSize = numEnv + 1;  /* terminating null pointer */
-        if (attr && attr->fdInheritBuffer) {
-            newEnvpSize++;
-        }
-        newEnvp = (char **) PR_MALLOC(newEnvpSize * sizeof(char *));
+        newEnvp = (char **) PR_MALLOC((numEnv + 2) * sizeof(char *));
         for (idx = 0; idx < numEnv; idx++) {
             newEnvp[idx] = envp[idx];
+            if (hasFdInheritBuffer && !found
+                    && !strncmp(newEnvp[idx], "NSPR_INHERIT_FDS=", 17)) {
+                newEnvp[idx] = attr->fdInheritBuffer;
+                found = PR_TRUE;
+            }
         }
-        if (attr && attr->fdInheritBuffer) {
+        if (hasFdInheritBuffer && !found) {
             newEnvp[idx++] = attr->fdInheritBuffer;
         }
         newEnvp[idx] = NULL;
-        qsort((void *) newEnvp, (size_t) (newEnvpSize - 1),
-                sizeof(char *), compare);
+        qsort((void *) newEnvp, (size_t) idx, sizeof(char *), compare);
     }
     if (assembleEnvBlock(newEnvp, &envBlock) == -1) {
         PR_SetError(PR_OUT_OF_MEMORY_ERROR, 0);
@@ -647,7 +588,7 @@ PRStatus _MD_CreateFileMap(PRFileMap *fmap, PRInt64 size)
 {
     DWORD dwHi, dwLo;
     DWORD flProtect;
-    PRUint32    osfd;
+    PROsfd osfd;
 
     osfd = ( fmap->fd == (PRFileDesc*)-1 )?  -1 : fmap->fd->secret->md.osfd;
 
@@ -688,8 +629,8 @@ PRInt32 _MD_GetMemMapAlignment(void)
     return info.dwAllocationGranularity;
 }
 
-#include "prlog.h"
 extern PRLogModuleInfo *_pr_shma_lm;
+
 void * _MD_MemMap(
     PRFileMap *fmap,
     PROffset64 offset,
@@ -838,7 +779,7 @@ PR_StackPush(PRStack *stack, PRStackElem *stack_elem)
   if (*tos == (void *) -1)
     goto retry;
   
-  __asm__("lock xchg %0,%1"
+  __asm__("xchg %0,%1"
           : "=r" (tmp), "=m"(*tos)
           : "0" (-1), "m"(*tos));
   
@@ -879,7 +820,7 @@ PR_StackPop(PRStack *stack)
   if (*tos == (void *) -1)
     goto retry;
   
-  __asm__("lock xchg %0,%1"
+  __asm__("xchg %0,%1"
           : "=r" (tmp), "=m"(*tos)
           : "0" (-1), "m"(*tos));
 

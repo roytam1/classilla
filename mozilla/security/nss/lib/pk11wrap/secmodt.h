@@ -1,59 +1,36 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- *
- * Definition of Security Module Data Structure. There is a separate data
- * structure for each loaded PKCS #11 module.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #ifndef _SECMODT_H_
 #define _SECMODT_H_ 1
 
+#include "nssrwlkt.h"
+#include "nssilckt.h"
 #include "secoid.h"
 #include "secasn1.h"
+#include "pkcs11t.h"
+#include "utilmodt.h"
+
+SEC_BEGIN_PROTOS
 
 /* find a better home for these... */
 extern const SEC_ASN1Template SECKEY_PointerToEncryptedPrivateKeyInfoTemplate[];
-extern SEC_ASN1TemplateChooser NSS_Get_SECKEY_PointerToEncryptedPrivateKeyInfoTemplate;
+SEC_ASN1_CHOOSER_DECLARE(SECKEY_PointerToEncryptedPrivateKeyInfoTemplate)
 extern const SEC_ASN1Template SECKEY_EncryptedPrivateKeyInfoTemplate[];
+SEC_ASN1_CHOOSER_DECLARE(SECKEY_EncryptedPrivateKeyInfoTemplate)
 extern const SEC_ASN1Template SECKEY_PrivateKeyInfoTemplate[];
-extern SEC_ASN1TemplateChooser NSS_Get_SECKEY_PrivateKeyInfoTemplate;
+SEC_ASN1_CHOOSER_DECLARE(SECKEY_PrivateKeyInfoTemplate)
 extern const SEC_ASN1Template SECKEY_PointerToPrivateKeyInfoTemplate[];
-extern SEC_ASN1TemplateChooser NSS_Get_SECKEY_PointerToPrivateKeyInfoTemplate;
+SEC_ASN1_CHOOSER_DECLARE(SECKEY_PointerToPrivateKeyInfoTemplate)
+
+SEC_END_PROTOS
 
 /* PKCS11 needs to be included */
 typedef struct SECMODModuleStr SECMODModule;
 typedef struct SECMODModuleListStr SECMODModuleList;
-typedef struct SECMODListLockStr SECMODListLock; /* defined in secmodi.h */
+typedef NSSRWLock SECMODListLock;
 typedef struct PK11SlotInfoStr PK11SlotInfo; /* defined in secmodti.h */
-typedef struct PK11PreSlotInfoStr PK11PreSlotInfo; /* defined in secmodti.h */
+typedef struct NSSUTILPreSlotInfoStr PK11PreSlotInfo; /* defined in secmodti.h */
 typedef struct PK11SymKeyStr PK11SymKey; /* defined in secmodti.h */
 typedef struct PK11ContextStr PK11Context; /* defined in secmodti.h */
 typedef struct PK11SlotListStr PK11SlotList;
@@ -61,9 +38,11 @@ typedef struct PK11SlotListElementStr PK11SlotListElement;
 typedef struct PK11RSAGenParamsStr PK11RSAGenParams;
 typedef unsigned long SECMODModuleID;
 typedef struct PK11DefaultArrayEntryStr PK11DefaultArrayEntry;
+typedef struct PK11GenericObjectStr PK11GenericObject;
+typedef void (*PK11FreeDataFunc)(void *);
 
 struct SECMODModuleStr {
-    PRArenaPool	*arena;
+    PLArenaPool	*arena;
     PRBool	internal;	/* true of internally linked modules, false
 				 * for the loaded modules */
     PRBool	loaded;		/* Set to true if module has been loaded */
@@ -74,9 +53,9 @@ struct SECMODModuleStr {
     void	*library;	/* pointer to the library. opaque. used only by
 				 * pk11load.c */
     void	*functionList; /* The PKCS #11 function table */
-    void	*refLock;	/* only used pk11db.c */
+    PZLock	*refLock;	/* only used pk11db.c */
     int		refCount;	/* Module reference count */
-    PK11SlotInfo **slots;	/* array of slot points attatched to this mod*/
+    PK11SlotInfo **slots;	/* array of slot points attached to this mod*/
     int		slotCount;	/* count of slot in above array */
     PK11PreSlotInfo *slotInfo;	/* special info about slots default settings */
     int		slotInfoCount;  /* count */
@@ -91,7 +70,26 @@ struct SECMODModuleStr {
     PRBool	moduleDBOnly;	/* this module only has lists of PKCS #11 modules */
     int		trustOrder;	/* order for this module's certificate trust rollup */
     int		cipherOrder;	/* order for cipher operations */
+    unsigned long evControlMask; /* control the running and shutdown of slot
+				  * events (SECMOD_WaitForAnyTokenEvent) */
+    CK_VERSION  cryptokiVersion; /* version of this library */
 };
+
+/* evControlMask flags */
+/*
+ * These bits tell the current state of a SECMOD_WaitForAnyTokenEvent.
+ *
+ * SECMOD_WAIT_PKCS11_EVENT - we're waiting in the PKCS #11 module in
+ *  C_WaitForSlotEvent().
+ * SECMOD_WAIT_SIMULATED_EVENT - we're waiting in the NSS simulation code
+ *  which polls for token insertion and removal events.
+ * SECMOD_END_WAIT - SECMOD_CancelWait has been called while the module is
+ *  waiting in SECMOD_WaitForAnyTokenEvent. SECMOD_WaitForAnyTokenEvent
+ *  should return immediately to it's caller.
+ */ 
+#define SECMOD_END_WAIT 	    0x01
+#define SECMOD_WAIT_SIMULATED_EVENT 0x02 
+#define SECMOD_WAIT_PKCS11_EVENT    0x04
 
 struct SECMODModuleListStr {
     SECMODModuleList	*next;
@@ -101,7 +99,7 @@ struct SECMODModuleListStr {
 struct PK11SlotListStr {
     PK11SlotListElement *head;
     PK11SlotListElement *tail;
-    void *lock;
+    PZLock *lock;
 };
 
 struct PK11SlotListElementStr {
@@ -117,10 +115,15 @@ struct PK11RSAGenParamsStr {
 };
 
 typedef enum {
-     PK11CertListUnique = 0,
-     PK11CertListUser = 1,
-     PK11CertListRootUnique = 2,
-     PK11CertListCA = 3
+     PK11CertListUnique = 0,     /* get one instance of all certs */
+     PK11CertListUser = 1,       /* get all instances of user certs */
+     PK11CertListRootUnique = 2, /* get one instance of CA certs without a private key.
+                                  * deprecated. Use PK11CertListCAUnique
+                                  */
+     PK11CertListCA = 3,         /* get all instances of CA certs */
+     PK11CertListCAUnique = 4,   /* get one instance of CA certs */
+     PK11CertListUserUnique = 5, /* get one instance of user certs */
+     PK11CertListAll = 6         /* get all instances of all certs */
 } PK11CertListType;
 
 /*
@@ -135,35 +138,141 @@ struct PK11DefaultArrayEntryStr {
 			      * whole pkcs 11 world to use this header */
 };
 
+/*
+ * PK11AttrFlags
+ *
+ * A 32-bit bitmask of PK11_ATTR_XXX flags
+ */
+typedef PRUint32 PK11AttrFlags;
 
-#define SECMOD_RSA_FLAG 	0x00000001L
-#define SECMOD_DSA_FLAG 	0x00000002L
-#define SECMOD_RC2_FLAG 	0x00000004L
-#define SECMOD_RC4_FLAG 	0x00000008L
-#define SECMOD_DES_FLAG 	0x00000010L
-#define SECMOD_DH_FLAG	 	0x00000020L
-#define SECMOD_FORTEZZA_FLAG	0x00000040L
-#define SECMOD_RC5_FLAG		0x00000080L
-#define SECMOD_SHA1_FLAG	0x00000100L
-#define SECMOD_SHA256_FLAG  0x00004000L
-#define SECMOD_MD5_FLAG		0x00000200L
-#define SECMOD_MD2_FLAG		0x00000400L
-#define SECMOD_SSL_FLAG		0x00000800L
-#define SECMOD_TLS_FLAG		0x00001000L
-#define SECMOD_AES_FLAG 	0x00002000L
-/* reserved bit for future, do not use */
-#define SECMOD_RESERVED_FLAG    0X08000000L
-#define SECMOD_FRIENDLY_FLAG	0x10000000L
-#define SECMOD_RANDOM_FLAG	0x80000000L
+/*
+ * PK11_ATTR_XXX
+ *
+ * The following PK11_ATTR_XXX bitflags are used to specify
+ * PKCS #11 object attributes that have Boolean values.  Some NSS
+ * functions have a "PK11AttrFlags attrFlags" parameter whose value
+ * is the logical OR of these bitflags.  NSS use these bitflags on
+ * private keys or secret keys.  Some of these bitflags also apply
+ * to the public keys associated with the private keys.
+ *
+ * For each PKCS #11 object attribute, we need two bitflags to
+ * specify not only "true" and "false" but also "default".  For
+ * example, PK11_ATTR_PRIVATE and PK11_ATTR_PUBLIC control the
+ * CKA_PRIVATE attribute.  If PK11_ATTR_PRIVATE is set, we add
+ *     { CKA_PRIVATE, &cktrue, sizeof(CK_BBOOL) }
+ * to the template.  If PK11_ATTR_PUBLIC is set, we add
+ *     { CKA_PRIVATE, &ckfalse, sizeof(CK_BBOOL) }
+ * to the template.  If neither flag is set, we don't add any
+ * CKA_PRIVATE entry to the template.
+ */
 
-/* need to make SECMOD and PK11 prefixes consistant. */
-#define PK11_OWN_PW_DEFAULTS 0x20000000L
-#define PK11_DISABLE_FLAG    0x40000000L
+/*
+ * Attributes for PKCS #11 storage objects, which include not only
+ * keys but also certificates and domain parameters.
+ */
 
-/* FAKE PKCS #11 defines */
-#define CKM_FAKE_RANDOM       0x80000efeL
-#define CKM_INVALID_MECHANISM 0xffffffffL
-#define CKA_DIGEST            0x81000000L
+/*
+ * PK11_ATTR_TOKEN
+ * PK11_ATTR_SESSION
+ *
+ * These two flags determine whether the object is a token or
+ * session object.
+ *
+ * These two flags are related and cannot both be set.
+ * If the PK11_ATTR_TOKEN flag is set, the object is a token
+ * object.  If the PK11_ATTR_SESSION flag is set, the object is
+ * a session object.  If neither flag is set, the object is *by
+ * default* a session object.
+ *
+ * These two flags specify the value of the PKCS #11 CKA_TOKEN
+ * attribute.
+ */
+#define PK11_ATTR_TOKEN         0x00000001L
+#define PK11_ATTR_SESSION       0x00000002L
+
+/*
+ * PK11_ATTR_PRIVATE
+ * PK11_ATTR_PUBLIC
+ *
+ * These two flags determine whether the object is a private or
+ * public object.  A user may not access a private object until the
+ * user has authenticated to the token.
+ *
+ * These two flags are related and cannot both be set.
+ * If the PK11_ATTR_PRIVATE flag is set, the object is a private
+ * object.  If the PK11_ATTR_PUBLIC flag is set, the object is a
+ * public object.  If neither flag is set, it is token-specific
+ * whether the object is private or public.
+ *
+ * These two flags specify the value of the PKCS #11 CKA_PRIVATE
+ * attribute.  NSS only uses this attribute on private and secret
+ * keys, so public keys created by NSS get the token-specific
+ * default value of the CKA_PRIVATE attribute.
+ */
+#define PK11_ATTR_PRIVATE       0x00000004L
+#define PK11_ATTR_PUBLIC        0x00000008L
+
+/*
+ * PK11_ATTR_MODIFIABLE
+ * PK11_ATTR_UNMODIFIABLE
+ *
+ * These two flags determine whether the object is modifiable or
+ * read-only.
+ *
+ * These two flags are related and cannot both be set.
+ * If the PK11_ATTR_MODIFIABLE flag is set, the object can be
+ * modified.  If the PK11_ATTR_UNMODIFIABLE flag is set, the object
+ * is read-only.  If neither flag is set, the object is *by default*
+ * modifiable.
+ *
+ * These two flags specify the value of the PKCS #11 CKA_MODIFIABLE
+ * attribute.
+ */
+#define PK11_ATTR_MODIFIABLE    0x00000010L
+#define PK11_ATTR_UNMODIFIABLE  0x00000020L
+
+/* Attributes for PKCS #11 key objects. */
+
+/*
+ * PK11_ATTR_SENSITIVE
+ * PK11_ATTR_INSENSITIVE
+ *
+ * These two flags are related and cannot both be set.
+ * If the PK11_ATTR_SENSITIVE flag is set, the key is sensitive.
+ * If the PK11_ATTR_INSENSITIVE flag is set, the key is not
+ * sensitive.  If neither flag is set, it is token-specific whether
+ * the key is sensitive or not.
+ *
+ * If a key is sensitive, certain attributes of the key cannot be
+ * revealed in plaintext outside the token.
+ *
+ * This flag specifies the value of the PKCS #11 CKA_SENSITIVE
+ * attribute.  Although the default value of the CKA_SENSITIVE
+ * attribute for secret keys is CK_FALSE per PKCS #11, some FIPS
+ * tokens set the default value to CK_TRUE because only CK_TRUE
+ * is allowed.  So in practice the default value of this attribute
+ * is token-specific, hence the need for two bitflags.
+ */
+#define PK11_ATTR_SENSITIVE     0x00000040L
+#define PK11_ATTR_INSENSITIVE   0x00000080L
+
+/*
+ * PK11_ATTR_EXTRACTABLE
+ * PK11_ATTR_UNEXTRACTABLE
+ *
+ * These two flags are related and cannot both be set.
+ * If the PK11_ATTR_EXTRACTABLE flag is set, the key is extractable
+ * and can be wrapped.  If the PK11_ATTR_UNEXTRACTABLE flag is set,
+ * the key is not extractable, and certain attributes of the key
+ * cannot be revealed in plaintext outside the token (just like a
+ * sensitive key).  If neither flag is set, it is token-specific
+ * whether the key is extractable or not.
+ *
+ * These two flags specify the value of the PKCS #11 CKA_EXTRACTABLE
+ * attribute.
+ */
+#define PK11_ATTR_EXTRACTABLE   0x00000100L
+#define PK11_ATTR_UNEXTRACTABLE 0x00000200L
 
 /* Cryptographic module types */
 #define SECMOD_EXTERNAL	0	/* external module */
@@ -171,16 +280,15 @@ struct PK11DefaultArrayEntryStr {
 #define SECMOD_FIPS	2	/* internal fips module */
 
 /* default module configuration strings */
-#define SECMOD_SLOT_FLAGS "slotFlags=[RSA,DSA,DH,RC2,RC4,DES,RANDOM,SHA1,MD5,MD2,SSL,TLS,AES]"
+#define SECMOD_SLOT_FLAGS "slotFlags=[RSA,DSA,DH,RC2,RC4,DES,RANDOM,SHA1,MD5,MD2,SSL,TLS,AES,Camellia,SEED,SHA256,SHA512]"
 
 #define SECMOD_MAKE_NSS_FLAGS(fips,slot) \
-"Flags=internal,critical"fips" slotparams=("#slot"={"SECMOD_SLOT_FLAGS"})"
+"Flags=internal,critical" fips " slotparams=(" #slot "={" SECMOD_SLOT_FLAGS "})"
 
 #define SECMOD_INT_NAME "NSS Internal PKCS #11 Module"
 #define SECMOD_INT_FLAGS SECMOD_MAKE_NSS_FLAGS("",1)
 #define SECMOD_FIPS_NAME "NSS Internal FIPS PKCS #11 Module"
 #define SECMOD_FIPS_FLAGS SECMOD_MAKE_NSS_FLAGS(",fips",3)
-
 
 /*
  * What is the origin of a given Key. Normally this doesn't matter, but
@@ -204,12 +312,48 @@ typedef enum {
     PK11_DIS_TOKEN_NOT_PRESENT = 4
 } PK11DisableReasons;
 
+/* types of PKCS #11 objects 
+ * used to identify which NSS data structure is 
+ * passed to the PK11_Raw* functions. Types map as follows:
+ *   PK11_TypeGeneric            PK11GenericObject *
+ *   PK11_TypePrivKey            SECKEYPrivateKey *
+ *   PK11_TypePubKey             SECKEYPublicKey *
+ *   PK11_TypeSymKey             PK11SymKey *
+ *   PK11_TypeCert               CERTCertificate * (currently not used).
+ */
+typedef enum {
+   PK11_TypeGeneric = 0,
+   PK11_TypePrivKey = 1,
+   PK11_TypePubKey = 2,
+   PK11_TypeCert = 3,
+   PK11_TypeSymKey = 4
+} PK11ObjectType;
+
+
+
 /* function pointer type for password callback function.
  * This type is passed in to PK11_SetPasswordFunc() 
  */
 typedef char *(PR_CALLBACK *PK11PasswordFunc)(PK11SlotInfo *slot, PRBool retry, void *arg);
 typedef PRBool (PR_CALLBACK *PK11VerifyPasswordFunc)(PK11SlotInfo *slot, void *arg);
 typedef PRBool (PR_CALLBACK *PK11IsLoggedInFunc)(PK11SlotInfo *slot, void *arg);
+
+/*
+ * Special strings the password callback function can return only if
+ * the slot is an protected auth path slot.
+ */ 
+#define PK11_PW_RETRY		"RETRY"	/* an failed attempt to authenticate
+					 * has already been made, just retry
+					 * the operation */
+#define PK11_PW_AUTHENTICATED	"AUTH"  /* a successful attempt to authenticate
+					 * has completed. Continue without
+					 * another call to C_Login */
+/* All other non-null values mean that that NSS could call C_Login to force
+ * the authentication. The following define is to aid applications in 
+ * documenting that is what it's trying to do */
+#define PK11_PW_TRY		"TRY"   /* Default: a prompt has been presented
+					 * to the user, initiate a C_Login
+					 * to authenticate the token */
 
 /*
  * PKCS #11 key structures
@@ -260,5 +404,45 @@ typedef enum {
    PK11TokenRemovedOrChangedEvent = 0,
    PK11TokenPresentEvent = 1
 } PK11TokenEvent;
+
+/*
+ * CRL Import Flags
+ */
+#define CRL_IMPORT_DEFAULT_OPTIONS 0x00000000
+#define CRL_IMPORT_BYPASS_CHECKS   0x00000001
+
+
+/*
+ * Merge Error Log
+ */
+typedef struct PK11MergeLogStr PK11MergeLog;
+typedef struct PK11MergeLogNodeStr PK11MergeLogNode;
+
+/* These need to be global, leave some open fields so we can 'expand'
+ * these without breaking binary compatibility */
+struct PK11MergeLogNodeStr {
+    PK11MergeLogNode *next;   /* next entry in the list */
+    PK11MergeLogNode *prev;   /* last entry in the list */
+    PK11GenericObject *object; /* object that failed */
+    int	error;		       /* what the error was */
+    CK_RV reserved1;
+    unsigned long reserved2; /* future flags */
+    unsigned long reserved3; /* future scalar */
+    void *reserved4; 	      /* future pointer */
+    void *reserved5;	      /* future expansion pointer */
+};
+
+struct PK11MergeLogStr {
+    PK11MergeLogNode *head;
+    PK11MergeLogNode *tail;
+    PLArenaPool *arena;
+    int version;
+    unsigned long reserved1;
+    unsigned long reserved2;
+    unsigned long reserved3;
+    void *reserverd4;
+    void *reserverd5;
+};
+    
 
 #endif /*_SECMODT_H_ */

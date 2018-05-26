@@ -1,35 +1,6 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* Cert-O-Matic CGI */
 
@@ -47,9 +18,8 @@
 #include "genname.h"
 #include "xconst.h"
 #include "secutil.h"
-#include "pqgutil.h"
+#include "pk11pqg.h"
 #include "certxutl.h"
-#include "secrng.h"	/* for RNG_ */
 #include "nss.h"
 
 
@@ -95,7 +65,7 @@ static void
 error_out(char  *error_string)
 {
     printf("Content-type: text/plain\n\n");
-    printf(error_string);
+    printf("%s", error_string);
     fflush(stderr);
     fflush(stdout);
     exit(1);
@@ -140,14 +110,6 @@ make_copy_string(char  *read_pos,
     }
     *write_pos = '\0';
     return new;
-}
-
-
-static char *
-PasswordStub(PK11SlotInfo  *slot, 
-	     void          *cx)
-{
-	return NULL;
 }
 
 
@@ -509,7 +471,7 @@ makeCertReq(Pair             *form_data,
 	    error_out("ERROR: Unsupported Key length selected");
 	}
 	if (find_field_bool(form_data, "keyType-dsa", PR_TRUE)) {
-	    rv = PQG_ParamGen(keySizeInBits, &pqgParams, &pqgVfy);
+	    rv = PK11_PQG_ParamGen(keySizeInBits, &pqgParams, &pqgVfy);
 	    if (rv != SECSuccess) {
 		error_out("ERROR: Unable to generate PQG parameters");
 	    }
@@ -540,10 +502,10 @@ makeCertReq(Pair             *form_data,
 	SECKEY_DestroySubjectPublicKeyInfo(spki);
     }
     if (pqgParams != NULL) {
-	PQG_DestroyParams(pqgParams);
+	PK11_PQG_DestroyParams(pqgParams);
     }
     if (pqgVfy != NULL) {
-	PQG_DestroyVerify(pqgVfy);
+	PK11_PQG_DestroyVerify(pqgVfy);
     }
     return certReq;
 }
@@ -681,11 +643,11 @@ get_serial_number(Pair  *data)
 
 
 typedef SECStatus (* EXTEN_VALUE_ENCODER)
-		(PRArenaPool *extHandle, void *value, SECItem *encodedValue);
+		(PLArenaPool *extHandle, void *value, SECItem *encodedValue);
 
 static SECStatus 
 EncodeAndAddExtensionValue(
-	PRArenaPool          *arena, 
+	PLArenaPool          *arena,
 	void                 *extHandle, 
 	void                 *value, 
 	PRBool 		     criticality,
@@ -751,10 +713,10 @@ static CERTOidSequence *
 CreateOidSequence(void)
 {
   CERTOidSequence *rv = (CERTOidSequence *)NULL;
-  PRArenaPool *arena = (PRArenaPool *)NULL;
+  PLArenaPool *arena = (PLArenaPool *)NULL;
 
   arena = PORT_NewArena(DER_DEFAULT_CHUNKSIZE);
-  if( (PRArenaPool *)NULL == arena ) {
+  if( (PLArenaPool *)NULL == arena ) {
     goto loser;
   }
 
@@ -772,7 +734,7 @@ CreateOidSequence(void)
   return rv;
 
  loser:
-  if( (PRArenaPool *)NULL != arena ) {
+  if( (PLArenaPool *)NULL != arena ) {
     PORT_FreeArena(arena, PR_FALSE);
   }
 
@@ -854,6 +816,11 @@ AddExtKeyUsage(void *extHandle, Pair *data)
 
   if( find_field_bool(data, "extKeyUsage-serverAuth", PR_TRUE) ) {
     rv = AddOidToSequence(os, SEC_OID_EXT_KEY_USAGE_SERVER_AUTH);
+    if( SECSuccess != rv ) goto loser;
+  }
+
+  if( find_field_bool(data, "extKeyUsage-msTrustListSign", PR_TRUE) ) {
+    rv = AddOidToSequence(os, SEC_OID_MS_EXT_KEY_USAGE_CTL_SIGNING);
     if( SECSuccess != rv ) goto loser;
   }
 
@@ -958,8 +925,7 @@ AddSubKeyID(void             *extHandle,
 	(data,"subjectKeyIdentifier-text", PR_TRUE);
     subjectCert->subjectKeyID.len = len;
     rv = CERT_EncodeSubjectKeyID
-	(NULL, find_field(data,"subjectKeyIdentifier-text", PR_TRUE),
-	 len, &encodedValue);
+	(NULL, &subjectCert->subjectKeyID, &encodedValue);
     if (rv) {
 	return (rv);
     }
@@ -975,7 +941,7 @@ AddAuthKeyID (void              *extHandle,
 	      CERTCertDBHandle  *handle)
 {
     CERTAuthKeyID               *authKeyID = NULL;    
-    PRArenaPool                 *arena = NULL;
+    PLArenaPool                 *arena = NULL;
     SECStatus                   rv = SECSuccess;
     CERTCertificate             *issuerCert = NULL;
     CERTGeneralName             *genNames;
@@ -1047,16 +1013,16 @@ AddPrivKeyUsagePeriod(void             *extHandle,
 {
     char *notBeforeStr;
     char *notAfterStr;
-    PRArenaPool *arena = NULL;
+    PLArenaPool *arena = NULL;
     SECStatus rv = SECSuccess;
-    PKUPEncodedContext *pkup;
+    CERTPrivKeyUsagePeriod *pkup;
 
 
     arena = PORT_NewArena(DER_DEFAULT_CHUNKSIZE);
     if ( !arena ) {
 	error_allocate();
     }
-    pkup = PORT_ArenaZAlloc (arena, sizeof (PKUPEncodedContext));
+    pkup = PORT_ArenaZNew (arena, CERTPrivKeyUsagePeriod);
     if (pkup == NULL) {
 	error_allocate();
     }
@@ -1174,7 +1140,7 @@ AddPrivKeyUsagePeriod(void             *extHandle,
 						    PR_TRUE), 
 				    SEC_OID_X509_PRIVATE_KEY_USAGE_PERIOD, 
 				    (EXTEN_VALUE_ENCODER)
-				    CERT_EncodePublicKeyUsagePeriod);
+				    CERT_EncodePrivateKeyUsagePeriod);
     if (arena) {
 	PORT_FreeArena (arena, PR_FALSE);
     }
@@ -1436,7 +1402,7 @@ string_to_ipaddress(char *string)
 		}
 	    }
 	}
-	if (value >= 0 || value < 256) {
+	if (value >= 0 && value < 256) {
 	    *(ipaddress->data + j) = value;
 	} else {
 	    error_out("ERROR: Improperly formated IP Address");
@@ -1473,14 +1439,14 @@ string_to_binary(char  *string)
 		high_digit = *string - '0';
 	    } else {
 		*string = toupper(*string);
-		high_digit = *string - 'A';
+		high_digit = *string - 'A' + 10;
 	    }
 	    string++;
 	    if (*string >= '0' && *string <= '9') {
 		low_digit = *string - '0';
 	    } else {
 		*string = toupper(*string);
-		low_digit = *string = 'A';
+		low_digit = *string - 'A' + 10;
 	    }
 	    (rv->len)++;
 	} else {
@@ -1505,7 +1471,7 @@ string_to_binary(char  *string)
 static SECStatus
 MakeGeneralName(char             *name, 
 		CERTGeneralName  *genName,
-		PRArenaPool      *arena)
+		PLArenaPool      *arena)
 {
     SECItem                      *oid;
     SECOidData                   *oidData;
@@ -1515,7 +1481,7 @@ MakeGeneralName(char             *name,
     int                          nameType;
     PRBool                       binary = PR_FALSE;
     SECStatus                    rv = SECSuccess;
-    PRBool                       nickname;
+    PRBool                       nickname = PR_FALSE;
 
     PORT_Assert(genName);
     PORT_Assert(arena);
@@ -1645,7 +1611,7 @@ MakeGeneralName(char             *name,
 static CERTGeneralName *
 MakeAltName(Pair             *data, 
 	    char             *which, 
-	    PRArenaPool      *arena)
+	    PLArenaPool      *arena)
 {
     CERTGeneralName          *SubAltName;
     CERTGeneralName          *current;
@@ -1706,7 +1672,7 @@ MakeAltName(Pair             *data,
 
 static CERTNameConstraints *
 MakeNameConstraints(Pair             *data, 
-		    PRArenaPool      *arena)
+		    PLArenaPool      *arena)
 {
     CERTNameConstraints      *NameConstraints;
     CERTNameConstraint       *current = NULL;
@@ -1828,16 +1794,13 @@ AddAltName(void              *extHandle,
 	   int               type)
 {
     PRBool             autoIssuer = PR_FALSE;
-    PRArenaPool        *arena = NULL;
+    PLArenaPool        *arena = NULL;
     CERTGeneralName    *genName = NULL;
-    CERTName           *directoryName = NULL;
     char               *which = NULL;
     char               *name = NULL;
     SECStatus          rv = SECSuccess;
     SECItem            *issuersAltName = NULL;
     CERTCertificate    *issuerCert = NULL;
-    void               *mark = NULL;
-
 
     arena = PORT_NewArena(DER_DEFAULT_CHUNKSIZE);
     if (arena == NULL) {
@@ -1893,11 +1856,6 @@ AddAltName(void              *extHandle,
     if (issuerCert != NULL) {
 	CERT_DestroyCertificate(issuerCert);
     }
-#if 0
-    if (arena != NULL) {
-	PORT_ArenaRelease (arena, mark);
-    }
-#endif
     return rv;
 }
 
@@ -1906,10 +1864,8 @@ static SECStatus
 AddNameConstraints(void  *extHandle,
 		   Pair  *data)
 {
-    PRBool              autoIssuer = PR_FALSE;
-    PRArenaPool         *arena = NULL;
+    PLArenaPool         *arena = NULL;
     CERTNameConstraints *constraints = NULL;
-    char                *constraint = NULL;
     SECStatus           rv = SECSuccess;
 
 
@@ -2124,7 +2080,6 @@ FindPrivateKeyFromNameStr(char              *name,
     SECKEYPrivateKey                        *key;
     CERTCertificate                         *cert;
     CERTCertificate                         *p11Cert;
-    SECStatus                               status = SECSuccess;
 
 
     /* We don't presently have a PK11 function to find a cert by 
@@ -2154,10 +2109,9 @@ SignCert(CERTCertificate   *cert,
          int               which_key)
 {
     SECItem                der;
-    SECItem                *result = NULL;
     SECKEYPrivateKey       *caPrivateKey = NULL;
     SECStatus              rv;
-    PRArenaPool            *arena;
+    PLArenaPool            *arena;
     SECOidTag              algID;
 
     if (which_key == 0) {
@@ -2171,17 +2125,11 @@ SignCert(CERTCertificate   *cert,
 	
     arena = cert->arena;
 
-    switch(caPrivateKey->keyType) {
-      case rsaKey:
-	algID = SEC_OID_PKCS1_MD5_WITH_RSA_ENCRYPTION;
-	break;
-      case dsaKey:
-	algID = SEC_OID_ANSIX9_DSA_SIGNATURE_WITH_SHA1_DIGEST;
-	break;
-      default:
+    algID = SEC_GetSignatureAlgorithmOidTag(caPrivateKey->keyType,
+					    SEC_OID_UNKNOWN);
+    if (algID == SEC_OID_UNKNOWN) {
 	error_out("ERROR: Unknown key type for issuer.");
 	goto done;
-	break;
     }
 
     rv = SECOID_SetAlgorithmID(arena, &cert->signature, algID, 0);
@@ -2219,7 +2167,6 @@ main(int argc, char **argv)
     int                    length = 500;
     int                    remaining = 500;
     int                    n;
-    int                    fields = 3;
     int                    i;
     int                    serial;
     int                    chainLen;
@@ -2426,6 +2373,9 @@ main(int argc, char **argv)
     fclose(outfile);
 #endif
     fflush(stdout);
+    if (NSS_Shutdown() != SECSuccess) {
+        exit(1);
+    }
     return 0;
 }
 

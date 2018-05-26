@@ -1,58 +1,28 @@
 /* 
  * This file implements the CLIENT Session ID cache.  
  *
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- *
- * $Id: sslnonce.c,v 1.12 2002/04/04 00:14:11 nelsonb%netscape.com Exp $
- */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "nssrenam.h"
 #include "cert.h"
+#include "pk11pub.h"
 #include "secitem.h"
 #include "ssl.h"
+#include "nss.h"
 
 #include "sslimpl.h"
 #include "sslproto.h"
 #include "nssilock.h"
-#include "nsslocks.h"
-#if (defined(XP_UNIX) || defined(XP_WIN) || defined(_WINDOWS) || defined(XP_BEOS)) && !defined(_WIN32_WCE)
+#if defined(XP_UNIX) || defined(XP_WIN) || defined(_WINDOWS) || defined(XP_BEOS)
 #include <time.h>
 #endif
 
 PRUint32 ssl_sid_timeout = 100;
 PRUint32 ssl3_sid_timeout = 86400L; /* 24 hours */
 
-static sslSessionID *cache;
-static PZLock *      cacheLock;
+static sslSessionID *cache = NULL;
+static PZLock *      cacheLock = NULL;
 
 /* sids can be in one of 4 states:
  *
@@ -65,14 +35,126 @@ static PZLock *      cacheLock;
 #define LOCK_CACHE 	lock_cache()
 #define UNLOCK_CACHE	PZ_Unlock(cacheLock)
 
+static SECStatus
+ssl_InitClientSessionCacheLock(void)
+{
+    cacheLock = PZ_NewLock(nssILockCache);
+    return cacheLock ? SECSuccess : SECFailure;
+}
+
+static SECStatus
+ssl_FreeClientSessionCacheLock(void)
+{
+    if (cacheLock) {
+        PZ_DestroyLock(cacheLock);
+        cacheLock = NULL;
+        return SECSuccess;
+    }
+    PORT_SetError(SEC_ERROR_NOT_INITIALIZED);
+    return SECFailure;
+}
+
+static PRBool LocksInitializedEarly = PR_FALSE;
+
+static SECStatus
+FreeSessionCacheLocks()
+{
+    SECStatus rv1, rv2;
+    rv1 = ssl_FreeSymWrapKeysLock();
+    rv2 = ssl_FreeClientSessionCacheLock();
+    if ( (SECSuccess == rv1) && (SECSuccess == rv2) ) {
+        return SECSuccess;
+    }
+    return SECFailure;
+}
+
+static SECStatus
+InitSessionCacheLocks(void)
+{
+    SECStatus rv1, rv2;
+    PRErrorCode rc;
+    rv1 = ssl_InitSymWrapKeysLock();
+    rv2 = ssl_InitClientSessionCacheLock();
+    if ( (SECSuccess == rv1) && (SECSuccess == rv2) ) {
+        return SECSuccess;
+    }
+    rc = PORT_GetError();
+    FreeSessionCacheLocks();
+    PORT_SetError(rc);
+    return SECFailure;
+}
+
+/* free the session cache locks if they were initialized early */
+SECStatus
+ssl_FreeSessionCacheLocks()
+{
+    PORT_Assert(PR_TRUE == LocksInitializedEarly);
+    if (!LocksInitializedEarly) {
+        PORT_SetError(SEC_ERROR_NOT_INITIALIZED);
+        return SECFailure;
+    }
+    FreeSessionCacheLocks();
+    LocksInitializedEarly = PR_FALSE;
+    return SECSuccess;
+}
+
+static PRCallOnceType lockOnce;
+
+/* free the session cache locks if they were initialized lazily */
+static SECStatus ssl_ShutdownLocks(void* appData, void* nssData)
+{
+    PORT_Assert(PR_FALSE == LocksInitializedEarly);
+    if (LocksInitializedEarly) {
+        PORT_SetError(SEC_ERROR_LIBRARY_FAILURE);
+        return SECFailure;
+    }
+    FreeSessionCacheLocks();
+    memset(&lockOnce, 0, sizeof(lockOnce));
+    return SECSuccess;
+}
+
+static PRStatus initSessionCacheLocksLazily(void)
+{
+    SECStatus rv = InitSessionCacheLocks();
+    if (SECSuccess != rv) {
+        return PR_FAILURE;
+    }
+    rv = NSS_RegisterShutdown(ssl_ShutdownLocks, NULL);
+    PORT_Assert(SECSuccess == rv);
+    if (SECSuccess != rv) {
+        return PR_FAILURE;
+    }
+    return PR_SUCCESS;
+}
+
+/* lazyInit means that the call is not happening during a 1-time
+ * initialization function, but rather during dynamic, lazy initialization
+ */
+SECStatus
+ssl_InitSessionCacheLocks(PRBool lazyInit)
+{
+    if (LocksInitializedEarly) {
+        return SECSuccess;
+    }
+
+    if (lazyInit) {
+        return (PR_SUCCESS ==
+                PR_CallOnce(&lockOnce, initSessionCacheLocksLazily)) ?
+               SECSuccess : SECFailure;
+    }
+     
+    if (SECSuccess == InitSessionCacheLocks()) {
+        LocksInitializedEarly = PR_TRUE;
+        return SECSuccess;
+    }
+
+    return SECFailure;
+}
+
 static void 
 lock_cache(void)
 {
-    /* XXX Since the client session cache has no init function, we must
-     * XXX init the cacheLock on the first call.  Fix in NSS 3.0.
-     */
-    if (!cacheLock)
-	nss_InitLock(&cacheLock, nssILockCache);
+    ssl_InitSessionCacheLocks(PR_TRUE);
     PZ_Lock(cacheLock);
 }
 
@@ -83,15 +165,26 @@ static void
 ssl_DestroySID(sslSessionID *sid)
 {
     SSL_TRC(8, ("SSL: destroy sid: sid=0x%x cached=%d", sid, sid->cached));
-    PORT_Assert((sid->references == 0));
-
-    if (sid->cached == in_client_cache)
-    	return;	/* it will get taken care of next time cache is traversed. */
+    PORT_Assert(sid->references == 0);
+    PORT_Assert(sid->cached != in_client_cache);
 
     if (sid->version < SSL_LIBRARY_VERSION_3_0) {
 	SECITEM_ZfreeItem(&sid->u.ssl2.masterKey, PR_FALSE);
 	SECITEM_ZfreeItem(&sid->u.ssl2.cipherArg, PR_FALSE);
+    } else {
+        if (sid->u.ssl3.locked.sessionTicket.ticket.data) {
+            SECITEM_FreeItem(&sid->u.ssl3.locked.sessionTicket.ticket,
+                             PR_FALSE);
+        }
+        if (sid->u.ssl3.srvName.data) {
+            SECITEM_FreeItem(&sid->u.ssl3.srvName, PR_FALSE);
+        }
+
+        if (sid->u.ssl3.lock) {
+            PR_DestroyRWLock(sid->u.ssl3.lock);
+        }
     }
+
     if (sid->peerID != NULL)
 	PORT_Free((void *)sid->peerID);		/* CONST */
 
@@ -101,6 +194,10 @@ ssl_DestroySID(sslSessionID *sid)
     if ( sid->peerCert ) {
 	CERT_DestroyCertificate(sid->peerCert);
     }
+    if (sid->peerCertStatus.items) {
+        SECITEM_FreeArray(&sid->peerCertStatus, PR_FALSE);
+    }
+
     if ( sid->localCert ) {
 	CERT_DestroyCertificate(sid->localCert);
     }
@@ -165,9 +262,9 @@ ssl_LookupSID(const PRIPv6Addr *addr, PRUint16 port, const char *peerID,
 
 	SSL_TRC(8, ("SSL: Lookup1: sid=0x%x", sid));
 
-	if (sid->expirationTime < now || !sid->references) {
+	if (sid->expirationTime < now) {
 	    /*
-	    ** This session-id timed out, or was orphaned.
+	    ** This session-id timed out.
 	    ** Don't even care who it belongs to, blow it out of our cache.
 	    */
 	    SSL_TRC(7, ("SSL: lookup1, throwing sid out, age=%d refs=%d",
@@ -175,11 +272,7 @@ ssl_LookupSID(const PRIPv6Addr *addr, PRUint16 port, const char *peerID,
 
 	    *sidp = sid->next; 			/* delink it from the list. */
 	    sid->cached = invalid_cache;	/* mark not on list. */
-	    if (!sid->references)
-	    	ssl_DestroySID(sid);
-	    else
-		ssl_FreeLockedSID(sid);		/* drop ref count, free. */
-
+	    ssl_FreeLockedSID(sid);		/* drop ref count, free. */
 	} else if (!memcmp(&sid->addr, addr, sizeof(PRIPv6Addr)) && /* server IP addr matches */
 	           (sid->port == port) && /* server port matches */
 		   /* proxy (peerID) matches */
@@ -188,7 +281,7 @@ ssl_LookupSID(const PRIPv6Addr *addr, PRUint16 port, const char *peerID,
 		     PORT_Strcmp(sid->peerID, peerID) == 0)) &&
 		   /* is cacheable */
 		   (sid->version < SSL_LIBRARY_VERSION_3_0 ||
-		    sid->u.ssl3.resumable) &&
+		    sid->u.ssl3.keys.resumable) &&
 		   /* server hostname matches. */
 	           (sid->urlSvrName != NULL) &&
 		   ((0 == PORT_Strcmp(urlSvrName, sid->urlSvrName)) ||
@@ -215,6 +308,9 @@ static void
 CacheSID(sslSessionID *sid)
 {
     PRUint32  expirationPeriod;
+
+    PORT_Assert(sid->cached == never_cached);
+
     SSL_TRC(8, ("SSL: Cache: sid=0x%x cached=%d addr=0x%08x%08x%08x%08x port=0x%04x "
 		"time=%x cached=%d",
 		sid, sid->cached, sid->addr.pr_s6_addr32[0], 
@@ -222,8 +318,10 @@ CacheSID(sslSessionID *sid)
 		sid->addr.pr_s6_addr32[3],  sid->port, sid->creationTime,
 		sid->cached));
 
-    if (sid->cached == in_client_cache)
-	return;
+    if (!sid->urlSvrName) {
+        /* don't cache this SID because it can never be matched */
+        return;
+    }
 
     /* XXX should be different trace for version 2 vs. version 3 */
     if (sid->version < SSL_LIBRARY_VERSION_3_0) {
@@ -235,11 +333,27 @@ CacheSID(sslSessionID *sid)
 	PRINT_BUF(8, (0, "cipherArg:",
 		  sid->u.ssl2.cipherArg.data, sid->u.ssl2.cipherArg.len));
     } else {
-	if (sid->u.ssl3.sessionIDLength == 0) 
+	if (sid->u.ssl3.sessionIDLength == 0 &&
+	    sid->u.ssl3.locked.sessionTicket.ticket.data == NULL)
 	    return;
+
+	/* Client generates the SessionID if this was a stateless resume. */
+	if (sid->u.ssl3.sessionIDLength == 0) {
+	    SECStatus rv;
+	    rv = PK11_GenerateRandom(sid->u.ssl3.sessionID,
+		SSL3_SESSIONID_BYTES);
+	    if (rv != SECSuccess)
+		return;
+	    sid->u.ssl3.sessionIDLength = SSL3_SESSIONID_BYTES;
+	}
 	expirationPeriod = ssl3_sid_timeout;
 	PRINT_BUF(8, (0, "sessionID:",
 		      sid->u.ssl3.sessionID, sid->u.ssl3.sessionIDLength));
+
+	sid->u.ssl3.lock = PR_NewRWLock(PR_RWLOCK_RANK_NONE, NULL);
+	if (!sid->u.ssl3.lock) {
+	    return;
+	}
     }
     PORT_Assert(sid->creationTime != 0 && sid->expirationTime != 0);
     if (!sid->creationTime)
@@ -348,7 +462,7 @@ PRUint32
 ssl_Time(void)
 {
     PRUint32 myTime;
-#if (defined(XP_UNIX) || defined(XP_WIN) || defined(_WINDOWS) || defined(XP_BEOS)) && !defined(_WIN32_WCE)
+#if defined(XP_UNIX) || defined(XP_WIN) || defined(_WINDOWS) || defined(XP_BEOS)
     myTime = time(NULL);	/* accurate until the year 2038. */
 #else
     /* portable, but possibly slower */
@@ -363,3 +477,38 @@ ssl_Time(void)
     return myTime;
 }
 
+void
+ssl3_SetSIDSessionTicket(sslSessionID *sid,
+                         /*in/out*/ NewSessionTicket *newSessionTicket)
+{
+    PORT_Assert(sid);
+    PORT_Assert(newSessionTicket);
+
+    /* if sid->u.ssl3.lock, we are updating an existing entry that is already
+     * cached or was once cached, so we need to acquire and release the write
+     * lock. Otherwise, this is a new session that isn't shared with anything
+     * yet, so no locking is needed.
+     */
+    if (sid->u.ssl3.lock) {
+	PR_RWLock_Wlock(sid->u.ssl3.lock);
+
+	/* A server might have sent us an empty ticket, which has the
+	 * effect of clearing the previously known ticket.
+	 */
+	if (sid->u.ssl3.locked.sessionTicket.ticket.data) {
+	    SECITEM_FreeItem(&sid->u.ssl3.locked.sessionTicket.ticket,
+			     PR_FALSE);
+	}
+    }
+
+    PORT_Assert(!sid->u.ssl3.locked.sessionTicket.ticket.data);
+
+    /* Do a shallow copy, moving the ticket data. */
+    sid->u.ssl3.locked.sessionTicket = *newSessionTicket;
+    newSessionTicket->ticket.data = NULL;
+    newSessionTicket->ticket.len = 0;
+
+    if (sid->u.ssl3.lock) {
+	PR_RWLock_Unlock(sid->u.ssl3.lock);
+    }
+}

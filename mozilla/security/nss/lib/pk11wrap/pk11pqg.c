@@ -1,35 +1,6 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2001 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /* Thse functions are stub functions which will get replaced with calls through
  * PKCS #11.
  */
@@ -37,19 +8,40 @@
 #include "pk11func.h"
 #include "secmod.h"
 #include "secmodi.h"
+#include "secmodti.h"
 #include "pkcs11t.h"
 #include "pk11pqg.h"
 #include "secerr.h"
 
 
 /* Generate PQGParams and PQGVerify structs.
- * Length of P specified by j.  Length of h will match length of P.
+ * Length of P specified by L.
+ *   if L is greater than 1024 then the resulting verify parameters will be
+ *   DSA2.
+ * Length of Q specified by N. If zero, The PKCS #11 module will
+ *   pick an appropriately sized Q for P. If N is specified and L = 1024, then
+ *   the resulting verify parameters will be DSA2, Otherwise DSA1 parameters 
+ *   will be returned.
  * Length of SEED in bytes specified in seedBytes.
- * seedBbytes must be in the range [20..255] or an error will result.
+ *
+ * The underlying PKCS #11 module will check the values for L, N, 
+ * and seedBytes. The rules for softoken are:
+ * 
+ * If L <= 1024, then L must be between 512 and 1024 in increments of 64 bits.
+ * If L <= 1024, then N must be 0 or 160.
+ * If L >= 1024, then L and N must match the following table:
+ *   L=1024   N=0 or 160
+ *   L=2048   N=0 or 224
+ *   L=2048   N=256
+ *   L=3072   N=0 or 256
+ * if L <= 1024
+ *   seedBbytes must be in the range [20..256].
+ * if L >= 1024
+ *   seedBbytes must be in the range [20..L/16].
  */
 extern SECStatus
-PK11_PQG_ParamGenSeedLen( unsigned int j, unsigned int seedBytes,
-				 PQGParams **pParams, PQGVerify **pVfy)
+PK11_PQG_ParamGenV2(unsigned int L, unsigned int N,
+	 unsigned int seedBytes, PQGParams **pParams, PQGVerify **pVfy)
 {
     PK11SlotInfo *slot = NULL;
     CK_ATTRIBUTE genTemplate[5];
@@ -64,25 +56,34 @@ PK11_PQG_ParamGenSeedLen( unsigned int j, unsigned int seedBytes,
 	{ CKA_BASE, NULL, 0 },
     };
     CK_ATTRIBUTE vTemplate[] = {
-	{ CKA_NSS_PQG_COUNTER, NULL, 0 },
-	{ CKA_NSS_PQG_SEED, NULL, 0 },
-	{ CKA_NSS_PQG_H, NULL, 0 },
+	{ CKA_NETSCAPE_PQG_COUNTER, NULL, 0 },
+	{ CKA_NETSCAPE_PQG_SEED, NULL, 0 },
+	{ CKA_NETSCAPE_PQG_H, NULL, 0 },
     };
+    CK_ULONG primeBits = L;
+    CK_ULONG subPrimeBits = N;
     int pTemplateCount = sizeof(pTemplate)/sizeof(pTemplate[0]);
     int vTemplateCount = sizeof(vTemplate)/sizeof(vTemplate[0]);
-    PRArenaPool *parena = NULL;
-    PRArenaPool *varena = NULL;
+    PLArenaPool *parena = NULL;
+    PLArenaPool *varena = NULL;
     PQGParams *params = NULL;
     PQGVerify *verify = NULL;
-    CK_ULONG primeBits = j;
     CK_ULONG seedBits = seedBytes*8;
 
     *pParams = NULL;
     *pVfy =  NULL;
 
+    if (primeBits == (CK_ULONG)-1) {
+	PORT_SetError(SEC_ERROR_INVALID_ARGS);
+	goto loser;
+    }
     PK11_SETATTRS(attrs, CKA_PRIME_BITS,&primeBits,sizeof(primeBits)); attrs++;
+    if (subPrimeBits != 0) {
+    	PK11_SETATTRS(attrs, CKA_SUB_PRIME_BITS, 
+				&subPrimeBits, sizeof(subPrimeBits)); attrs++;
+    }
     if (seedBits != 0) {
-    	PK11_SETATTRS(attrs, CKA_NSS_PQG_SEED_BITS, 
+    	PK11_SETATTRS(attrs, CKA_NETSCAPE_PQG_SEED_BITS, 
 					&seedBits, sizeof(seedBits)); attrs++;
     }
     count = attrs - genTemplate;
@@ -91,7 +92,35 @@ PK11_PQG_ParamGenSeedLen( unsigned int j, unsigned int seedBytes,
     slot = PK11_GetInternalSlot();
     if (slot == NULL) {
 	/* set error */
+	PORT_SetError(SEC_ERROR_LIBRARY_FAILURE);/* shouldn't happen */
 	goto loser;
+    }
+
+    /* make sure the internal slot can handle DSA2 type parameters. */
+    if (primeBits > 1024) {
+	CK_MECHANISM_INFO mechanism_info;
+
+	if (!slot->isThreadSafe) PK11_EnterSlotMonitor(slot);
+	crv = PK11_GETTAB(slot)->C_GetMechanismInfo(slot->slotID,
+			CKM_DSA_PARAMETER_GEN, &mechanism_info);
+	if (!slot->isThreadSafe) PK11_ExitSlotMonitor(slot);
+	/* a bug in the old softoken left CKM_DSA_PARAMETER_GEN off of the
+	 * mechanism List. If we get a failure asking for this value, we know
+	 * it can't handle DSA2 */
+	if ((crv != CKR_OK) || (mechanism_info.ulMaxKeySize < primeBits)) {
+	    PK11_FreeSlot(slot);
+	    slot = PK11_GetBestSlotWithAttributes(CKM_DSA_PARAMETER_GEN, 0,
+						primeBits, NULL);
+	    if (slot == NULL) {
+		PORT_SetError(SEC_ERROR_NO_TOKEN); /* can happen */
+		goto loser;
+	    }
+	    /* ditch seedBits in this case, they are NSS specific and at
+	     * this point we have a token that claims to handle DSA2 */
+	    if (seedBits) {
+		attrs--;
+	    }
+	}
     }
 
     /* Initialize the Key Gen Mechanism */
@@ -110,6 +139,10 @@ PK11_PQG_ParamGenSeedLen( unsigned int j, unsigned int seedBytes,
     }
 
     parena = PORT_NewArena(60);
+    if (!parena) {
+	goto loser;
+    }        
+
     crv = PK11_GetAttributes(parena, slot, objectID, pTemplate, pTemplateCount);
     if (crv != CKR_OK) {
 	PORT_SetError( PK11_MapError(crv) );
@@ -124,15 +157,22 @@ PK11_PQG_ParamGenSeedLen( unsigned int j, unsigned int seedBytes,
 
     /* fill in Params */
     params->arena = parena;
+    params->prime.type = siUnsignedInteger;
     params->prime.data = pTemplate[0].pValue;
     params->prime.len = pTemplate[0].ulValueLen;
+    params->subPrime.type = siUnsignedInteger;
     params->subPrime.data = pTemplate[1].pValue;
     params->subPrime.len = pTemplate[1].ulValueLen;
+    params->base.type = siUnsignedInteger;
     params->base.data = pTemplate[2].pValue;
     params->base.len = pTemplate[2].ulValueLen;
 
 
     varena = PORT_NewArena(60);
+    if (!varena) {
+	goto loser;
+    }        
+
     crv = PK11_GetAttributes(varena, slot, objectID, vTemplate, vTemplateCount);
     if (crv != CKR_OK) {
 	PORT_SetError( PK11_MapError(crv) );
@@ -147,8 +187,10 @@ PK11_PQG_ParamGenSeedLen( unsigned int j, unsigned int seedBytes,
     /* fill in Params */
     verify->arena = varena;
     verify->counter = (unsigned int)(*(CK_ULONG*)vTemplate[0].pValue);
+    verify->seed.type = siUnsignedInteger;
     verify->seed.data = vTemplate[1].pValue;
     verify->seed.len = vTemplate[1].ulValueLen;
+    verify->h.type = siUnsignedInteger;
     verify->h.data = vTemplate[2].pValue;
     verify->h.len = vTemplate[2].ulValueLen;
 
@@ -177,20 +219,34 @@ loser:
 }
 
 /* Generate PQGParams and PQGVerify structs.
+ * Length of P specified by j.  Length of h will match length of P.
+ * Length of SEED in bytes specified in seedBytes.
+ * seedBbytes must be in the range [20..255] or an error will result.
+ */
+extern SECStatus
+PK11_PQG_ParamGenSeedLen( unsigned int j, unsigned int seedBytes,
+				 PQGParams **pParams, PQGVerify **pVfy)
+{
+    unsigned int primeBits = PQG_INDEX_TO_PBITS(j);
+    return PK11_PQG_ParamGenV2(primeBits, 0, seedBytes, pParams, pVfy);
+}
+
+/* Generate PQGParams and PQGVerify structs.
  * Length of seed and length of h both equal length of P. 
  * All lengths are specified by "j", according to the table above.
  */
 extern SECStatus
 PK11_PQG_ParamGen(unsigned int j, PQGParams **pParams, PQGVerify **pVfy)
 {
-    return PK11_PQG_ParamGenSeedLen(j, 0, pParams, pVfy);
+    unsigned int primeBits = PQG_INDEX_TO_PBITS(j);
+    return PK11_PQG_ParamGenV2(primeBits, 0, 0, pParams, pVfy);
 }
 
 /*  Test PQGParams for validity as DSS PQG values.
  *  If vfy is non-NULL, test PQGParams to make sure they were generated
  *       using the specified seed, counter, and h values.
  *
- *  Return value indicates whether Verification operation ran succesfully
+ *  Return value indicates whether Verification operation ran successfully
  *  to completion, but does not indicate if PQGParams are valid or not.
  *  If return value is SECSuccess, then *pResult has these meanings:
  *       SECSuccess: PQGParams are valid.
@@ -208,9 +264,9 @@ PK11_PQG_VerifyParams(const PQGParams *params, const PQGVerify *vfy,
 	{ CKA_SUBPRIME, NULL, 0 },
 	{ CKA_BASE, NULL, 0 },
 	{ CKA_TOKEN, NULL, 0 },
-	{ CKA_NSS_PQG_COUNTER, NULL, 0 },
-	{ CKA_NSS_PQG_SEED, NULL, 0 },
-	{ CKA_NSS_PQG_H, NULL, 0 },
+	{ CKA_NETSCAPE_PQG_COUNTER, NULL, 0 },
+	{ CKA_NETSCAPE_PQG_SEED, NULL, 0 },
+	{ CKA_NETSCAPE_PQG_H, NULL, 0 },
     };
     CK_ATTRIBUTE *attrs;
     CK_BBOOL ckfalse = CK_FALSE;
@@ -230,16 +286,23 @@ PK11_PQG_VerifyParams(const PQGParams *params, const PQGVerify *vfy,
 						params->prime.len); attrs++;
     PK11_SETATTRS(attrs, CKA_SUBPRIME, params->subPrime.data, 
 						params->subPrime.len); attrs++;
-    PK11_SETATTRS(attrs, CKA_BASE,params->base.data,params->base.len); attrs++;
+    if (params->base.len) {
+        PK11_SETATTRS(attrs, CKA_BASE,params->base.data,params->base.len);
+	 attrs++;
+    }
     PK11_SETATTRS(attrs, CKA_TOKEN, &ckfalse, sizeof(ckfalse)); attrs++;
     if (vfy) {
-	counter = vfy->counter;
-	PK11_SETATTRS(attrs, CKA_NSS_PQG_COUNTER, 
+	if (vfy->counter != -1) {
+	    counter = vfy->counter;
+	    PK11_SETATTRS(attrs, CKA_NETSCAPE_PQG_COUNTER, 
 			&counter, sizeof(counter)); attrs++;
-	PK11_SETATTRS(attrs, CKA_NSS_PQG_SEED, 
+	}
+	PK11_SETATTRS(attrs, CKA_NETSCAPE_PQG_SEED, 
 			vfy->seed.data, vfy->seed.len); attrs++;
-	PK11_SETATTRS(attrs, CKA_NSS_PQG_H, 
+	if (vfy->h.len) {
+	    PK11_SETATTRS(attrs, CKA_NETSCAPE_PQG_H, 
 			vfy->h.data, vfy->h.len); attrs++;
+	}
     }
 
     keyCount = attrs - keyTempl;
@@ -278,8 +341,16 @@ PK11_PQG_VerifyParams(const PQGParams *params, const PQGVerify *vfy,
  **************************************************************************/
 extern void 
 PK11_PQG_DestroyParams(PQGParams *params) {
-     PQG_DestroyParams(params);
-     return;
+    if (params == NULL) 
+    	return;
+    if (params->arena != NULL) {
+	PORT_FreeArena(params->arena, PR_FALSE);	/* don't zero it */
+    } else {
+	SECITEM_FreeItem(&params->prime,    PR_FALSE); /* don't free prime */
+	SECITEM_FreeItem(&params->subPrime, PR_FALSE); /* don't free subPrime */
+	SECITEM_FreeItem(&params->base,     PR_FALSE); /* don't free base */
+	PORT_Free(params);
+    }
 }
 
 /**************************************************************************
@@ -287,9 +358,18 @@ PK11_PQG_DestroyParams(PQGParams *params) {
  **************************************************************************/
 extern void
 PK11_PQG_DestroyVerify(PQGVerify *vfy) {
-    PQG_DestroyVerify(vfy);
-    return;
+    if (vfy == NULL) 
+    	return;
+    if (vfy->arena != NULL) {
+	PORT_FreeArena(vfy->arena, PR_FALSE);	/* don't zero it */
+    } else {
+	SECITEM_FreeItem(&vfy->seed,   PR_FALSE); /* don't free seed */
+	SECITEM_FreeItem(&vfy->h,      PR_FALSE); /* don't free h */
+	PORT_Free(vfy);
+    }
 }
+
+#define PQG_DEFAULT_CHUNKSIZE 2048	/* bytes */
 
 /**************************************************************************
  *  Return a pointer to a new PQGParams struct that is constructed from   *
@@ -299,7 +379,38 @@ PK11_PQG_DestroyVerify(PQGVerify *vfy) {
 extern PQGParams *
 PK11_PQG_NewParams(const SECItem * prime, const SECItem * subPrime, 
                                  		const SECItem * base) {
-    return PQG_NewParams(prime, subPrime, base);
+    PLArenaPool *arena;
+    PQGParams *dest;
+    SECStatus status;
+
+    arena = PORT_NewArena(PQG_DEFAULT_CHUNKSIZE);
+    if (arena == NULL)
+	goto loser;
+
+    dest = (PQGParams*)PORT_ArenaZAlloc(arena, sizeof(PQGParams));
+    if (dest == NULL)
+	goto loser;
+
+    dest->arena = arena;
+
+    status = SECITEM_CopyItem(arena, &dest->prime, prime);
+    if (status != SECSuccess)
+	goto loser;
+
+    status = SECITEM_CopyItem(arena, &dest->subPrime, subPrime);
+    if (status != SECSuccess)
+	goto loser;
+
+    status = SECITEM_CopyItem(arena, &dest->base, base);
+    if (status != SECSuccess)
+	goto loser;
+
+    return dest;
+
+loser:
+    if (arena != NULL)
+	PORT_FreeArena(arena, PR_FALSE);
+    return NULL;
 }
 
 
@@ -309,7 +420,7 @@ PK11_PQG_NewParams(const SECItem * prime, const SECItem * subPrime,
  **************************************************************************/
 extern SECStatus 
 PK11_PQG_GetPrimeFromParams(const PQGParams *params, SECItem * prime) {
-    return PQG_GetPrimeFromParams(params, prime);
+    return SECITEM_CopyItem(NULL, prime, &params->prime);
 }
 
 
@@ -319,7 +430,7 @@ PK11_PQG_GetPrimeFromParams(const PQGParams *params, SECItem * prime) {
  **************************************************************************/
 extern SECStatus
 PK11_PQG_GetSubPrimeFromParams(const PQGParams *params, SECItem * subPrime) {
-    return PQG_GetSubPrimeFromParams(params, subPrime);
+    return SECITEM_CopyItem(NULL, subPrime, &params->subPrime);
 }
 
 
@@ -329,7 +440,7 @@ PK11_PQG_GetSubPrimeFromParams(const PQGParams *params, SECItem * subPrime) {
  **************************************************************************/
 extern SECStatus 
 PK11_PQG_GetBaseFromParams(const PQGParams *params, SECItem *base) {
-    return PQG_GetBaseFromParams(params, base);
+    return SECITEM_CopyItem(NULL, base, &params->base);
 }
 
 
@@ -341,7 +452,35 @@ PK11_PQG_GetBaseFromParams(const PQGParams *params, SECItem *base) {
 extern PQGVerify *
 PK11_PQG_NewVerify(unsigned int counter, const SECItem * seed, 
 							const SECItem * h) {
-    return PQG_NewVerify(counter, seed, h);
+    PLArenaPool *arena;
+    PQGVerify *  dest;
+    SECStatus    status;
+
+    arena = PORT_NewArena(PQG_DEFAULT_CHUNKSIZE);
+    if (arena == NULL)
+	goto loser;
+
+    dest = (PQGVerify*)PORT_ArenaZAlloc(arena, sizeof(PQGVerify));
+    if (dest == NULL)
+	goto loser;
+
+    dest->arena   = arena;
+    dest->counter = counter;
+
+    status = SECITEM_CopyItem(arena, &dest->seed, seed);
+    if (status != SECSuccess)
+	goto loser;
+
+    status = SECITEM_CopyItem(arena, &dest->h, h);
+    if (status != SECSuccess)
+	goto loser;
+
+    return dest;
+
+loser:
+    if (arena != NULL)
+	PORT_FreeArena(arena, PR_FALSE);
+    return NULL;
 }
 
 
@@ -350,7 +489,7 @@ PK11_PQG_NewVerify(unsigned int counter, const SECItem * seed,
  **************************************************************************/
 extern unsigned int 
 PK11_PQG_GetCounterFromVerify(const PQGVerify *verify) {
-    return PQG_GetCounterFromVerify(verify);
+    return verify->counter;
 }
 
 /**************************************************************************
@@ -359,7 +498,7 @@ PK11_PQG_GetCounterFromVerify(const PQGVerify *verify) {
  **************************************************************************/
 extern SECStatus 
 PK11_PQG_GetSeedFromVerify(const PQGVerify *verify, SECItem *seed) {
-    return PQG_GetSeedFromVerify(verify, seed);
+    return SECITEM_CopyItem(NULL, seed, &verify->seed);
 }
 
 
@@ -369,5 +508,5 @@ PK11_PQG_GetSeedFromVerify(const PQGVerify *verify, SECItem *seed) {
  **************************************************************************/
 extern SECStatus 
 PK11_PQG_GetHFromVerify(const PQGVerify *verify, SECItem * h) {
-    return PQG_GetHFromVerify(verify, h);
+    return SECITEM_CopyItem(NULL, h, &verify->h);
 }

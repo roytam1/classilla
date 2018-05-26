@@ -1,44 +1,14 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Public prototypes for base64 encoding/decoding.
- *
- * $Id: nssb64.h,v 1.2 2000/04/06 00:42:49 repka%netscape.com Exp $
  */
 #ifndef _NSSB64_H_
 #define _NSSB64_H_
 
+#include "utilrename.h"
 #include "seccomon.h"
 #include "nssb64t.h"
 
@@ -96,7 +66,7 @@ NSSBase64Encoder_Destroy (NSSBase64Encoder *data, PRBool abort_p);
  * Return value is NULL on error, the Item (allocated or provided) otherwise.
  */
 extern SECItem *
-NSSBase64_DecodeBuffer (PRArenaPool *arenaOpt, SECItem *outItemOpt,
+NSSBase64_DecodeBuffer (PLArenaPool *arenaOpt, SECItem *outItemOpt,
 			const char *inStr, unsigned int inLen);
 
 /*
@@ -116,7 +86,7 @@ NSSBase64_DecodeBuffer (PRArenaPool *arenaOpt, SECItem *outItemOpt,
  * otherwise.
  */
 extern char *
-NSSBase64_EncodeItem (PRArenaPool *arenaOpt, char *outStrOpt,
+NSSBase64_EncodeItem (PLArenaPool *arenaOpt, char *outStrOpt,
 		      unsigned int maxOutLen, SECItem *inItem);
 
 SEC_END_PROTOS

@@ -1,44 +1,16 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef _SECDERT_H_
 #define _SECDERT_H_
 /*
  * secdert.h - public data structures for the DER encoding and
  *	       decoding utilities library
- *
- * $Id: secdert.h,v 1.1 2000/03/31 19:39:35 relyea%netscape.com Exp $
  */
+
+#include "utilrename.h"
+#include "seccomon.h"
 
 typedef struct DERTemplateStr DERTemplate;
 
@@ -153,18 +125,5 @@ struct DERTemplateStr {
 {					  \
     (item)->len = ((item)->len + 7) >> 3; \
 }
-
-extern DERTemplate SECAnyTemplate[];
-extern DERTemplate SECBitStringTemplate[];
-extern DERTemplate SECBooleanTemplate[];
-extern DERTemplate SECIA5StringTemplate[];
-extern DERTemplate SECIntegerTemplate[];
-extern DERTemplate SECNullTemplate[];
-extern DERTemplate SECObjectIDTemplate[];
-extern DERTemplate SECOctetStringTemplate[];
-extern DERTemplate SECPrintableStringTemplate[];
-extern DERTemplate SECT61StringTemplate[];
-extern DERTemplate SECUTCTimeTemplate[];
-extern DERTemplate SECAlgorithmIDTemplate[];
 
 #endif /* _SECDERT_H_ */

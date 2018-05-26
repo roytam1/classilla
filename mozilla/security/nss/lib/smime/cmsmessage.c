@@ -1,40 +1,9 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * CMS message methods.
- *
- * $Id: cmsmessage.c,v 1.3 2001/09/20 22:15:32 relyea%netscape.com Exp $
  */
 
 #include "cmslocal.h"
@@ -78,6 +47,7 @@ NSS_CMSMessage_Create(PLArenaPool *poolp)
 	    PORT_FreeArena(poolp, PR_FALSE);
 	return NULL;
     }
+    NSS_CMSContentInfo_Private_Init(&(cmsg->contentInfo));
 
     cmsg->poolp = poolp;
     cmsg->poolp_is_ours = poolp_is_ours;
@@ -178,7 +148,9 @@ SECItem *
 NSS_CMSMessage_GetContent(NSSCMSMessage *cmsg)
 {
     /* this is a shortcut */
-    return NSS_CMSContentInfo_GetInnerContent(NSS_CMSMessage_GetContentInfo(cmsg));
+    NSSCMSContentInfo * cinfo = NSS_CMSMessage_GetContentInfo(cmsg);
+    SECItem           * pItem = NSS_CMSContentInfo_GetInnerContent(cinfo);
+    return pItem;
 }
 
 /*
@@ -193,8 +165,9 @@ NSS_CMSMessage_ContentLevelCount(NSSCMSMessage *cmsg)
     NSSCMSContentInfo *cinfo;
 
     /* walk down the chain of contentinfos */
-    for (cinfo = &(cmsg->contentInfo); cinfo != NULL; cinfo = NSS_CMSContentInfo_GetChildContentInfo(cinfo)) {
+    for (cinfo = &(cmsg->contentInfo); cinfo != NULL; ) {
 	count++;
+	cinfo = NSS_CMSContentInfo_GetChildContentInfo(cinfo);
     }
     return count;
 }
@@ -228,11 +201,12 @@ NSS_CMSMessage_ContainsCertsOrCrls(NSSCMSMessage *cmsg)
 
     /* descend into CMS message */
     for (cinfo = &(cmsg->contentInfo); cinfo != NULL; cinfo = NSS_CMSContentInfo_GetChildContentInfo(cinfo)) {
-	if (NSS_CMSContentInfo_GetContentTypeTag(cinfo) != SEC_OID_PKCS7_SIGNED_DATA)
+	if (!NSS_CMSType_IsData(NSS_CMSContentInfo_GetContentTypeTag(cinfo)))
 	    continue;	/* next level */
 	
 	if (NSS_CMSSignedData_ContainsCertsOrCrls(cinfo->content.signedData))
 	    return PR_TRUE;
+	/* callback here for generic wrappers? */
     }
     return PR_FALSE;
 }
@@ -253,6 +227,7 @@ NSS_CMSMessage_IsEncrypted(NSSCMSMessage *cmsg)
 	case SEC_OID_PKCS7_ENCRYPTED_DATA:
 	    return PR_TRUE;
 	default:
+	    /* callback here for generic wrappers? */
 	    break;
 	}
     }
@@ -283,6 +258,7 @@ NSS_CMSMessage_IsSigned(NSSCMSMessage *cmsg)
 		return PR_TRUE;
 	    break;
 	default:
+	    /* callback here for generic wrappers? */
 	    break;
 	}
     }

@@ -1,36 +1,7 @@
 /* -*- Mode: C; tab-width: 8 -*-*/
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
 #include "crmf.h"
@@ -78,6 +49,11 @@ crmf_decode_process_raverified(CRMFCertReqMsg *inCertReqMsg)
 static SECStatus
 crmf_decode_process_signature(CRMFCertReqMsg *inCertReqMsg)
 {
+    PORT_Assert(inCertReqMsg->poolp);
+    if (!inCertReqMsg->poolp) {
+    	PORT_SetError(SEC_ERROR_INVALID_ARGS);
+	return SECFailure;
+    }
     return SEC_ASN1Decode(inCertReqMsg->poolp,
 			  &inCertReqMsg->pop->popChoice.signature,
 			  CRMFPOPOSigningKeyTemplate, 
@@ -127,15 +103,17 @@ crmf_decode_process_popoprivkey(CRMFCertReqMsg *inCertReqMsg)
     switch (popoPrivKey->messageChoice) {
     case crmfThisMessage:
     case crmfDHMAC:
+        privKeyDer.type = derPOP->type;
         privKeyDer.data = &derPOP->data[5];
 	privKeyDer.len  = derPOP->len - 5;
 	break;
     case crmfSubsequentMessage:
+        privKeyDer.type = derPOP->type;
         privKeyDer.data = &derPOP->data[4];
 	privKeyDer.len  = derPOP->len - 4;
 	break;
     default:
-        rv = SECFailure;
+        return SECFailure;
     }
 
     rv = SECITEM_CopyItem(inCertReqMsg->poolp, 
@@ -185,7 +163,7 @@ static SECStatus
 crmf_decode_process_pop(CRMFCertReqMsg *inCertReqMsg)
 {
      SECItem               *derPOP;
-     PRArenaPool           *poolp;
+     PLArenaPool           *poolp;
      CRMFProofOfPossession *pop;
      void                  *mark;
      SECStatus              rv;
@@ -239,7 +217,7 @@ crmf_decode_process_pop(CRMFCertReqMsg *inCertReqMsg)
 }
 
 static SECStatus
-crmf_decode_process_single_control(PRArenaPool *poolp, 
+crmf_decode_process_single_control(PLArenaPool *poolp,
 				   CRMFControl *inControl)
 {
     const SEC_ASN1Template *asn1Template = NULL;
@@ -248,6 +226,11 @@ crmf_decode_process_single_control(PRArenaPool *poolp,
     asn1Template = crmf_get_pkiarchiveoptions_subtemplate(inControl);
 
     PORT_Assert (asn1Template != NULL);
+    PORT_Assert (poolp != NULL);
+    if (!asn1Template || !poolp) {
+    	PORT_SetError(SEC_ERROR_INVALID_ARGS);
+	return SECFailure;
+    }
     /* We've got a union, so passing a pointer to one element of the
      * union is the same as passing a pointer to any of the other
      * members of the union.
@@ -262,7 +245,7 @@ crmf_decode_process_controls(CRMFCertReqMsg *inCertReqMsg)
 {
     int           i, numControls;
     SECStatus     rv;
-    PRArenaPool  *poolp;
+    PLArenaPool  *poolp;
     CRMFControl **controls;
     
     numControls = CRMF_CertRequestGetNumControls(inCertReqMsg->certReq);
@@ -302,7 +285,7 @@ crmf_decode_process_single_reqmsg(CRMFCertReqMsg *inCertReqMsg)
 CRMFCertReqMsg*
 CRMF_CreateCertReqMsgFromDER (const char * buf, long len)
 {
-    PRArenaPool    *poolp;
+    PLArenaPool    *poolp;
     CRMFCertReqMsg *certReqMsg;
     SECStatus       rv;
 
@@ -339,14 +322,14 @@ CRMF_CreateCertReqMessagesFromDER(const char *buf, long len)
     long                 arenaSize;
     int                  i;
     SECStatus            rv;
-    PRArenaPool         *poolp;
+    PLArenaPool         *poolp;
     CRMFCertReqMessages *certReqMsgs;
 
     PORT_Assert (buf != NULL);
     /* Wanna make sure the arena is big enough to store all of the requests
      * coming in.  We'll guestimate according to the length of the buffer.
      */
-    arenaSize = len * 1.5;
+    arenaSize = len + len/2;
     poolp = PORT_NewArena(arenaSize);
     if (poolp == NULL) {
         return NULL;

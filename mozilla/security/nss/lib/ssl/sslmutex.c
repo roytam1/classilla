@@ -1,41 +1,10 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 2001 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s): 
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- *
- * $Id: sslmutex.c,v 1.16 2002/09/07 02:48:45 jpierre%netscape.com Exp $
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "seccomon.h"
 /* This ifdef should match the one in sslsnce.c */
-#if (defined(XP_UNIX) || defined(XP_WIN32) || defined (XP_OS2) || defined(XP_BEOS)) && !defined(_WIN32_WCE)
+#if defined(XP_UNIX) || defined(XP_WIN32) || defined (XP_OS2) || defined(XP_BEOS)
 
 #include "sslmutex.h"
 #include "prerr.h"
@@ -87,7 +56,7 @@ static SECStatus single_process_sslMutex_Lock(sslMutex* pMutex)
     return SECSuccess;
 }
 
-#if defined(LINUX) || defined(AIX) || defined(VMS) || defined(BEOS) || defined(BSDI) || defined(NETBSD) || defined(OPENBSD)
+#if defined(LINUX) || defined(AIX) || defined(BEOS) || defined(BSDI) || (defined(NETBSD) && __NetBSD_Version__ < 500000000) || defined(OPENBSD)
 
 #include <unistd.h>
 #include <fcntl.h>
@@ -139,19 +108,9 @@ sslMutex_Init(sslMutex *pMutex, int shared)
 
     err = pipe(pMutex->u.pipeStr.mPipes);
     if (err) {
+	nss_MD_unix_map_default_error(errno);
 	return err;
     }
-    /* close-on-exec is false by default */
-    if (!shared) {
-	err = fcntl(pMutex->u.pipeStr.mPipes[0], F_SETFD, FD_CLOEXEC);
-	if (err) 
-	    goto loser;
-
-	err = fcntl(pMutex->u.pipeStr.mPipes[1], F_SETFD, FD_CLOEXEC);
-	if (err) 
-	    goto loser;
-    }
-
 #if NONBLOCKING_POSTS
     err = setNonBlocking(pMutex->u.pipeStr.mPipes[1], 1);
     if (err)
@@ -176,7 +135,7 @@ loser:
 }
 
 SECStatus
-sslMutex_Destroy(sslMutex *pMutex)
+sslMutex_Destroy(sslMutex *pMutex, PRBool processLocal)
 {
     if (PR_FALSE == pMutex->isMultiProcess) {
         return single_process_sslMutex_Destroy(pMutex);
@@ -187,6 +146,10 @@ sslMutex_Destroy(sslMutex *pMutex)
     }
     close(pMutex->u.pipeStr.mPipes[0]);
     close(pMutex->u.pipeStr.mPipes[1]);
+
+    if (processLocal) {
+	return SECSuccess;
+    }
 
     pMutex->u.pipeStr.mPipes[0] = -1;
     pMutex->u.pipeStr.mPipes[1] = -1;
@@ -199,10 +162,17 @@ sslMutex_Destroy(sslMutex *pMutex)
 #if defined(LINUX) && defined(i386)
 /* No memory barrier needed for this platform */
 
+/* nWaiters includes the holder of the lock (if any) and the number
+** threads waiting for it.  After incrementing nWaiters, if the count
+** is exactly 1, then you have the lock and may proceed.  If the 
+** count is greater than 1, then you must wait on the pipe.
+*/ 
+
+
 SECStatus 
 sslMutex_Unlock(sslMutex *pMutex)
 {
-    PRInt32 oldValue;
+    PRInt32 newValue;
     if (PR_FALSE == pMutex->isMultiProcess) {
         return single_process_sslMutex_Unlock(pMutex);
     }
@@ -212,8 +182,8 @@ sslMutex_Unlock(sslMutex *pMutex)
 	return SECFailure;
     }
     /* Do Memory Barrier here. */
-    oldValue = PR_AtomicDecrement(&pMutex->u.pipeStr.nWaiters);
-    if (oldValue > 1) {
+    newValue = PR_ATOMIC_DECREMENT(&pMutex->u.pipeStr.nWaiters);
+    if (newValue > 0) {
 	int  cc;
 	char c  = 1;
 	do {
@@ -233,7 +203,7 @@ sslMutex_Unlock(sslMutex *pMutex)
 SECStatus 
 sslMutex_Lock(sslMutex *pMutex)
 {
-    PRInt32 oldValue;
+    PRInt32 newValue;
     if (PR_FALSE == pMutex->isMultiProcess) {
         return single_process_sslMutex_Lock(pMutex);
     }
@@ -242,9 +212,9 @@ sslMutex_Lock(sslMutex *pMutex)
 	PORT_SetError(PR_INVALID_ARGUMENT_ERROR);
 	return SECFailure;
     }
-    oldValue = PR_AtomicDecrement(&pMutex->u.pipeStr.nWaiters);
+    newValue = PR_ATOMIC_INCREMENT(&pMutex->u.pipeStr.nWaiters);
     /* Do Memory Barrier here. */
-    if (oldValue > 0) {
+    if (newValue > 1) {
 	int   cc;
 	char  c;
 	do {
@@ -410,7 +380,7 @@ sslMutex_Init(sslMutex *pMutex, int shared)
 }
 
 SECStatus
-sslMutex_Destroy(sslMutex *pMutex)
+sslMutex_Destroy(sslMutex *pMutex, PRBool processLocal)
 {
     HANDLE hMutex;
     int    rv;
@@ -436,9 +406,10 @@ sslMutex_Destroy(sslMutex *pMutex)
     }
     
     rv = CloseHandle(hMutex); /* ignore error */
-    if (rv) {
+    if (!processLocal && rv) {
         pMutex->u.sslMutx = hMutex = INVALID_HANDLE_VALUE;
-    } else {
+    }
+    if (!rv) {
         nss_MD_win32_map_default_error(GetLastError());
         retvalue = SECFailure;
     }
@@ -558,11 +529,16 @@ sslMutex_Init(sslMutex *pMutex, int shared)
 }
 
 SECStatus 
-sslMutex_Destroy(sslMutex *pMutex)
+sslMutex_Destroy(sslMutex *pMutex, PRBool processLocal)
 {
     int rv;
     if (PR_FALSE == pMutex->isMultiProcess) {
         return single_process_sslMutex_Destroy(pMutex);
+    }
+
+    /* semaphores are global resources. See SEM_DESTROY(3) man page */
+    if (processLocal) {
+	return SECSuccess;
     }
     do {
 	rv = sem_destroy(&pMutex->u.sem);
@@ -624,7 +600,7 @@ sslMutex_Init(sslMutex *pMutex, int shared)
 }
 
 SECStatus 
-sslMutex_Destroy(sslMutex *pMutex)
+sslMutex_Destroy(sslMutex *pMutex, PRBool processLocal)
 {
     PR_ASSERT(pMutex);
     if (PR_FALSE == pMutex->isMultiProcess) {

@@ -1,47 +1,17 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Support for encoding/decoding of ASN.1 using BER/DER (Basic/Distinguished
  * Encoding Rules).  The routines are found in and used extensively by the
  * security library, but exported for other use.
- *
- * $Id: secasn1.h,v 1.6 2002/08/08 01:54:38 jpierre%netscape.com Exp $
  */
 
 #ifndef _SECASN1_H_
 #define _SECASN1_H_
 
+#include "utilrename.h"
 #include "plarena.h"
 
 #include "seccomon.h"
@@ -59,7 +29,7 @@ SEC_BEGIN_PROTOS
 ** Decoding.
 */
 
-extern SEC_ASN1DecoderContext *SEC_ASN1DecoderStart(PRArenaPool *pool,
+extern SEC_ASN1DecoderContext *SEC_ASN1DecoderStart(PLArenaPool *pool,
 						    void *dest,
 						    const SEC_ASN1Template *t);
 
@@ -69,6 +39,9 @@ extern SECStatus SEC_ASN1DecoderUpdate(SEC_ASN1DecoderContext *cx,
 				       unsigned long len);
 
 extern SECStatus SEC_ASN1DecoderFinish(SEC_ASN1DecoderContext *cx);
+
+/* Higher level code detected an error, abort the rest of the processing */
+extern void SEC_ASN1DecoderAbort(SEC_ASN1DecoderContext *cx, int error);
 
 extern void SEC_ASN1DecoderSetFilterProc(SEC_ASN1DecoderContext *cx,
 					 SEC_ASN1WriteProc fn,
@@ -82,23 +55,30 @@ extern void SEC_ASN1DecoderSetNotifyProc(SEC_ASN1DecoderContext *cx,
 
 extern void SEC_ASN1DecoderClearNotifyProc(SEC_ASN1DecoderContext *cx);
 
-extern SECStatus SEC_ASN1Decode(PRArenaPool *pool, void *dest,
+extern SECStatus SEC_ASN1Decode(PLArenaPool *pool, void *dest,
 				const SEC_ASN1Template *t,
 				const char *buf, long len);
 
-extern SECStatus SEC_ASN1DecodeItem(PRArenaPool *pool, void *dest,
-				    const SEC_ASN1Template *t,
-				    SECItem *item);
+/* Both classic ASN.1 and QuickDER have a feature that removes leading zeroes
+   out of SEC_ASN1_INTEGER if the caller sets siUnsignedInteger in the type
+   field of the target SECItem prior to calling the decoder. Otherwise, the
+   type field is ignored and untouched. For SECItem that are dynamically
+   allocated (from POINTER, SET OF, SEQUENCE OF) the decoder sets the type
+   field to siBuffer. */
 
-extern SECStatus SEC_QuickDERDecodeItem(PRArenaPool* arena, void* dest,
+extern SECStatus SEC_ASN1DecodeItem(PLArenaPool *pool, void *dest,
+				    const SEC_ASN1Template *t,
+				    const SECItem *src);
+
+extern SECStatus SEC_QuickDERDecodeItem(PLArenaPool* arena, void* dest,
                      const SEC_ASN1Template* templateEntry,
-                     SECItem* src);
+                     const SECItem* src);
 
 /*
 ** Encoding.
 */
 
-extern SEC_ASN1EncoderContext *SEC_ASN1EncoderStart(void *src,
+extern SEC_ASN1EncoderContext *SEC_ASN1EncoderStart(const void *src,
 						    const SEC_ASN1Template *t,
 						    SEC_ASN1WriteProc fn,
 						    void *output_arg);
@@ -109,6 +89,9 @@ extern SECStatus SEC_ASN1EncoderUpdate(SEC_ASN1EncoderContext *cx,
 				       unsigned long len);
 
 extern void SEC_ASN1EncoderFinish(SEC_ASN1EncoderContext *cx);
+
+/* Higher level code detected an error, abort the rest of the processing */
+extern void SEC_ASN1EncoderAbort(SEC_ASN1EncoderContext *cx, int error);
 
 extern void SEC_ASN1EncoderSetNotifyProc(SEC_ASN1EncoderContext *cx,
 					 SEC_ASN1NotifyProc fn,
@@ -128,17 +111,23 @@ extern void SEC_ASN1EncoderSetTakeFromBuf(SEC_ASN1EncoderContext *cx);
 
 extern void SEC_ASN1EncoderClearTakeFromBuf(SEC_ASN1EncoderContext *cx);
 
-extern SECStatus SEC_ASN1Encode(void *src, const SEC_ASN1Template *t,
+extern SECStatus SEC_ASN1Encode(const void *src, const SEC_ASN1Template *t,
 				SEC_ASN1WriteProc output_proc,
 				void *output_arg);
 
-extern SECItem * SEC_ASN1EncodeItem(PRArenaPool *pool, SECItem *dest,
-				    void *src, const SEC_ASN1Template *t);
+/*
+ * If both pool and dest are NULL, the caller should free the returned SECItem
+ * with a SECITEM_FreeItem(..., PR_TRUE) call.  If pool is NULL but dest is
+ * not NULL, the caller should free the data buffer pointed to by dest with a
+ * SECITEM_FreeItem(dest, PR_FALSE) or PORT_Free(dest->data) call.
+ */
+extern SECItem * SEC_ASN1EncodeItem(PLArenaPool *pool, SECItem *dest,
+				    const void *src, const SEC_ASN1Template *t);
 
-extern SECItem * SEC_ASN1EncodeInteger(PRArenaPool *pool,
+extern SECItem * SEC_ASN1EncodeInteger(PLArenaPool *pool,
 				       SECItem *dest, long value);
 
-extern SECItem * SEC_ASN1EncodeUnsignedInteger(PRArenaPool *pool,
+extern SECItem * SEC_ASN1EncodeUnsignedInteger(PLArenaPool *pool,
 					       SECItem *dest,
 					       unsigned long value);
 
@@ -173,6 +162,11 @@ extern int SEC_ASN1EncodeLength(unsigned char *buf,int value);
 extern const SEC_ASN1Template *
 SEC_ASN1GetSubtemplate (const SEC_ASN1Template *inTemplate, void *thing,
 			PRBool encoding);
+
+/* whether the template is for a primitive type or a choice of
+ * primitive types
+ */
+extern PRBool SEC_ASN1IsTemplateSimple(const SEC_ASN1Template *theTemplate);
 
 /************************************************************************/
 
@@ -285,5 +279,14 @@ SEC_ASN1_CHOOSER_DECLARE(SEC_PointerToOctetStringTemplate)
 
 SEC_ASN1_CHOOSER_DECLARE(SEC_SetOfAnyTemplate)
 
+SEC_ASN1_CHOOSER_DECLARE(SEC_EnumeratedTemplate)
+SEC_ASN1_CHOOSER_DECLARE(SEC_PointerToEnumeratedTemplate)
+SEC_ASN1_CHOOSER_DECLARE(SEC_SequenceOfAnyTemplate)
+SEC_ASN1_CHOOSER_DECLARE(SEC_SequenceOfObjectIDTemplate)
+SEC_ASN1_CHOOSER_DECLARE(SEC_SkipTemplate)
+SEC_ASN1_CHOOSER_DECLARE(SEC_UniversalStringTemplate)
+SEC_ASN1_CHOOSER_DECLARE(SEC_PrintableStringTemplate)
+SEC_ASN1_CHOOSER_DECLARE(SEC_T61StringTemplate)
+SEC_ASN1_CHOOSER_DECLARE(SEC_PointerToGeneralizedTimeTemplate)
 SEC_END_PROTOS
 #endif /* _SECASN1_H_ */

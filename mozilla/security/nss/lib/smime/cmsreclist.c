@@ -1,40 +1,9 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * CMS recipient list functions
- *
- * $Id: cmsreclist.c,v 1.2 2000/06/13 21:56:31 chrisk%netscape.com Exp $
  */
 
 #include "cmslocal.h"
@@ -63,21 +32,32 @@ nss_cms_recipients_traverse(NSSCMSRecipientInfo **recipientinfos, NSSCMSRecipien
 	switch (ri->recipientInfoType) {
 	case NSSCMSRecipientInfoID_KeyTrans:
 	    if (recipient_list) {
+		NSSCMSRecipientIdentifier *recipId =
+		   &ri->ri.keyTransRecipientInfo.recipientIdentifier;
+
+		if (recipId->identifierType != NSSCMSRecipientID_IssuerSN &&
+                    recipId->identifierType != NSSCMSRecipientID_SubjectKeyID) {
+		    PORT_SetError(SEC_ERROR_INVALID_ARGS);
+		    return -1;
+		}                
 		/* alloc one & fill it out */
 		rle = (NSSCMSRecipient *)PORT_ZAlloc(sizeof(NSSCMSRecipient));
-		if (rle == NULL)
+		if (!rle)
 		    return -1;
 		
 		rle->riIndex = i;
 		rle->subIndex = -1;
-		switch (ri->ri.keyTransRecipientInfo.recipientIdentifier.identifierType) {
+		switch (recipId->identifierType) {
 		case NSSCMSRecipientID_IssuerSN:
 		    rle->kind = RLIssuerSN;
-		    rle->id.issuerAndSN = ri->ri.keyTransRecipientInfo.recipientIdentifier.id.issuerAndSN;
+		    rle->id.issuerAndSN = recipId->id.issuerAndSN;
 		    break;
 		case NSSCMSRecipientID_SubjectKeyID:
 		    rle->kind = RLSubjKeyID;
-		    rle->id.subjectKeyID = ri->ri.keyTransRecipientInfo.recipientIdentifier.id.subjectKeyID;
+		    rle->id.subjectKeyID = recipId->id.subjectKeyID;
+		    break;
+		default: /* we never get here because of identifierType check
+                            we done before. Leaving it to kill compiler warning */
 		    break;
 		}
 		recipient_list[rlindex++] = rle;
@@ -93,7 +73,7 @@ nss_cms_recipients_traverse(NSSCMSRecipientInfo **recipientinfos, NSSCMSRecipien
 		    rek = ri->ri.keyAgreeRecipientInfo.recipientEncryptedKeys[j];
 		    /* alloc one & fill it out */
 		    rle = (NSSCMSRecipient *)PORT_ZAlloc(sizeof(NSSCMSRecipient));
-		    if (rle == NULL)
+		    if (!rle)
 			return -1;
 		    
 		    rle->riIndex = i;

@@ -1,50 +1,41 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
-
-/*
- * Contributors:
+ *   IBM Corporation
  *
- * This Original Code has been modified by IBM Corporation.
- * Modifications made by IBM described herein are
- * Copyright (c) International Business Machines Corporation, 2000.
- * Modifications to Mozilla code or documentation identified per
- * MPL Section 3.3
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
  *
- * Date         Modified by     Description of modification
- * 04/10/2000   IBM Corp.       Added DebugBreak() definitions for OS/2
- */
+ * ***** END LICENSE BLOCK ***** */
 
 #include "primpl.h"
 #include "prenv.h"
@@ -87,7 +78,6 @@ static PRLock *_pr_logLock;
 
 #if defined(XP_PC)
 #define strcasecmp stricmp
-#define strncasecmp strnicmp
 #endif
 
 /*
@@ -111,8 +101,21 @@ static PRLock *_pr_logLock;
 
 /* Macros used to reduce #ifdef pollution */
 
-#if defined(_PR_USE_STDIO_FOR_LOGGING)
-#define _PUT_LOG(fd, buf, nb) {fputs(buf, fd); fflush(fd);}
+#if defined(_PR_USE_STDIO_FOR_LOGGING) && defined(XP_PC)
+#define _PUT_LOG(fd, buf, nb) \
+    PR_BEGIN_MACRO \
+    if (logFile == WIN32_DEBUG_FILE) { \
+        char savebyte = buf[nb]; \
+        buf[nb] = '\0'; \
+        OutputDebugString(buf); \
+        buf[nb] = savebyte; \
+    } else { \
+        fwrite(buf, 1, nb, fd); \
+        fflush(fd); \
+    } \
+    PR_END_MACRO
+#elif defined(_PR_USE_STDIO_FOR_LOGGING)
+#define _PUT_LOG(fd, buf, nb) {fwrite(buf, 1, nb, fd); fflush(fd);}
 #elif defined(_PR_PTHREADS)
 #define _PUT_LOG(fd, buf, nb) PR_Write(fd, buf, nb)
 #elif defined(XP_MAC)
@@ -203,7 +206,7 @@ void _PR_InitLog(void)
         PRInt32 bufSize = DEFAULT_BUF_SIZE;
         while (pos < evlen) {
             PRIntn level = 1, count = 0, delta = 0;
-            count = sscanf(&ev[pos], "%63[ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789]%n:%d%n",
+            count = sscanf(&ev[pos], "%63[ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-]%n:%d%n",
                            module, &delta, &level, &delta);
             pos += delta;
             if (count == 0) break;
@@ -237,7 +240,13 @@ void _PR_InitLog(void)
             pos += delta;
             if (count == EOF) break;
         }
-        PR_SetLogBuffering(isSync ? bufSize : 0);
+        PR_SetLogBuffering(isSync ? 0 : bufSize);
+
+#ifdef XP_UNIX
+        if ((getuid() != geteuid()) || (getgid() != getegid())) {
+            return;
+        }
+#endif /* XP_UNIX */
 
         ev = PR_GetEnv("NSPR_LOG_FILE");
         if (ev && ev[0]) {
@@ -269,14 +278,25 @@ void _PR_LogCleanup(void)
     PR_LogFlush();
 
 #ifdef _PR_USE_STDIO_FOR_LOGGING
-    if (logFile && logFile != stdout && logFile != stderr) {
+    if (logFile
+        && logFile != stdout
+        && logFile != stderr
+#ifdef XP_PC
+        && logFile != WIN32_DEBUG_FILE
+#endif
+        ) {
         fclose(logFile);
+        logFile = NULL;
     }
 #else
     if (logFile && logFile != _pr_stdout && logFile != _pr_stderr) {
         PR_Close(logFile);
+        logFile = NULL;
     }
 #endif
+
+    if (logBuf)
+        PR_DELETE(logBuf);
 
     while (lm != NULL) {
         PRLogModuleInfo *next = lm->next;
@@ -306,7 +326,7 @@ static void _PR_SetLogModuleLevel( PRLogModuleInfo *lm )
         while (pos < evlen) {
             PRIntn level = 1, count = 0, delta = 0;
 
-            count = sscanf(&ev[pos], "%63[ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789]%n:%d%n",
+            count = sscanf(&ev[pos], "%63[ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-]%n:%d%n",
                            module, &delta, &level, &delta);
             pos += delta;
             if (count == 0) break;
@@ -342,8 +362,8 @@ PR_IMPLEMENT(PRLogModuleInfo*) PR_NewLogModule(const char *name)
         lm->level = PR_LOG_NONE;
         lm->next = logModules;
         logModules = lm;
+        _PR_SetLogModuleLevel(lm);
     }
-    _PR_SetLogModuleLevel(lm);
     return lm;
 }
 
@@ -355,20 +375,29 @@ PR_IMPLEMENT(PRBool) PR_SetLogFile(const char *file)
 #ifdef XP_PC
     if ( strcmp( file, "WinDebug") == 0)
     {
-        logFile = WIN32_DEBUG_FILE;
-        return(PR_TRUE);
+        newLogFile = WIN32_DEBUG_FILE;
     }
+    else
 #endif
-    newLogFile = fopen(file, "w");
-    if (newLogFile) {
+    {
+        newLogFile = fopen(file, "w");
+        if (!newLogFile)
+            return PR_FALSE;
+
         /* We do buffering ourselves. */
         setvbuf(newLogFile, NULL, _IONBF, 0);
-        if (logFile && logFile != stdout && logFile != stderr) {
-            fclose(logFile);
-        }
-        logFile = newLogFile;
     }
-    return (PRBool) (newLogFile != 0);
+    if (logFile
+        && logFile != stdout
+        && logFile != stderr
+#ifdef XP_PC
+        && logFile != WIN32_DEBUG_FILE
+#endif
+        ) {
+        fclose(logFile);
+    }
+    logFile = newLogFile;
+    return PR_TRUE;
 #else
     PRFileDesc *newLogFile;
 
@@ -392,7 +421,6 @@ PR_IMPLEMENT(void) PR_SetLogBuffering(PRIntn buffer_size)
 
     if (logBuf)
         PR_DELETE(logBuf);
-    logBuf = 0;
 
     if (buffer_size >= LINE_BUF_SIZE) {
         logp = logBuf = (char*) PR_MALLOC(buffer_size);
@@ -404,7 +432,8 @@ PR_IMPLEMENT(void) PR_LogPrint(const char *fmt, ...)
 {
     va_list ap;
     char line[LINE_BUF_SIZE];
-    PRUint32 nb;
+    char *line_long = NULL;
+    PRUint32 nb_tid, nb;
     PRThread *me;
 
     if (!_pr_initialized) _PR_ImplicitInitialization();
@@ -413,54 +442,74 @@ PR_IMPLEMENT(void) PR_LogPrint(const char *fmt, ...)
         return;
     }
 
-    va_start(ap, fmt);
     me = PR_GetCurrentThread();
-    nb = PR_snprintf(line, sizeof(line)-1, "%ld[%p]: ",
+    nb_tid = PR_snprintf(line, sizeof(line)-1, "%ld[%p]: ",
 #if defined(_PR_DCETHREADS)
              /* The problem is that for _PR_DCETHREADS, pthread_t is not a 
               * pointer, but a structure; so you can't easily print it...
               */
-                     me ? &(me->id): 0L, me);
+                         me ? &(me->id): 0L, me);
 #elif defined(_PR_BTHREADS)
-		     me, me);
+                         me, me);
 #else
-                     me ? me->id : 0L, me);
+                         me ? me->id : 0L, me);
 #endif
 
-    nb += PR_vsnprintf(line+nb, sizeof(line)-nb-1, fmt, ap);
-    if (nb && (line[nb-1] != '\n')) {
-#ifndef XP_MAC
-        line[nb++] = '\n';
-#else
-        line[nb++] = '\015';
-#endif 
-        line[nb] = '\0';
-    } else {
-#ifdef XP_MAC
-        line[nb-1] = '\015';
-#endif
-    }
+    va_start(ap, fmt);
+    nb = nb_tid + PR_vsnprintf(line+nb_tid, sizeof(line)-nb_tid-1, fmt, ap);
     va_end(ap);
 
-    _PR_LOCK_LOG();
-    if (logBuf == 0) {
-#ifdef XP_PC
-        if ( logFile == WIN32_DEBUG_FILE)
-            OutputDebugString( line );
-        else
-            _PUT_LOG(logFile, line, nb);
-#else
-        _PUT_LOG(logFile, line, nb);
-#endif
-    } else {
-        if (logp + nb > logEndp) {
+    /*
+     * Check if we might have run out of buffer space (in case we have a
+     * long line), and malloc a buffer just this once.
+     */
+    if (nb == sizeof(line)-2) {
+        va_start(ap, fmt);
+        line_long = PR_vsmprintf(fmt, ap);
+        va_end(ap);
+        /* If this failed, we'll fall back to writing the truncated line. */
+    }
+
+    if (line_long) {
+        nb = strlen(line_long);
+        _PR_LOCK_LOG();
+        if (logBuf != 0) {
             _PUT_LOG(logFile, logBuf, logp - logBuf);
             logp = logBuf;
         }
-        memcpy(logp, line, nb);
-        logp += nb;
+        /* Write out the thread id and the malloc'ed buffer. */
+        _PUT_LOG(logFile, line, nb_tid);
+        _PUT_LOG(logFile, line_long, nb);
+        /* Ensure there is a trailing newline. */
+        if (!nb || (line_long[nb-1] != '\n')) {
+            char eol[2];
+            eol[0] = '\n';
+            eol[1] = '\0';
+            _PUT_LOG(logFile, eol, 1);
+        }
+        _PR_UNLOCK_LOG();
+        PR_smprintf_free(line_long);
+    } else {
+        /* Ensure there is a trailing newline. */
+        if (nb && (line[nb-1] != '\n')) {
+            line[nb++] = '\n';
+            line[nb] = '\0';
+        }
+        _PR_LOCK_LOG();
+        if (logBuf == 0) {
+            _PUT_LOG(logFile, line, nb);
+        } else {
+            /* If nb can't fit into logBuf, write out logBuf first. */
+            if (logp + nb > logEndp) {
+                _PUT_LOG(logFile, logBuf, logp - logBuf);
+                logp = logBuf;
+            }
+            /* nb is guaranteed to fit into logBuf. */
+            memcpy(logp, line, nb);
+            logp += nb;
+        }
+        _PR_UNLOCK_LOG();
     }
-    _PR_UNLOCK_LOG();
     PR_LogFlush();
 }
 
@@ -482,24 +531,6 @@ PR_IMPLEMENT(void) PR_Abort(void)
     abort();
 }
 
-#if defined(XP_OS2)
-/*
- * Added definitions for DebugBreak() for 2 different OS/2 compilers.
- * Doing the int3 on purpose for Visual Age so that a developer can
- * step over the instruction if so desired.  Not always possible if
- * trapping due to exception handling IBM-AKR
- */
-#if defined(XP_OS2_VACPP)
-#include <builtin.h>
-static void DebugBreak(void) { _interrupt(3); }
-#elif defined(XP_OS2_EMX)
-/* Force a trap */
-static void DebugBreak(void) { int *pTrap=NULL; *pTrap = 1; }
-#else
-static void DebugBreak(void) { }
-#endif
-#endif /* XP_OS2 */
-
 PR_IMPLEMENT(void) PR_Assert(const char *s, const char *file, PRIntn ln)
 {
     PR_LogPrint("Assertion failure: %s, at %s:%d\n", s, file, ln);
@@ -509,8 +540,11 @@ PR_IMPLEMENT(void) PR_Assert(const char *s, const char *file, PRIntn ln)
 #ifdef XP_MAC
     dprintf("Assertion failure: %s, at %s:%d\n", s, file, ln);
 #endif
-#if defined(WIN32) || defined(XP_OS2)
+#ifdef WIN32
     DebugBreak();
+#endif
+#ifdef XP_OS2
+    asm("int $3");
 #endif
 #ifndef XP_MAC
     abort();

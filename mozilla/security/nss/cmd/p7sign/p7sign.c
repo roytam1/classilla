@@ -1,41 +1,10 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * p7sign -- A command to create a *detached* pkcs7 signature (over a given
  * input file).
- *
- * $Id: p7sign.c,v 1.7 2002/03/07 22:05:43 nelsonb%netscape.com Exp $
  */
 
 #include "nspr.h"
@@ -61,19 +30,7 @@ extern int fwrite(char *, size_t, size_t, FILE*);
 extern int fprintf(FILE *, char *, ...);
 #endif
 
-char* KeyDbPassword = 0;
-
-
-char* MyPK11PasswordFunc (PK11SlotInfo *slot, PRBool retry, void* arg)
-{
-    char *ret=0;
-
-    if (retry == PR_TRUE)
-        return NULL;
-    ret = PL_strdup (KeyDbPassword);
-    return ret;
-}
-
+static secuPWData  pwdata          = { PW_NONE, 0 };
 
 static void
 Usage(char *progName)
@@ -92,6 +49,7 @@ Usage(char *progName)
     fprintf(stderr, "%-20s Encapsulate content in signature message\n",
 	    "-e");
     fprintf(stderr, "%-20s Password to the key databse\n", "-p");
+    fprintf(stderr, "%-20s password file\n", "-f");
     exit(-1);
 }
 
@@ -128,7 +86,6 @@ static int
 SignFile(FILE *outFile, PRFileDesc *inFile, CERTCertificate *cert, 
          PRBool encapsulated)
 {
-    int nb;
     char digestdata[32];
     unsigned int len;
     SECItem digest, data2sign;
@@ -139,7 +96,8 @@ SignFile(FILE *outFile, PRFileDesc *inFile, CERTCertificate *cert,
 	return -1;
 
     /* suck the file in */
-	if (SECU_ReadDERFromFile(&data2sign, inFile, PR_FALSE) != SECSuccess)
+	if (SECU_ReadDERFromFile(&data2sign, inFile, PR_FALSE,
+	                         PR_FALSE) != SECSuccess)
 	return -1;
 
     if (!encapsulated) {
@@ -172,7 +130,7 @@ SignFile(FILE *outFile, PRFileDesc *inFile, CERTCertificate *cert,
     }
 
     rv = SEC_PKCS7Encode (cinfo, SignOut, outFile, NULL,
-			  NULL, NULL);
+			  NULL, &pwdata);
 
     SEC_PKCS7DestroyContentInfo (cinfo);
 
@@ -188,9 +146,9 @@ main(int argc, char **argv)
     char *progName;
     FILE *outFile;
     PRFileDesc *inFile;
-    char *keyName;
+    char *keyName = NULL;
     CERTCertDBHandle *certHandle;
-    CERTCertificate *cert;
+    CERTCertificate *cert = NULL;
     PRBool encapsulated = PR_FALSE;
     PLOptState *optstate;
     PLOptStatus status;
@@ -206,7 +164,7 @@ main(int argc, char **argv)
     /*
      * Parse command line arguments
      */
-    optstate = PL_CreateOptState(argc, argv, "ed:k:i:o:p:");
+    optstate = PL_CreateOptState(argc, argv, "ed:k:i:o:p:f:");
     while ((status = PL_GetNextOpt(optstate)) == PL_OPT_OK) {
 	switch (optstate->option) {
 	  case '?':
@@ -236,7 +194,7 @@ main(int argc, char **argv)
 	    break;
 
 	  case 'o':
-	    outFile = fopen(optstate->value, "w");
+	    outFile = fopen(optstate->value, "wb");
 	    if (!outFile) {
 		fprintf(stderr, "%s: unable to open \"%s\" for writing\n",
 			progName, optstate->value);
@@ -244,8 +202,14 @@ main(int argc, char **argv)
 	    }
 	    break;
 	  case 'p':
-            KeyDbPassword = strdup (optstate->value);
+            pwdata.source = PW_PLAINTEXT;
+            pwdata.data = strdup (optstate->value);
             break;
+
+	  case 'f':
+              pwdata.source = PW_FROMFILE;
+              pwdata.data = PORT_Strdup (optstate->value);
+              break;
 	}
     }
 
@@ -259,15 +223,16 @@ main(int argc, char **argv)
     rv = NSS_Init(SECU_ConfigDirectory(NULL));
     if (rv != SECSuccess) {
 	SECU_PrintPRandOSError(progName);
-	return -1;
+	goto loser;
     }
 
-    PK11_SetPasswordFunc (MyPK11PasswordFunc);
+    PK11_SetPasswordFunc(SECU_GetModulePassword);
 
     /* open cert database */
     certHandle = CERT_GetDefaultCertDB();
     if (certHandle == NULL) {
-	return -1;
+	rv = SECFailure;
+	goto loser;
     }
 
     /* find cert */
@@ -276,13 +241,36 @@ main(int argc, char **argv)
 	SECU_PrintError(progName,
 		        "the corresponding cert for key \"%s\" does not exist",
 			keyName);
-	return -1;
+	rv = SECFailure;
+	goto loser;
     }
 
     if (SignFile(outFile, inFile, cert, encapsulated)) {
 	SECU_PrintError(progName, "problem signing data");
-	return -1;
+	rv = SECFailure;
+	goto loser;
     }
 
-    return 0;
+loser:
+    if (pwdata.data) {
+        PORT_Free(pwdata.data);
+    }
+    if (keyName) {
+        PORT_Free(keyName);
+    }
+    if (cert) {
+        CERT_DestroyCertificate(cert);
+    }
+    if (inFile && inFile != PR_STDIN) {
+        PR_Close(inFile);
+    }
+    if (outFile && outFile != stdout) {
+        fclose(outFile);
+    }
+    if (NSS_Shutdown() != SECSuccess) {
+        SECU_PrintError(progName, "NSS shutdown:");
+        exit(1);
+    }
+
+    return (rv != SECSuccess);
 }

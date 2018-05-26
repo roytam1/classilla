@@ -1,49 +1,18 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Support routines for SECItem data structure.
- *
- * $Id: secitem.c,v 1.7.12.1 2003/06/27 22:40:21 wtc%netscape.com Exp $
  */
 
 #include "seccomon.h"
 #include "secitem.h"
-#include "base64.h"
 #include "secerr.h"
+#include "secport.h"
 
 SECItem *
-SECITEM_AllocItem(PRArenaPool *arena, SECItem *item, unsigned int len)
+SECITEM_AllocItem(PLArenaPool *arena, SECItem *item, unsigned int len)
 {
     SECItem *result = NULL;
     void *mark = NULL;
@@ -73,6 +42,11 @@ SECITEM_AllocItem(PRArenaPool *arena, SECItem *item, unsigned int len)
 	} else {
 	    result->data = PORT_Alloc(len);
 	}
+	if (result->data == NULL) {
+	    goto loser;
+	}
+    } else {
+	result->data = NULL;
     }
 
     if (mark) {
@@ -93,12 +67,16 @@ loser:
 	if (result != NULL) {
 	    SECITEM_FreeItem(result, (item == NULL) ? PR_TRUE : PR_FALSE);
 	}
+	/*
+	 * If item is not NULL, the above has set item->data and
+	 * item->len to 0.
+	 */
     }
     return(NULL);
 }
 
 SECStatus
-SECITEM_ReallocItem(PRArenaPool *arena, SECItem *item, unsigned int oldlen,
+SECITEM_ReallocItem(PLArenaPool *arena, SECItem *item, unsigned int oldlen,
 		    unsigned int newlen)
 {
     PORT_Assert(item != NULL);
@@ -137,12 +115,74 @@ SECITEM_ReallocItem(PRArenaPool *arena, SECItem *item, unsigned int oldlen,
     return SECSuccess;
 }
 
+SECStatus
+SECITEM_ReallocItemV2(PLArenaPool *arena, SECItem *item, unsigned int newlen)
+{
+    unsigned char *newdata = NULL;
+
+    PORT_Assert(item);
+    if (!item) {
+	PORT_SetError(SEC_ERROR_INVALID_ARGS);
+	return SECFailure;
+    }
+    
+    if (item->len == newlen) {
+	return SECSuccess;
+    }
+
+    if (!newlen) {
+	if (!arena) {
+	    PORT_Free(item->data);
+	}
+	item->data = NULL;
+	item->len = 0;
+	return SECSuccess;
+    }
+    
+    if (!item->data) {
+	/* allocate fresh block of memory */
+	PORT_Assert(!item->len);
+	if (arena) {
+	    newdata = PORT_ArenaAlloc(arena, newlen);
+	} else {
+	    newdata = PORT_Alloc(newlen);
+	}
+    } else {
+	/* reallocate or adjust existing block of memory */
+	if (arena) {
+	    if (item->len > newlen) {
+		/* There's no need to realloc a shorter block from the arena,
+		 * because it would result in using even more memory!
+		 * Therefore we'll continue to use the old block and 
+		 * set the item to the shorter size.
+		 */
+		item->len = newlen;
+		return SECSuccess;
+	    }
+	    newdata = PORT_ArenaGrow(arena, item->data, item->len, newlen);
+	} else {
+	    newdata = PORT_Realloc(item->data, newlen);
+	}
+    }
+
+    if (!newdata) {
+	PORT_SetError(SEC_ERROR_NO_MEMORY);
+	return SECFailure;
+    }
+
+    item->len = newlen;
+    item->data = newdata;
+    return SECSuccess;
+}
+
 SECComparison
 SECITEM_CompareItem(const SECItem *a, const SECItem *b)
 {
     unsigned m;
-    SECComparison rv;
+    int rv;
 
+    if (a == b)
+    	return SECEqual;
     if (!a || !a->len || !a->data) 
         return (!b || !b->len || !b->data) ? SECEqual : SECLessThan;
     if (!b || !b->len || !b->data) 
@@ -150,9 +190,9 @@ SECITEM_CompareItem(const SECItem *a, const SECItem *b)
 
     m = ( ( a->len < b->len ) ? a->len : b->len );
     
-    rv = (SECComparison) PORT_Memcmp(a->data, b->data, m);
+    rv = PORT_Memcmp(a->data, b->data, m);
     if (rv) {
-	return rv;
+	return rv < 0 ? SECLessThan : SECGreaterThan;
     }
     if (a->len < b->len) {
 	return SECLessThan;
@@ -180,18 +220,32 @@ SECITEM_ItemsAreEqual(const SECItem *a, const SECItem *b)
 SECItem *
 SECITEM_DupItem(const SECItem *from)
 {
+    return SECITEM_ArenaDupItem(NULL, from);
+}
+
+SECItem *
+SECITEM_ArenaDupItem(PLArenaPool *arena, const SECItem *from)
+{
     SECItem *to;
     
     if ( from == NULL ) {
 	return(NULL);
     }
     
-    to = (SECItem *)PORT_Alloc(sizeof(SECItem));
+    if ( arena != NULL ) {
+	to = (SECItem *)PORT_ArenaAlloc(arena, sizeof(SECItem));
+    } else {
+	to = (SECItem *)PORT_Alloc(sizeof(SECItem));
+    }
     if ( to == NULL ) {
 	return(NULL);
     }
 
-    to->data = (unsigned char *)PORT_Alloc(from->len);
+    if ( arena != NULL ) {
+	to->data = (unsigned char *)PORT_ArenaAlloc(arena, from->len);
+    } else {
+	to->data = (unsigned char *)PORT_Alloc(from->len);
+    }
     if ( to->data == NULL ) {
 	PORT_Free(to);
 	return(NULL);
@@ -199,13 +253,15 @@ SECITEM_DupItem(const SECItem *from)
 
     to->len = from->len;
     to->type = from->type;
-    PORT_Memcpy(to->data, from->data, to->len);
+    if ( to->len ) {
+	PORT_Memcpy(to->data, from->data, to->len);
+    }
     
     return(to);
 }
 
 SECStatus
-SECITEM_CopyItem(PRArenaPool *arena, SECItem *to, const SECItem *from)
+SECITEM_CopyItem(PLArenaPool *arena, SECItem *to, const SECItem *from)
 {
     to->type = from->type;
     if (from->data && from->len) {
@@ -221,6 +277,10 @@ SECITEM_CopyItem(PRArenaPool *arena, SECItem *to, const SECItem *from)
 	PORT_Memcpy(to->data, from->data, from->len);
 	to->len = from->len;
     } else {
+	/*
+	 * If from->data is NULL but from->len is nonzero, this function
+	 * will succeed.  Is this right?
+	 */
 	to->data = 0;
 	to->len = 0;
     }
@@ -291,4 +351,135 @@ SECITEM_HashCompare ( const void *k1, const void *k2)
     const SECItem *i2 = (const SECItem *)k2;
 
     return SECITEM_ItemsAreEqual(i1,i2);
+}
+
+SECItemArray *
+SECITEM_AllocArray(PLArenaPool *arena, SECItemArray *array, unsigned int len)
+{
+    SECItemArray *result = NULL;
+    void *mark = NULL;
+
+    if (array != NULL && array->items != NULL) {
+        PORT_Assert(0);
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return NULL;
+    }
+
+    if (arena != NULL) {
+        mark = PORT_ArenaMark(arena);
+    }
+
+    if (array == NULL) {
+        if (arena != NULL) {
+            result = PORT_ArenaZAlloc(arena, sizeof(SECItemArray));
+        } else {
+            result = PORT_ZAlloc(sizeof(SECItemArray));
+        }
+        if (result == NULL) {
+            goto loser;
+        }
+    } else {
+        result = array;
+    }
+
+    result->len = len;
+    if (len) {
+        if (arena != NULL) {
+            result->items = PORT_ArenaZNewArray(arena, SECItem, len);
+        } else {
+            result->items = PORT_ZNewArray(SECItem, len);
+        }
+        if (result->items == NULL) {
+            goto loser;
+        }
+    } else {
+        result->items = NULL;
+    }
+
+    if (mark) {
+        PORT_ArenaUnmark(arena, mark);
+    }
+    return result;
+
+loser:
+    if ( arena != NULL ) {
+        if (mark) {
+            PORT_ArenaRelease(arena, mark);
+        }
+    } else {
+        if (result != NULL && array == NULL) {
+            PORT_Free(result);
+        }
+    }
+    if (array != NULL) {
+        array->items = NULL;
+        array->len = 0;
+    }
+    return NULL;
+}
+
+static void
+secitem_FreeArray(SECItemArray *array, PRBool zero_items, PRBool freeit)
+{
+    unsigned int i;
+
+    if (!array || !array->len || !array->items)
+        return;
+
+    for (i = 0; i < array->len; ++i) {
+        SECItem *item = &array->items[i];
+
+        if (item->data) {
+            if (zero_items) {
+                SECITEM_ZfreeItem(item, PR_FALSE);
+            } else {
+                SECITEM_FreeItem(item, PR_FALSE);
+            }
+        }
+    }
+    PORT_Free(array->items);
+    array->items = NULL;
+    array->len = 0;
+
+    if (freeit)
+        PORT_Free(array);
+}
+
+void SECITEM_FreeArray(SECItemArray *array, PRBool freeit)
+{
+    secitem_FreeArray(array, PR_FALSE, freeit);
+}
+
+void SECITEM_ZfreeArray(SECItemArray *array, PRBool freeit)
+{
+    secitem_FreeArray(array, PR_TRUE, freeit);
+}
+
+SECItemArray *
+SECITEM_DupArray(PLArenaPool *arena, const SECItemArray *from)
+{
+    SECItemArray *result;
+    unsigned int i;
+
+    /* Require a "from" array.
+     * Reject an inconsistent "from" array with NULL data and nonzero length.
+     * However, allow a "from" array of zero length.
+     */
+    if (!from || (!from->items && from->len))
+        return NULL;
+
+    result = SECITEM_AllocArray(arena, NULL, from->len);
+    if (!result)
+        return NULL;
+
+    for (i = 0; i < from->len; ++i) {
+        SECStatus rv = SECITEM_CopyItem(arena,
+                                        &result->items[i], &from->items[i]);
+        if (rv != SECSuccess) {
+            SECITEM_ZfreeArray(result, PR_TRUE);
+            return NULL;
+        }
+    }
+
+    return result;
 }

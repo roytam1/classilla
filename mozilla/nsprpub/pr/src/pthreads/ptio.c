@@ -1,36 +1,39 @@
-/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 /*
 ** File:   ptio.c
@@ -57,6 +60,9 @@
 #include <sys/uio.h>
 #include <sys/file.h>
 #include <sys/ioctl.h>
+#if defined(DARWIN)
+#include <sys/utsname.h> /* for uname */
+#endif
 #if defined(SOLARIS) || defined(UNIXWARE)
 #include <sys/filio.h>  /* to pick up FIONREAD */
 #endif
@@ -181,7 +187,10 @@ static ssize_t (*pt_aix_sendfile_fptr)() = NULL;
 
 #include "primpl.h"
 
+#ifdef HAVE_NETINET_TCP_H
 #include <netinet/tcp.h>  /* TCP_NODELAY, TCP_MAXSEG */
+#endif
+
 #ifdef LINUX
 /* TCP_CORK is not defined in <netinet/tcp.h> on Red Hat Linux 6.0 */
 #ifndef TCP_CORK
@@ -189,15 +198,8 @@ static ssize_t (*pt_aix_sendfile_fptr)() = NULL;
 #endif
 #endif
 
-#if defined(SOLARIS)
-#define _PRSockOptVal_t char *
-#elif defined(IRIX) || defined(OSF1) || defined(AIX) || defined(HPUX) \
-    || defined(LINUX) || defined(FREEBSD) || defined(BSDI) || defined(VMS) \
-    || defined(NTO) || defined(OPENBSD) || defined(DARWIN) \
-    || defined(UNIXWARE)
-#define _PRSockOptVal_t void *
-#else
-#error "Cannot determine architecture"
+#ifdef _PR_IPV6_V6ONLY_PROBE
+static PRBool _pr_ipv6_v6only_on_by_default;
 #endif
 
 #if (defined(HPUX) && !defined(HPUX10_30) && !defined(HPUX11))
@@ -206,10 +208,11 @@ static ssize_t (*pt_aix_sendfile_fptr)() = NULL;
 #define _PRSelectFdSetArg_t void *
 #elif defined(IRIX) || (defined(AIX) && !defined(AIX4_1)) \
     || defined(OSF1) || defined(SOLARIS) \
-    || defined(HPUX10_30) || defined(HPUX11) || defined(LINUX) \
+    || defined(HPUX10_30) || defined(HPUX11) \
+    || defined(LINUX) || defined(__GNU__) || defined(__GLIBC__) \
     || defined(FREEBSD) || defined(NETBSD) || defined(OPENBSD) \
     || defined(BSDI) || defined(VMS) || defined(NTO) || defined(DARWIN) \
-    || defined(UNIXWARE)
+    || defined(UNIXWARE) || defined(RISCOS) || defined(SYMBIAN)
 #define _PRSelectFdSetArg_t fd_set *
 #else
 #error "Cannot determine architecture"
@@ -290,7 +293,7 @@ static PRBool IsValidNetAddrLen(const PRNetAddr *addr, PRInt32 addr_len)
  * most current systems.
  */
 #if defined(HAVE_SOCKLEN_T) \
-    || (defined(LINUX) && defined(__GLIBC__) && __GLIBC__ >= 2)
+    || (defined(__GLIBC__) && __GLIBC__ >= 2)
 typedef socklen_t pt_SockLen;
 #elif (defined(AIX) && !defined(AIX4_1)) \
     || defined(VMS)
@@ -456,7 +459,7 @@ static void pt_poll_now_with_select(pt_Continuation *op)
 
 				rv = select(op->arg1.osfd + 1, rdp, wrp, NULL, &tv);
 
-				if (self->state & PT_THREAD_ABORTED)
+				if (_PT_THREAD_INTERRUPTED(self))
 				{
 					self->state &= ~PT_THREAD_ABORTED;
 					op->result.code = -1;
@@ -517,7 +520,7 @@ static void pt_poll_now_with_select(pt_Continuation *op)
 				tv.tv_usec = (msecs % PR_MSEC_PER_SEC) * PR_USEC_PER_MSEC;
 				rv = select(op->arg1.osfd + 1, rdp, wrp, NULL, &tv);
 
-				if (self->state & PT_THREAD_ABORTED)
+				if (_PT_THREAD_INTERRUPTED(self))
 				{
 					self->state &= ~PT_THREAD_ABORTED;
 					op->result.code = -1;
@@ -598,7 +601,7 @@ static void pt_poll_now(pt_Continuation *op)
 
 				rv = poll(&tmp_pfd, 1, msecs);
 				
-				if (self->state & PT_THREAD_ABORTED)
+				if (_PT_THREAD_INTERRUPTED(self))
 				{
 					self->state &= ~PT_THREAD_ABORTED;
 					op->result.code = -1;
@@ -656,7 +659,7 @@ static void pt_poll_now(pt_Continuation *op)
 				}
 				rv = poll(&tmp_pfd, 1, msecs);
 				
-				if (self->state & PT_THREAD_ABORTED)
+				if (_PT_THREAD_INTERRUPTED(self))
 				{
 					self->state &= ~PT_THREAD_ABORTED;
 					op->result.code = -1;
@@ -1015,7 +1018,7 @@ static PRBool pt_hpux_sendfile_cont(pt_Continuation *op, PRInt16 revents)
         if (count < hdtrl[0].iov_len) {
 			/* header not sent */
 
-            hdtrl[0].iov_base = ((char *) hdtrl[0].iov_len) + count;
+            hdtrl[0].iov_base = ((char *) hdtrl[0].iov_base) + count;
             hdtrl[0].iov_len -= count;
 
         } else if (count < (hdtrl[0].iov_len + op->arg3.file_spec.nbytes)) {
@@ -1072,6 +1075,15 @@ static PRBool pt_solaris_sendfile_cont(pt_Continuation *op, PRInt16 revents)
             return PR_TRUE;
         }
         count = xferred;
+    } else if (count == 0) {
+        /* 
+         * We are now at EOF. The file was truncated. Solaris sendfile is
+         * supposed to return 0 and no error in this case, though some versions
+         * may return -1 and EINVAL .
+         */
+        op->result.code = -1;
+        op->syserrno = 0; /* will be treated as EOF */
+        return PR_TRUE;
     }
     PR_ASSERT(count <= op->nbytes_to_send);
     
@@ -1146,6 +1158,26 @@ void _PR_InitIO(void)
     _pr_stderr = pt_SetMethods(2, PR_DESC_FILE, PR_FALSE, PR_TRUE);
     PR_ASSERT(_pr_stdin && _pr_stdout && _pr_stderr);
 
+#ifdef _PR_IPV6_V6ONLY_PROBE
+    /* In Mac OS X v10.3 Panther Beta the IPV6_V6ONLY socket option
+     * is turned on by default, contrary to what RFC 3493, Section
+     * 5.3 says.  So we have to turn it off.  Find out whether we
+     * are running on such a system.
+     */
+    {
+        int osfd;
+        osfd = socket(AF_INET6, SOCK_STREAM, 0);
+        if (osfd != -1) {
+            int on;
+            int optlen = sizeof(on);
+            if (getsockopt(osfd, IPPROTO_IPV6, IPV6_V6ONLY,
+                    &on, &optlen) == 0) {
+                _pr_ipv6_v6only_on_by_default = on;
+            }
+            close(osfd);
+        }
+    }
+#endif
 }  /* _PR_InitIO */
 
 void _PR_CleanupIO(void)
@@ -1200,7 +1232,7 @@ PR_IMPLEMENT(PRFileDesc*) PR_GetSpecialFD(PRSpecialFD osfd)
 
 static PRBool pt_TestAbort(void)
 {
-    PRThread *me = PR_CurrentThread();
+    PRThread *me = PR_GetCurrentThread();
     if(_PT_THREAD_INTERRUPTED(me))
     {
         PR_SetError(PR_PENDING_INTERRUPT_ERROR, 0);
@@ -1552,10 +1584,9 @@ static PRStatus pt_Connect(
     addrCopy = *addr;
     ((struct sockaddr*)&addrCopy)->sa_len = addr_len;
     ((struct sockaddr*)&addrCopy)->sa_family = md_af;
-    rv = connect(fd->secret->md.osfd, (struct sockaddr*)&addrCopy, addr_len);
-#else
-    rv = connect(fd->secret->md.osfd, (struct sockaddr*)addrp, addr_len);
+    addrp = &addrCopy;
 #endif
+    rv = connect(fd->secret->md.osfd, (struct sockaddr*)addrp, addr_len);
     syserrno = errno;
     if ((-1 == rv) && (EINPROGRESS == syserrno) && (!fd->secret->nonblocking))
     {
@@ -1564,11 +1595,7 @@ static PRStatus pt_Connect(
         {
             pt_Continuation op;
             op.arg1.osfd = fd->secret->md.osfd;
-#ifdef _PR_HAVE_SOCKADDR_LEN
-            op.arg2.buffer = (void*)&addrCopy;
-#else
-            op.arg2.buffer = (void*)addr;
-#endif
+            op.arg2.buffer = (void*)addrp;
             op.arg3.amount = addr_len;
             op.timeout = timeout;
             op.function = pt_connect_cont;
@@ -1632,8 +1659,17 @@ static PRFileDesc* pt_Accept(
     PRFileDesc *newfd = NULL;
     PRIntn syserrno, osfd = -1;
     pt_SockLen addr_len = sizeof(PRNetAddr);
+#ifdef SYMBIAN
+    PRNetAddr dummy_addr;
+#endif
 
     if (pt_TestAbort()) return newfd;
+
+#ifdef SYMBIAN
+    /* On Symbian OS, accept crashes if addr is NULL. */
+    if (!addr)
+        addr = &dummy_addr;
+#endif
 
 #ifdef _PR_STRICT_ADDR_LEN
     if (addr)
@@ -1747,10 +1783,9 @@ static PRStatus pt_Bind(PRFileDesc *fd, const PRNetAddr *addr)
     addrCopy = *addr;
     ((struct sockaddr*)&addrCopy)->sa_len = addr_len;
     ((struct sockaddr*)&addrCopy)->sa_family = md_af;
-    rv = bind(fd->secret->md.osfd, (struct sockaddr*)&addrCopy, addr_len);
-#else
-    rv = bind(fd->secret->md.osfd, (struct sockaddr*)addrp, addr_len);
+    addrp = &addrCopy;
 #endif
+    rv = bind(fd->secret->md.osfd, (struct sockaddr*)addrp, addr_len);
 
     if (rv == -1) {
         pt_MapError(_PR_MD_MAP_BIND_ERROR, errno);
@@ -1803,7 +1838,15 @@ static PRInt32 pt_Recv(
     if (0 == flags)
         osflags = 0;
     else if (PR_MSG_PEEK == flags)
+    {
+#ifdef SYMBIAN
+        /* MSG_PEEK doesn't work as expected. */
+        PR_SetError(PR_NOT_IMPLEMENTED_ERROR, 0);
+        return bytes;
+#else
         osflags = MSG_PEEK;
+#endif
+    }
     else
     {
         PR_SetError(PR_INVALID_ARGUMENT_ERROR, 0);
@@ -1987,14 +2030,11 @@ static PRInt32 pt_SendTo(
     addrCopy = *addr;
     ((struct sockaddr*)&addrCopy)->sa_len = addr_len;
     ((struct sockaddr*)&addrCopy)->sa_family = md_af;
-    bytes = sendto(
-        fd->secret->md.osfd, buf, amount, flags,
-        (struct sockaddr*)&addrCopy, addr_len);
-#else
+    addrp = &addrCopy;
+#endif
     bytes = sendto(
         fd->secret->md.osfd, buf, amount, flags,
         (struct sockaddr*)addrp, addr_len);
-#endif
     syserrno = errno;
     if ( (bytes == -1) && (syserrno == EWOULDBLOCK || syserrno == EAGAIN)
         && (!fd->secret->nonblocking) )
@@ -2009,11 +2049,7 @@ static PRInt32 pt_SendTo(
         op.arg2.buffer = (void*)buf;
         op.arg3.amount = amount;
         op.arg4.flags = flags;
-#ifdef _PR_HAVE_SOCKADDR_LEN
-        op.arg5.addr = (PRNetAddr*)&addrCopy;
-#else
-        op.arg5.addr = (PRNetAddr*)addr;
-#endif
+        op.arg5.addr = (PRNetAddr*)addrp;
         op.timeout = timeout;
         op.result.code = 0;  /* initialize the number sent */
         op.function = pt_sendto_cont;
@@ -2413,6 +2449,14 @@ static PRInt32 pt_SolarisSendFile(PRFileDesc *sd, PRSendFileData *sfd,
                 || syserrno == EAGAIN || syserrno == EWOULDBLOCK) {
             count = xferred;
         }
+    } else if (count == 0) {
+        /*
+         * We are now at EOF. The file was truncated. Solaris sendfile is
+         * supposed to return 0 and no error in this case, though some versions
+         * may return -1 and EINVAL .
+         */
+        count = -1;
+        syserrno = 0;  /* will be treated as EOF */
     }
 
     if (count != -1 && count < nbytes_to_send) {
@@ -3224,9 +3268,11 @@ static PRIOMethods _pr_socketpollfd_methods = {
 };
 
 #if defined(HPUX) || defined(OSF1) || defined(SOLARIS) || defined (IRIX) \
-    || defined(AIX) || defined(LINUX) || defined(FREEBSD) || defined(NETBSD) \
+    || defined(LINUX) || defined(__GNU__) || defined(__GLIBC__) \
+    || defined(AIX) || defined(FREEBSD) || defined(NETBSD) \
     || defined(OPENBSD) || defined(BSDI) || defined(VMS) || defined(NTO) \
-    || defined(DARWIN) || defined(UNIXWARE)
+    || defined(DARWIN) || defined(UNIXWARE) || defined(RISCOS) \
+    || defined(SYMBIAN)
 #define _PR_FCNTL_FLAGS O_NONBLOCK
 #else
 #error "Can't determine architecture"
@@ -3369,17 +3415,35 @@ failed:
 #if !defined(_PR_INET6) || defined(_PR_INET6_PROBE)
 PR_EXTERN(PRStatus) _pr_push_ipv6toipv4_layer(PRFileDesc *fd);
 #if defined(_PR_INET6_PROBE)
-PR_EXTERN(PRBool) _pr_ipv6_is_present;
+extern PRBool _pr_ipv6_is_present(void);
 PR_IMPLEMENT(PRBool) _pr_test_ipv6_socket()
 {
 PRInt32 osfd;
 
-	osfd = socket(AF_INET6, SOCK_STREAM, 0);
-	if (osfd != -1) {
-		close(osfd);
-		return PR_TRUE;
-	}
-	return PR_FALSE;
+#if defined(DARWIN)
+    /*
+     * Disable IPv6 if Darwin version is less than 7.0.0 (OS X 10.3).  IPv6 on
+     * lesser versions is not ready for general use (see bug 222031).
+     */
+    {
+        struct utsname u;
+        if (uname(&u) != 0 || atoi(u.release) < 7)
+            return PR_FALSE;
+    }
+#endif
+
+    /*
+     * HP-UX only: HP-UX IPv6 Porting Guide (dated February 2001)
+     * suggests that we call open("/dev/ip6", O_RDWR) to determine
+     * whether IPv6 APIs and the IPv6 stack are on the system.
+     * Our portable test below seems to work fine, so I am using it.
+     */
+    osfd = socket(AF_INET6, SOCK_STREAM, 0);
+    if (osfd != -1) {
+        close(osfd);
+        return PR_TRUE;
+    }
+    return PR_FALSE;
 }
 #endif	/* _PR_INET6_PROBE */
 #endif
@@ -3410,12 +3474,8 @@ PR_IMPLEMENT(PRFileDesc*) PR_Socket(PRInt32 domain, PRInt32 type, PRInt32 proto)
 		return fd;
 	}
 #if defined(_PR_INET6_PROBE)
-	if (PR_AF_INET6 == domain) {
-		if (_pr_ipv6_is_present == PR_FALSE) 
-			domain = AF_INET;
-		else
-			domain = AF_INET6;
-	}
+	if (PR_AF_INET6 == domain)
+		domain = _pr_ipv6_is_present() ? AF_INET6 : AF_INET;
 #elif defined(_PR_INET6) 
 	if (PR_AF_INET6 == domain)
 		domain = AF_INET6;
@@ -3428,10 +3488,18 @@ PR_IMPLEMENT(PRFileDesc*) PR_Socket(PRInt32 domain, PRInt32 type, PRInt32 proto)
     if (osfd == -1) pt_MapError(_PR_MD_MAP_SOCKET_ERROR, errno);
     else
     {
+#ifdef _PR_IPV6_V6ONLY_PROBE
+        if ((domain == AF_INET6) && _pr_ipv6_v6only_on_by_default)
+        {
+            int on = 0;
+            (void)setsockopt(osfd, IPPROTO_IPV6, IPV6_V6ONLY,
+                    &on, sizeof(on));
+        }
+#endif
         fd = pt_SetMethods(osfd, ftype, PR_FALSE, PR_FALSE);
         if (fd == NULL) close(osfd);
     }
-#ifdef _PR_STRICT_ADDR_LEN
+#ifdef _PR_NEED_SECRET_AF
     if (fd != NULL) fd->secret->af = domain;
 #endif
 #if defined(_PR_INET6_PROBE) || !defined(_PR_INET6)
@@ -3674,7 +3742,10 @@ PR_IMPLEMENT(PRDir*) PR_OpenDir(const char *name)
     else
     {
         dir = PR_NEWZAP(PRDir);
-        dir->md.d = osdir;
+        if (dir)
+            dir->md.d = osdir;
+        else
+            (void)closedir(osdir);
     }
     return dir;
 }  /* PR_OpenDir */
@@ -3826,6 +3897,7 @@ static PRInt32 _pr_poll_with_poll(
             {
                 /* make poll() ignore this entry */
                 syspoll[index].fd = -1;
+                syspoll[index].events = 0;
                 pds[index].out_flags = 0;
             }
         }
@@ -4255,8 +4327,13 @@ PR_IMPLEMENT(PRDirEntry*) PR_ReadDir(PRDir *dir, PRDirFlags flags)
 
     for (;;)
     {
+        errno = 0;
         dp = readdir(dir->md.d);
-        if (NULL == dp) return NULL;
+        if (NULL == dp)
+        {
+            pt_MapError(_PR_MD_MAP_READDIR_ERROR, errno);
+            return NULL;
+        }
         if ((flags & PR_SKIP_DOT)
             && ('.' == dp->d_name[0])
             && (0 == dp->d_name[1])) continue;
@@ -4298,13 +4375,91 @@ PR_IMPLEMENT(PRFileDesc*) PR_OpenTCPSocket(PRIntn af)
 
 PR_IMPLEMENT(PRStatus) PR_NewTCPSocketPair(PRFileDesc *fds[2])
 {
+#ifdef SYMBIAN
+    /*
+     * For the platforms that don't have socketpair.
+     *
+     * Copied from prsocket.c, with the parameter f[] renamed fds[] and the
+     * _PR_CONNECT_DOES_NOT_BIND code removed.
+     */
+    PRFileDesc *listenSock;
+    PRNetAddr selfAddr, peerAddr;
+    PRUint16 port;
+
+    fds[0] = fds[1] = NULL;
+    listenSock = PR_NewTCPSocket();
+    if (listenSock == NULL) {
+        goto failed;
+    }
+    PR_InitializeNetAddr(PR_IpAddrLoopback, 0, &selfAddr); /* BugZilla: 35408 */
+    if (PR_Bind(listenSock, &selfAddr) == PR_FAILURE) {
+        goto failed;
+    }
+    if (PR_GetSockName(listenSock, &selfAddr) == PR_FAILURE) {
+        goto failed;
+    }
+    port = ntohs(selfAddr.inet.port);
+    if (PR_Listen(listenSock, 5) == PR_FAILURE) {
+        goto failed;
+    }
+    fds[0] = PR_NewTCPSocket();
+    if (fds[0] == NULL) {
+        goto failed;
+    }
+    PR_InitializeNetAddr(PR_IpAddrLoopback, port, &selfAddr);
+
+    /*
+     * Only a thread is used to do the connect and accept.
+     * I am relying on the fact that PR_Connect returns
+     * successfully as soon as the connect request is put
+     * into the listen queue (but before PR_Accept is called).
+     * This is the behavior of the BSD socket code.  If
+     * connect does not return until accept is called, we
+     * will need to create another thread to call connect.
+     */
+    if (PR_Connect(fds[0], &selfAddr, PR_INTERVAL_NO_TIMEOUT)
+            == PR_FAILURE) {
+        goto failed;
+    }
+    /*
+     * A malicious local process may connect to the listening
+     * socket, so we need to verify that the accepted connection
+     * is made from our own socket fds[0].
+     */
+    if (PR_GetSockName(fds[0], &selfAddr) == PR_FAILURE) {
+        goto failed;
+    }
+    fds[1] = PR_Accept(listenSock, &peerAddr, PR_INTERVAL_NO_TIMEOUT);
+    if (fds[1] == NULL) {
+        goto failed;
+    }
+    if (peerAddr.inet.port != selfAddr.inet.port) {
+        /* the connection we accepted is not from fds[0] */
+        PR_SetError(PR_INSUFFICIENT_RESOURCES_ERROR, 0);
+        goto failed;
+    }
+    PR_Close(listenSock);
+    return PR_SUCCESS;
+
+failed:
+    if (listenSock) {
+        PR_Close(listenSock);
+    }
+    if (fds[0]) {
+        PR_Close(fds[0]);
+    }
+    if (fds[1]) {
+        PR_Close(fds[1]);
+    }
+    return PR_FAILURE;
+#else
     PRInt32 osfd[2];
 
     if (pt_TestAbort()) return PR_FAILURE;
 
     if (socketpair(AF_UNIX, SOCK_STREAM, 0, osfd) == -1) {
-    pt_MapError(_PR_MD_MAP_SOCKETPAIR_ERROR, errno);
-    return PR_FAILURE;
+        pt_MapError(_PR_MD_MAP_SOCKETPAIR_ERROR, errno);
+        return PR_FAILURE;
     }
 
     fds[0] = pt_SetMethods(osfd[0], PR_DESC_SOCKET_TCP, PR_FALSE, PR_FALSE);
@@ -4320,6 +4475,7 @@ PR_IMPLEMENT(PRStatus) PR_NewTCPSocketPair(PRFileDesc *fds[2])
         return PR_FAILURE;
     }
     return PR_SUCCESS;
+#endif
 }  /* PR_NewTCPSocketPair */
 
 PR_IMPLEMENT(PRStatus) PR_CreatePipe(
@@ -4375,6 +4531,7 @@ PR_IMPLEMENT(PRStatus) PR_SetFDInheritable(
         if (fcntl(fd->secret->md.osfd, F_SETFD,
         inheritable ? 0 : FD_CLOEXEC) == -1)
         {
+            _PR_MD_MAP_DEFAULT_ERROR(errno);
             return PR_FAILURE;
         }
         fd->secret->inheritable = (_PRTriStateBool) inheritable;
@@ -4413,7 +4570,7 @@ PR_IMPLEMENT(PRFileDesc*) PR_ImportTCPSocket(PRInt32 osfd)
     if (!_pr_initialized) _PR_ImplicitInitialization();
     fd = pt_SetMethods(osfd, PR_DESC_SOCKET_TCP, PR_FALSE, PR_TRUE);
     if (NULL == fd) close(osfd);
-#ifdef _PR_STRICT_ADDR_LEN
+#ifdef _PR_NEED_SECRET_AF
     if (NULL != fd) fd->secret->af = PF_INET;
 #endif
     return fd;
@@ -4545,23 +4702,25 @@ PR_IMPLEMENT(PRStatus) PR_UnlockFile(PRFileDesc *fd)
  * defined here for historical (or hysterical) reasons.
  */
 
-PRInt32 PR_GetSysfdTableMax(void)
+PR_IMPLEMENT(PRInt32) PR_GetSysfdTableMax(void)
 {
-#if defined(XP_UNIX) && !defined(AIX) && !defined(VMS)
+#if defined(AIX) || defined(VMS) || defined(SYMBIAN)
+    return sysconf(_SC_OPEN_MAX);
+#else
     struct rlimit rlim;
 
     if ( getrlimit(RLIMIT_NOFILE, &rlim) < 0) 
        return -1;
 
     return rlim.rlim_max;
-#elif defined(AIX) || defined(VMS)
-    return sysconf(_SC_OPEN_MAX);
 #endif
 }
 
-PRInt32 PR_SetSysfdTableSize(PRIntn table_size)
+PR_IMPLEMENT(PRInt32) PR_SetSysfdTableSize(PRIntn table_size)
 {
-#if defined(XP_UNIX) && !defined(AIX) && !defined(VMS)
+#if defined(AIX) || defined(VMS) || defined(SYMBIAN)
+    return -1;
+#else
     struct rlimit rlim;
     PRInt32 tableMax = PR_GetSysfdTableMax();
 
@@ -4578,8 +4737,6 @@ PRInt32 PR_SetSysfdTableSize(PRIntn table_size)
         return -1;
 
     return rlim.rlim_cur;
-#elif defined(AIX) || defined(VMS)
-    return -1;
 #endif
 }
 
@@ -4689,7 +4846,8 @@ PR_IMPLEMENT(PRInt32) PR_FD_NISSET(PRInt32 fd, PR_fd_set *set)
 
 #include <sys/types.h>
 #include <sys/time.h>
-#if !defined(SUNOS4) && !defined(HPUX) && !defined(LINUX)
+#if !defined(SUNOS4) && !defined(HPUX) \
+    && !defined(LINUX) && !defined(__GNU__) && !defined(__GLIBC__)
 #include <sys/select.h>
 #endif
 

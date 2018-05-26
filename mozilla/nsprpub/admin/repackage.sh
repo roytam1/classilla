@@ -1,34 +1,40 @@
 #! /bin/sh
-# The contents of this file are subject to the Mozilla Public
-# License Version 1.1 (the "License"); you may not use this file
-# except in compliance with the License. You may obtain a copy of
-# the License at http://www.mozilla.org/MPL/
-# 
-# Software distributed under the License is distributed on an "AS
-# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
-# implied. See the License for the specific language governing
-# rights and limitations under the License.
-# 
+# ***** BEGIN LICENSE BLOCK *****
+# Version: MPL 1.1/GPL 2.0/LGPL 2.1
+#
+# The contents of this file are subject to the Mozilla Public License Version
+# 1.1 (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+# http://www.mozilla.org/MPL/
+#
+# Software distributed under the License is distributed on an "AS IS" basis,
+# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+# for the specific language governing rights and limitations under the
+# License.
+#
 # The Original Code is the Netscape Portable Runtime (NSPR).
-# 
-# The Initial Developer of the Original Code is Netscape
-# Communications Corporation.  Portions created by Netscape are 
-# Copyright (C) 1998-2001 Netscape Communications Corporation.  All
-# Rights Reserved.
-# 
+#
+# The Initial Developer of the Original Code is
+# Netscape Communications Corporation.
+# Portions created by the Initial Developer are Copyright (C) 1998-2001
+# the Initial Developer. All Rights Reserved.
+#
 # Contributor(s):
-# 
-# Alternatively, the contents of this file may be used under the
-# terms of the GNU General Public License Version 2 or later (the
-# "GPL"), in which case the provisions of the GPL are applicable 
-# instead of those above.  If you wish to allow use of your 
-# version of this file only under the terms of the GPL and not to
-# allow others to use your version of this file under the MPL,
-# indicate your decision by deleting the provisions above and
-# replace them with the notice and other provisions required by
-# the GPL.  If you do not delete the provisions above, a recipient
-# may use your version of this file under either the MPL or the
-# GPL.
+#
+# Alternatively, the contents of this file may be used under the terms of
+# either the GNU General Public License Version 2 or later (the "GPL"), or
+# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+# in which case the provisions of the GPL or the LGPL are applicable instead
+# of those above. If you wish to allow use of your version of this file only
+# under the terms of either the GPL or the LGPL, and not to allow others to
+# use your version of this file under the terms of the MPL, indicate your
+# decision by deleting the provisions above and replace them with the notice
+# and other provisions required by the GPL or the LGPL. If you do not delete
+# the provisions above, a recipient may use your version of this file under
+# the terms of any one of the MPL, the GPL or the LGPL.
+#
+# ***** END LICENSE BLOCK *****
+
 # ------------------------------------------------------------------
 # repackage.sh -- Repackage NSPR from /s/b/c to mozilla.org format
 #
@@ -57,39 +63,33 @@
 # 
 # 
 # ------------------------------------------------------------------
-#
-# These variables should be modified for each NSPR release.
-#
-FROMTOP=/share/builds/components/nspr20/v4.3
-TOTOP=./v4.3
-NSPRDIR=nspr-4.3
-SOURCETAG=NSPR_4_3_RELEASE
+
+FROMTOP=/share/builds/components/nspr20/v4.7.6
+TOTOP=./v4.7.6
+NSPRDIR=nspr-4.7.6
+SOURCETAG=NSPR_4_7_6_RTM
 
 #
 # enumerate Unix object directories on /s/b/c
 UNIX_OBJDIRS="
-AIX4.3_64_DBG.OBJ
-AIX4.3_64_OPT.OBJ
-AIX4.3_DBG.OBJ
-AIX4.3_OPT.OBJ
-HP-UXB.11.00_64_DBG.OBJ
-HP-UXB.11.00_64_OPT.OBJ
-HP-UXB.11.00_DBG.OBJ
-HP-UXB.11.00_OPT.OBJ
-IRIX6.5_n32_PTH_DBG.OBJ
-IRIX6.5_n32_PTH_OPT.OBJ
-Linux2.2_x86_glibc_PTH_DBG.OBJ
-Linux2.2_x86_glibc_PTH_OPT.OBJ
+HP-UXB.11.11_64_DBG.OBJ
+HP-UXB.11.11_64_OPT.OBJ
+HP-UXB.11.11_DBG.OBJ
+HP-UXB.11.11_OPT.OBJ
+HP-UXB.11.23_ia64_32_DBG.OBJ
+HP-UXB.11.23_ia64_32_OPT.OBJ
+HP-UXB.11.23_ia64_64_DBG.OBJ
+HP-UXB.11.23_ia64_64_OPT.OBJ
 Linux2.4_x86_glibc_PTH_DBG.OBJ
 Linux2.4_x86_glibc_PTH_OPT.OBJ
-OSF1V5.0_DBG.OBJ
-OSF1V5.0_OPT.OBJ
-SunOS5.6_DBG.OBJ
-SunOS5.6_OPT.OBJ
-SunOS5.8_64_DBG.OBJ
-SunOS5.8_64_OPT.OBJ
-SunOS5.8_DBG.OBJ
-SunOS5.8_OPT.OBJ
+Linux2.6_x86_64_glibc_PTH_DBG.OBJ
+Linux2.6_x86_64_glibc_PTH_OPT.OBJ
+Linux2.6_x86_glibc_PTH_DBG.OBJ
+Linux2.6_x86_glibc_PTH_OPT.OBJ
+SunOS5.9_64_DBG.OBJ
+SunOS5.9_64_OPT.OBJ
+SunOS5.9_DBG.OBJ
+SunOS5.9_OPT.OBJ
 "
 #
 # enumerate Windows object directories on /s/b/c
@@ -97,9 +97,9 @@ WIN_OBJDIRS="
 WIN954.0_DBG.OBJ
 WIN954.0_DBG.OBJD
 WIN954.0_OPT.OBJ
-WINNT4.0_DBG.OBJ
-WINNT4.0_DBG.OBJD
-WINNT4.0_OPT.OBJ
+WINNT5.0_DBG.OBJ
+WINNT5.0_DBG.OBJD
+WINNT5.0_OPT.OBJ
 "
 
 #
@@ -161,18 +161,15 @@ for OBJDIR in $WIN_OBJDIRS; do
     #
     headers=`ls $FROMTOP/$OBJDIR/include/*.h`
     for header in $headers; do
-        sed -e 's/$/
-/g' $header > $NSPRDIR/include/`basename $header`
+        sed -e 's/$//g' $header > $NSPRDIR/include/`basename $header`
     done
     headers=`ls $FROMTOP/$OBJDIR/include/obsolete/*.h`
     for header in $headers; do
-        sed -e 's/$/
-/g' $header > $NSPRDIR/include/obsolete/`basename $header`
+        sed -e 's/$//g' $header > $NSPRDIR/include/obsolete/`basename $header`
     done
     headers=`ls $FROMTOP/$OBJDIR/include/private/*.h`
     for header in $headers; do
-        sed -e 's/$/
-/g' $header > $NSPRDIR/include/private/`basename $header`
+        sed -e 's/$//g' $header > $NSPRDIR/include/private/`basename $header`
     done
 
     echo "copying $FROMTOP/$OBJDIR/lib"
@@ -182,7 +179,7 @@ for OBJDIR in $WIN_OBJDIRS; do
     cp -r $FROMTOP/$OBJDIR/bin $NSPRDIR
 
     echo "creating directory $TOTOP/$OBJDIR"
-    mkdir $TOTOP/$OBJDIR
+    mkdir -p $TOTOP/$OBJDIR
     echo "creating $TOTOP/$OBJDIR/$NSPRDIR.zip"
     zip -r $TOTOP/$OBJDIR/$NSPRDIR.zip $NSPRDIR
 done

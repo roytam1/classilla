@@ -1,35 +1,6 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Certificate Extensions handling code
@@ -140,8 +111,8 @@ typedef struct _extNode {
 typedef struct {
     void (*setExts)(void *object, CERTCertExtension **exts);
     void *object;
-    PRArenaPool *ownerArena;
-    PRArenaPool *arena;
+    PLArenaPool *ownerArena;
+    PLArenaPool *arena;
     extNode *head;
     int count;
 }extRec;
@@ -153,12 +124,12 @@ typedef struct {
  *   about callers data structures (owner objects)
  */
 void *
-cert_StartExtensions(void *owner, PRArenaPool *ownerArena,
+cert_StartExtensions(void *owner, PLArenaPool *ownerArena,
    void (*setExts)(void *object, CERTCertExtension **exts))
 {
-    PRArenaPool *arena;
+    PLArenaPool *arena;
     extRec *handle;
-    
+
     arena = PORT_NewArena(DER_DEFAULT_CHUNKSIZE);
     if ( !arena ) {
 	return(0);
@@ -302,7 +273,8 @@ CERT_EncodeAndAddBitStrExtension (void *exthandle, int idtag,
   
   PrepareBitStringForEncoding (&bitsmap, value);
   return (CERT_EncodeAndAddExtension
-	  (exthandle, idtag, &bitsmap, critical, SEC_BitStringTemplate));
+	  (exthandle, idtag, &bitsmap, critical,
+          SEC_ASN1_GET(SEC_BitStringTemplate)));
 }
 
 SECStatus
@@ -372,6 +344,50 @@ loser:
     return rv;
 }
 
+SECStatus
+CERT_MergeExtensions(void *exthandle, CERTCertExtension **extensions)
+{
+    CERTCertExtension *ext;
+    SECStatus rv = SECSuccess;
+    SECOidTag tag;
+    extNode *node;
+    extRec *handle = exthandle;
+    
+    if (!exthandle || !extensions) {
+	PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return SECFailure;
+    }
+    while ((ext = *extensions++) != NULL) {
+        tag = SECOID_FindOIDTag(&ext->id);
+        for (node=handle->head; node != NULL; node=node->next) {
+            if (tag == 0) {
+                if (SECITEM_ItemsAreEqual(&ext->id, &node->ext->id))
+                    break;
+            }
+            else {
+                if (SECOID_FindOIDTag(&node->ext->id) == tag) {
+                    break;
+                }
+            }
+        }
+        if (node == NULL) {
+            PRBool critical = (ext->critical.len != 0 &&
+                            ext->critical.data[ext->critical.len - 1] != 0);
+            if (critical && tag == SEC_OID_UNKNOWN) {
+               PORT_SetError(SEC_ERROR_UNKNOWN_CRITICAL_EXTENSION);
+               rv = SECFailure;
+               break;
+            }
+            /* add to list */
+            rv = CERT_AddExtensionByOID (exthandle, &ext->id, &ext->value,
+                                         critical, PR_TRUE);
+            if (rv != SECSuccess)
+                break;
+        }
+    }
+    return rv;
+}
+
 /*
  * get the value of the Netscape Certificate Type Extension
  */
@@ -381,7 +397,7 @@ CERT_FindBitStringExtension (CERTCertExtension **extensions, int tag,
 {
     SECItem wrapperItem, tmpItem = {siBuffer,0};
     SECStatus rv;
-    PRArenaPool *arena = NULL;
+    PLArenaPool *arena = NULL;
     
     wrapperItem.data = NULL;
     tmpItem.data = NULL;
@@ -397,8 +413,9 @@ CERT_FindBitStringExtension (CERTCertExtension **extensions, int tag,
 	goto loser;
     }
 
-    rv = SEC_QuickDERDecodeItem(arena, &tmpItem, SEC_BitStringTemplate, 
-			    &wrapperItem);
+    rv = SEC_QuickDERDecodeItem(arena, &tmpItem,
+                                SEC_ASN1_GET(SEC_BitStringTemplate),
+                                &wrapperItem);
 
     if ( rv != SECSuccess ) {
 	goto loser;

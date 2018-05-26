@@ -1,39 +1,6 @@
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
-
-#ifdef DEBUG
-static const char CVS_ID[] = "@(#) $RCSfile: cryptocontext.c,v $ $Revision: 1.11.10.1 $ $Date: 2003/01/09 02:05:06 $ $Name:  $";
-#endif /* DEBUG */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef DEV_H
 #include "dev.h"
@@ -47,21 +14,8 @@ static const char CVS_ID[] = "@(#) $RCSfile: cryptocontext.c,v $ $Revision: 1.11
 #include "pkistore.h"
 #endif /* PKISTORE_H */
 
-#include "pki1t.h"
-
-#ifdef PURE_STAN_BUILD
-struct NSSCryptoContextStr
-{
-    PRInt32 refCount;
-    NSSArena *arena;
-    NSSTrustDomain *td;
-    NSSToken *token;
-    nssSession *session;
-    nssCertificateStore *certStore;
-};
-#endif
-
 extern const NSSError NSS_ERROR_NOT_FOUND;
+extern const NSSError NSS_ERROR_INVALID_ARGUMENT;
 
 NSS_IMPLEMENT NSSCryptoContext *
 nssCryptoContext_Create (
@@ -81,6 +35,12 @@ nssCryptoContext_Create (
     }
     rvCC->td = td;
     rvCC->arena = arena;
+    rvCC->certStore = nssCertificateStore_Create(rvCC->arena);
+    if (!rvCC->certStore) {
+	nssArena_Destroy(arena);
+	return NULL;
+    }
+
     return rvCC;
 }
 
@@ -90,11 +50,14 @@ NSSCryptoContext_Destroy (
 )
 {
     PRStatus status = PR_SUCCESS;
+    PORT_Assert(cc->certStore);
     if (cc->certStore) {
 	status = nssCertificateStore_Destroy(cc->certStore);
 	if (status == PR_FAILURE) {
 	    return status;
 	}
+    } else {
+	status = PR_FAILURE;
     }
     nssArena_Destroy(cc->arena);
     return status;
@@ -130,24 +93,33 @@ NSSCryptoContext_GetTrustDomain (
     return NULL;
 }
 
-NSS_IMPLEMENT PRStatus
-NSSCryptoContext_ImportCertificate (
+
+NSS_IMPLEMENT NSSCertificate *
+NSSCryptoContext_FindOrImportCertificate (
   NSSCryptoContext *cc,
   NSSCertificate *c
 )
 {
-    PRStatus nssrv;
+    NSSCertificate *rvCert = NULL;
+
+    PORT_Assert(cc->certStore);
     if (!cc->certStore) {
-	cc->certStore = nssCertificateStore_Create(cc->arena);
-	if (!cc->certStore) {
-	    return PR_FAILURE;
-	}
+	nss_SetError(NSS_ERROR_INVALID_ARGUMENT);
+	return rvCert;
     }
-    nssrv = nssCertificateStore_Add(cc->certStore, c);
-    if (nssrv == PR_SUCCESS) {
+    rvCert = nssCertificateStore_FindOrAdd(cc->certStore, c);
+    if (rvCert == c && c->object.cryptoContext != cc) {
+	PORT_Assert(!c->object.cryptoContext);
 	c->object.cryptoContext = cc;
+    } 
+    if (rvCert) {
+	/* an NSSCertificate cannot be part of two crypto contexts
+	** simultaneously.  If this assertion fails, then there is 
+	** a serious Stan design flaw.
+	*/
+	PORT_Assert(cc == c->object.cryptoContext);
     }
-    return nssrv;
+    return rvCert;
 }
 
 NSS_IMPLEMENT NSSCertificate *
@@ -187,11 +159,9 @@ nssCryptoContext_ImportTrust (
 )
 {
     PRStatus nssrv;
+    PORT_Assert(cc->certStore);
     if (!cc->certStore) {
-	cc->certStore = nssCertificateStore_Create(cc->arena);
-	if (!cc->certStore) {
-	    return PR_FAILURE;
-	}
+	return PR_FAILURE;
     }
     nssrv = nssCertificateStore_AddTrust(cc->certStore, trust);
 #if 0
@@ -209,11 +179,9 @@ nssCryptoContext_ImportSMIMEProfile (
 )
 {
     PRStatus nssrv;
+    PORT_Assert(cc->certStore);
     if (!cc->certStore) {
-	cc->certStore = nssCertificateStore_Create(cc->arena);
-	if (!cc->certStore) {
-	    return PR_FAILURE;
-	}
+	return PR_FAILURE;
     }
     nssrv = nssCertificateStore_AddSMIMEProfile(cc->certStore, profile);
 #if 0
@@ -227,7 +195,7 @@ nssCryptoContext_ImportSMIMEProfile (
 NSS_IMPLEMENT NSSCertificate *
 NSSCryptoContext_FindBestCertificateByNickname (
   NSSCryptoContext *cc,
-  NSSUTF8 *name,
+  const NSSUTF8 *name,
   NSSTime *timeOpt, /* NULL for "now" */
   NSSUsage *usage,
   NSSPolicies *policiesOpt /* NULL for none */
@@ -235,6 +203,7 @@ NSSCryptoContext_FindBestCertificateByNickname (
 {
     NSSCertificate **certs;
     NSSCertificate *rvCert = NULL;
+    PORT_Assert(cc->certStore);
     if (!cc->certStore) {
 	return NULL;
     }
@@ -261,6 +230,7 @@ NSSCryptoContext_FindCertificatesByNickname (
 )
 {
     NSSCertificate **rvCerts;
+    PORT_Assert(cc->certStore);
     if (!cc->certStore) {
 	return NULL;
     }
@@ -279,6 +249,7 @@ NSSCryptoContext_FindCertificateByIssuerAndSerialNumber (
   NSSDER *serialNumber
 )
 {
+    PORT_Assert(cc->certStore);
     if (!cc->certStore) {
 	return NULL;
     }
@@ -299,6 +270,7 @@ NSSCryptoContext_FindBestCertificateBySubject (
 {
     NSSCertificate **certs;
     NSSCertificate *rvCert = NULL;
+    PORT_Assert(cc->certStore);
     if (!cc->certStore) {
 	return NULL;
     }
@@ -325,6 +297,7 @@ nssCryptoContext_FindCertificatesBySubject (
 )
 {
     NSSCertificate **rvCerts;
+    PORT_Assert(cc->certStore);
     if (!cc->certStore) {
 	return NULL;
     }
@@ -382,6 +355,7 @@ NSSCryptoContext_FindCertificateByEncodedCertificate (
   NSSBER *encodedCertificate
 )
 {
+    PORT_Assert(cc->certStore);
     if (!cc->certStore) {
 	return NULL;
     }
@@ -401,6 +375,8 @@ NSSCryptoContext_FindBestCertificateByEmail (
 {
     NSSCertificate **certs;
     NSSCertificate *rvCert = NULL;
+
+    PORT_Assert(cc->certStore);
     if (!cc->certStore) {
 	return NULL;
     }
@@ -427,6 +403,7 @@ NSSCryptoContext_FindCertificatesByEmail (
 )
 {
     NSSCertificate **rvCerts;
+    PORT_Assert(cc->certStore);
     if (!cc->certStore) {
 	return NULL;
     }
@@ -543,6 +520,7 @@ nssCryptoContext_FindTrustForCertificate (
   NSSCertificate *cert
 )
 {
+    PORT_Assert(cc->certStore);
     if (!cc->certStore) {
 	return NULL;
     }
@@ -555,6 +533,7 @@ nssCryptoContext_FindSMIMEProfileForCertificate (
   NSSCertificate *cert
 )
 {
+    PORT_Assert(cc->certStore);
     if (!cc->certStore) {
 	return NULL;
     }

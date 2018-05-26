@@ -1,36 +1,39 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 #include <private/primpl.h>       
 #include <string.h>
@@ -89,7 +92,7 @@ extern PRSharedMemory * _MD_OpenSharedMemory(
         return(NULL);
     }
 
-    shm->ipcname = PR_MALLOC( strlen( ipcname ) + 1 );
+    shm->ipcname = PR_MALLOC( (PRUint32) (strlen( ipcname ) + 1) );
     if ( NULL == shm->ipcname )
     {
         PR_SetError(PR_OUT_OF_MEMORY_ERROR, 0 );
@@ -106,9 +109,8 @@ extern PRSharedMemory * _MD_OpenSharedMemory(
     shm->ident = _PR_SHM_IDENT;
 
     if (flags & PR_SHM_CREATE ) {
-        /* XXX: Not 64bit safe. Fix when WinNT goes 64bit. */
-        dwHi = 0;
-        dwLo = shm->size;
+        dwHi = (DWORD) (((PRUint64) shm->size >> 32) & 0xffffffff);
+        dwLo = (DWORD) (shm->size & 0xffffffff);
 
         if (_PR_NT_MakeSecurityDescriptorACL(mode, filemapAccessTable,
                 &pSD, &pACL) == PR_SUCCESS) {
@@ -302,9 +304,8 @@ extern PRStatus _md_ExportFileMapAsString(
 {
     PRIntn  written;
 
-    written = PR_snprintf( buf, bufSize, "%d:%ld:%ld",
-        (PRIntn)fm->prot, (PRInt32)fm->md.hFileMap, (PRInt32)fm->md.dwAccess );
-    /* Watch out on the above snprintf(). Windows HANDLE assumes 32bits; windows calls it void* */
+    written = PR_snprintf( buf, (PRUint32) bufSize, "%d:%" PR_PRIdOSFD ":%ld",
+        (PRIntn)fm->prot, (PROsfd)fm->md.hFileMap, (PRInt32)fm->md.dwAccess );
 
     PR_LOG( _pr_shma_lm, PR_LOG_DEBUG,
         ("_md_ExportFileMapAsString(): prot: %x, hFileMap: %x, dwAccess: %x",
@@ -323,11 +324,12 @@ extern PRFileMap * _md_ImportFileMapFromString(
 )
 {
     PRIntn  prot;
-    PRInt32 hFileMap;
+    PROsfd hFileMap;
     PRInt32 dwAccess;
     PRFileMap *fm = NULL;
 
-    PR_sscanf( fmstring, "%d:%ld:%ld", &prot, &hFileMap, &dwAccess  );
+    PR_sscanf( fmstring, "%d:%" PR_SCNdOSFD ":%ld",
+        &prot, &hFileMap, &dwAccess );
 
     fm = PR_NEWZAP(PRFileMap);
     if ( NULL == fm ) {
@@ -337,7 +339,7 @@ extern PRFileMap * _md_ImportFileMapFromString(
     }
 
     fm->prot = (PRFileMapProtect)prot;
-    fm->md.hFileMap = (HANDLE)hFileMap;  /* Assumes HANDLE is 32bit */
+    fm->md.hFileMap = (HANDLE)hFileMap;
     fm->md.dwAccess = (DWORD)dwAccess;
     fm->fd = (PRFileDesc*)-1;
 

@@ -1,35 +1,6 @@
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef DEV_H
 #define DEV_H
@@ -39,14 +10,6 @@
  *
  * Low-level methods for interaction with cryptoki devices
  */
-
-#ifdef DEBUG
-static const char DEV_CVS_ID[] = "@(#) $RCSfile: dev.h,v $ $Revision: 1.31.10.1 $ $Date: 2003/05/14 00:12:14 $ $Name:  $";
-#endif /* DEBUG */
-
-#ifndef NSSCKT_H
-#include "nssckt.h"
-#endif /* NSSCKT_H */
 
 #ifndef NSSDEV_H
 #include "nssdev.h"
@@ -247,6 +210,12 @@ nssSlot_AddRef
   NSSSlot *slot
 );
 
+NSS_EXTERN void
+nssSlot_ResetDelay
+(
+  NSSSlot *slot
+);
+
 NSS_EXTERN NSSUTF8 *
 nssSlot_GetName
 (
@@ -380,15 +349,13 @@ nssSlot_CreateSession
  * nssToken_GenerateKeyPair
  * nssToken_GenerateSymmetricKey
  * nssToken_DeleteStoredObject
- * nssToken_FindCertificates
+ * nssToken_FindObjects
  * nssToken_FindCertificatesBySubject
  * nssToken_FindCertificatesByNickname
  * nssToken_FindCertificatesByEmail
  * nssToken_FindCertificateByIssuerAndSerialNumber
  * nssToken_FindCertificateByEncodedCertificate
- * nssToken_FindTrustObjects
  * nssToken_FindTrustForCertificate
- * nssToken_FindCRLs
  * nssToken_FindCRLsBySubject
  * nssToken_FindPrivateKeys
  * nssToken_FindPrivateKeyByID
@@ -441,7 +408,7 @@ nssToken_ImportCertificate
   nssSession *sessionOpt,
   NSSCertificateType certType,
   NSSItem *id,
-  NSSUTF8 *nickname,
+  const NSSUTF8 *nickname,
   NSSDER *encoding,
   NSSDER *issuer,
   NSSDER *subject,
@@ -462,6 +429,7 @@ nssToken_ImportTrust
   nssTrustLevel clientAuth,
   nssTrustLevel codeSigning,
   nssTrustLevel emailProtection,
+  PRBool stepUpApproved,
   PRBool asTokenObject
 );
 
@@ -485,10 +453,11 @@ nssToken_DeleteStoredObject
 );
 
 NSS_EXTERN nssCryptokiObject **
-nssToken_FindCertificates
+nssToken_FindObjects
 (
   NSSToken *token,
   nssSession *sessionOpt,
+  CK_OBJECT_CLASS objclass,
   nssTokenSearchType searchType,
   PRUint32 maximumOpt,
   PRStatus *statusOpt
@@ -510,7 +479,7 @@ nssToken_FindCertificatesByNickname
 (
   NSSToken *token,
   nssSession *sessionOpt,
-  NSSUTF8 *name,
+  const NSSUTF8 *name,
   nssTokenSearchType searchType,
   PRUint32 maximumOpt,
   PRStatus *statusOpt
@@ -559,16 +528,6 @@ nssToken_FindCertificateByEncodedCertificate
   PRStatus *statusOpt
 );
 
-NSS_EXTERN nssCryptokiObject **
-nssToken_FindTrustObjects
-(
-  NSSToken *token,
-  nssSession *sessionOpt,
-  nssTokenSearchType searchType,
-  PRUint32 maximumOpt,
-  PRStatus *statusOpt
-);
-
 NSS_EXTERN nssCryptokiObject *
 nssToken_FindTrustForCertificate
 (
@@ -578,16 +537,6 @@ nssToken_FindTrustForCertificate
   NSSDER *certIssuer,
   NSSDER *certSerial,
   nssTokenSearchType searchType
-);
-
-NSS_EXTERN nssCryptokiObject **
-nssToken_FindCRLs
-(
-  NSSToken *token,
-  nssSession *sessionOpt,
-  nssTokenSearchType searchType,
-  PRUint32 maximumOpt,
-  PRStatus *statusOpt
 );
 
 NSS_EXTERN nssCryptokiObject **
@@ -744,8 +693,7 @@ nssCryptokiCertificate_GetAttributes
   NSSDER *encodingOpt,
   NSSDER *issuerOpt,
   NSSDER *serialOpt,
-  NSSDER *subjectOpt,
-  NSSASCII7 **emailOpt
+  NSSDER *subjectOpt
 );
 
 NSS_EXTERN PRStatus
@@ -757,7 +705,8 @@ nssCryptokiTrust_GetAttributes
   nssTrustLevel *serverAuth,
   nssTrustLevel *clientAuth,
   nssTrustLevel *codeSigning,
-  nssTrustLevel *emailProtection
+  nssTrustLevel *emailProtection,
+  PRBool *stepUpApproved
 );
 
 NSS_EXTERN PRStatus
@@ -782,7 +731,7 @@ nssCryptokiPrivateKey_SetCertificate
 (
   nssCryptokiObject *keyObject,
   nssSession *sessionOpt,
-  NSSUTF8 *nickname,
+  const NSSUTF8 *nickname,
   NSSItem *id,
   NSSDER *subject
 );
@@ -942,8 +891,6 @@ nssSlotList_GetBestSlotForAlgorithmsAndParameters
   NSSAlgorithmAndParameters **ap
 );
 
-#ifdef NSS_3_4_CODE
-
 NSS_EXTERN PRBool
 nssToken_IsPresent
 (
@@ -985,9 +932,6 @@ nssToken_IsPrivateKeyAvailable
   NSSCertificate *c,
   nssCryptokiObject *instance
 );
-
-
-#endif
 
 PR_END_EXTERN_C
 

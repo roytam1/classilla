@@ -1,48 +1,54 @@
 #! gmake
 # 
-# The contents of this file are subject to the Mozilla Public
-# License Version 1.1 (the "License"); you may not use this file
-# except in compliance with the License. You may obtain a copy of
-# the License at http://www.mozilla.org/MPL/
-# 
-# Software distributed under the License is distributed on an "AS
-# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
-# implied. See the License for the specific language governing
-# rights and limitations under the License.
-# 
+# ***** BEGIN LICENSE BLOCK *****
+# Version: MPL 1.1/GPL 2.0/LGPL 2.1
+#
+# The contents of this file are subject to the Mozilla Public License Version
+# 1.1 (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+# http://www.mozilla.org/MPL/
+#
+# Software distributed under the License is distributed on an "AS IS" basis,
+# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+# for the specific language governing rights and limitations under the
+# License.
+#
 # The Original Code is the Netscape Portable Runtime (NSPR).
-# 
-# The Initial Developer of the Original Code is Netscape
-# Communications Corporation.  Portions created by Netscape are 
-# Copyright (C) 1998-2000 Netscape Communications Corporation.  All
-# Rights Reserved.
-# 
+#
+# The Initial Developer of the Original Code is
+# Netscape Communications Corporation.
+# Portions created by the Initial Developer are Copyright (C) 1998-2000
+# the Initial Developer. All Rights Reserved.
+#
 # Contributor(s):
-# 
-# Alternatively, the contents of this file may be used under the
-# terms of the GNU General Public License Version 2 or later (the
-# "GPL"), in which case the provisions of the GPL are applicable 
-# instead of those above.  If you wish to allow use of your 
-# version of this file only under the terms of the GPL and not to
-# allow others to use your version of this file under the MPL,
-# indicate your decision by deleting the provisions above and
-# replace them with the notice and other provisions required by
-# the GPL.  If you do not delete the provisions above, a recipient
-# may use your version of this file under either the MPL or the
-# GPL.
-# 
+#
+# Alternatively, the contents of this file may be used under the terms of
+# either the GNU General Public License Version 2 or later (the "GPL"), or
+# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+# in which case the provisions of the GPL or the LGPL are applicable instead
+# of those above. If you wish to allow use of your version of this file only
+# under the terms of either the GPL or the LGPL, and not to allow others to
+# use your version of this file under the terms of the MPL, indicate your
+# decision by deleting the provisions above and replace them with the notice
+# and other provisions required by the GPL or the LGPL. If you do not delete
+# the provisions above, a recipient may use your version of this file under
+# the terms of any one of the MPL, the GPL or the LGPL.
+#
+# ***** END LICENSE BLOCK *****
 
 ################################################################################
-# We have a 4 pass build process:
+# We used to have a 4 pass build process.  Now we do everything in one pass.
 #
-# Pass 1. export - Create generated headers and stubs. Publish public headers to
-#		dist/<arch>/include.
+# export - Create generated headers and stubs. Publish public headers to
+#          dist/<arch>/include.
+#          Create libraries. Publish libraries to dist/<arch>/lib.
+#          Create programs. 
 #
-# Pass 2. libs - Create libraries. Publish libraries to dist/<arch>/lib.
+# libs - obsolete.  Now a synonym of "export".
 #
-# Pass 3. all - Create programs. 
+# all - the default makefile target.  Now a synonym of "export".
 #
-# Pass 4. install - Publish programs to dist/<arch>/bin.
+# install - Install headers, libraries, and programs on the system.
 #
 # Parameters to this makefile (set these before including):
 #
@@ -83,6 +89,7 @@ CC=$(HOST_CC)
 CCC=$(HOST_CXX)
 CFLAGS=$(HOST_CFLAGS)
 CXXFLAGS=$(HOST_CXXFLAGS)
+LDFLAGS=$(HOST_LDFLAGS)
 endif
 endif
 endif
@@ -109,10 +116,12 @@ ifeq (,$(filter-out WIN95 OS2,$(OS_TARGET)))
 LIBRARY		= $(OBJDIR)/$(LIBRARY_NAME)$(LIBRARY_VERSION)_s.$(LIB_SUFFIX)
 SHARED_LIBRARY	= $(OBJDIR)/$(LIBRARY_NAME)$(LIBRARY_VERSION).$(DLL_SUFFIX)
 IMPORT_LIBRARY	= $(OBJDIR)/$(LIBRARY_NAME)$(LIBRARY_VERSION).$(LIB_SUFFIX)
+SHARED_LIB_PDB	= $(OBJDIR)/$(LIBRARY_NAME)$(LIBRARY_VERSION).pdb
 else
 LIBRARY		= $(OBJDIR)/lib$(LIBRARY_NAME)$(LIBRARY_VERSION)_s.$(LIB_SUFFIX)
 SHARED_LIBRARY	= $(OBJDIR)/lib$(LIBRARY_NAME)$(LIBRARY_VERSION).$(DLL_SUFFIX)
 IMPORT_LIBRARY	= $(OBJDIR)/lib$(LIBRARY_NAME)$(LIBRARY_VERSION).$(LIB_SUFFIX)
+SHARED_LIB_PDB	= $(OBJDIR)/lib$(LIBRARY_NAME)$(LIBRARY_VERSION).pdb
 endif
 
 else
@@ -132,6 +141,13 @@ endif
 ifndef TARGETS
 ifeq (,$(filter-out WINNT OS2,$(OS_ARCH)))
 TARGETS		= $(LIBRARY) $(SHARED_LIBRARY) $(IMPORT_LIBRARY)
+ifndef BUILD_OPT
+ifdef MSC_VER
+ifneq (,$(filter-out 1100 1200,$(MSC_VER)))
+TARGETS		+= $(SHARED_LIB_PDB)
+endif
+endif
+endif
 else
 TARGETS		= $(LIBRARY) $(SHARED_LIBRARY)
 endif
@@ -148,15 +164,7 @@ OBJS		= $(addprefix $(OBJDIR)/,$(CSRCS:.c=.$(OBJ_SUFFIX))) \
 		  $(addprefix $(OBJDIR)/,$(ASFILES:.$(ASM_SUFFIX)=.$(OBJ_SUFFIX)))
 endif
 
-ifeq ($(OS_ARCH), WINNT)
-OBJS += $(RES)
-endif
-
-ifeq ($(MOZ_OS2_TOOLS),VACPP)
-EXTRA_LIBS := $(patsubst -l%,$(DIST)/lib/%.$(LIB_SUFFIX),$(EXTRA_LIBS))
-endif
-
-ALL_TRASH		= $(TARGETS) $(OBJS) $(filter-out . .., $(OBJDIR)) LOGS TAGS $(GARBAGE) \
+ALL_TRASH		= $(TARGETS) $(OBJS) $(RES) $(filter-out . .., $(OBJDIR)) LOGS TAGS $(GARBAGE) \
 			  $(NOSUCHFILE) \
 			  so_locations
 
@@ -196,14 +204,12 @@ export::
 
 libs:: export
 
-install:: export
-
 clean::
-	rm -rf $(OBJS) so_locations $(NOSUCHFILE) $(GARBAGE)
+	rm -rf $(OBJS) $(RES) so_locations $(NOSUCHFILE) $(GARBAGE)
 	+$(LOOP_OVER_DIRS)
 
 clobber::
-	rm -rf $(OBJS) $(TARGETS) $(filter-out . ..,$(OBJDIR)) $(GARBAGE) so_locations $(NOSUCHFILE)
+	rm -rf $(OBJS) $(RES) $(TARGETS) $(filter-out . ..,$(OBJDIR)) $(GARBAGE) so_locations $(NOSUCHFILE)
 	+$(LOOP_OVER_DIRS)
 
 realclean clobber_all::
@@ -214,7 +220,9 @@ distclean::
 	rm -rf $(wildcard *.OBJ *.OBJD) dist $(ALL_TRASH) $(DIST_GARBAGE)
 	+$(LOOP_OVER_DIRS)
 
-real_install:: $(RELEASE_BINS) $(RELEASE_HEADERS) $(RELEASE_LIBS)
+real_install:: install
+
+install:: $(RELEASE_BINS) $(RELEASE_HEADERS) $(RELEASE_LIBS)
 ifdef RELEASE_BINS
 	$(NSINSTALL) -t -m 0755 $(RELEASE_BINS) $(DESTDIR)$(bindir)
 endif
@@ -289,13 +297,15 @@ $(PROGRAM): $(OBJS)
 	@$(MAKE_OBJDIR)
 ifeq ($(NS_USE_GCC)_$(OS_ARCH),_WINNT)
 	$(CC) $(OBJS) -Fe$@ -link $(LDFLAGS) $(OS_LIBS) $(EXTRA_LIBS)
-else
-ifeq ($(MOZ_OS2_TOOLS),VACPP)
-	$(CC) $(OBJS) -Fe$@ $(LDFLAGS) $(OS_LIBS) $(EXTRA_LIBS)
-else
+ifdef MT
+	@if test -f $@.manifest; then \
+		$(MT) -NOLOGO -MANIFEST $@.manifest -OUTPUTRESOURCE:$@\;1; \
+		rm -f $@.manifest; \
+	fi
+endif	# MSVC with manifest tool
+else	# WINNT && !GCC
 	$(CC) -o $@ $(CFLAGS) $(OBJS) $(LDFLAGS)
-endif
-endif
+endif	# WINNT && !GCC
 ifdef ENABLE_STRIP
 	$(STRIP) $@
 endif
@@ -303,19 +313,16 @@ endif
 $(LIBRARY): $(OBJS)
 	@$(MAKE_OBJDIR)
 	rm -f $@
-ifeq ($(MOZ_OS2_TOOLS),VACPP)
-	$(AR) $(subst /,\\,$(OBJS)) $(AR_FLAGS)
-else
 	$(AR) $(AR_FLAGS) $(OBJS) $(AR_EXTRA_ARGS)
-endif
 	$(RANLIB) $@
 
 ifeq ($(OS_TARGET), OS2)
-$(IMPORT_LIBRARY): $(SHARED_LIBRARY)
-	$(IMPLIB) $@ $(SHARED_LIBRARY).def
+$(IMPORT_LIBRARY): $(MAPFILE)
+	rm -f $@
+	$(IMPLIB) $@ $(MAPFILE)
 endif
 
-$(SHARED_LIBRARY): $(OBJS) $(MAPFILE)
+$(SHARED_LIBRARY): $(OBJS) $(RES) $(MAPFILE)
 	@$(MAKE_OBJDIR)
 	rm -f $@
 ifeq ($(OS_ARCH)$(OS_RELEASE), AIX4.1)
@@ -328,18 +335,14 @@ ifeq ($(OS_ARCH)$(OS_RELEASE), AIX4.1)
 		-bM:SRE -bnoentry $(OS_LIBS) $(EXTRA_LIBS)
 else	# AIX 4.1
 ifeq ($(NS_USE_GCC)_$(OS_ARCH),_WINNT)
-	$(LINK_DLL) -MAP $(DLLBASE) $(DLL_LIBS) $(EXTRA_LIBS) $(OBJS)
-else
-ifeq ($(OS_ARCH),OS2)
-# append ( >> ) doesn't seem to be working under OS/2 gmake. Run through OS/2 shell instead.	
-	@cmd /C "echo LIBRARY $(notdir $(basename $(SHARED_LIBRARY))) INITINSTANCE TERMINSTANCE >$@.def"
-	@cmd /C "echo PROTMODE >>$@.def"
-	@cmd /C "echo CODE    LOADONCALL MOVEABLE DISCARDABLE >>$@.def"
-	@cmd /C "echo DATA    PRELOAD MOVEABLE MULTIPLE NONSHARED >>$@.def"	
-	@cmd /C "echo EXPORTS >>$@.def"
-	@cmd /C "$(FILTER) $(LIBRARY) | grep -v _DLL_InitTerm >>$@.def"
-	$(LINK_DLL) $(DLLBASE) $(OBJS) $(OS_LIBS) $(EXTRA_LIBS) $@.def
-else	# OS2
+	$(LINK_DLL) -MAP $(DLLBASE) $(DLL_LIBS) $(EXTRA_LIBS) $(OBJS) $(RES)
+ifdef MT
+	@if test -f $@.manifest; then \
+		$(MT) -NOLOGO -MANIFEST $@.manifest -OUTPUTRESOURCE:$@\;2; \
+		rm -f $@.manifest; \
+	fi
+endif	# MSVC with manifest tool
+else	# WINNT && !GCC
 ifeq ($(OS_TARGET), OpenVMS)
 	@if test ! -f $(VMS_SYMVEC_FILE); then \
 	  if test -f $(VMS_SYMVEC_FILE_MODULE); then \
@@ -348,27 +351,22 @@ ifeq ($(OS_TARGET), OpenVMS)
 	  fi; \
 	fi
 endif	# OpenVMS
-	$(MKSHLIB) $(OBJS) $(EXTRA_LIBS)
-endif   # OS2
-endif	# WINNT
+	$(MKSHLIB) $(OBJS) $(RES) $(EXTRA_LIBS)
+endif	# WINNT && !GCC
 endif	# AIX 4.1
 ifdef ENABLE_STRIP
 	$(STRIP) $@
 endif
 
-ifeq (,$(filter-out WINNT OS2,$(OS_ARCH)))
+ifeq ($(OS_ARCH),WINNT)
 $(RES): $(RESNAME)
 	@$(MAKE_OBJDIR)
-ifeq ($(OS_TARGET),OS2)
-	$(RC) -DOS2 -r $< $@
-else
 # The resource compiler does not understand the -U option.
 ifdef NS_USE_GCC
 	$(RC) $(RCFLAGS) $(filter-out -U%,$(DEFINES)) $(INCLUDES:-I%=--include-dir %) -o $@ $<
 else
 	$(RC) $(RCFLAGS) $(filter-out -U%,$(DEFINES)) $(INCLUDES) -Fo$@ $<
 endif # GCC
-endif
 	@echo $(RES) finished
 endif
 
@@ -378,14 +376,44 @@ ifeq ($(OS_ARCH),SunOS)
 	grep -v ';-' $< | \
 	sed -e 's,;+,,' -e 's; DATA ;;' -e 's,;;,,' -e 's,;.*,;,' > $@
 endif
+ifeq ($(OS_ARCH),OS2)
+	echo LIBRARY $(LIBRARY_NAME)$(LIBRARY_VERSION) INITINSTANCE TERMINSTANCE > $@
+	echo PROTMODE >> $@
+	echo CODE    LOADONCALL MOVEABLE DISCARDABLE >> $@
+	echo DATA    PRELOAD MOVEABLE MULTIPLE NONSHARED >> $@
+	echo EXPORTS >> $@
+	grep -v ';+' $< | grep -v ';-' | \
+	sed -e 's; DATA ;;' -e 's,;;,,' -e 's,;.*,,' -e 's,\([\t ]*\),\1_,' | \
+	awk 'BEGIN {ord=1;} { print($$0 " @" ord " RESIDENTNAME"); ord++;}'	>> $@
+	$(ADD_TO_DEF_FILE)
+endif
+
+#
+# Translate source filenames to absolute paths. This is required for
+# debuggers under Windows and OS/2 to find source files automatically.
+#
+
+ifeq (,$(filter-out AIX OS2,$(OS_ARCH)))
+NEED_ABSOLUTE_PATH = 1
+endif
+
+ifeq ($(NS_USE_GCC)_$(OS_ARCH),_WINNT)
+NEED_ABSOLUTE_PATH = 1
+endif
+
+ifdef NEED_ABSOLUTE_PATH
+PWD := $(shell pwd)
+# The quotes allow absolute paths to contain spaces.
+pr_abspath = "$(if $(findstring :,$(1)),$(1),$(if $(filter /%,$(1)),$(1),$(PWD)/$(1)))"
+endif
 
 $(OBJDIR)/%.$(OBJ_SUFFIX): %.cpp
 	@$(MAKE_OBJDIR)
 ifeq ($(NS_USE_GCC)_$(OS_ARCH),_WINNT)
-	$(CCC) -Fo$@ -c $(CCCFLAGS) $<
+	$(CCC) -Fo$@ -c $(CCCFLAGS) $(call pr_abspath,$<)
 else
-ifeq ($(MOZ_OS2_TOOLS),VACPP)
-	$(CCC) -Fo$@ -c $(CCCFLAGS) $<
+ifdef NEED_ABSOLUTE_PATH
+	$(CCC) -o $@ -c $(CCCFLAGS) $(call pr_abspath,$<)
 else
 	$(CCC) -o $@ -c $(CCCFLAGS) $<
 endif
@@ -397,10 +425,10 @@ WCCFLAGS3 = $(subst -D,-d,$(WCCFLAGS2))
 $(OBJDIR)/%.$(OBJ_SUFFIX): %.c
 	@$(MAKE_OBJDIR)
 ifeq ($(NS_USE_GCC)_$(OS_ARCH),_WINNT)
-	$(CC) -Fo$@ -c $(CFLAGS) $<
+	$(CC) -Fo$@ -c $(CFLAGS) $(call pr_abspath,$<)
 else
-ifeq ($(MOZ_OS2_TOOLS),VACPP)
-	$(CC) -Fo$@ -c $(CFLAGS) $<
+ifdef NEED_ABSOLUTE_PATH
+	$(CC) -o $@ -c $(CFLAGS) $(call pr_abspath,$<)
 else
 	$(CC) -o $@ -c $(CFLAGS) $<
 endif
@@ -410,12 +438,6 @@ endif
 $(OBJDIR)/%.$(OBJ_SUFFIX): %.s
 	@$(MAKE_OBJDIR)
 	$(AS) -o $@ $(ASFLAGS) -c $<
-
-ifeq ($(MOZ_OS2_TOOLS),VACPP)
-$(OBJDIR)/%.$(OBJ_SUFFIX): %.asm
-	@$(MAKE_OBJDIR)
-	$(AS) -Fdo:./$(OBJDIR) $(ASFLAGS) $<
-endif
 
 %.i: %.c
 	$(CC) -C -E $(CFLAGS) $< > $*.i

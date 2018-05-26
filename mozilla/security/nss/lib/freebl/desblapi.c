@@ -5,41 +5,19 @@
  *  Implement DES Modes of Operation and Triple-DES.
  *  Adapt DES-150 to blapi API.
  *
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- *
- * The Original Code is the DES-150 library.
- *
- * The Initial Developer of the Original Code is Nelson B. Bolyard,
- * nelsonb@iname.com.  Portions created by Nelson B. Bolyard are 
- * Copyright (C) 1990, 2000  Nelson B. Bolyard, All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable
- * instead of those above.  If you wish to allow use of your
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the GPL.
- */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#ifdef FREEBL_NO_DEPEND
+#include "stubs.h"
+#endif
 
 #include "des.h"
 #include <stddef.h>
 #include "secerr.h"
 
-#if defined(_X86_)
+#if defined(NSS_X86_OR_X64)
 /* Intel X86 CPUs do unaligned loads and stores without complaint. */
 #define COPY8B(to, from, ptr) \
     	HALFPTR(to)[0] = HALFPTR(from)[0]; \
@@ -173,12 +151,21 @@ DES_EDE3CBCDe(DESContext *cx, BYTE *out, const BYTE *in, unsigned int len)
 }
 
 DESContext *
-DES_CreateContext(const BYTE * key, const BYTE *iv, int mode, PRBool encrypt)
+DES_AllocateContext(void)
 {
-    DESContext *cx = PORT_ZNew(DESContext);
+    return PORT_ZNew(DESContext);
+}
+
+SECStatus   
+DES_InitContext(DESContext *cx, const unsigned char *key, unsigned int keylen,
+	        const unsigned char *iv, int mode, unsigned int encrypt,
+	        unsigned int unused)
+{
     DESDirection opposite;
-    if (!cx) 
-    	return 0;
+    if (!cx) {
+	PORT_SetError(SEC_ERROR_INVALID_ARGS);
+    	return SECFailure;
+    }
     cx->direction = encrypt ? DES_ENCRYPT : DES_DECRYPT;
     opposite      = encrypt ? DES_DECRYPT : DES_ENCRYPT;
     switch (mode) {
@@ -222,10 +209,21 @@ DES_CreateContext(const BYTE * key, const BYTE *iv, int mode, PRBool encrypt)
 	break;
 
     default:
-    	PORT_Free(cx);
-	cx = 0;
 	PORT_SetError(SEC_ERROR_INVALID_ARGS);
-	break;
+	return SECFailure;
+    }
+    return SECSuccess;
+}
+
+DESContext *
+DES_CreateContext(const BYTE * key, const BYTE *iv, int mode, PRBool encrypt)
+{
+    DESContext *cx = PORT_ZNew(DESContext);
+    SECStatus rv   = DES_InitContext(cx, key, 0, iv, mode, encrypt, 0);
+
+    if (rv != SECSuccess) {
+    	PORT_ZFree(cx, sizeof *cx);
+	cx = NULL;
     }
     return cx;
 }
@@ -245,7 +243,7 @@ DES_Encrypt(DESContext *cx, BYTE *out, unsigned int *outLen,
             unsigned int maxOutLen, const BYTE *in, unsigned int inLen)
 {
 
-    if (inLen < 0 || (inLen % 8) != 0 || maxOutLen < inLen || !cx || 
+    if ((inLen % 8) != 0 || maxOutLen < inLen || !cx || 
         cx->direction != DES_ENCRYPT) {
     	PORT_SetError(SEC_ERROR_INVALID_ARGS);
 	return SECFailure;
@@ -262,7 +260,7 @@ DES_Decrypt(DESContext *cx, BYTE *out, unsigned int *outLen,
             unsigned int maxOutLen, const BYTE *in, unsigned int inLen)
 {
 
-    if (inLen < 0 || (inLen % 8) != 0 || maxOutLen < inLen || !cx || 
+    if ((inLen % 8) != 0 || maxOutLen < inLen || !cx || 
         cx->direction != DES_DECRYPT) {
     	PORT_SetError(SEC_ERROR_INVALID_ARGS);
 	return SECFailure;

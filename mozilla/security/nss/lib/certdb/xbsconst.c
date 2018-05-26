@@ -1,42 +1,13 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * X.509 v3 Basic Constraints Extension 
  */
 
 #include "prtypes.h"
-#include "mcom_db.h"
+#include <limits.h>     /* for LONG_MAX */
 #include "seccomon.h"
 #include "secdert.h"
 #include "secoidt.h"
@@ -51,7 +22,7 @@ typedef struct EncodedContext{
     SECItem isCA;
     SECItem pathLenConstraint;
     SECItem encodedValue;
-    PRArenaPool *arena;
+    PLArenaPool *arena;
 }EncodedContext;
 
 static const SEC_ASN1Template CERTBasicConstraintsTemplate[] = {
@@ -70,10 +41,10 @@ static unsigned char hexFalse = 0x00;
 #define GEN_BREAK(status) rv = status; break;
 
 SECStatus CERT_EncodeBasicConstraintValue
-   (PRArenaPool *arena, CERTBasicConstraints *value, SECItem *encodedValue)
+   (PLArenaPool *arena, CERTBasicConstraints *value, SECItem *encodedValue)
 {
     EncodedContext encodeContext;
-    PRArenaPool *our_pool = NULL;   
+    PLArenaPool *our_pool = NULL;
     SECStatus rv = SECSuccess;
 
     do {
@@ -117,10 +88,10 @@ SECStatus CERT_EncodeBasicConstraintValue
 }
 
 SECStatus CERT_DecodeBasicConstraintValue
-   (CERTBasicConstraints *value, SECItem *encodedValue)
+   (CERTBasicConstraints *value, const SECItem *encodedValue)
 {
     EncodedContext decodeContext;
-    PRArenaPool *our_pool;
+    PLArenaPool *our_pool;
     SECStatus rv = SECSuccess;
 
     do {
@@ -142,7 +113,9 @@ SECStatus CERT_DecodeBasicConstraintValue
 	if (rv == SECFailure)
 	    break;
 	
-	value->isCA = (PRBool)(*decodeContext.isCA.data);
+	value->isCA = decodeContext.isCA.data 
+	              ? (PRBool)(decodeContext.isCA.data[0] != 0)
+		      : PR_FALSE;
 	if (decodeContext.pathLenConstraint.data == NULL) {
 	    /* if the pathLenConstraint is not encoded, and the current setting
 	      is CA, then the pathLenConstraint should be set to a negative number
@@ -150,10 +123,14 @@ SECStatus CERT_DecodeBasicConstraintValue
 	     */
 	    if (value->isCA)
 		value->pathLenConstraint = CERT_UNLIMITED_PATH_CONSTRAINT;
-	}
-	else if (value->isCA)
-	    value->pathLenConstraint = DER_GetUInteger (&decodeContext.pathLenConstraint);
-	else {
+	} else if (value->isCA) {
+	    long len = DER_GetInteger (&decodeContext.pathLenConstraint);
+	    if (len < 0 || len == LONG_MAX) {
+		PORT_SetError (SEC_ERROR_BAD_DER);
+		GEN_BREAK (SECFailure);
+	    }
+	    value->pathLenConstraint = len;
+	} else {
 	    /* here we get an error where the subject is not a CA, but
 	       the pathLenConstraint is set */
 	    PORT_SetError (SEC_ERROR_BAD_DER);

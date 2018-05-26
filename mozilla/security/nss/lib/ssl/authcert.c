@@ -1,39 +1,9 @@
 /*
  * NSS utility functions
  *
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- *
- * $Id: authcert.c,v 1.2 2001/12/07 01:36:21 relyea%netscape.com Exp $
- */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include <stdio.h>
 #include <string.h>
@@ -68,7 +38,9 @@ NSS_GetClientAuthData(void *                       arg,
   proto_win = SSL_RevealPinArg(socket);
   
   if (chosenNickName) {
-    cert = PK11_FindCertFromNickname(chosenNickName, proto_win);
+    cert = CERT_FindUserCertByUsage(CERT_GetDefaultCertDB(),
+                                    chosenNickName, certUsageSSLClient,
+                                    PR_FALSE, proto_win);	
     if ( cert ) {
       privkey = PK11_FindKeyByAnyCert(cert, proto_win);
       if ( privkey ) {
@@ -85,7 +57,9 @@ NSS_GetClientAuthData(void *                       arg,
 				  SEC_CERT_NICKNAMES_USER, proto_win);
     if (names != NULL) {
       for (i = 0; i < names->numnicknames; i++) {
-	cert = PK11_FindCertFromNickname(names->nicknames[i],proto_win);
+	cert = CERT_FindUserCertByUsage(CERT_GetDefaultCertDB(),
+                            names->nicknames[i], certUsageSSLClient,
+                            PR_FALSE, proto_win);	
 	if ( !cert )
 	  continue;
 	/* Only check unexpired certs */

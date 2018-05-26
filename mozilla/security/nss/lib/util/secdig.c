@@ -1,72 +1,11 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- *
- * $Id: secdig.c,v 1.2 2001/01/07 08:13:12 nelsonb%netscape.com Exp $
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include "secdig.h"
 
 #include "secoid.h"
 #include "secasn1.h" 
 #include "secerr.h"
-
-/*
- * XXX OLD Template.  Once all uses have been switched over to new one,
- * remove this.
- */
-DERTemplate SGNDigestInfoTemplate[] = {
-    { DER_SEQUENCE,
-	  0, NULL, sizeof(SGNDigestInfo) },
-    { DER_INLINE,
-	  offsetof(SGNDigestInfo,digestAlgorithm),
-	  SECAlgorithmIDTemplate, },
-    { DER_OCTET_STRING,
-	  offsetof(SGNDigestInfo,digest), },
-    { 0, }
-};
-
-/* XXX See comment below about SGN_DecodeDigestInfo -- keep this static! */
-/* XXX Changed from static -- need to change name? */
-const SEC_ASN1Template sgn_DigestInfoTemplate[] = {
-    { SEC_ASN1_SEQUENCE,
-	  0, NULL, sizeof(SGNDigestInfo) },
-    { SEC_ASN1_INLINE,
-	  offsetof(SGNDigestInfo,digestAlgorithm),
-	  SECOID_AlgorithmIDTemplate },
-    { SEC_ASN1_OCTET_STRING,
-	  offsetof(SGNDigestInfo,digest) },
-    { 0 }
-};
-
-SEC_ASN1_CHOOSER_IMPLEMENT(sgn_DigestInfoTemplate)
 
 /*
  * XXX Want to have a SGN_DecodeDigestInfo, like:
@@ -84,17 +23,18 @@ SEC_ASN1_CHOOSER_IMPLEMENT(sgn_DigestInfoTemplate)
  */
 
 SECItem *
-SGN_EncodeDigestInfo(PRArenaPool *poolp, SECItem *dest, SGNDigestInfo *diginfo)
+SGN_EncodeDigestInfo(PLArenaPool *poolp, SECItem *dest, SGNDigestInfo *diginfo)
 {
     return SEC_ASN1EncodeItem (poolp, dest, diginfo, sgn_DigestInfoTemplate);
 }
 
 SGNDigestInfo *
-SGN_CreateDigestInfo(SECOidTag algorithm, unsigned char *sig, unsigned len)
+SGN_CreateDigestInfo(SECOidTag algorithm, const unsigned char *sig,
+                     unsigned len)
 {
     SGNDigestInfo *di;
     SECStatus rv;
-    PRArenaPool *arena;
+    PLArenaPool *arena;
     SECItem *null_param;
     SECItem dummy_value;
 
@@ -102,7 +42,10 @@ SGN_CreateDigestInfo(SECOidTag algorithm, unsigned char *sig, unsigned len)
       case SEC_OID_MD2:
       case SEC_OID_MD5:
       case SEC_OID_SHA1:
-      case SEC_OID_SHA256: // issue 220
+      case SEC_OID_SHA224:
+      case SEC_OID_SHA256:
+      case SEC_OID_SHA384:
+      case SEC_OID_SHA512:
 	break;
       default:
 	PORT_SetError(SEC_ERROR_INVALID_ALGORITHM);
@@ -159,24 +102,29 @@ SGN_CreateDigestInfo(SECOidTag algorithm, unsigned char *sig, unsigned len)
 SGNDigestInfo *
 SGN_DecodeDigestInfo(SECItem *didata)
 {
-    PRArenaPool *arena;
+    PLArenaPool *arena;
     SGNDigestInfo *di;
     SECStatus rv = SECFailure;
+    SECItem      diCopy   = {siBuffer, NULL, 0};
 
     arena = PORT_NewArena(SEC_ASN1_DEFAULT_ARENA_SIZE);
     if(arena == NULL)
 	return NULL;
 
+    rv = SECITEM_CopyItem(arena, &diCopy, didata);
+    if (rv != SECSuccess) {
+	PORT_FreeArena(arena, PR_FALSE);
+    	return NULL;
+    }
+
     di = (SGNDigestInfo *)PORT_ArenaZAlloc(arena, sizeof(SGNDigestInfo));
-    if(di != NULL)
-    {
+    if (di != NULL) {
 	di->arena = arena;
-	rv = SEC_ASN1DecodeItem(arena, di, sgn_DigestInfoTemplate, didata);
+	rv = SEC_QuickDERDecodeItem(arena, di, sgn_DigestInfoTemplate, &diCopy);
     }
 	
-    if((di == NULL) || (rv != SECSuccess))
-    {
-	PORT_FreeArena(arena, PR_TRUE);
+    if ((di == NULL) || (rv != SECSuccess)) {
+	PORT_FreeArena(arena, PR_FALSE);
 	di = NULL;
     }
 
@@ -194,7 +142,7 @@ SGN_DestroyDigestInfo(SGNDigestInfo *di)
 }
 
 SECStatus 
-SGN_CopyDigestInfo(PRArenaPool *poolp, SGNDigestInfo *a, SGNDigestInfo *b)
+SGN_CopyDigestInfo(PLArenaPool *poolp, SGNDigestInfo *a, SGNDigestInfo *b)
 {
     SECStatus rv;
     void *mark;

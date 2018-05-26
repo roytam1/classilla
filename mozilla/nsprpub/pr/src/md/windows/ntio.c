@@ -1,36 +1,40 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *   Masayuki Nakano <masayuki@d-toybox.com>
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 /* Windows NT IO module
  *
@@ -60,8 +64,10 @@ static PRThread             *_pr_io_completion_thread;
 
 #define RECYCLE_SIZE 512
 static struct _MDLock        _pr_recycle_lock;
-static PRInt32               _pr_recycle_array[RECYCLE_SIZE];
-static PRInt32               _pr_recycle_tail = 0; 
+static PRInt32               _pr_recycle_INET_array[RECYCLE_SIZE];
+static PRInt32               _pr_recycle_INET_tail = 0; 
+static PRInt32               _pr_recycle_INET6_array[RECYCLE_SIZE];
+static PRInt32               _pr_recycle_INET6_tail = 0; 
 
 __declspec(thread) PRThread *_pr_io_restarted_io = NULL;
 DWORD _pr_io_restartedIOIndex;  /* The thread local storage slot for each
@@ -105,6 +111,8 @@ static const PRTime _pr_filetime_offset = 116444736000000000LL;
 static const PRTime _pr_filetime_offset = 116444736000000000i64;
 #endif
 
+static PRBool IsPrevCharSlash(const char *str, const char *current);
+
 #define _NEED_351_FILE_LOCKING_HACK
 #ifdef _NEED_351_FILE_LOCKING_HACK
 #define _PR_LOCAL_FILE 1
@@ -115,7 +123,7 @@ PRInt32 IsFileLocal(HANDLE hFile);
 
 static PRInt32 _md_MakeNonblock(HANDLE);
 
-static PRInt32 _nt_nonblock_accept(PRFileDesc *fd, struct sockaddr *addr, int *addrlen, PRIntervalTime);
+static PROsfd _nt_nonblock_accept(PRFileDesc *fd, struct sockaddr *addr, int *addrlen, PRIntervalTime);
 static PRInt32 _nt_nonblock_connect(PRFileDesc *fd, struct sockaddr *addr, int addrlen, PRIntervalTime);
 static PRInt32 _nt_nonblock_recv(PRFileDesc *fd, char *buf, int len, int flags, PRIntervalTime);
 static PRInt32 _nt_nonblock_send(PRFileDesc *fd, char *buf, int len, PRIntervalTime);
@@ -899,7 +907,9 @@ _PR_MD_INIT_IO()
     } else 
         PR_ASSERT(0);
 
+#ifdef _NEED_351_FILE_LOCKING_HACK
     IsFileLocalInit();
+#endif /* _NEED_351_FILE_LOCKING_HACK */
 
     /*
      * UDP support: start up the continuation thread
@@ -957,15 +967,20 @@ _PR_MD_INIT_IO()
  * second argument.
  */
 static SOCKET
-_md_get_recycled_socket()
+_md_get_recycled_socket(int af)
 {
     SOCKET rv;
-    int af = AF_INET;
 
     _MD_LOCK(&_pr_recycle_lock);
-    if (_pr_recycle_tail) {
-        _pr_recycle_tail--;
-        rv = _pr_recycle_array[_pr_recycle_tail];
+    if (af == AF_INET && _pr_recycle_INET_tail) {
+        _pr_recycle_INET_tail--;
+        rv = _pr_recycle_INET_array[_pr_recycle_INET_tail];
+        _MD_UNLOCK(&_pr_recycle_lock);
+        return rv;
+    }
+    if (af == AF_INET6 && _pr_recycle_INET6_tail) {
+        _pr_recycle_INET6_tail--;
+        rv = _pr_recycle_INET6_array[_pr_recycle_INET6_tail];
         _MD_UNLOCK(&_pr_recycle_lock);
         return rv;
     }
@@ -983,14 +998,19 @@ _md_get_recycled_socket()
  * Add a socket to the recycle bin.
  */
 static void
-_md_put_recycled_socket(SOCKET newsock)
+_md_put_recycled_socket(SOCKET newsock, int af)
 {
-    PR_ASSERT(_pr_recycle_tail >= 0);
+    PR_ASSERT(_pr_recycle_INET_tail >= 0);
+    PR_ASSERT(_pr_recycle_INET6_tail >= 0);
 
     _MD_LOCK(&_pr_recycle_lock);
-    if (_pr_recycle_tail < RECYCLE_SIZE) {
-        _pr_recycle_array[_pr_recycle_tail] = newsock;
-        _pr_recycle_tail++;
+    if (af == AF_INET && _pr_recycle_INET_tail < RECYCLE_SIZE) {
+        _pr_recycle_INET_array[_pr_recycle_INET_tail] = newsock;
+        _pr_recycle_INET_tail++;
+        _MD_UNLOCK(&_pr_recycle_lock);
+    } else if (af == AF_INET6 && _pr_recycle_INET6_tail < RECYCLE_SIZE) {
+        _pr_recycle_INET6_array[_pr_recycle_INET6_tail] = newsock;
+        _pr_recycle_INET6_tail++;
         _MD_UNLOCK(&_pr_recycle_lock);
     } else {
         _MD_UNLOCK(&_pr_recycle_lock);
@@ -1042,7 +1062,7 @@ static int missing_completions = 0;
 static int max_wait_loops = 0;
 
 static PRInt32
-_NT_IO_ABORT(PRInt32 sock)
+_NT_IO_ABORT(PROsfd sock)
 {
     PRThread *me = _PR_MD_CURRENT_THREAD();
     PRBool fWait;
@@ -1133,7 +1153,7 @@ _NT_IO_ABORT(PRInt32 sock)
 }
 
 
-PRInt32
+PROsfd
 _PR_MD_SOCKET(int af, int type, int flags)
 {
     SOCKET sock;
@@ -1144,13 +1164,13 @@ _PR_MD_SOCKET(int af, int type, int flags)
         _PR_MD_MAP_SOCKET_ERROR(WSAGetLastError());
     }
 
-    return (PRInt32)sock;
+    return (PROsfd)sock;
 }
 
 struct connect_data_s {
     PRInt32 status;
     PRInt32 error;
-    PRInt32 osfd;
+    PROsfd  osfd;
     struct sockaddr *addr;
     PRUint32 addrlen;
     PRIntervalTime timeout;
@@ -1174,7 +1194,7 @@ PRInt32
 _PR_MD_CONNECT(PRFileDesc *fd, const PRNetAddr *addr, PRUint32 addrlen, 
                PRIntervalTime timeout)
 {
-    PRInt32 osfd = fd->secret->md.osfd;
+    PROsfd osfd = fd->secret->md.osfd;
     PRInt32 rv, err;
     u_long nbio;
     PRInt32 rc;
@@ -1242,7 +1262,7 @@ _PR_MD_BIND(PRFileDesc *fd, const PRNetAddr *addr, PRUint32 addrlen)
     return 0;
 }
 
-void _PR_MD_UPDATE_ACCEPT_CONTEXT(PRInt32 accept_sock, PRInt32 listen_sock)
+void _PR_MD_UPDATE_ACCEPT_CONTEXT(PROsfd accept_sock, PROsfd listen_sock)
 {
     /* Sockets accept()'d with AcceptEx need to call this setsockopt before
      * calling anything other than ReadFile(), WriteFile(), send(), recv(), 
@@ -1265,12 +1285,12 @@ void _PR_MD_UPDATE_ACCEPT_CONTEXT(PRInt32 accept_sock, PRInt32 listen_sock)
 }
 
 #define INET_ADDR_PADDED (sizeof(PRNetAddr) + 16)
-PRInt32
+PROsfd
 _PR_MD_FAST_ACCEPT(PRFileDesc *fd, PRNetAddr *raddr, PRUint32 *rlen,
               PRIntervalTime timeout, PRBool fast, 
               _PR_AcceptTimeoutCallback callback, void *callbackArg)
 {
-    PRInt32 osfd = fd->secret->md.osfd;
+    PROsfd osfd = fd->secret->md.osfd;
     PRThread *me = _PR_MD_CURRENT_THREAD();
     SOCKET accept_sock;
     int bytes;
@@ -1319,7 +1339,7 @@ _PR_MD_FAST_ACCEPT(PRFileDesc *fd, PRNetAddr *raddr, PRUint32 *rlen,
         }
     }
 
-    accept_sock = _md_get_recycled_socket();
+    accept_sock = _md_get_recycled_socket(fd->secret->af);
     if (accept_sock == INVALID_SOCKET)
         return -1;
 
@@ -1332,6 +1352,7 @@ _PR_MD_FAST_ACCEPT(PRFileDesc *fd, PRNetAddr *raddr, PRUint32 *rlen,
 		me->flags &= ~_PR_INTERRUPT;
 		PR_SetError(PR_PENDING_INTERRUPT_ERROR, 0);
     	_PR_THREAD_UNLOCK(me);
+		closesocket(accept_sock);
 		return -1;
 	}
     me->io_pending = PR_TRUE;
@@ -1348,8 +1369,9 @@ _PR_MD_FAST_ACCEPT(PRFileDesc *fd, PRNetAddr *raddr, PRUint32 *rlen,
                   &bytes,
                   &(me->md.overlapped.overlapped));
 
-    if ( (rv == 0) && ((err = GetLastError()) != ERROR_IO_PENDING))  {
+    if ( (rv == 0) && ((err = WSAGetLastError()) != ERROR_IO_PENDING))  {
         /* Argh! The IO failed */
+		closesocket(accept_sock);
 		_PR_THREAD_LOCK(me);
 		me->io_pending = PR_FALSE;
 		me->state = _PR_RUNNING;
@@ -1369,12 +1391,14 @@ _PR_MD_FAST_ACCEPT(PRFileDesc *fd, PRNetAddr *raddr, PRUint32 *rlen,
         _native_thread_io_nowait(me, rv, bytes);
     } else if (_NT_IO_WAIT(me, timeout) == PR_FAILURE) {
         PR_ASSERT(0);
+        closesocket(accept_sock);
         return -1;
     }
 
     PR_ASSERT(me->io_pending == PR_FALSE || me->io_suspended == PR_TRUE);
 
     if (me->io_suspended) {
+        closesocket(accept_sock);
         if (_PR_PENDING_INTERRUPT(me)) {
             me->flags &= ~_PR_INTERRUPT;
             PR_SetError(PR_PENDING_INTERRUPT_ERROR, 0);
@@ -1385,6 +1409,7 @@ _PR_MD_FAST_ACCEPT(PRFileDesc *fd, PRNetAddr *raddr, PRUint32 *rlen,
     }
 
     if (me->md.blocked_io_status == 0) {
+		closesocket(accept_sock);
 		_PR_MD_MAP_ACCEPTEX_ERROR(me->md.blocked_io_error);
         return -1;
     }
@@ -1412,12 +1437,12 @@ _PR_MD_FAST_ACCEPT(PRFileDesc *fd, PRNetAddr *raddr, PRUint32 *rlen,
 }
 
 PRInt32
-_PR_MD_FAST_ACCEPT_READ(PRFileDesc *sd, PRInt32 *newSock, PRNetAddr **raddr, 
+_PR_MD_FAST_ACCEPT_READ(PRFileDesc *sd, PROsfd *newSock, PRNetAddr **raddr, 
                    void *buf, PRInt32 amount, PRIntervalTime timeout, 
                    PRBool fast, _PR_AcceptTimeoutCallback callback, 
                    void *callbackArg)
 {
-    PRInt32 sock = sd->secret->md.osfd;
+    PROsfd sock = sd->secret->md.osfd;
     PRThread *me = _PR_MD_CURRENT_THREAD();
     int bytes;
     PRNetAddr *Laddr;
@@ -1437,7 +1462,7 @@ _PR_MD_FAST_ACCEPT_READ(PRFileDesc *sd, PRInt32 *newSock, PRNetAddr **raddr,
         sd->secret->md.io_model_committed = PR_TRUE;
     }
 
-    *newSock = _md_get_recycled_socket();
+    *newSock = _md_get_recycled_socket(sd->secret->af);
     if (*newSock == INVALID_SOCKET)
         return -1;
 
@@ -1450,6 +1475,7 @@ _PR_MD_FAST_ACCEPT_READ(PRFileDesc *sd, PRInt32 *newSock, PRNetAddr **raddr,
 		me->flags &= ~_PR_INTERRUPT;
 		PR_SetError(PR_PENDING_INTERRUPT_ERROR, 0);
     	_PR_THREAD_UNLOCK(me);
+		closesocket(*newSock);
 		return -1;
 	}
     me->io_pending = PR_TRUE;
@@ -1467,6 +1493,7 @@ _PR_MD_FAST_ACCEPT_READ(PRFileDesc *sd, PRInt32 *newSock, PRNetAddr **raddr,
                   &(me->md.overlapped.overlapped));
 
     if ( (rv == 0) && ((err = GetLastError()) != ERROR_IO_PENDING)) {
+		closesocket(*newSock);
 		_PR_THREAD_LOCK(me);
 		me->io_pending = PR_FALSE;
 		me->state = _PR_RUNNING;
@@ -1486,6 +1513,7 @@ _PR_MD_FAST_ACCEPT_READ(PRFileDesc *sd, PRInt32 *newSock, PRNetAddr **raddr,
         _native_thread_io_nowait(me, rv, bytes);
     } else if (_NT_IO_WAIT(me, timeout) == PR_FAILURE) {
         PR_ASSERT(0);
+        closesocket(*newSock);
         return -1;
     }
 
@@ -1515,8 +1543,10 @@ retry:
                     callback(callbackArg);
                 madeCallback = PR_TRUE;
                 me->state = _PR_IO_WAIT;
-                if (_NT_ResumeIO(me, timeout) == PR_FAILURE)
+                if (_NT_ResumeIO(me, timeout) == PR_FAILURE) {
+                    closesocket(*newSock);
                     return -1;
+                }
                 goto retry;
             }
 
@@ -1524,8 +1554,10 @@ retry:
                 /* Socket is connected but time not elapsed, RESUME IO */
                 timeout -= elapsed;
                 me->state = _PR_IO_WAIT;
-                if (_NT_ResumeIO(me, timeout) == PR_FAILURE)
+                if (_NT_ResumeIO(me, timeout) == PR_FAILURE) {
+                    closesocket(*newSock);
                     return -1;
+                }
                 goto retry;
             }
         } else {
@@ -1552,6 +1584,7 @@ retry:
             PR_SetError(PR_IO_TIMEOUT_ERROR, 0);
         }
         me->state = _PR_RUNNING;
+        closesocket(*newSock);
         return -1;
     }
 
@@ -1679,7 +1712,7 @@ _PR_MD_SENDFILE(PRFileDesc *sock, PRSendFileData *sfd,
     }
 
     if (flags & PR_TRANSMITFILE_CLOSE_SOCKET) {
-        _md_put_recycled_socket(sock->secret->md.osfd);
+        _md_put_recycled_socket(sock->secret->md.osfd, sock->secret->af);
     }
 
     PR_ASSERT(me->io_pending == PR_FALSE);
@@ -1691,7 +1724,7 @@ PRInt32
 _PR_MD_RECV(PRFileDesc *fd, void *buf, PRInt32 amount, PRIntn flags, 
             PRIntervalTime timeout)
 {
-    PRInt32 osfd = fd->secret->md.osfd;
+    PROsfd osfd = fd->secret->md.osfd;
     PRThread *me = _PR_MD_CURRENT_THREAD();
     int bytes;
     int rv, err;
@@ -1790,7 +1823,7 @@ PRInt32
 _PR_MD_SEND(PRFileDesc *fd, const void *buf, PRInt32 amount, PRIntn flags,
             PRIntervalTime timeout)
 {
-    PRInt32 osfd = fd->secret->md.osfd;
+    PROsfd osfd = fd->secret->md.osfd;
     PRThread *me = _PR_MD_CURRENT_THREAD();
     int bytes;
     int rv, err;
@@ -1885,7 +1918,7 @@ PRInt32
 _PR_MD_SENDTO(PRFileDesc *fd, const void *buf, PRInt32 amount, PRIntn flags,
               const PRNetAddr *addr, PRUint32 addrlen, PRIntervalTime timeout)
 {
-    PRInt32 osfd = fd->secret->md.osfd;
+    PROsfd osfd = fd->secret->md.osfd;
     PRInt32 rv;
 
     if (!fd->secret->md.io_model_committed) {
@@ -1903,7 +1936,7 @@ PRInt32
 _PR_MD_RECVFROM(PRFileDesc *fd, void *buf, PRInt32 amount, PRIntn flags,
                 PRNetAddr *addr, PRUint32 *addrlen, PRIntervalTime timeout)
 {
-    PRInt32 osfd = fd->secret->md.osfd;
+    PROsfd osfd = fd->secret->md.osfd;
     PRInt32 rv;
 
     if (!fd->secret->md.io_model_committed) {
@@ -1921,7 +1954,7 @@ _PR_MD_RECVFROM(PRFileDesc *fd, void *buf, PRInt32 amount, PRIntn flags,
 PRInt32
 _PR_MD_WRITEV(PRFileDesc *fd, const PRIOVec *iov, PRInt32 iov_size, PRIntervalTime timeout)
 {
-    PRInt32 osfd = fd->secret->md.osfd;
+    PROsfd osfd = fd->secret->md.osfd;
     int index;
     int sent = 0;
     int rv;
@@ -2066,7 +2099,7 @@ _PR_MD_SETSOCKOPT(PRFileDesc *fd, PRInt32 level, PRInt32 optname, const char* op
 
 /* --- FILE IO ----------------------------------------------------------- */
 
-PRInt32
+PROsfd
 _PR_MD_OPEN(const char *name, PRIntn osflags, PRIntn mode)
 {
     HANDLE file;
@@ -2109,10 +2142,10 @@ _PR_MD_OPEN(const char *name, PRIntn osflags, PRIntn mode)
         }
     }
 
-    return (PRInt32)file;
+    return (PROsfd)file;
 }
 
-PRInt32
+PROsfd
 _PR_MD_OPEN_FILE(const char *name, PRIntn osflags, PRIntn mode)
 {
     HANDLE file;
@@ -2171,13 +2204,13 @@ _PR_MD_OPEN_FILE(const char *name, PRIntn osflags, PRIntn mode)
         }
     }
 
-    return (PRInt32)file;
+    return (PROsfd)file;
 }
 
 PRInt32 
 _PR_MD_READ(PRFileDesc *fd, void *buf, PRInt32 len)
 {
-    PRInt32 f = fd->secret->md.osfd;
+    PROsfd f = fd->secret->md.osfd;
     PRUint32 bytes;
     int rv, err;
     LONG hiOffset = 0;
@@ -2328,7 +2361,7 @@ _PR_MD_READ(PRFileDesc *fd, void *buf, PRInt32 len)
 PRInt32
 _PR_MD_WRITE(PRFileDesc *fd, const void *buf, PRInt32 len)
 {
-    PRInt32 f = fd->secret->md.osfd;
+    PROsfd f = fd->secret->md.osfd;
     PRInt32 bytes;
     int rv, err;
     LONG hiOffset = 0;
@@ -2597,7 +2630,7 @@ _PR_MD_FSYNC(PRFileDesc *fd)
 }
 
 PRInt32
-_PR_MD_CLOSE(PRInt32 osfd, PRBool socket)
+_PR_MD_CLOSE(PROsfd osfd, PRBool socket)
 {
     PRInt32 rv;
     PRThread *me = _PR_MD_CURRENT_THREAD();
@@ -2753,7 +2786,7 @@ _PR_MD_OPEN_DIR(_MDDir *d, const char *name)
      * If 'name' ends in a slash or backslash, do not append
      * another backslash.
      */
-    if (filename[len - 1] == '/' || filename[len - 1] == '\\') {
+    if (IsPrevCharSlash(filename, filename + len)) {
         len--;
     }
     strcpy(&filename[len], "\\*.*");
@@ -2891,7 +2924,7 @@ _PR_MD_STAT(const char *fn, struct stat *info)
 
         int len = strlen(fn);
         if (len > 0 && len <= _MAX_PATH
-                && (fn[len - 1] == '\\' || fn[len - 1] == '/')) {
+                && IsPrevCharSlash(fn, fn + len)) {
             char newfn[_MAX_PATH + 1];
 
             strcpy(newfn, fn);
@@ -2907,6 +2940,17 @@ _PR_MD_STAT(const char *fn, struct stat *info)
 }
 
 #define _PR_IS_SLASH(ch) ((ch) == '/' || (ch) == '\\')
+
+static PRBool
+IsPrevCharSlash(const char *str, const char *current)
+{
+    const char *prev;
+
+    if (str >= current)
+        return PR_FALSE;
+    prev = _mbsdec(str, current);
+    return (prev == current - 1) && _PR_IS_SLASH(*prev);
+}
 
 /*
  * IsRootDirectory --
@@ -2954,7 +2998,7 @@ IsRootDirectory(char *fn, size_t buflen)
 
         /* look for the next slash */
         do {
-            p++;
+            p = _mbsinc(p);
         } while (*p != '\0' && !_PR_IS_SLASH(*p));
         if (*p == '\0') {
             return PR_FALSE;
@@ -2968,7 +3012,7 @@ IsRootDirectory(char *fn, size_t buflen)
 
         /* look for the final slash */
         do {
-            p++;
+            p = _mbsinc(p);
         } while (*p != '\0' && !_PR_IS_SLASH(*p));
         if (_PR_IS_SLASH(*p) && p[1] != '\0') {
             return PR_FALSE;
@@ -2999,79 +3043,17 @@ IsRootDirectory(char *fn, size_t buflen)
 PRInt32
 _PR_MD_GETFILEINFO64(const char *fn, PRFileInfo64 *info)
 {
-    HANDLE hFindFile;
-    WIN32_FIND_DATA findFileData;
-    char pathbuf[MAX_PATH + 1];
+    WIN32_FILE_ATTRIBUTE_DATA findFileData;
     
     if (NULL == fn || '\0' == *fn) {
         PR_SetError(PR_INVALID_ARGUMENT_ERROR, 0);
         return -1;
     }
 
-    /*
-     * FindFirstFile() expands wildcard characters.  So
-     * we make sure the pathname contains no wildcard.
-     */
-    if (NULL != _mbspbrk(fn, "?*")) {
-        PR_SetError(PR_FILE_NOT_FOUND_ERROR, 0);
+    if (!GetFileAttributesEx(fn, GetFileExInfoStandard, &findFileData)) {
+        _PR_MD_MAP_OPENDIR_ERROR(GetLastError());
         return -1;
     }
-
-    hFindFile = FindFirstFile(fn, &findFileData);
-    if (INVALID_HANDLE_VALUE == hFindFile) {
-        DWORD len;
-        char *filePart;
-
-        /*
-         * FindFirstFile() does not work correctly on root directories.
-         * It also doesn't work correctly on a pathname that ends in a
-         * slash.  So we first check to see if the pathname specifies a
-         * root directory.  If not, and if the pathname ends in a slash,
-         * we remove the final slash and try again.
-         */
-
-        /*
-         * If the pathname does not contain ., \, and /, it cannot be
-         * a root directory or a pathname that ends in a slash.
-         */
-        if (NULL == _mbspbrk(fn, ".\\/")) {
-            _PR_MD_MAP_OPENDIR_ERROR(GetLastError());
-            return -1;
-        } 
-        len = GetFullPathName(fn, sizeof(pathbuf), pathbuf,
-                &filePart);
-        if (0 == len) {
-            _PR_MD_MAP_OPENDIR_ERROR(GetLastError());
-            return -1;
-        }
-        if (len > sizeof(pathbuf)) {
-            PR_SetError(PR_NAME_TOO_LONG_ERROR, 0);
-            return -1;
-        }
-        if (IsRootDirectory(pathbuf, sizeof(pathbuf))) {
-            info->type = PR_FILE_DIRECTORY;
-            info->size = 0;
-            /*
-             * These timestamps don't make sense for root directories.
-             */
-            info->modifyTime = 0;
-            info->creationTime = 0;
-            return 0;
-        }
-        if (!_PR_IS_SLASH(pathbuf[len - 1])) {
-            _PR_MD_MAP_OPENDIR_ERROR(GetLastError());
-            return -1;
-        } else {
-            pathbuf[len - 1] = '\0';
-            hFindFile = FindFirstFile(pathbuf, &findFileData);
-            if (INVALID_HANDLE_VALUE == hFindFile) {
-                _PR_MD_MAP_OPENDIR_ERROR(GetLastError());
-                return -1;
-            }
-        }
-    }
-
-    FindClose(hFindFile);
 
     if (findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
         info->type = PR_FILE_DIRECTORY;
@@ -3252,7 +3234,7 @@ _PR_MD_RMDIR(const char *name)
 }
 
 PRStatus
-_PR_MD_LOCKFILE(PRInt32 f)
+_PR_MD_LOCKFILE(PROsfd f)
 {
     PRInt32 rv, err;
     PRThread *me = _PR_MD_CURRENT_THREAD();
@@ -3371,7 +3353,7 @@ _PR_MD_LOCKFILE(PRInt32 f)
 }
 
 PRStatus
-_PR_MD_TLOCKFILE(PRInt32 f)
+_PR_MD_TLOCKFILE(PROsfd f)
 {
     PRInt32 rv, err;
     PRThread *me = _PR_MD_CURRENT_THREAD();
@@ -3484,7 +3466,7 @@ _PR_MD_TLOCKFILE(PRInt32 f)
 
 
 PRStatus
-_PR_MD_UNLOCKFILE(PRInt32 f)
+_PR_MD_UNLOCKFILE(PROsfd f)
 {
     PRInt32 rv;
     PRThread *me = _PR_MD_CURRENT_THREAD();
@@ -3671,7 +3653,10 @@ PRInt32 IsFileLocal(HANDLE hFile)
    _MD_LOCK(&cachedVolumeLock);
    while(dwIndex <= dwLastCachedDrive)
       if (dwCachedVolumeSerialNumbers[dwIndex++] == Info.dwVolumeSerialNumber)
+      {
+         _MD_UNLOCK(&cachedVolumeLock);
          return _PR_LOCAL_FILE;
+      }
    _MD_UNLOCK(&cachedVolumeLock);
 
    // volume serial number not found in the cache.  Check removable files.
@@ -3776,9 +3761,10 @@ PR_IMPLEMENT(PRStatus) PR_NT_CancelIo(PRFileDesc *fd)
 	return PR_SUCCESS;
 }
 
-static PRInt32 _nt_nonblock_accept(PRFileDesc *fd, struct sockaddr *addr, int *addrlen, PRIntervalTime timeout)
+static PROsfd _nt_nonblock_accept(PRFileDesc *fd, struct sockaddr *addr, int *addrlen, PRIntervalTime timeout)
 {
-    PRInt32 osfd = fd->secret->md.osfd;
+    PROsfd osfd = fd->secret->md.osfd;
+    SOCKET sock;
     PRInt32 rv, err;
     fd_set rd;
     struct timeval tv, *tvp;
@@ -3786,10 +3772,10 @@ static PRInt32 _nt_nonblock_accept(PRFileDesc *fd, struct sockaddr *addr, int *a
     FD_ZERO(&rd);
     FD_SET((SOCKET)osfd, &rd);
     if (timeout == PR_INTERVAL_NO_TIMEOUT) {
-        while ((rv = accept(osfd, addr, addrlen)) == -1) {
+        while ((sock = accept(osfd, addr, addrlen)) == -1) {
             if (((err = WSAGetLastError()) == WSAEWOULDBLOCK)
                     && (!fd->secret->nonblocking)) {
-                if ((rv = _PR_NTFiberSafeSelect(osfd + 1, &rd, NULL, NULL,
+                if ((rv = _PR_NTFiberSafeSelect(0, &rd, NULL, NULL,
                         NULL)) == -1) {
                     _PR_MD_MAP_SELECT_ERROR(WSAGetLastError());
                     break;
@@ -3800,7 +3786,7 @@ static PRInt32 _nt_nonblock_accept(PRFileDesc *fd, struct sockaddr *addr, int *a
             }
         }
     } else if (timeout == PR_INTERVAL_NO_WAIT) {
-        if ((rv = accept(osfd, addr, addrlen)) == -1) {
+        if ((sock = accept(osfd, addr, addrlen)) == -1) {
             if (((err = WSAGetLastError()) == WSAEWOULDBLOCK)
                     && (!fd->secret->nonblocking)) {
                 PR_SetError(PR_IO_TIMEOUT_ERROR, 0);
@@ -3810,7 +3796,7 @@ static PRInt32 _nt_nonblock_accept(PRFileDesc *fd, struct sockaddr *addr, int *a
         }
     } else {
 retry:
-        if ((rv = accept(osfd, addr, addrlen)) == -1) {
+        if ((sock = accept(osfd, addr, addrlen)) == -1) {
             if (((err = WSAGetLastError()) == WSAEWOULDBLOCK)
                     && (!fd->secret->nonblocking)) {
                 tv.tv_sec = PR_IntervalToSeconds(timeout);
@@ -3818,12 +3804,11 @@ retry:
                     timeout - PR_SecondsToInterval(tv.tv_sec));
                 tvp = &tv;
 
-                rv = _PR_NTFiberSafeSelect(osfd + 1, &rd, NULL, NULL, tvp);
+                rv = _PR_NTFiberSafeSelect(0, &rd, NULL, NULL, tvp);
                 if (rv > 0) {
                     goto retry;
                 } else if (rv == 0) {
                     PR_SetError(PR_IO_TIMEOUT_ERROR, 0);
-                    rv = -1;
                 } else {
                     _PR_MD_MAP_SELECT_ERROR(WSAGetLastError());
                 }
@@ -3832,12 +3817,12 @@ retry:
             }
         }
     }
-    return(rv);
+    return (PROsfd)sock;
 }
 
 static PRInt32 _nt_nonblock_connect(PRFileDesc *fd, struct sockaddr *addr, int addrlen, PRIntervalTime timeout)
 {
-    PRInt32 osfd = fd->secret->md.osfd;
+    PROsfd osfd = fd->secret->md.osfd;
     PRInt32 rv;
     int err;
     fd_set wr, ex;
@@ -3858,7 +3843,7 @@ static PRInt32 _nt_nonblock_connect(PRFileDesc *fd, struct sockaddr *addr, int a
             FD_ZERO(&ex);
             FD_SET((SOCKET)osfd, &wr);
             FD_SET((SOCKET)osfd, &ex);
-            if ((rv = _PR_NTFiberSafeSelect(osfd + 1, NULL, &wr, &ex,
+            if ((rv = _PR_NTFiberSafeSelect(0, NULL, &wr, &ex,
                     tvp)) == -1) {
                 _PR_MD_MAP_SELECT_ERROR(WSAGetLastError());
                 return rv;
@@ -3890,7 +3875,7 @@ static PRInt32 _nt_nonblock_connect(PRFileDesc *fd, struct sockaddr *addr, int a
 
 static PRInt32 _nt_nonblock_recv(PRFileDesc *fd, char *buf, int len, int flags, PRIntervalTime timeout)
 {
-    PRInt32 osfd = fd->secret->md.osfd;
+    PROsfd osfd = fd->secret->md.osfd;
     PRInt32 rv, err;
     struct timeval tv, *tvp;
     fd_set rd;
@@ -3915,7 +3900,7 @@ static PRInt32 _nt_nonblock_recv(PRFileDesc *fd, char *buf, int len, int flags, 
                 timeout - PR_SecondsToInterval(tv.tv_sec));
                 tvp = &tv;
             }
-            if ((rv = _PR_NTFiberSafeSelect(osfd + 1, &rd, NULL, NULL,
+            if ((rv = _PR_NTFiberSafeSelect(0, &rd, NULL, NULL,
                     tvp)) == -1) {
                 _PR_MD_MAP_SELECT_ERROR(WSAGetLastError());
                 break;
@@ -3934,7 +3919,7 @@ static PRInt32 _nt_nonblock_recv(PRFileDesc *fd, char *buf, int len, int flags, 
 
 static PRInt32 _nt_nonblock_send(PRFileDesc *fd, char *buf, int len, PRIntervalTime timeout)
 {
-    PRInt32 osfd = fd->secret->md.osfd;
+    PROsfd osfd = fd->secret->md.osfd;
     PRInt32 rv, err;
     struct timeval tv, *tvp;
     fd_set wd;
@@ -3954,7 +3939,7 @@ static PRInt32 _nt_nonblock_send(PRFileDesc *fd, char *buf, int len, PRIntervalT
                 }
                 FD_ZERO(&wd);
                 FD_SET((SOCKET)osfd, &wd);
-                if ((rv = _PR_NTFiberSafeSelect(osfd + 1, NULL, &wd, NULL,
+                if ((rv = _PR_NTFiberSafeSelect(0, NULL, &wd, NULL,
                         tvp)) == -1) {
                     _PR_MD_MAP_SELECT_ERROR(WSAGetLastError());
                     return -1;
@@ -3983,7 +3968,7 @@ static PRInt32 _nt_nonblock_send(PRFileDesc *fd, char *buf, int len, PRIntervalT
             }
             FD_ZERO(&wd);
             FD_SET((SOCKET)osfd, &wd);
-            if ((rv = _PR_NTFiberSafeSelect(osfd + 1, NULL, &wd, NULL,
+            if ((rv = _PR_NTFiberSafeSelect(0, NULL, &wd, NULL,
                     tvp)) == -1) {
                 _PR_MD_MAP_SELECT_ERROR(WSAGetLastError());
                 return -1;
@@ -4030,7 +4015,7 @@ static PRInt32 _nt_nonblock_sendto(
     PRFileDesc *fd, const char *buf, int len,
     const struct sockaddr *addr, int addrlen, PRIntervalTime timeout)
 {
-    PRInt32 osfd = fd->secret->md.osfd;
+    PROsfd osfd = fd->secret->md.osfd;
     PRInt32 rv, err;
     struct timeval tv, *tvp;
     fd_set wd;
@@ -4050,7 +4035,7 @@ static PRInt32 _nt_nonblock_sendto(
                 }
                 FD_ZERO(&wd);
                 FD_SET((SOCKET)osfd, &wd);
-                if ((rv = _PR_NTFiberSafeSelect(osfd + 1, NULL, &wd, NULL,
+                if ((rv = _PR_NTFiberSafeSelect(0, NULL, &wd, NULL,
                         tvp)) == -1) {
                     _PR_MD_MAP_SELECT_ERROR(WSAGetLastError());
                     return -1;
@@ -4079,7 +4064,7 @@ static PRInt32 _nt_nonblock_sendto(
             }
             FD_ZERO(&wd);
             FD_SET((SOCKET)osfd, &wd);
-            if ((rv = _PR_NTFiberSafeSelect(osfd + 1, NULL, &wd, NULL,
+            if ((rv = _PR_NTFiberSafeSelect(0, NULL, &wd, NULL,
                     tvp)) == -1) {
                 _PR_MD_MAP_SELECT_ERROR(WSAGetLastError());
                 return -1;
@@ -4095,7 +4080,7 @@ static PRInt32 _nt_nonblock_sendto(
 
 static PRInt32 _nt_nonblock_recvfrom(PRFileDesc *fd, char *buf, int len, struct sockaddr *addr, int *addrlen, PRIntervalTime timeout)
 {
-    PRInt32 osfd = fd->secret->md.osfd;
+    PROsfd osfd = fd->secret->md.osfd;
     PRInt32 rv, err;
     struct timeval tv, *tvp;
     fd_set rd;
@@ -4113,7 +4098,7 @@ static PRInt32 _nt_nonblock_recvfrom(PRFileDesc *fd, char *buf, int len, struct 
             }
             FD_ZERO(&rd);
             FD_SET((SOCKET)osfd, &rd);
-            if ((rv = _PR_NTFiberSafeSelect(osfd + 1, &rd, NULL, NULL,
+            if ((rv = _PR_NTFiberSafeSelect(0, &rd, NULL, NULL,
                     tvp)) == -1) {
                 _PR_MD_MAP_SELECT_ERROR(WSAGetLastError());
                 break;

@@ -1,36 +1,40 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *   Masayuki Nakano <masayuki@d-toybox.com>
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 /* Windows 95 IO module
  *
@@ -77,9 +81,15 @@ static const PRTime _pr_filetime_offset = 116444736000000000LL;
 static const PRTime _pr_filetime_offset = 116444736000000000i64;
 #endif
 
-#ifdef MOZ_UNICODE
+typedef BOOL (WINAPI *GetFileAttributesExFn)(LPCTSTR,
+                                             GET_FILEEX_INFO_LEVELS,
+                                             LPVOID); 
+static GetFileAttributesExFn getFileAttributesEx;
+static void InitGetFileInfo(void);
+
 static void InitUnicodeSupport(void);
-#endif
+
+static PRBool IsPrevCharSlash(const char *str, const char *current);
 
 void
 _PR_MD_INIT_IO()
@@ -118,9 +128,11 @@ _PR_MD_INIT_IO()
 
     _PR_NT_InitSids();
 
-#ifdef MOZ_UNICODE
+    InitGetFileInfo();
+
     InitUnicodeSupport();
-#endif
+
+    _PR_MD_InitSockets();
 }
 
 PRStatus
@@ -186,7 +198,7 @@ _PR_MD_WAKEUP_WAITER(PRThread *thread)
  *  as in 0666, in the case of opening the logFile. 
  *
  */
-PRInt32
+PROsfd
 _PR_MD_OPEN(const char *name, PRIntn osflags, int mode)
 {
     HANDLE file;
@@ -227,10 +239,10 @@ _PR_MD_OPEN(const char *name, PRIntn osflags, int mode)
         return -1; 
 	}
 
-    return (PRInt32)file;
+    return (PROsfd)file;
 }
 
-PRInt32
+PROsfd
 _PR_MD_OPEN_FILE(const char *name, PRIntn osflags, int mode)
 {
     HANDLE file;
@@ -288,7 +300,7 @@ _PR_MD_OPEN_FILE(const char *name, PRIntn osflags, int mode)
         return -1; 
 	}
 
-    return (PRInt32)file;
+    return (PROsfd)file;
 }
 
 PRInt32
@@ -321,10 +333,9 @@ _PR_MD_READ(PRFileDesc *fd, void *buf, PRInt32 len)
 PRInt32
 _PR_MD_WRITE(PRFileDesc *fd, const void *buf, PRInt32 len)
 {
-    PRInt32 f = fd->secret->md.osfd;
+    PROsfd f = fd->secret->md.osfd;
     PRInt32 bytes;
     int rv;
-    PRThread *me = _PR_MD_CURRENT_THREAD();
     
     rv = WriteFile((HANDLE)f,
             buf,
@@ -445,7 +456,7 @@ _PR_MD_FSYNC(PRFileDesc *fd)
 }
 
 PRInt32
-_MD_CloseFile(PRInt32 osfd)
+_MD_CloseFile(PROsfd osfd)
 {
     PRInt32 rv;
     
@@ -460,9 +471,9 @@ _MD_CloseFile(PRInt32 osfd)
 #define GetFileFromDIR(d)       (d)->d_entry.cFileName
 #define FileIsHidden(d)	((d)->d_entry.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN)
 
-void FlipSlashes(char *cp, int len)
+void FlipSlashes(char *cp, size_t len)
 {
-    while (--len >= 0) {
+    while (len-- > 0) {
         if (cp[0] == '/') {
             cp[0] = PR_DIRECTORY_SEPARATOR;
         }
@@ -499,7 +510,7 @@ PRStatus
 _PR_MD_OPEN_DIR(_MDDir *d, const char *name)
 {
     char filename[ MAX_PATH ];
-    int len;
+    size_t len;
 
     len = strlen(name);
     /* Need 5 bytes for \*.* and the trailing null byte. */
@@ -513,7 +524,7 @@ _PR_MD_OPEN_DIR(_MDDir *d, const char *name)
      * If 'name' ends in a slash or backslash, do not append
      * another backslash.
      */
-    if (filename[len - 1] == '/' || filename[len - 1] == '\\') {
+    if (IsPrevCharSlash(filename, filename + len)) {
         len--;
     }
     strcpy(&filename[len], "\\*.*");
@@ -649,9 +660,9 @@ _PR_MD_STAT(const char *fn, struct stat *info)
          * try again.
          */
 
-        int len = strlen(fn);
+        size_t len = strlen(fn);
         if (len > 0 && len <= _MAX_PATH
-                && (fn[len - 1] == '\\' || fn[len - 1] == '/')) {
+                && IsPrevCharSlash(fn, fn + len)) {
             char newfn[_MAX_PATH + 1];
 
             strcpy(newfn, fn);
@@ -667,6 +678,17 @@ _PR_MD_STAT(const char *fn, struct stat *info)
 }
 
 #define _PR_IS_SLASH(ch) ((ch) == '/' || (ch) == '\\')
+
+static PRBool
+IsPrevCharSlash(const char *str, const char *current)
+{
+    const char *prev;
+
+    if (str >= current)
+        return PR_FALSE;
+    prev = _mbsdec(str, current);
+    return (prev == current - 1) && _PR_IS_SLASH(*prev);
+}
 
 /*
  * IsRootDirectory --
@@ -714,7 +736,7 @@ IsRootDirectory(char *fn, size_t buflen)
 
         /* look for the next slash */
         do {
-            p++;
+            p = _mbsinc(p);
         } while (*p != '\0' && !_PR_IS_SLASH(*p));
         if (*p == '\0') {
             return PR_FALSE;
@@ -728,7 +750,7 @@ IsRootDirectory(char *fn, size_t buflen)
 
         /* look for the final slash */
         do {
-            p++;
+            p = _mbsinc(p);
         } while (*p != '\0' && !_PR_IS_SLASH(*p));
         if (_PR_IS_SLASH(*p) && p[1] != '\0') {
             return PR_FALSE;
@@ -756,31 +778,52 @@ IsRootDirectory(char *fn, size_t buflen)
     return rv;
 }
 
-PRInt32
-_PR_MD_GETFILEINFO64(const char *fn, PRFileInfo64 *info)
+/*
+ * InitGetFileInfo --
+ *
+ * Called during IO init. Checks for the existence of the system function
+ * GetFileAttributeEx, which when available is used in GETFILEINFO calls. 
+ * If the routine exists, then the address of the routine is stored in the
+ * variable getFileAttributesEx, which will be used to call the routine.
+ */
+static void InitGetFileInfo(void)
+{
+    HMODULE module;
+    module = GetModuleHandle("Kernel32.dll");
+    if (!module) {
+        PR_LOG(_pr_io_lm, PR_LOG_DEBUG,
+                ("InitGetFileInfo: GetModuleHandle() failed: %d",
+                GetLastError()));
+        return;
+    }
+
+    getFileAttributesEx = (GetFileAttributesExFn)
+            GetProcAddress(module, "GetFileAttributesExA");
+}
+
+/*
+ * If GetFileAttributeEx doesn't exist, we call FindFirstFile as a
+ * fallback.
+ */
+static BOOL
+GetFileAttributesExFB(const char *fn, WIN32_FIND_DATA *findFileData)
 {
     HANDLE hFindFile;
-    WIN32_FIND_DATA findFileData;
-    char pathbuf[MAX_PATH + 1];
-    
-    if (NULL == fn || '\0' == *fn) {
-        PR_SetError(PR_INVALID_ARGUMENT_ERROR, 0);
-        return -1;
-    }
 
     /*
      * FindFirstFile() expands wildcard characters.  So
      * we make sure the pathname contains no wildcard.
      */
     if (NULL != _mbspbrk(fn, "?*")) {
-        PR_SetError(PR_FILE_NOT_FOUND_ERROR, 0);
-        return -1;
+        SetLastError(ERROR_INVALID_NAME);
+        return FALSE;
     }
 
-    hFindFile = FindFirstFile(fn, &findFileData);
+    hFindFile = FindFirstFile(fn, findFileData);
     if (INVALID_HANDLE_VALUE == hFindFile) {
         DWORD len;
         char *filePart;
+        char pathbuf[MAX_PATH + 1];
 
         /*
          * FindFirstFile() does not work correctly on root directories.
@@ -795,43 +838,68 @@ _PR_MD_GETFILEINFO64(const char *fn, PRFileInfo64 *info)
          * a root directory or a pathname that ends in a slash.
          */
         if (NULL == _mbspbrk(fn, ".\\/")) {
-            _PR_MD_MAP_OPENDIR_ERROR(GetLastError());
-            return -1;
+            return FALSE;
         } 
         len = GetFullPathName(fn, sizeof(pathbuf), pathbuf,
                 &filePart);
         if (0 == len) {
-            _PR_MD_MAP_OPENDIR_ERROR(GetLastError());
-            return -1;
+            return FALSE;
         }
         if (len > sizeof(pathbuf)) {
-            PR_SetError(PR_NAME_TOO_LONG_ERROR, 0);
-            return -1;
+            SetLastError(ERROR_FILENAME_EXCED_RANGE);
+            return FALSE;
         }
         if (IsRootDirectory(pathbuf, sizeof(pathbuf))) {
-            info->type = PR_FILE_DIRECTORY;
-            info->size = 0;
+            findFileData->dwFileAttributes = FILE_ATTRIBUTE_DIRECTORY;
+            /* The file size doesn't have a meaning for directories. */
+            findFileData->nFileSizeHigh = 0;
+            findFileData->nFileSizeLow = 0;
             /*
-             * These timestamps don't make sense for root directories.
+             * For a directory, these timestamps all specify when the
+             * directory is created.  The creation time doesn't make
+             * sense for root directories, so we set it to (NSPR) time 0.
              */
-            info->modifyTime = 0;
-            info->creationTime = 0;
-            return 0;
+            memcpy(&findFileData->ftCreationTime, &_pr_filetime_offset, 8);
+            findFileData->ftLastAccessTime = findFileData->ftCreationTime;
+            findFileData->ftLastWriteTime = findFileData->ftCreationTime;
+            return TRUE;
         }
-        if (!_PR_IS_SLASH(pathbuf[len - 1])) {
-            _PR_MD_MAP_OPENDIR_ERROR(GetLastError());
-            return -1;
+        if (!IsPrevCharSlash(pathbuf, pathbuf + len)) {
+            return FALSE;
         } else {
             pathbuf[len - 1] = '\0';
-            hFindFile = FindFirstFile(pathbuf, &findFileData);
+            hFindFile = FindFirstFile(pathbuf, findFileData);
             if (INVALID_HANDLE_VALUE == hFindFile) {
-                _PR_MD_MAP_OPENDIR_ERROR(GetLastError());
-                return -1;
+                return FALSE;
             }
         }
     }
 
     FindClose(hFindFile);
+    return TRUE;
+}
+
+PRInt32
+_PR_MD_GETFILEINFO64(const char *fn, PRFileInfo64 *info)
+{
+    WIN32_FIND_DATA findFileData;
+    BOOL rv;
+    
+    if (NULL == fn || '\0' == *fn) {
+        PR_SetError(PR_INVALID_ARGUMENT_ERROR, 0);
+        return -1;
+    }
+
+    /* GetFileAttributesEx is supported on Win 2K and up. */
+    if (getFileAttributesEx) {
+        rv = getFileAttributesEx(fn, GetFileExInfoStandard, &findFileData);
+    } else {
+        rv = GetFileAttributesExFB(fn, &findFileData);
+    }
+    if (!rv) {
+        _PR_MD_MAP_OPENDIR_ERROR(GetLastError());
+        return -1;
+    }
 
     if (findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
         info->type = PR_FILE_DIRECTORY;
@@ -1044,7 +1112,7 @@ _PR_MD_RMDIR(const char *name)
 }
 
 PRStatus
-_PR_MD_LOCKFILE(PRInt32 f)
+_PR_MD_LOCKFILE(PROsfd f)
 {
     PRStatus  rc = PR_SUCCESS;
 	DWORD     rv;
@@ -1063,7 +1131,7 @@ _PR_MD_LOCKFILE(PRInt32 f)
 } /* end _PR_MD_LOCKFILE() */
 
 PRStatus
-_PR_MD_TLOCKFILE(PRInt32 f)
+_PR_MD_TLOCKFILE(PROsfd f)
 {
     PR_SetError( PR_NOT_IMPLEMENTED_ERROR, 0 );
     return PR_FAILURE;
@@ -1071,7 +1139,7 @@ _PR_MD_TLOCKFILE(PRInt32 f)
 
 
 PRStatus
-_PR_MD_UNLOCKFILE(PRInt32 f)
+_PR_MD_UNLOCKFILE(PROsfd f)
 {
 	PRInt32   rv;
     
@@ -1103,42 +1171,53 @@ _PR_MD_PIPEAVAILABLE(PRFileDesc *fd)
 #ifdef MOZ_UNICODE
 
 typedef HANDLE (WINAPI *CreateFileWFn) (LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
-static CreateFileWFn createFileW = NULL; 
+static CreateFileWFn createFileW = CreateFileW;
 typedef HANDLE (WINAPI *FindFirstFileWFn) (LPCWSTR, LPWIN32_FIND_DATAW);
-static FindFirstFileWFn findFirstFileW = NULL; 
+static FindFirstFileWFn findFirstFileW = FindFirstFileW;
 typedef BOOL (WINAPI *FindNextFileWFn) (HANDLE, LPWIN32_FIND_DATAW);
-static FindNextFileWFn findNextFileW = NULL; 
+static FindNextFileWFn findNextFileW = FindNextFileW;
 typedef DWORD (WINAPI *GetFullPathNameWFn) (LPCWSTR, DWORD, LPWSTR, LPWSTR *);
-static GetFullPathNameWFn getFullPathNameW = NULL; 
+static GetFullPathNameWFn getFullPathNameW = GetFullPathNameW;
 typedef UINT (WINAPI *GetDriveTypeWFn) (LPCWSTR);
-static GetDriveTypeWFn getDriveTypeW = NULL; 
+static GetDriveTypeWFn getDriveTypeW = GetDriveTypeW;
+
+#endif /* MOZ_UNICODE */
+
+PRBool _pr_useUnicode = PR_FALSE;
 
 static void InitUnicodeSupport(void)
 {
-    HMODULE module;
-
     /*
-     * The W functions do not exist on Win9x.  NSPR won't run on Win9x
-     * if we call the W functions directly.  Use GetProcAddress() to
-     * look up their addresses at run time.
+     * The W functions exist on Win9x as stubs that fail with the
+     * ERROR_CALL_NOT_IMPLEMENTED error.  We plan to emulate the
+     * MSLU W functions on Win9x in the future.
      */
 
-    module = GetModuleHandle("Kernel32.dll");
-    if (!module) {
-        return;
-    }
+    /* Find out if we are running on a Unicode enabled version of Windows */
+    OSVERSIONINFOA osvi = {0};
 
-    createFileW = (CreateFileWFn)GetProcAddress(module, "CreateFileW"); 
-    findFirstFileW = (FindFirstFileWFn)GetProcAddress(module, "FindFirstFileW"); 
-    findNextFileW = (FindNextFileWFn)GetProcAddress(module, "FindNextFileW"); 
-    getDriveTypeW = (GetDriveTypeWFn)GetProcAddress(module, "GetDriveTypeW"); 
-    getFullPathNameW = (GetFullPathNameWFn)GetProcAddress(module, "GetFullPathNameW"); 
+    osvi.dwOSVersionInfoSize = sizeof(osvi);
+    if (GetVersionExA(&osvi)) {
+        _pr_useUnicode = (osvi.dwPlatformId >= VER_PLATFORM_WIN32_NT);
+    } else {
+        _pr_useUnicode = PR_FALSE;
+    }
+#ifdef DEBUG
+    /*
+     * In debug builds, allow explicit use of ANSI methods to simulate
+     * a Win9x environment for testing purposes.
+     */
+    if (getenv("WINAPI_USE_ANSI"))
+        _pr_useUnicode = PR_FALSE;
+#endif
 }
 
+#ifdef MOZ_UNICODE
+
 /* ================ UTF16 Interfaces ================================ */
-void FlipSlashesW(PRUnichar *cp, int len)
+void FlipSlashesW(PRUnichar *cp, size_t len)
 {
-    while (--len >= 0) {
+    while (len-- > 0) {
         if (cp[0] == L'/') {
             cp[0] = L'\\';
         }
@@ -1146,7 +1225,7 @@ void FlipSlashesW(PRUnichar *cp, int len)
     }
 } /* end FlipSlashesW() */
 
-PRInt32
+PROsfd
 _PR_MD_OPEN_FILE_UTF16(const PRUnichar *name, PRIntn osflags, int mode)
 {
     HANDLE file;
@@ -1158,11 +1237,6 @@ _PR_MD_OPEN_FILE_UTF16(const PRUnichar *name, PRIntn osflags, int mode)
     PSECURITY_DESCRIPTOR pSD = NULL;
     PACL pACL = NULL;
 
-    if (!createFileW) {
-        PR_SetError(PR_NOT_IMPLEMENTED_ERROR, 0);
-        return -1;
-    }
- 
     if (osflags & PR_CREATE_FILE) {
         if (_PR_NT_MakeSecurityDescriptorACL(mode, fileAccessTable,
                 &pSD, &pACL) == PR_SUCCESS) {
@@ -1209,7 +1283,7 @@ _PR_MD_OPEN_FILE_UTF16(const PRUnichar *name, PRIntn osflags, int mode)
         return -1;
     }
  
-    return (PRInt32)file;
+    return (PROsfd)file;
 }
  
 PRStatus
@@ -1217,11 +1291,6 @@ _PR_MD_OPEN_DIR_UTF16(_MDDirUTF16 *d, const PRUnichar *name)
 {
     PRUnichar filename[ MAX_PATH ];
     int len;
-
-    if (!findFirstFileW) {
-        PR_SetError(PR_NOT_IMPLEMENTED_ERROR, 0);
-        return PR_FAILURE;
-    }
 
     len = wcslen(name);
     /* Need 5 bytes for \*.* and the trailing null byte. */
@@ -1257,11 +1326,6 @@ _PR_MD_READ_DIR_UTF16(_MDDirUTF16 *d, PRIntn flags)
     PRInt32 err;
     BOOL rv;
     PRUnichar *fileName;
-
-    if (!findNextFileW) {
-        PR_SetError(PR_NOT_IMPLEMENTED_ERROR, 0);
-        return NULL;
-    }
 
     if ( d ) {
         while (1) {
@@ -1408,11 +1472,6 @@ _PR_MD_GETFILEINFO64_UTF16(const PRUnichar *fn, PRFileInfo64 *info)
     WIN32_FIND_DATAW findFileData;
     PRUnichar pathbuf[MAX_PATH + 1];
 
-    if (!findFirstFileW || !getFullPathNameW || !getDriveTypeW) {
-        PR_SetError(PR_NOT_IMPLEMENTED_ERROR, 0);
-        return -1;
-    }
-    
     if (NULL == fn || L'\0' == *fn) {
         PR_SetError(PR_INVALID_ARGUMENT_ERROR, 0);
         return -1;

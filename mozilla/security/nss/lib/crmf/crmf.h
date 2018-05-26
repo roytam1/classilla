@@ -1,36 +1,7 @@
 /* -*- Mode: C; tab-width: 8 -*-*/
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
 #ifndef _CRMF_H_
@@ -80,11 +51,11 @@ extern SECStatus
  * OUTPUT:
  *    The function fn will be called, probably multiple times whenever 
  *    the ASN1 encoder wants to write out DER-encoded bytes.  Look at the 
- *    comments in crmft.h where the CRMFEncoderOuputCallback type is
- *    defined for information on proper behavior of the funciton fn.
+ *    comments in crmft.h where the CRMFEncoderOutputCallback type is
+ *    defined for information on proper behavior of the function fn.
  * RETURN:
  *    SECSuccess if encoding was successful.  Any other return value 
- *    indicates an error occured during encoding.
+ *    indicates an error occurred during encoding.
  */
 extern SECStatus CRMF_EncodeCertRequest (CRMFCertRequest           *inCertReq,
 					 CRMFEncoderOutputCallback  fn,
@@ -112,8 +83,8 @@ extern SECStatus CRMF_EncodeCertRequest (CRMFCertRequest           *inCertReq,
  *
  * OUTPUT:
  *    The function fn will be called, probably multiple times.  Look at the 
- *    comments in crmft.h where the CRMFEncoderOuputCallback type is
- *    defined for information on proper behavior of the funciton fn.
+ *    comments in crmft.h where the CRMFEncoderOutputCallback type is
+ *    defined for information on proper behavior of the function fn.
  *
  * RETURN:
  * SECSuccess if encoding the Certificate Request Messages was successful. 
@@ -205,7 +176,7 @@ extern SECStatus CRMF_CertReqMsgSetCertRequest(CRMFCertReqMsg  *inCertReqMsg,
  *    A pointer to the new Certificate Request.  A NULL return value
  *    indicates an error in creating the Certificate Request.
  */
-extern CRMFCertRequest *CRMF_CreateCertRequest (long inRequestID);
+extern CRMFCertRequest *CRMF_CreateCertRequest (PRUint32 inRequestID);
 
 /*
  * FUNCTION: CRMF_DestroyCertRequest
@@ -613,7 +584,7 @@ extern SECStatus CRMF_CertReqMsgSetRAVerifiedPOP(CRMFCertReqMsg *inCertReqMsg);
  *
  * The last 3 arguments are for future compatibility in case we ever want to
  * support generating POPOSigningKeyInput.  Pass in NULL for all 3 if you 
- * definitely don't want the funciton to even try to generate 
+ * definitely don't want the function to even try to generate 
  * POPOSigningKeyInput.  If you try to use POPOSigningKeyInput, the function
  * will fail.
  *
@@ -652,10 +623,10 @@ extern SECStatus
  * Adds Proof Of Possession using the keyEncipherment field of
  * ProofOfPossession.
  *
- * The funciton looks at the the inKeyChoice parameter and interprets it in
+ * The function looks at the the inKeyChoice parameter and interprets it in
  * in the following manner.
  *
- * If a parameter is not mentioned under interpretation, the funciton will not
+ * If a parameter is not mentioned under interpretation, the function will not
  * look at its value when implementing that case.
  *
  * inKeyChoice          Interpretation
@@ -706,10 +677,10 @@ extern SECStatus
  * Adds Proof Of Possession using the keyAgreement field of
  * ProofOfPossession.
  *
- * The funciton looks at the the inKeyChoice parameter and interprets it in
+ * The function looks at the the inKeyChoice parameter and interprets it in
  * in the following manner.
  *
- * If a parameter is not mentioned under interpretation, the funciton will not
+ * If a parameter is not mentioned under interpretation, the function will not
  * look at its value when implementing that case.
  *
  * inKeyChoice          Interpretation
@@ -951,7 +922,7 @@ extern SECStatus
  * RETURN:
  * If the issuer is present in the cert request cert template, the function 
  * returns SECSuccess and places a  copy of the issuer in *destIssuer.
- * If there is no issuer present, the funciton returns SECFailure and the
+ * If there is no issuer present, the function returns SECFailure and the
  * value at *destIssuer is unchanged.
  */
 extern SECStatus 
@@ -1763,7 +1734,7 @@ extern SECStatus
 
 /* Helper functions that can be used by other libraries. */
 /*
- * A quick helper funciton to get the best wrap mechanism.
+ * A quick helper function to get the best wrap mechanism.
  */
 extern CK_MECHANISM_TYPE CRMF_GetBestWrapPadMechanism(PK11SlotInfo *slot); 
 

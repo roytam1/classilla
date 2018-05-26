@@ -1,37 +1,7 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "nssrenam.h"
 #include "p12t.h"
 #include "p12.h"
 #include "plarena.h"
@@ -46,8 +16,42 @@
 #include "pk11func.h"
 #include "p12plcy.h"
 #include "p12local.h"
-#include "alghmac.h"
 #include "prcpucfg.h"
+
+extern const int NSS_PBE_DEFAULT_ITERATION_COUNT; /* defined in p7create.c */
+
+/*
+** This PKCS12 file encoder uses numerous nested ASN.1 and PKCS7 encoder
+** contexts.  It can be difficult to keep straight.  Here's a picture:
+**
+**  "outer"  ASN.1 encoder.  The output goes to the library caller's CB.
+**  "middle" PKCS7 encoder.  Feeds    the "outer" ASN.1 encoder.
+**  "middle" ASN1  encoder.  Encodes  the encrypted aSafes. 
+**                           Feeds    the "middle" P7 encoder above.
+**  "inner"  PKCS7 encoder.  Encrypts the "authenticated Safes" (aSafes)
+**                           Feeds    the "middle" ASN.1 encoder above.
+**  "inner"  ASN.1 encoder.  Encodes  the unencrypted aSafes.  
+**                           Feeds    the "inner" P7 enocder above.
+**
+** Buffering has been added at each point where the output of an ASN.1
+** encoder feeds the input of a PKCS7 encoder.
+*/
+
+/*********************************
+ * Output buffer object, used to buffer output from ASN.1 encoder
+ * before passing data on down to the next PKCS7 encoder.
+ *********************************/
+
+#define PK12_OUTPUT_BUFFER_SIZE  8192
+
+struct sec_pkcs12OutputBufferStr {
+    SEC_PKCS7EncoderContext * p7eCx;
+    PK11Context             * hmacCx;
+    unsigned int              numBytes;
+    unsigned int              bufBytes;
+             char             buf[PK12_OUTPUT_BUFFER_SIZE];
+};
+typedef struct sec_pkcs12OutputBufferStr sec_pkcs12OutputBuffer;
 
 /*********************************
  * Structures used in exporting the PKCS 12 blob
@@ -58,7 +62,7 @@
  * PFX structure.
  */
 struct SEC_PKCS12SafeInfoStr {
-    PRArenaPool *arena;
+    PLArenaPool *arena;
 
     /* information for setting up password encryption */
     SECItem pwitem;
@@ -81,7 +85,7 @@ struct SEC_PKCS12SafeInfoStr {
  * certificates and keys through PKCS 12.
  */
 struct SEC_PKCS12ExportContextStr {
-    PRArenaPool *arena;
+    PLArenaPool *arena;
     PK11SlotInfo *slot;
     void *wincx;
 
@@ -126,31 +130,35 @@ struct sec_pkcs12_hmac_and_output_info {
  * portion of PKCS 12. 
  */
 typedef struct sec_PKCS12EncoderContextStr {
-    PRArenaPool *arena;
+    PLArenaPool *arena;
     SEC_PKCS12ExportContext *p12exp;
-    PK11SymKey *encryptionKey;
 
     /* encoder information - this is set up based on whether 
      * password based or public key pased privacy is being used
      */
-    SEC_ASN1EncoderContext *ecx;
+    SEC_ASN1EncoderContext *outerA1ecx;
     union {
 	struct sec_pkcs12_hmac_and_output_info hmacAndOutputInfo;
-	struct sec_pkcs12_encoder_output encOutput;
+	struct sec_pkcs12_encoder_output       encOutput;
     } output;
 
     /* structures for encoding of PFX and MAC */
-    sec_PKCS12PFXItem pfx;
-    sec_PKCS12MacData mac;
+    sec_PKCS12PFXItem        pfx;
+    sec_PKCS12MacData        mac;
 
     /* authenticated safe encoding tracking information */
-    SEC_PKCS7ContentInfo *aSafeCinfo;
-    SEC_PKCS7EncoderContext *aSafeP7Ecx;
-    SEC_ASN1EncoderContext *aSafeEcx;
-    unsigned int currentSafe;
+    SEC_PKCS7ContentInfo    *aSafeCinfo;
+    SEC_PKCS7EncoderContext *middleP7ecx;
+    SEC_ASN1EncoderContext  *middleA1ecx;
+    unsigned int             currentSafe;
 
     /* hmac context */
-    PK11Context *hmacCx;
+    PK11Context             *hmacCx;
+
+    /* output buffers */
+    sec_pkcs12OutputBuffer  middleBuf;
+    sec_pkcs12OutputBuffer  innerBuf;
+
 } sec_PKCS12EncoderContext;
 
 
@@ -170,7 +178,7 @@ SEC_PKCS12ExportContext *
 SEC_PKCS12CreateExportContext(SECKEYGetPasswordKey pwfn, void *pwfnarg,  
 			      PK11SlotInfo *slot, void *wincx)
 {
-    PRArenaPool *arena = NULL;
+    PLArenaPool *arena = NULL;
     SEC_PKCS12ExportContext *p12ctxt = NULL;
 
     /* allocate the arena and create the context */
@@ -575,7 +583,7 @@ loser:
 
 /* creates a safe contents which safeBags will be appended to */
 sec_PKCS12SafeContents *
-sec_PKCS12CreateSafeContents(PRArenaPool *arena)
+sec_PKCS12CreateSafeContents(PLArenaPool *arena)
 {
     sec_PKCS12SafeContents *safeContents;
 
@@ -605,7 +613,7 @@ loser:
 /* appends a safe bag to a safeContents using the specified arena. 
  */
 SECStatus
-sec_pkcs12_append_bag_to_safe_contents(PRArenaPool *arena, 
+sec_pkcs12_append_bag_to_safe_contents(PLArenaPool *arena,
 				       sec_PKCS12SafeContents *safeContents,
 				       sec_PKCS12SafeBag *safeBag)
 {
@@ -766,7 +774,7 @@ loser:
  * occurs NULL is returned.
  */
 sec_PKCS12CertBag *
-sec_PKCS12NewCertBag(PRArenaPool *arena, SECOidTag certType)
+sec_PKCS12NewCertBag(PLArenaPool *arena, SECOidTag certType)
 {
     sec_PKCS12CertBag *certBag = NULL;
     SECOidData *bagType = NULL;
@@ -810,7 +818,7 @@ loser:
  * occurs NULL is returned.
  */
 sec_PKCS12CRLBag *
-sec_PKCS12NewCRLBag(PRArenaPool *arena, SECOidTag crlType)
+sec_PKCS12NewCRLBag(PLArenaPool *arena, SECOidTag crlType)
 {
     sec_PKCS12CRLBag *crlBag = NULL;
     SECOidData *bagType = NULL;
@@ -1141,96 +1149,6 @@ loser:
     return SECFailure;
 }
 
-/* SEC_PKCS12AddEncryptedKey
- *	Extracts the key associated with a particular certificate and exports
- *	it.
- *
- *	p12ctxt - the export context 
- *	safe - the safeInfo to place the key in
- *	nestedDest - the nested safeContents to place a key
- *	cert - the certificate which the key belongs to
- *	shroudKey - encrypt the private key for export.  This value should 
- *		always be true.  lower level code will not allow the export
- *		of unencrypted private keys.
- *	algorithm - the algorithm with which to encrypt the private key
- *	pwitem - the password to encrypted the private key with
- *	keyId - the keyID attribute
- *	nickName - the nickname attribute
- */
-static SECStatus
-SEC_PKCS12AddEncryptedKey(SEC_PKCS12ExportContext *p12ctxt, 
-		SECKEYEncryptedPrivateKeyInfo *epki, SEC_PKCS12SafeInfo *safe,
-		void *nestedDest, SECItem *keyId, SECItem *nickName)
-{
-    void *mark;
-    void *keyItem;
-    SECOidTag keyType;
-    SECStatus rv = SECFailure;
-    sec_PKCS12SafeBag *returnBag;
-
-    if(!p12ctxt || !safe || !epki) {
-	return SECFailure;
-    }
-
-    mark = PORT_ArenaMark(p12ctxt->arena);
-
-    keyItem = PORT_ArenaZAlloc(p12ctxt->arena, 
-				sizeof(SECKEYEncryptedPrivateKeyInfo));
-    if(!keyItem) {
-	PORT_SetError(SEC_ERROR_NO_MEMORY);
-	goto loser;
-    }
-
-    rv = SECKEY_CopyEncryptedPrivateKeyInfo(p12ctxt->arena, 
-					(SECKEYEncryptedPrivateKeyInfo *)keyItem,
-					epki);
-    keyType = SEC_OID_PKCS12_V1_PKCS8_SHROUDED_KEY_BAG_ID;
-
-    if(rv != SECSuccess) {
-	goto loser;
-    }
-	
-    /* create the safe bag and set any attributes */
-    returnBag = sec_PKCS12CreateSafeBag(p12ctxt, keyType, keyItem);
-    if(!returnBag) {
-	rv = SECFailure;
-	goto loser;
-    }
-
-    if(nickName) {
-	if(sec_PKCS12AddAttributeToBag(p12ctxt, returnBag, 
-				       SEC_OID_PKCS9_FRIENDLY_NAME, nickName) 
-				       != SECSuccess) {
-	    goto loser;
-	}
-    }
-	   
-    if(keyId) {
-	if(sec_PKCS12AddAttributeToBag(p12ctxt, returnBag, SEC_OID_PKCS9_LOCAL_KEY_ID,
-				       keyId) != SECSuccess) {
-	    goto loser;
-	}
-    }
-
-    if(nestedDest) {
-	rv = sec_pkcs12_append_bag_to_safe_contents(p12ctxt->arena, 
-					   (sec_PKCS12SafeContents*)nestedDest,
-					   returnBag);
-    } else {
-	rv = sec_pkcs12_append_bag(p12ctxt, safe, returnBag);
-    }
-
-loser:
-
-    if (rv != SECSuccess) {
-	PORT_ArenaRelease(p12ctxt->arena, mark);
-    } else {
-	PORT_ArenaUnmark(p12ctxt->arena, mark);
-    }
-
-    return rv;
-}
-
 /* SEC_PKCS12AddKeyForCert
  *	Extracts the key associated with a particular certificate and exports
  *	it.
@@ -1308,9 +1226,14 @@ SEC_PKCS12AddKeyForCert(SEC_PKCS12ExportContext *p12ctxt, SEC_PKCS12SafeInfo *sa
 	}
 
 	epki = PK11_ExportEncryptedPrivateKeyInfo(slot, algorithm, 
-						  &uniPwitem, cert, 1, 
-						  p12ctxt->wincx);
+					    &uniPwitem, cert,
+					    NSS_PBE_DEFAULT_ITERATION_COUNT,
+					    p12ctxt->wincx);
 	PK11_FreeSlot(slot);
+	if(!epki) {
+	    PORT_SetError(SEC_ERROR_PKCS12_UNABLE_TO_EXPORT_KEY);
+	    goto loser;
+	}   
 	
 	keyItem = PORT_ArenaZAlloc(p12ctxt->arena, 
 				  sizeof(SECKEYEncryptedPrivateKeyInfo));
@@ -1318,10 +1241,6 @@ SEC_PKCS12AddKeyForCert(SEC_PKCS12ExportContext *p12ctxt, SEC_PKCS12SafeInfo *sa
 	    PORT_SetError(SEC_ERROR_NO_MEMORY);
 	    goto loser;
 	}
-	if(!epki) {
-	    PORT_SetError(SEC_ERROR_PKCS12_UNABLE_TO_EXPORT_KEY);
-	    return SECFailure;
-	}   
 	rv = SECKEY_CopyEncryptedPrivateKeyInfo(p12ctxt->arena, 
 					(SECKEYEncryptedPrivateKeyInfo *)keyItem,
 					epki);
@@ -1385,108 +1304,27 @@ loser:
     return rv;
 }
 
-/* SEC_PKCS12AddCertAndEncryptedKey
+/* SEC_PKCS12AddCertOrChainAndKey
  *	Add a certificate and key pair to be exported.
  *
- *	p12ctxt - the export context 
- * 	certSafe - the safeInfo where the cert is stored
- *	certNestedDest - the nested safeContents to store the cert
- *	keySafe - the safeInfo where the key is stored
- *	keyNestedDest - the nested safeContents to store the key
- *	shroudKey - extract the private key encrypted?
- *	pwitem - the password with which the key is encrypted
- *	algorithm - the algorithm with which the key is encrypted
+ *	p12ctxt          - the export context 
+ * 	certSafe         - the safeInfo where the cert is stored
+ *	certNestedDest   - the nested safeContents to store the cert
+ *	keySafe          - the safeInfo where the key is stored
+ *	keyNestedDest    - the nested safeContents to store the key
+ *	shroudKey        - extract the private key encrypted?
+ *	pwitem           - the password with which the key is encrypted
+ *	algorithm        - the algorithm with which the key is encrypted
+ *	includeCertChain - also add certs from chain to bag.
  */
 SECStatus
-SEC_PKCS12AddDERCertAndEncryptedKey(SEC_PKCS12ExportContext *p12ctxt, 
-		void *certSafe, void *certNestedDest, 
-		SECItem *derCert, void *keySafe, 
-		void *keyNestedDest, SECKEYEncryptedPrivateKeyInfo *epki,
-		char *nickname)
-{		
-    SECStatus rv = SECFailure;
-    SGNDigestInfo *digest = NULL;
-    void *mark = NULL;
-    CERTCertificate *cert;
-    SECItem nick = {siBuffer, NULL,0}, *nickPtr = NULL; 
-
-    if(!p12ctxt || !certSafe || !keySafe || !derCert) {
-	return SECFailure;
-    }
-
-    mark = PORT_ArenaMark(p12ctxt->arena);
-
-    cert = CERT_NewTempCertificate(CERT_GetDefaultCertDB(),
-                                   derCert, NULL, PR_FALSE, PR_FALSE);
-    if(!cert) {
-	PORT_ArenaRelease(p12ctxt->arena, mark);
-	PORT_SetError(SEC_ERROR_NO_MEMORY);
-	return SECFailure;
-    }
-    cert->nickname = nickname;
-
-    /* generate the thumbprint of the cert to use as a keyId */
-    digest = sec_pkcs12_compute_thumbprint(&cert->derCert);
-    if(!digest) {
-	CERT_DestroyCertificate(cert);
-	return SECFailure;
-    }
-
-    /* add the certificate */
-    rv = SEC_PKCS12AddCert(p12ctxt, (SEC_PKCS12SafeInfo*)certSafe, 
-			   certNestedDest, cert, NULL,
-    			   &digest->digest, PR_FALSE);
-    if(rv != SECSuccess) {
-	goto loser;
-    }
-
-    if(nickname) {
-	nick.data = (unsigned char *)nickname;
-	nick.len = PORT_Strlen(nickname);
-	nickPtr = &nick;
-    } else {
-	nickPtr = NULL;
-    }
-
-    /* add the key */
-    rv = SEC_PKCS12AddEncryptedKey(p12ctxt, epki, (SEC_PKCS12SafeInfo*)keySafe,
-				   keyNestedDest, &digest->digest, nickPtr );
-    if(rv != SECSuccess) {
-	goto loser;
-    }
-
-    SGN_DestroyDigestInfo(digest);
-
-    PORT_ArenaUnmark(p12ctxt->arena, mark);
-    return SECSuccess;
-
-loser:
-    SGN_DestroyDigestInfo(digest);
-    CERT_DestroyCertificate(cert);
-    PORT_ArenaRelease(p12ctxt->arena, mark);
-    
-    return SECFailure; 
-}
-
-/* SEC_PKCS12AddCertAndKey
- *	Add a certificate and key pair to be exported.
- *
- *	p12ctxt - the export context 
- * 	certSafe - the safeInfo where the cert is stored
- *	certNestedDest - the nested safeContents to store the cert
- *	keySafe - the safeInfo where the key is stored
- *	keyNestedDest - the nested safeContents to store the key
- *	shroudKey - extract the private key encrypted?
- *	pwitem - the password with which the key is encrypted
- *	algorithm - the algorithm with which the key is encrypted
- */
-SECStatus
-SEC_PKCS12AddCertAndKey(SEC_PKCS12ExportContext *p12ctxt, 
-			void *certSafe, void *certNestedDest, 
-			CERTCertificate *cert, CERTCertDBHandle *certDb,
-			void *keySafe, void *keyNestedDest, 
-			PRBool shroudKey, SECItem *pwitem, SECOidTag algorithm)
-{		
+SEC_PKCS12AddCertOrChainAndKey(SEC_PKCS12ExportContext *p12ctxt, 
+			       void *certSafe, void *certNestedDest, 
+			       CERTCertificate *cert, CERTCertDBHandle *certDb,
+			       void *keySafe, void *keyNestedDest, 
+			       PRBool shroudKey, SECItem *pwitem, 
+			       SECOidTag algorithm, PRBool includeCertChain)
+{
     SECStatus rv = SECFailure;
     SGNDigestInfo *digest = NULL;
     void *mark = NULL;
@@ -1507,7 +1345,7 @@ SEC_PKCS12AddCertAndKey(SEC_PKCS12ExportContext *p12ctxt,
     /* add the certificate */
     rv = SEC_PKCS12AddCert(p12ctxt, (SEC_PKCS12SafeInfo*)certSafe, 
 			   (SEC_PKCS12SafeInfo*)certNestedDest, cert, certDb,
-    			   &digest->digest, PR_TRUE);
+    			   &digest->digest, includeCertChain);
     if(rv != SECSuccess) {
 	goto loser;
     }
@@ -1532,6 +1370,20 @@ loser:
     
     return SECFailure; 
 }
+
+/* like SEC_PKCS12AddCertOrChainAndKey, but always adds cert chain */
+SECStatus
+SEC_PKCS12AddCertAndKey(SEC_PKCS12ExportContext *p12ctxt, 
+			void *certSafe, void *certNestedDest, 
+			CERTCertificate *cert, CERTCertDBHandle *certDb,
+			void *keySafe, void *keyNestedDest, 
+			PRBool shroudKey, SECItem *pwItem, SECOidTag algorithm)
+{
+    return SEC_PKCS12AddCertOrChainAndKey(p12ctxt, certSafe, certNestedDest,
+    		cert, certDb, keySafe, keyNestedDest, shroudKey, pwItem, 
+		algorithm, PR_TRUE);
+}
+
 
 /* SEC_PKCS12CreateNestedSafeContents
  * 	Allows nesting of safe contents to be implemented.  No limit imposed on 
@@ -1596,11 +1448,40 @@ loser:
  * Encoding routines
  *********************************/
 
+/* Clean up the resources allocated by a sec_PKCS12EncoderContext. */
+static void
+sec_pkcs12_encoder_destroy_context(sec_PKCS12EncoderContext *p12enc)
+{
+    if(p12enc) {
+	if(p12enc->outerA1ecx) {
+	    SEC_ASN1EncoderFinish(p12enc->outerA1ecx);
+	    p12enc->outerA1ecx = NULL;
+	}
+	if(p12enc->aSafeCinfo) {
+	    SEC_PKCS7DestroyContentInfo(p12enc->aSafeCinfo);
+	    p12enc->aSafeCinfo = NULL;
+	}
+	if(p12enc->middleP7ecx) {
+	    SEC_PKCS7EncoderFinish(p12enc->middleP7ecx, p12enc->p12exp->pwfn,
+				   p12enc->p12exp->pwfnarg);
+	    p12enc->middleP7ecx = NULL;
+	}
+	if(p12enc->middleA1ecx) {
+	    SEC_ASN1EncoderFinish(p12enc->middleA1ecx);
+	    p12enc->middleA1ecx = NULL;
+	}
+	if(p12enc->hmacCx) {
+	    PK11_DestroyContext(p12enc->hmacCx, PR_TRUE);
+	    p12enc->hmacCx = NULL;
+	}
+    }
+}
+
 /* set up the encoder context based on information in the export context
  * and return the newly allocated enocoder context.  A return of NULL 
  * indicates an error occurred. 
  */
-sec_PKCS12EncoderContext *
+static sec_PKCS12EncoderContext *
 sec_pkcs12_encoder_start_context(SEC_PKCS12ExportContext *p12exp)
 {
     sec_PKCS12EncoderContext *p12enc = NULL;
@@ -1628,8 +1509,7 @@ sec_pkcs12_encoder_start_context(SEC_PKCS12ExportContext *p12exp)
 
     /* allocate the encoder context */
     mark = PORT_ArenaMark(p12exp->arena);
-    p12enc = (sec_PKCS12EncoderContext*)PORT_ArenaZAlloc(p12exp->arena, 
-    			      sizeof(sec_PKCS12EncoderContext));
+    p12enc = PORT_ArenaZNew(p12exp->arena, sec_PKCS12EncoderContext);
     if(!p12enc) {
 	PORT_SetError(SEC_ERROR_NO_MEMORY);
 	return NULL;
@@ -1680,7 +1560,8 @@ sec_pkcs12_encoder_start_context(SEC_PKCS12ExportContext *p12exp)
 	    SECItem *salt = sec_pkcs12_generate_salt();
 	    PK11SymKey *symKey;
 	    SECItem *params;
-	    CK_MECHANISM_TYPE integrityMech;
+	    CK_MECHANISM_TYPE integrityMechType;
+	    CK_MECHANISM_TYPE hmacMechType;
 
 	    /* zero out macData and set values */
 	    PORT_Memset(&p12enc->mac, 0, sizeof(sec_PKCS12MacData));
@@ -1691,42 +1572,60 @@ sec_pkcs12_encoder_start_context(SEC_PKCS12ExportContext *p12exp)
 	    }
 	    if(SECITEM_CopyItem(p12exp->arena, &(p12enc->mac.macSalt), salt) 
 			!= SECSuccess) {
+		/* XXX salt is leaked */
 		PORT_SetError(SEC_ERROR_NO_MEMORY);
 		goto loser;
 	    }   
+	    if (!SEC_ASN1EncodeInteger(p12exp->arena, &(p12enc->mac.iter),
+				       NSS_PBE_DEFAULT_ITERATION_COUNT)) {
+		/* XXX salt is leaked */
+		goto loser;
+	    }
 
 	    /* generate HMAC key */
 	    if(!sec_pkcs12_convert_item_to_unicode(NULL, &pwd, 
 			p12exp->integrityInfo.pwdInfo.password, PR_TRUE, 
 			PR_TRUE, PR_TRUE)) {
+		/* XXX salt is leaked */
 		goto loser;
 	    }
-
-	    params = PK11_CreatePBEParams(salt, &pwd, 1);
+	    /*
+	     * This code only works with PKCS #12 Mac using PKCS #5 v1
+	     * PBA keygens. PKCS #5 v2 support will require a change to
+	     * the PKCS #12 spec.
+	     */
+	    params = PK11_CreatePBEParams(salt, &pwd,
+                                          NSS_PBE_DEFAULT_ITERATION_COUNT);
 	    SECITEM_ZfreeItem(salt, PR_TRUE);
 	    SECITEM_ZfreeItem(&pwd, PR_FALSE);
 
+	    /* get the PBA Mechanism to generate the key */
 	    switch (p12exp->integrityInfo.pwdInfo.algorithm) {
 	    case SEC_OID_SHA1:
-		integrityMech = CKM_NSS_PBE_SHA1_HMAC_KEY_GEN; break;
+		integrityMechType = CKM_PBA_SHA1_WITH_SHA1_HMAC; break;
 	    case SEC_OID_MD5:
-		integrityMech = CKM_NSS_PBE_MD5_HMAC_KEY_GEN;  break;
+		integrityMechType = CKM_NETSCAPE_PBE_MD5_HMAC_KEY_GEN;  break;
 	    case SEC_OID_MD2:
-		integrityMech = CKM_NSS_PBE_MD2_HMAC_KEY_GEN;  break;
+		integrityMechType = CKM_NETSCAPE_PBE_MD2_HMAC_KEY_GEN;  break;
 	    default:
+		/* XXX params is leaked */
 		goto loser;
 	    }
 
-	    symKey = PK11_KeyGen(NULL, integrityMech, params, 20, NULL);
+	    /* generate the key */
+	    symKey = PK11_KeyGen(NULL, integrityMechType, params, 20, NULL);
 	    PK11_DestroyPBEParams(params);
 	    if(!symKey) {
 		goto loser;
 	    }
 
-	    /* initialize hmac */
-	    p12enc->hmacCx = PK11_CreateContextBySymKey(
-	     sec_pkcs12_algtag_to_mech(p12exp->integrityInfo.pwdInfo.algorithm),
-	                                           CKA_SIGN, symKey, &ignore);
+	    /* initialize HMAC */
+	    /* Get the HMAC mechanism from the hash OID */
+	    hmacMechType=  sec_pkcs12_algtag_to_mech( 
+	                              p12exp->integrityInfo.pwdInfo.algorithm);
+
+	    p12enc->hmacCx = PK11_CreateContextBySymKey( hmacMechType,
+						 CKA_SIGN, symKey, &ignore);
 
 	    PK11_FreeSymKey(symKey);
 	    if(!p12enc->hmacCx) {
@@ -1748,25 +1647,19 @@ sec_pkcs12_encoder_start_context(SEC_PKCS12ExportContext *p12exp)
     return p12enc;
 
 loser:
-    if(p12enc) {
-	if(p12enc->aSafeCinfo) {
-	    SEC_PKCS7DestroyContentInfo(p12enc->aSafeCinfo);
-	}
-	if(p12enc->hmacCx) {
-	    PK11_DestroyContext(p12enc->hmacCx, PR_TRUE);
-	}
-    }
+    sec_pkcs12_encoder_destroy_context(p12enc);
     if (p12exp->arena != NULL)
 	PORT_ArenaRelease(p12exp->arena, mark);
 
     return NULL;
 }
 
-/* callback wrapper to allow the ASN1 engine to call the PKCS 12 
- * output routines.
+/* The outermost ASN.1 encoder calls this function for output.
+** This function calls back to the library caller's output routine,
+** which typically writes to a PKCS12 file.
  */
 static void
-sec_pkcs12_encoder_out(void *arg, const char *buf, unsigned long len,
+sec_P12A1OutputCB_Outer(void *arg, const char *buf, unsigned long len,
 		       int depth, SEC_ASN1EncodingPart data_kind)
 {
     struct sec_pkcs12_encoder_output *output;
@@ -1775,62 +1668,90 @@ sec_pkcs12_encoder_out(void *arg, const char *buf, unsigned long len,
     (* output->outputfn)(output->outputarg, buf, len);
 }
 
-/* callback wrapper to wrap SEC_PKCS7EncoderUpdate for ASN1 encoder
+/* The "middle" and "inner" ASN.1 encoders call this function to output. 
+** This function does HMACing, if appropriate, and then buffers the data.
+** The buffered data is eventually passed down to the underlying PKCS7 encoder.
  */
-static void 
-sec_pkcs12_wrap_pkcs7_encoder_update(void *arg, const char *buf, 
-				     unsigned long len, int depth, 
-				     SEC_ASN1EncodingPart data_kind)
+static void
+sec_P12A1OutputCB_HmacP7Update(void *arg, const char *buf,
+			       unsigned long        len, 
+			       int                  depth,
+			       SEC_ASN1EncodingPart data_kind)
 {
-    SEC_PKCS7EncoderContext *ecx;
-    if(!buf || !len) {
+    sec_pkcs12OutputBuffer *  bufcx = (sec_pkcs12OutputBuffer *)arg;
+
+    if(!buf || !len) 
 	return;
+
+    if (bufcx->hmacCx) {
+	PK11_DigestOp(bufcx->hmacCx, (unsigned char *)buf, len);
     }
 
-    ecx = (SEC_PKCS7EncoderContext*)arg;
-    SEC_PKCS7EncoderUpdate(ecx, buf, len);
+    /* buffer */
+    if (bufcx->numBytes > 0) {
+	int toCopy;
+	if (len + bufcx->numBytes <= bufcx->bufBytes) {
+	    memcpy(bufcx->buf + bufcx->numBytes, buf, len);
+	    bufcx->numBytes += len;
+	    if (bufcx->numBytes < bufcx->bufBytes) 
+	    	return;
+	    SEC_PKCS7EncoderUpdate(bufcx->p7eCx, bufcx->buf, bufcx->bufBytes);
+	    bufcx->numBytes = 0;
+	    return;
+	} 
+	toCopy = bufcx->bufBytes - bufcx->numBytes;
+	memcpy(bufcx->buf + bufcx->numBytes, buf, toCopy);
+	SEC_PKCS7EncoderUpdate(bufcx->p7eCx, bufcx->buf, bufcx->bufBytes);
+	bufcx->numBytes = 0;
+	len -= toCopy;
+	buf += toCopy;
+    } 
+    /* buffer is presently empty */
+    if (len >= bufcx->bufBytes) {
+	/* Just pass it through */
+	SEC_PKCS7EncoderUpdate(bufcx->p7eCx, buf, len);
+    } else {
+	/* copy it all into the buffer, and return */
+	memcpy(bufcx->buf, buf, len);
+	bufcx->numBytes = len;
+    }
 }
 
-/* callback wrapper to wrap SEC_ASN1EncoderUpdate for PKCS 7 encoding
- */
-static void
-sec_pkcs12_wrap_asn1_update_for_p7_update(void *arg, const char *buf,
-					  unsigned long len)
+void
+sec_FlushPkcs12OutputBuffer( sec_pkcs12OutputBuffer *  bufcx)
 {
-    if(!buf && !len) return;
-
-    SEC_ASN1EncoderUpdate((SEC_ASN1EncoderContext*)arg, buf, len);
+    if (bufcx->numBytes > 0) {
+	SEC_PKCS7EncoderUpdate(bufcx->p7eCx, bufcx->buf, bufcx->numBytes);
+	bufcx->numBytes = 0;
+    }
 }
 
-/* callback wrapper which updates the HMAC and passes on bytes to the 
- * appropriate output function.
- */
+/* Feeds the output of a PKCS7 encoder into the next outward ASN.1 encoder.
+** This function is used by both the inner and middle PCS7 encoders.
+*/
 static void
-sec_pkcs12_asafe_update_hmac_and_encode_bits(void *arg, const char *buf,
-				      unsigned long len, int depth,
-				      SEC_ASN1EncodingPart data_kind)
+sec_P12P7OutputCB_CallA1Update(void *arg, const char *buf, unsigned long len)
 {
-    sec_PKCS12EncoderContext *p12ecx;
+    SEC_ASN1EncoderContext *cx = (SEC_ASN1EncoderContext*)arg;
 
-    p12ecx = (sec_PKCS12EncoderContext*)arg;
-    PK11_DigestOp(p12ecx->hmacCx, (unsigned char *)buf, len);
-    sec_pkcs12_wrap_pkcs7_encoder_update(p12ecx->aSafeP7Ecx, buf, len,
-    					 depth, data_kind);
+    if (!buf || !len) 
+    	return;
+
+    SEC_ASN1EncoderUpdate(cx, buf, len);
 }
+
 
 /* this function encodes content infos which are part of the
  * sequence of content infos labeled AuthenticatedSafes 
  */
 static SECStatus 
 sec_pkcs12_encoder_asafe_process(sec_PKCS12EncoderContext *p12ecx)
-{ 
-    SECStatus rv = SECSuccess;
-    SEC_PKCS5KeyAndPassword keyPwd;
-    SEC_PKCS7EncoderContext *p7ecx;
-    SEC_PKCS7ContentInfo *cinfo;
-    SEC_ASN1EncoderContext *ecx = NULL;
-
-    void *arg = NULL;
+{
+    SEC_PKCS7EncoderContext *innerP7ecx;
+    SEC_PKCS7ContentInfo    *cinfo;
+    PK11SymKey              *bulkKey      = NULL;
+    SEC_ASN1EncoderContext  *innerA1ecx   = NULL;
+    SECStatus                rv           = SECSuccess;
 
     if(p12ecx->currentSafe < p12ecx->p12exp->authSafe.safeCount) {
 	SEC_PKCS12SafeInfo *safeInfo;
@@ -1849,15 +1770,11 @@ sec_pkcs12_encoder_asafe_process(sec_PKCS12EncoderContext *p12ecx)
 	/* determine the safe type and set the appropriate argument */
 	switch(cinfoType) {
 	    case SEC_OID_PKCS7_DATA:
-		arg = NULL;
+	    case SEC_OID_PKCS7_ENVELOPED_DATA:
 		break;
 	    case SEC_OID_PKCS7_ENCRYPTED_DATA:
-		keyPwd.pwitem = &safeInfo->pwitem;
-		keyPwd.key = safeInfo->encryptionKey;
-		arg = &keyPwd;
-		break;
-	    case SEC_OID_PKCS7_ENVELOPED_DATA:
-		arg = NULL;
+		bulkKey = safeInfo->encryptionKey;
+		PK11_SetSymKeyUserData(bulkKey, &safeInfo->pwitem, NULL);
 		break;
 	    default:
 		return SECFailure;
@@ -1865,44 +1782,52 @@ sec_pkcs12_encoder_asafe_process(sec_PKCS12EncoderContext *p12ecx)
 	}
 
 	/* start the PKCS7 encoder */
-	p7ecx = SEC_PKCS7EncoderStart(cinfo, 
-				      sec_pkcs12_wrap_asn1_update_for_p7_update,
-				      p12ecx->aSafeEcx, (PK11SymKey *)arg);
-	if(!p7ecx) {
+	innerP7ecx = SEC_PKCS7EncoderStart(cinfo, 
+				  sec_P12P7OutputCB_CallA1Update,
+				  p12ecx->middleA1ecx, bulkKey);
+	if(!innerP7ecx) {
 	    goto loser;
 	}
 
 	/* encode safe contents */
-	ecx = SEC_ASN1EncoderStart(safeInfo->safe, sec_PKCS12SafeContentsTemplate,
-				   sec_pkcs12_wrap_pkcs7_encoder_update, p7ecx);
-	if(!ecx) {
+	p12ecx->innerBuf.p7eCx    = innerP7ecx;
+	p12ecx->innerBuf.hmacCx   = NULL;
+	p12ecx->innerBuf.numBytes = 0;
+	p12ecx->innerBuf.bufBytes = sizeof p12ecx->innerBuf.buf;
+
+	innerA1ecx = SEC_ASN1EncoderStart(safeInfo->safe, 
+	                           sec_PKCS12SafeContentsTemplate,
+				   sec_P12A1OutputCB_HmacP7Update, 
+				   &p12ecx->innerBuf);
+	if(!innerA1ecx) {
 	    goto loser;
 	}   
-	rv = SEC_ASN1EncoderUpdate(ecx, NULL, 0);
-	SEC_ASN1EncoderFinish(ecx);
-	ecx = NULL;
+	rv = SEC_ASN1EncoderUpdate(innerA1ecx, NULL, 0);
+	SEC_ASN1EncoderFinish(innerA1ecx);
+	sec_FlushPkcs12OutputBuffer( &p12ecx->innerBuf);
+	innerA1ecx = NULL;
 	if(rv != SECSuccess) {
 	    goto loser;
 	}
 
 
 	/* finish up safe content info */
-	rv = SEC_PKCS7EncoderFinish(p7ecx, p12ecx->p12exp->pwfn, 
+	rv = SEC_PKCS7EncoderFinish(innerP7ecx, p12ecx->p12exp->pwfn, 
 				    p12ecx->p12exp->pwfnarg);
     }
-
+    memset(&p12ecx->innerBuf, 0, sizeof p12ecx->innerBuf);
     return SECSuccess;
 
 loser:
-    if(p7ecx) {
-	SEC_PKCS7EncoderFinish(p7ecx, p12ecx->p12exp->pwfn, 
+    if(innerP7ecx) {
+	SEC_PKCS7EncoderFinish(innerP7ecx, p12ecx->p12exp->pwfn, 
 			       p12ecx->p12exp->pwfnarg);
     }
 
-    if(ecx) {
-	SEC_ASN1EncoderFinish(ecx);
+    if(innerA1ecx) {
+	SEC_ASN1EncoderFinish(innerA1ecx);
     }
-
+    memset(&p12ecx->innerBuf, 0, sizeof p12ecx->innerBuf);
     return SECFailure;
 }
 
@@ -1910,7 +1835,7 @@ loser:
  * encoded.
  */
 static SECStatus
-sec_pkcs12_update_mac(sec_PKCS12EncoderContext *p12ecx)
+sec_Pkcs12FinishMac(sec_PKCS12EncoderContext *p12ecx)
 {
     SECItem hmac = { siBuffer, NULL, 0 };
     SECStatus rv;
@@ -1980,19 +1905,9 @@ loser:
     return rv;
 }
 
-/* wraps the ASN1 encoder update for PKCS 7 encoder */
-static void
-sec_pkcs12_wrap_asn1_encoder_update(void *arg, const char *buf, 
-				    unsigned long len)
-{
-    SEC_ASN1EncoderContext *cx;
-
-    cx = (SEC_ASN1EncoderContext*)arg;
-    SEC_ASN1EncoderUpdate(cx, buf, len);
-}
-
-/* pfx notify function for ASN1 encoder.  we want to stop encoding, once we reach
- * the authenticated safe.  at that point, the encoder will be updated via streaming
+/* pfx notify function for ASN1 encoder.  
+ * We want to stop encoding once we reach the authenticated safe.  
+ * At that point, the encoder will be updated via streaming
  * as the authenticated safe is  encoded. 
  */
 static void
@@ -2010,9 +1925,9 @@ sec_pkcs12_encoder_pfx_notify(void *arg, PRBool before, void *dest, int real_dep
 	return;
     }
 
-    SEC_ASN1EncoderSetTakeFromBuf(p12ecx->ecx);
-    SEC_ASN1EncoderSetStreaming(p12ecx->ecx);
-    SEC_ASN1EncoderClearNotifyProc(p12ecx->ecx);
+    SEC_ASN1EncoderSetTakeFromBuf(p12ecx->outerA1ecx);
+    SEC_ASN1EncoderSetStreaming(p12ecx->outerA1ecx);
+    SEC_ASN1EncoderClearNotifyProc(p12ecx->outerA1ecx);
 }
 
 /* SEC_PKCS12Encode
@@ -2045,83 +1960,94 @@ SEC_PKCS12Encode(SEC_PKCS12ExportContext *p12exp,
     outInfo.outputfn = output;
     outInfo.outputarg = outputarg;
 
-    /* set up PFX encoder.  Set it for streaming */
-    p12enc->ecx = SEC_ASN1EncoderStart(&p12enc->pfx, sec_PKCS12PFXItemTemplate,
-				       sec_pkcs12_encoder_out, 
+    /* set up PFX encoder, the "outer" encoder.  Set it for streaming */
+    p12enc->outerA1ecx = SEC_ASN1EncoderStart(&p12enc->pfx, 
+                                       sec_PKCS12PFXItemTemplate,
+				       sec_P12A1OutputCB_Outer, 
 				       &outInfo);
-    if(!p12enc->ecx) {
+    if(!p12enc->outerA1ecx) {
 	PORT_SetError(SEC_ERROR_NO_MEMORY);
 	rv = SECFailure;
 	goto loser;
     }
-    SEC_ASN1EncoderSetStreaming(p12enc->ecx);
-    SEC_ASN1EncoderSetNotifyProc(p12enc->ecx, sec_pkcs12_encoder_pfx_notify, p12enc);
-    rv = SEC_ASN1EncoderUpdate(p12enc->ecx, NULL, 0);
+    SEC_ASN1EncoderSetStreaming(p12enc->outerA1ecx);
+    SEC_ASN1EncoderSetNotifyProc(p12enc->outerA1ecx, 
+                                 sec_pkcs12_encoder_pfx_notify, p12enc);
+    rv = SEC_ASN1EncoderUpdate(p12enc->outerA1ecx, NULL, 0);
     if(rv != SECSuccess) {
 	rv = SECFailure;
 	goto loser;
     }
 
     /* set up asafe cinfo - the output of the encoder feeds the PFX encoder */
-    p12enc->aSafeP7Ecx = SEC_PKCS7EncoderStart(p12enc->aSafeCinfo, 
-    					       sec_pkcs12_wrap_asn1_encoder_update,
-    					       p12enc->ecx, NULL);
-    if(!p12enc->aSafeP7Ecx) {
+    p12enc->middleP7ecx = SEC_PKCS7EncoderStart(p12enc->aSafeCinfo, 
+				       sec_P12P7OutputCB_CallA1Update,
+				       p12enc->outerA1ecx, NULL);
+    if(!p12enc->middleP7ecx) {
 	rv = SECFailure;
 	goto loser;
     }
 
     /* encode asafe */
-    if(p12enc->p12exp->integrityEnabled && p12enc->p12exp->pwdIntegrity) {
-	p12enc->aSafeEcx = SEC_ASN1EncoderStart(&p12enc->p12exp->authSafe,
-					sec_PKCS12AuthenticatedSafeTemplate, 
-					sec_pkcs12_asafe_update_hmac_and_encode_bits,
-    					p12enc);
-    } else {
-	p12enc->aSafeEcx = SEC_ASN1EncoderStart(&p12enc->p12exp->authSafe,
-				sec_PKCS12AuthenticatedSafeTemplate,
-				sec_pkcs12_wrap_pkcs7_encoder_update,
-				p12enc->aSafeP7Ecx);
+    p12enc->middleBuf.p7eCx    = p12enc->middleP7ecx;
+    p12enc->middleBuf.hmacCx   = NULL;
+    p12enc->middleBuf.numBytes = 0;
+    p12enc->middleBuf.bufBytes = sizeof p12enc->middleBuf.buf;
+
+    /* Setup the "inner ASN.1 encoder for Authenticated Safes.  */
+    if(p12enc->p12exp->integrityEnabled && 
+       p12enc->p12exp->pwdIntegrity) {
+	p12enc->middleBuf.hmacCx = p12enc->hmacCx;
     }
-    if(!p12enc->aSafeEcx) {
+    p12enc->middleA1ecx = SEC_ASN1EncoderStart(&p12enc->p12exp->authSafe,
+			    sec_PKCS12AuthenticatedSafeTemplate,
+			    sec_P12A1OutputCB_HmacP7Update,
+			    &p12enc->middleBuf);
+    if(!p12enc->middleA1ecx) {
 	rv = SECFailure;
 	goto loser;
     }
-    SEC_ASN1EncoderSetStreaming(p12enc->aSafeEcx);
-    SEC_ASN1EncoderSetTakeFromBuf(p12enc->aSafeEcx); 
+    SEC_ASN1EncoderSetStreaming(p12enc->middleA1ecx);
+    SEC_ASN1EncoderSetTakeFromBuf(p12enc->middleA1ecx); 
 	
     /* encode each of the safes */			 
     while(p12enc->currentSafe != p12enc->p12exp->safeInfoCount) {
 	sec_pkcs12_encoder_asafe_process(p12enc);
 	p12enc->currentSafe++;
     }
-    SEC_ASN1EncoderClearTakeFromBuf(p12enc->aSafeEcx);
-    SEC_ASN1EncoderClearStreaming(p12enc->aSafeEcx);
-    SEC_ASN1EncoderUpdate(p12enc->aSafeEcx, NULL, 0);
-    SEC_ASN1EncoderFinish(p12enc->aSafeEcx);
+    SEC_ASN1EncoderClearTakeFromBuf(p12enc->middleA1ecx);
+    SEC_ASN1EncoderClearStreaming(p12enc->middleA1ecx);
+    SEC_ASN1EncoderUpdate(p12enc->middleA1ecx, NULL, 0);
+    SEC_ASN1EncoderFinish(p12enc->middleA1ecx);
+    p12enc->middleA1ecx = NULL;
+
+    sec_FlushPkcs12OutputBuffer( &p12enc->middleBuf);
 
     /* finish the encoding of the authenticated safes */
-    rv = SEC_PKCS7EncoderFinish(p12enc->aSafeP7Ecx, p12exp->pwfn, 
+    rv = SEC_PKCS7EncoderFinish(p12enc->middleP7ecx, p12exp->pwfn, 
     				p12exp->pwfnarg);
+    p12enc->middleP7ecx = NULL;
     if(rv != SECSuccess) {
 	goto loser;
     }
 
-    SEC_ASN1EncoderClearTakeFromBuf(p12enc->ecx);
-    SEC_ASN1EncoderClearStreaming(p12enc->ecx);
+    SEC_ASN1EncoderClearTakeFromBuf(p12enc->outerA1ecx);
+    SEC_ASN1EncoderClearStreaming(p12enc->outerA1ecx);
 
     /* update the mac, if necessary */
-    rv = sec_pkcs12_update_mac(p12enc);
+    rv = sec_Pkcs12FinishMac(p12enc);
     if(rv != SECSuccess) {
 	goto loser;
     }
    
     /* finish encoding the pfx */ 
-    rv = SEC_ASN1EncoderUpdate(p12enc->ecx, NULL, 0);
+    rv = SEC_ASN1EncoderUpdate(p12enc->outerA1ecx, NULL, 0);
 
-    SEC_ASN1EncoderFinish(p12enc->ecx);
+    SEC_ASN1EncoderFinish(p12enc->outerA1ecx);
+    p12enc->outerA1ecx = NULL;
 
 loser:
+    sec_pkcs12_encoder_destroy_context(p12enc);
     return rv;
 }
 
@@ -2151,144 +2077,3 @@ SEC_PKCS12DestroyExportContext(SEC_PKCS12ExportContext *p12ecx)
 
     PORT_FreeArena(p12ecx->arena, PR_TRUE);
 }
-
-
-/*********************************
- * All-in-one routines for exporting certificates 
- *********************************/
-struct inPlaceEncodeInfo {
-    PRBool error;
-    SECItem outItem;
-};
-
-static void 
-sec_pkcs12_in_place_encoder_output(void *arg, const char *buf, unsigned long len)
-{
-    struct inPlaceEncodeInfo *outInfo = (struct inPlaceEncodeInfo*)arg;
-
-    if(!outInfo || !len || outInfo->error) {
-	return;
-    }
-
-    if(!outInfo->outItem.data) {
-	outInfo->outItem.data = (unsigned char*)PORT_ZAlloc(len);
-	outInfo->outItem.len = 0;
-    } else {
-	if(!PORT_Realloc(&(outInfo->outItem.data), (outInfo->outItem.len + len))) {
-	    SECITEM_ZfreeItem(&(outInfo->outItem), PR_FALSE);
-	    outInfo->outItem.data = NULL;
-	    PORT_SetError(SEC_ERROR_NO_MEMORY);
-	    outInfo->error = PR_TRUE;
-	    return;
-	}
-    }
-
-    PORT_Memcpy(&(outInfo->outItem.data[outInfo->outItem.len]), buf, len);
-    outInfo->outItem.len += len;
-
-    return;
-}
-
-/*
- * SEC_PKCS12ExportCertifcateAndKeyUsingPassword
- *	Exports a certificate/key pair using password-based encryption and
- *	authentication.
- *
- * pwfn, pwfnarg - password function and argument for the key database
- * cert - the certificate to export
- * certDb - certificate database
- * pwitem - the password to use
- * shroudKey - encrypt the key externally, 
- * keyShroudAlg - encryption algorithm for key
- * encryptionAlg - the algorithm with which data is encrypted
- * integrityAlg - the algorithm for integrity
- */
-SECItem *
-SEC_PKCS12ExportCertificateAndKeyUsingPassword(
-				SECKEYGetPasswordKey pwfn, void *pwfnarg,
-				CERTCertificate *cert, PK11SlotInfo *slot,
-				CERTCertDBHandle *certDb, SECItem *pwitem,
-				PRBool shroudKey, SECOidTag shroudAlg,
-				PRBool encryptCert, SECOidTag certEncAlg,
-				SECOidTag integrityAlg, void *wincx)
-{
-    struct inPlaceEncodeInfo outInfo;
-    SEC_PKCS12ExportContext *p12ecx = NULL;
-    SEC_PKCS12SafeInfo *keySafe, *certSafe;
-    SECItem *returnItem = NULL;
-
-    if(!cert || !pwitem || !slot) {
-	return NULL;
-    }
-
-    outInfo.error = PR_FALSE;
-    outInfo.outItem.data = NULL;
-    outInfo.outItem.len = 0;
-
-    p12ecx = SEC_PKCS12CreateExportContext(pwfn, pwfnarg, slot, wincx);
-    if(!p12ecx) {
-	return NULL;
-    }
-
-    /* set up cert safe */
-    if(encryptCert) {
-	certSafe = SEC_PKCS12CreatePasswordPrivSafe(p12ecx, pwitem, certEncAlg);
-    } else {
-	certSafe = SEC_PKCS12CreateUnencryptedSafe(p12ecx);
-    }
-    if(!certSafe) {
-	goto loser;
-    }
-
-    /* set up key safe */
-    if(shroudKey) {
-	keySafe = SEC_PKCS12CreateUnencryptedSafe(p12ecx);
-    } else {
-	keySafe = certSafe;
-    }
-    if(!keySafe) {
-	goto loser;
-    }
-
-    /* add integrity mode */
-    if(SEC_PKCS12AddPasswordIntegrity(p12ecx, pwitem, integrityAlg) 
-		!= SECSuccess) {
-	goto loser;
-    }
-
-    /* add cert and key pair */
-    if(SEC_PKCS12AddCertAndKey(p12ecx, certSafe, NULL, cert, certDb, 
-			       keySafe, NULL, shroudKey, pwitem, shroudAlg)
-		!= SECSuccess) {
-	goto loser;
-    }
-
-    /* encode the puppy */
-    if(SEC_PKCS12Encode(p12ecx, sec_pkcs12_in_place_encoder_output, &outInfo)
-		!= SECSuccess) {
-	goto loser;
-    }
-    if(outInfo.error) {
-	goto loser;
-    }
-
-    SEC_PKCS12DestroyExportContext(p12ecx);
-	
-    returnItem = SECITEM_DupItem(&outInfo.outItem);
-    SECITEM_ZfreeItem(&outInfo.outItem, PR_FALSE);
-
-    return returnItem;
-
-loser:
-    if(outInfo.outItem.data) {
-	SECITEM_ZfreeItem(&(outInfo.outItem), PR_TRUE);
-    }
-
-    if(p12ecx) {
-	SEC_PKCS12DestroyExportContext(p12ecx);
-    }
-
-    return NULL;
-}
-
-

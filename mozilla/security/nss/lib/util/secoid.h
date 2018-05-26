@@ -1,42 +1,14 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef _SECOID_H_
 #define _SECOID_H_
+
+#include "utilrename.h"
+
 /*
  * secoid.h - public data structures and prototypes for ASN.1 OID functions
- *
- * $Id: secoid.h,v 1.4 2001/08/24 18:34:34 relyea%netscape.com Exp $
  */
 
 #include "plarena.h"
@@ -55,8 +27,8 @@ SEC_ASN1_CHOOSER_DECLARE(SECOID_AlgorithmIDTemplate)
 /*
  * OID handling routines
  */
-extern SECOidData *SECOID_FindOID(SECItem *oid);
-extern SECOidTag SECOID_FindOIDTag(SECItem *oid);
+extern SECOidData *SECOID_FindOID( const SECItem *oid);
+extern SECOidTag SECOID_FindOIDTag(const SECItem *oid);
 extern SECOidData *SECOID_FindOIDByTag(SECOidTag tagnum);
 extern SECOidData *SECOID_FindOIDByMechanism(unsigned long mechanism);
 
@@ -69,10 +41,10 @@ extern SECOidData *SECOID_FindOIDByMechanism(unsigned long mechanism);
 ** Fill in an algorithm-ID object given a tag and some parameters.
 ** 	"aid" where the DER encoded algorithm info is stored (memory
 **	   is allocated)
-**	"tag" the tag defining the algorithm (SEC_OID_*)
+**	"tag" the tag number defining the algorithm 
 **	"params" if not NULL, the parameters to go with the algorithm
 */
-extern SECStatus SECOID_SetAlgorithmID(PRArenaPool *arena, SECAlgorithmID *aid,
+extern SECStatus SECOID_SetAlgorithmID(PLArenaPool *arena, SECAlgorithmID *aid,
 				   SECOidTag tag, SECItem *params);
 
 /*
@@ -81,13 +53,13 @@ extern SECStatus SECOID_SetAlgorithmID(PRArenaPool *arena, SECAlgorithmID *aid,
 ** before memory is allocated (use SECOID_DestroyAlgorithmID(dest, PR_FALSE)
 ** to do that).
 */
-extern SECStatus SECOID_CopyAlgorithmID(PRArenaPool *arena, SECAlgorithmID *dest,
-				    SECAlgorithmID *src);
+extern SECStatus SECOID_CopyAlgorithmID(PLArenaPool *arena, SECAlgorithmID *dest,
+				        const SECAlgorithmID *src);
 
 /*
-** Get the SEC_OID_* tag for the given algorithm-id object.
+** Get the tag number for the given algorithm-id object.
 */
-extern SECOidTag SECOID_GetAlgorithmTag(SECAlgorithmID *aid);
+extern SECOidTag SECOID_GetAlgorithmTag(const SECAlgorithmID *aid);
 
 /*
 ** Destroy an algorithm-id object.
@@ -105,14 +77,63 @@ extern SECComparison SECOID_CompareAlgorithmID(SECAlgorithmID *a,
 
 extern PRBool SECOID_KnownCertExtenOID (SECItem *extenOid);
 
-/* Given a SEC_OID_* tag, return a string describing it.
+/* Given a tag number, return a string describing it.
  */
 extern const char *SECOID_FindOIDTagDescription(SECOidTag tagnum);
+
+/* Add a dynamic SECOidData to the dynamic OID table.
+** Routine copies the src entry, and returns the new SECOidTag.
+** Returns SEC_OID_INVALID if failed to add for some reason.
+*/
+extern SECOidTag SECOID_AddEntry(const SECOidData * src);
+
+/*
+ * initialize the oid data structures.
+ */
+extern SECStatus SECOID_Init(void);
 
 /*
  * free up the oid data structures.
  */
 extern SECStatus SECOID_Shutdown(void);
+
+/* if to->data is not NULL, and to->len is large enough to hold the result,
+ * then the resultant OID will be copyed into to->data, and to->len will be
+ * changed to show the actual OID length.
+ * Otherwise, memory for the OID will be allocated (from the caller's 
+ * PLArenaPool, if pool is non-NULL) and to->data will receive the address
+ * of the allocated data, and to->len will receive the OID length.
+ * The original value of to->data is not freed when a new buffer is allocated.
+ * 
+ * The input string may begin with "OID." and this still be ignored.
+ * The length of the input string is given in len.  If len == 0, then 
+ * len will be computed as strlen(from), meaning it must be NUL terminated.
+ * It is an error if from == NULL, or if *from == '\0'.
+ */
+extern SECStatus SEC_StringToOID(PLArenaPool *pool, SECItem *to, 
+                                 const char *from, PRUint32 len);
+
+extern void UTIL_SetForkState(PRBool forked);
+
+/*
+ * Accessor functions for new opaque extended SECOID table.
+ * Any of these functions may return SECSuccess or SECFailure with the error 
+ * code set to SEC_ERROR_UNKNOWN_OBJECT_TYPE if the SECOidTag is out of range.
+ */
+
+/* The Get function outputs the 32-bit value associated with the SECOidTag.
+ * Flags bits are the NSS_USE_ALG_ #defines in "secoidt.h".
+ * Default value for any algorithm is 0xffffffff (enabled for all purposes).
+ * No value is output if function returns SECFailure.
+ */
+extern SECStatus NSS_GetAlgorithmPolicy(SECOidTag tag, PRUint32 *pValue);
+
+/* The Set function modifies the stored value according to the following
+ * algorithm:
+ *   policy[tag] = (policy[tag] & ~clearBits) | setBits;
+ */
+extern SECStatus
+NSS_SetAlgorithmPolicy(SECOidTag tag, PRUint32 setBits, PRUint32 clearBits);
 
 
 SEC_END_PROTOS

@@ -1,35 +1,39 @@
-The contents of this file are subject to the Mozilla Public
-License Version 1.1 (the "License"); you may not use this file
-except in compliance with the License. You may obtain a copy of
-the License at http://www.mozilla.org/MPL/
+***** BEGIN LICENSE BLOCK *****
+Version: MPL 1.1/GPL 2.0/LGPL 2.1
 
-Software distributed under the License is distributed on an "AS
-IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
-implied. See the License for the specific language governing
-rights and limitations under the License.
+The contents of this file are subject to the Mozilla Public License Version
+1.1 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+http://www.mozilla.org/MPL/
+
+Software distributed under the License is distributed on an "AS IS" basis,
+WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+for the specific language governing rights and limitations under the
+License.
 
 The Original Code is the MPI Arbitrary Precision Integer Arithmetic
 library.
 
-The Initial Developer of the Original Code is 
+The Initial Developer of the Original Code is
 Michael J. Fromberger <sting@linguist.dartmouth.edu>
-
-Portions created by Michael J. Fromberger are 
-Copyright (C) 1997, 1998, 1999, 2000 Michael J. Fromberger. 
-All Rights Reserved.
+Portions created by the Initial Developer are Copyright (C) 1997-2000
+the Initial Developer. All Rights Reserved.
 
 Contributor(s):
 
-Alternatively, the contents of this file may be used under the
-terms of the GNU General Public License Version 2 or later (the
-"GPL"), in which case the provisions of the GPL are applicable
-instead of those above.  If you wish to allow use of your
-version of this file only under the terms of the GPL and not to
-allow others to use your version of this file under the MPL,
-indicate your decision by deleting the provisions above and
-replace them with the notice and other provisions required by
-the GPL.  If you do not delete the provisions above, a recipient
-may use your version of this file under either the MPL or the GPL.
+Alternatively, the contents of this file may be used under the terms of
+either the GNU General Public License Version 2 or later (the "GPL"), or
+the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+in which case the provisions of the GPL or the LGPL are applicable instead
+of those above. If you wish to allow use of your version of this file only
+under the terms of either the GPL or the LGPL, and not to allow others to
+use your version of this file under the terms of the MPL, indicate your
+decision by deleting the provisions above and replace them with the notice
+and other provisions required by the GPL or the LGPL. If you do not delete
+the provisions above, a recipient may use your version of this file under
+the terms of any one of the MPL, the GPL or the LGPL.
+
+***** END LICENSE BLOCK *****
 
 About the MPI Library
 ---------------------
@@ -152,10 +156,6 @@ output parameter, without confusing anything.
 The basic numeric type defined by the library is an mp_int.  Virtually
 all the functions in the library take a pointer to an mp_int as one of
 their parameters.  An explanation of how to create and use these
-<HR>
-<A NAME="p23">
-<H3>Problem 23:</H3>
-
 structures follows.  And so, without further ado...
 
 
@@ -672,10 +672,7 @@ exptmod.c       Computes arbitrary precision modular exponentiation
                 from the command line (exptmod a b m -> a^b (mod m))
 
 Most of these can be built from the Makefile that comes with the
-library.  Try 'make tools', if your environment supports it.  (If you
-are compiling on a Macintosh, I'm afraid you'll have to build them by
-hand -- fortunately, this is not difficult -- the library itself
-should compile just fine under Metrowerks CodeWarrior).
+library.  Try 'make tools', if your environment supports it.
 
 
 Testing the Library
@@ -700,9 +697,9 @@ what platform and compiler you were using, as well as which test
 failed.  If a reason for failure was given, please send me that text
 as well.
 
-If you're on a system such as the Macintosh, where the standard Unix
-build tools don't work, you can build the 'mpi-test' program manually,
-and run it by hand.  This is tedious and obnoxious, sorry.
+If you're on a system where the standard Unix build tools don't work,
+you can build the 'mpi-test' program manually, and run it by hand.
+This is tedious and obnoxious, sorry.
 
 Further manual testing can be performed by building the manual testing
 programs, whose source is found in the 'tests' subdirectory.  Each
@@ -732,8 +729,7 @@ cannot use make, here is what needs to be done:
 
 (1) Use 'make-test-arrays' to generate the file 'test-info.c' from
     the 'test-arrays.txt' file.  Since Perl can be found everywhere,
-    even on the Macintosh, this should be no trouble.  Under Unix, 
-    this looks like:
+    this should be no trouble.  Under Unix, this looks like:
 
         make-test-arrays test-arrays.txt > test-info.c
 

@@ -1,37 +1,40 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 /* OS/2 Sockets module
  *
@@ -45,19 +48,11 @@
 
 #include "primpl.h"
 
-#ifdef XP_OS2_EMX
- #include <sys/time.h> /* For timeval. */
-#endif
+#include <sys/time.h> /* For timeval. */
 
 #define _PR_INTERRUPT_CHECK_INTERVAL_SECS 5
 #define READ_FD   1
 #define WRITE_FD  2
-
-void
-_PR_MD_INIT_IO()
-{
-    sock_init();
-}
 
 /* --- SOCKET IO --------------------------------------------------------- */
 
@@ -100,7 +95,7 @@ _MD_SocketAvailable(PRFileDesc *fd)
 {
     PRInt32 result;
 
-    if (ioctl(fd->secret->md.osfd, FIONREAD, (char *) &result, sizeof(result)) < 0) {
+    if (so_ioctl(fd->secret->md.osfd, FIONREAD, (char *) &result, sizeof(result)) < 0) {
         PR_SetError(PR_BAD_DESCRIPTOR_ERROR, sock_errno());
         return -1;
     }
@@ -139,19 +134,19 @@ socket_io_wait( PRInt32 osfd, PRInt32 fd_type, PRIntervalTime timeout )
             do {
                 FD_SET(osfd, &rd_wr);
                 if (fd_type == READ_FD)
-                    rv = _MD_SELECT(osfd + 1, &rd_wr, NULL, NULL, &tv);
+                    rv = bsdselect(osfd + 1, &rd_wr, NULL, NULL, &tv);
                 else
-                    rv = _MD_SELECT(osfd + 1, NULL, &rd_wr, NULL, &tv);
+                    rv = bsdselect(osfd + 1, NULL, &rd_wr, NULL, &tv);
 #else
             lTimeout = _PR_INTERRUPT_CHECK_INTERVAL_SECS * 1000; 
             do {
                 socks[0] = osfd;
                 if (fd_type == READ_FD)
-                    rv = _MD_SELECT(socks, 1, 0, 0, lTimeout);
+                    rv = os2_select(socks, 1, 0, 0, lTimeout);
                 else
-                    rv = _MD_SELECT(socks, 0, 1, 0, lTimeout);
+                    rv = os2_select(socks, 0, 1, 0, lTimeout);
 #endif                    
-                if (rv == -1 && (syserror = sock_errno()) != SOCEINTR) {
+                if (rv == -1 && (syserror = sock_errno()) != EINTR) {
                     _PR_MD_MAP_SELECT_ERROR(syserror);
                     break;
                 }
@@ -171,7 +166,7 @@ socket_io_wait( PRInt32 osfd, PRInt32 fd_type, PRIntervalTime timeout )
 #endif
             do {
                 /*
-                 * We block in _MD_SELECT for at most
+                 * We block in select for at most
                  * _PR_INTERRUPT_CHECK_INTERVAL_SECS seconds,
                  * so that there is an upper limit on the delay
                  * before the interrupt bit is checked.
@@ -190,9 +185,9 @@ socket_io_wait( PRInt32 osfd, PRInt32 fd_type, PRIntervalTime timeout )
                 }
                 FD_SET(osfd, &rd_wr);
                 if (fd_type == READ_FD)
-                    rv = _MD_SELECT(osfd + 1, &rd_wr, NULL, NULL, &tv);
+                    rv = bsdselect(osfd + 1, &rd_wr, NULL, NULL, &tv);
                 else
-                    rv = _MD_SELECT(osfd + 1, NULL, &rd_wr, NULL, &tv);
+                    rv = bsdselect(osfd + 1, NULL, &rd_wr, NULL, &tv);
 #else
                 wait_for_remaining = PR_TRUE;
                 lTimeout = PR_IntervalToMilliseconds(remaining);
@@ -202,14 +197,14 @@ socket_io_wait( PRInt32 osfd, PRInt32 fd_type, PRIntervalTime timeout )
                 }
                 socks[0] = osfd;
                 if (fd_type == READ_FD)
-                    rv = _MD_SELECT(socks, 1, 0, 0, lTimeout);
+                    rv = os2_select(socks, 1, 0, 0, lTimeout);
                 else
-                    rv = _MD_SELECT(socks, 0, 1, 0, lTimeout);
+                    rv = os2_select(socks, 0, 1, 0, lTimeout);
 #endif
                 /*
                  * we don't consider EINTR a real error
                  */
-                if (rv == -1 && (syserror = sock_errno()) != SOCEINTR) {
+                if (rv == -1 && (syserror = sock_errno()) != EINTR) {
                     _PR_MD_MAP_SELECT_ERROR(syserror);
                     break;
                 }
@@ -220,12 +215,12 @@ socket_io_wait( PRInt32 osfd, PRInt32 fd_type, PRIntervalTime timeout )
                     break;
                 }
                 /*
-                 * We loop again if _MD_SELECT timed out or got interrupted
+                 * We loop again if select timed out or got interrupted
                  * by a signal, and the timeout deadline has not passed yet.
                  */
-                if (rv == 0 || (rv == -1 && syserror == SOCEINTR)) {
+                if (rv == 0 || (rv == -1 && syserror == EINTR)) {
                     /*
-                     * If _MD_SELECT timed out, we know how much time
+                     * If select timed out, we know how much time
                      * we spent in blocking, so we can avoid a
                      * PR_IntervalNow() call.
                      */
@@ -252,7 +247,7 @@ socket_io_wait( PRInt32 osfd, PRInt32 fd_type, PRIntervalTime timeout )
                         remaining = timeout - elapsed;
                     }
                 }
-            } while (rv == 0 || (rv == -1 && syserror == SOCEINTR));
+            } while (rv == 0 || (rv == -1 && syserror == EINTR));
             break;
         }
     return(rv);
@@ -269,14 +264,14 @@ _MD_Accept(PRFileDesc *fd, PRNetAddr *addr,
     while ((rv = accept(osfd, (struct sockaddr*) addr, (int*)addrlen)) == -1)
     {
         err = sock_errno();
-        if ((err == SOCEWOULDBLOCK) || (err == SOCECONNABORTED))
+        if ((err == EWOULDBLOCK) || (err == ECONNABORTED))
         {
             if (fd->secret->nonblocking) {
                 break;
             }
                 if ((rv = socket_io_wait(osfd, READ_FD, timeout)) < 0)
                     goto done;
-        } else if ((err == SOCEINTR) && (!_PR_PENDING_INTERRUPT(me))){
+        } else if ((err == EINTR) && (!_PR_PENDING_INTERRUPT(me))){
             continue;
         } else {
             break;
@@ -296,6 +291,9 @@ _PR_MD_CONNECT(PRFileDesc *fd, const PRNetAddr *addr, PRUint32 addrlen,
     PRInt32 rv, err;
     PRThread *me = _PR_MD_CURRENT_THREAD();
     PRInt32 osfd = fd->secret->md.osfd;
+    PRNetAddr addrCopy = *addr; /* Work around a bug in OS/2 where connect
+                                 * modifies the sockaddr structure.
+                                 * See Bugzilla bug 100776. */
 
      /*
       * We initiate the connection setup by making a nonblocking connect()
@@ -310,11 +308,11 @@ _PR_MD_CONNECT(PRFileDesc *fd, const PRNetAddr *addr, PRUint32 addrlen,
       */
 
 retry:
-    if ((rv = connect(osfd, (struct sockaddr *)addr, addrlen)) == -1)
+    if ((rv = connect(osfd, (struct sockaddr *)&addrCopy, addrlen)) == -1)
     {
         err = sock_errno();
 
-        if (err == SOCEINTR) {
+        if (err == EINTR) {
             if (_PR_PENDING_INTERRUPT(me)) {
                 me->flags &= ~_PR_INTERRUPT;
                 PR_SetError( PR_PENDING_INTERRUPT_ERROR, 0);
@@ -323,7 +321,7 @@ retry:
             goto retry;
         }
 
-        if (!fd->secret->nonblocking && (err == SOCEINPROGRESS))
+        if (!fd->secret->nonblocking && (err == EINPROGRESS))
         {
             /*
              * socket_io_wait() may return -1 or 1.
@@ -391,13 +389,13 @@ _PR_MD_RECV(PRFileDesc *fd, void *buf, PRInt32 amount, PRIntn flags,
     while ((rv = recv(osfd,buf,amount,flags)) == -1)
     {
         err = sock_errno();
-        if ((err == SOCEWOULDBLOCK)) {
+        if ((err == EWOULDBLOCK)) {
             if (fd->secret->nonblocking) {
                 break;
             }
             if ((rv = socket_io_wait(osfd, READ_FD, timeout)) < 0)
                 goto done;
-        } else if ((err == SOCEINTR) && (!_PR_PENDING_INTERRUPT(me))){
+        } else if ((err == EINTR) && (!_PR_PENDING_INTERRUPT(me))){
             continue;
         } else {
             break;
@@ -421,13 +419,13 @@ _PR_MD_SEND(PRFileDesc *fd, const void *buf, PRInt32 amount, PRIntn flags,
     while ((rv = send(osfd,buf,amount,flags)) == -1)
     {
         err = sock_errno();
-        if ((err == SOCEWOULDBLOCK)) {
+        if ((err == EWOULDBLOCK)) {
             if (fd->secret->nonblocking) {
                 break;
             }
             if ((rv = socket_io_wait(osfd, WRITE_FD, timeout)) < 0)
                 goto done;
-        } else if ((err == SOCEINTR) && (!_PR_PENDING_INTERRUPT(me))){
+        } else if ((err == EINTR) && (!_PR_PENDING_INTERRUPT(me))){
             continue;
         } else {
             break;
@@ -465,7 +463,7 @@ _PR_MD_SENDTO(PRFileDesc *fd, const void *buf, PRInt32 amount, PRIntn flags,
            (struct sockaddr *) addr, addrlen)) == -1)
     {
         err = sock_errno();
-        if ((err == SOCEWOULDBLOCK))
+        if ((err == EWOULDBLOCK))
         {
             if (fd->secret->nonblocking) {
                 break;
@@ -498,13 +496,13 @@ _PR_MD_RECVFROM(PRFileDesc *fd, void *buf, PRInt32 amount, PRIntn flags,
              (struct sockaddr *) addr, (int *)addrlen)) == -1))
     {
         err = sock_errno();
-        if ((err == SOCEWOULDBLOCK)) {
+        if ((err == EWOULDBLOCK)) {
             if (fd->secret->nonblocking) {
                 break;
             }
             if ((rv = socket_io_wait(osfd, READ_FD, timeout)) < 0)
                 goto done;
-        } else if ((err == SOCEINTR) && (!_PR_PENDING_INTERRUPT(me))){
+        } else if ((err == EINTR) && (!_PR_PENDING_INTERRUPT(me))){
             continue;
         } else {
             break;
@@ -525,6 +523,20 @@ _PR_MD_WRITEV(PRFileDesc *fd, const PRIOVec *iov, PRInt32 iov_size,
     PRThread *me = _PR_MD_CURRENT_THREAD();
     PRInt32 index, amount = 0;
     PRInt32 osfd = fd->secret->md.osfd;
+    struct iovec osiov[PR_MAX_IOVECTOR_SIZE];
+
+    /* Ensured by PR_Writev */
+    PR_ASSERT(iov_size <= PR_MAX_IOVECTOR_SIZE);
+
+    /*
+     * We can't pass iov to so_writev because PRIOVec and struct iovec
+     * may not be binary compatible.  Make osiov a copy of iov and
+     * pass osiov to so_writev .
+     */
+    for (index = 0; index < iov_size; index++) {
+        osiov[index].iov_base = iov[index].iov_base;
+        osiov[index].iov_len = iov[index].iov_len;
+    }
 
      /*
       * Calculate the total number of bytes to be sent; needed for
@@ -539,9 +551,9 @@ _PR_MD_WRITEV(PRFileDesc *fd, const PRIOVec *iov, PRInt32 iov_size,
         }
     }
 
-    while ((rv = writev(osfd, (const struct iovec*)iov, iov_size)) == -1) {
+    while ((rv = so_writev(osfd, osiov, iov_size)) == -1) {
         err = sock_errno();
-        if ((err == SOCEWOULDBLOCK))    {
+        if ((err == EWOULDBLOCK))    {
             if (fd->secret->nonblocking) {
                 break;
             }
@@ -581,6 +593,19 @@ _PR_MD_SHUTDOWN(PRFileDesc *fd, PRIntn how)
     rv = shutdown(fd->secret->md.osfd, how);
     if (rv < 0)
         _PR_MD_MAP_SHUTDOWN_ERROR(sock_errno());
+    return rv;
+}
+
+PRInt32
+_PR_MD_SOCKETPAIR(int af, int type, int flags, PRInt32 *osfd)
+{
+    PRInt32 rv, err;
+
+    rv = socketpair(af, type, flags, osfd);
+    if (rv < 0) {
+        err = _MD_ERRNO();
+        _PR_MD_MAP_SOCKETPAIR_ERROR(err);
+    }
     return rv;
 }
 
@@ -652,7 +677,7 @@ _MD_MakeNonblock(PRFileDesc *fd)
         return;
     }
 
-    err = ioctl( osfd, FIONBIO, (char *) &one, sizeof(one));
+    err = so_ioctl( osfd, FIONBIO, (char *) &one, sizeof(one));
     if ( err != 0 )
     {
         err = sock_errno();

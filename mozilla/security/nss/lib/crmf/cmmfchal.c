@@ -1,36 +1,7 @@
 /* -*- Mode: C; tab-width: 8 -*-*/
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "cmmf.h"
 #include "cmmfi.h"
@@ -43,7 +14,7 @@
 #include "keyhi.h"
 
 static int
-cmmf_create_witness_and_challenge(PRArenaPool     *poolp,
+cmmf_create_witness_and_challenge(PLArenaPool     *poolp,
 				  CMMFChallenge   *challenge,
 				  long             inRandom,
 				  SECItem         *senderDER,
@@ -72,12 +43,12 @@ cmmf_create_witness_and_challenge(PRArenaPool     *poolp,
         goto loser;
     }
     rv = PK11_HashBuf(SEC_OID_SHA1, randHash, encodedRandNum->data, 
-		      (uint32)encodedRandNum->len);
+		      (PRUint32)encodedRandNum->len);
     if (rv != SECSuccess) {
         goto loser;
     }
     rv = PK11_HashBuf(SEC_OID_SHA1, senderHash, senderDER->data,
-		      (uint32)senderDER->len);
+		      (PRUint32)senderDER->len);
     if (rv != SECSuccess) {
         goto loser;
     }
@@ -100,7 +71,7 @@ cmmf_create_witness_and_challenge(PRArenaPool     *poolp,
         rv = SECFailure;
         goto loser;
     }
-    slot =PK11_GetBestSlot(CKM_RSA_PKCS, passwdArg);
+    slot =PK11_GetBestSlotWithAttributes(CKM_RSA_PKCS, CKF_WRAP, 0, passwdArg);
     if (slot == NULL) {
         rv = SECFailure;
         goto loser;
@@ -155,7 +126,7 @@ cmmf_create_first_challenge(CMMFPOPODecKeyChallContent *challContent,
     SECOidData     *oidData;
     CMMFChallenge  *challenge;
     SECAlgorithmID *algId;
-    PRArenaPool    *poolp;
+    PLArenaPool    *poolp;
     SECStatus       rv;
 
     oidData = SECOID_FindOIDByTag(SEC_OID_SHA1);
@@ -185,7 +156,7 @@ cmmf_create_first_challenge(CMMFPOPODecKeyChallContent *challContent,
 CMMFPOPODecKeyChallContent*
 CMMF_CreatePOPODecKeyChallContent (void)
 {
-    PRArenaPool *poolp;
+    PLArenaPool *poolp;
     CMMFPOPODecKeyChallContent *challContent;
 
     poolp = PORT_NewArena(CRMF_DEFAULT_ARENA_SIZE);
@@ -210,7 +181,7 @@ CMMF_POPODecKeyChallContentSetNextChallenge
 				     void                       *passwdArg)
 {
     CMMFChallenge               *curChallenge;
-    PRArenaPool                 *genNamePool = NULL, *poolp;
+    PLArenaPool                 *genNamePool = NULL, *poolp;
     SECStatus                    rv;
     SECItem                     *genNameDER;
     void                        *mark;

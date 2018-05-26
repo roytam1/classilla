@@ -1,36 +1,39 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 #include "primpl.h"
 #if defined(_PR_POLL_AVAILABLE)
@@ -107,6 +110,9 @@ void _MD_unix_map_default_error(int err)
             break;
         case EFBIG:
             prError = PR_FILE_TOO_BIG_ERROR;
+            break;
+        case EHOSTUNREACH:
+            prError = PR_HOST_UNREACHABLE_ERROR;
             break;
         case EINPROGRESS:
             prError = PR_IN_PROGRESS_ERROR;
@@ -188,6 +194,9 @@ void _MD_unix_map_default_error(int err)
             prError = PR_INSUFFICIENT_RESOURCES_ERROR;
             break;
 #endif
+        case ENOSYS:
+            prError = PR_NOT_IMPLEMENTED_ERROR;
+            break;
         case ENOTCONN:
             prError = PR_NOT_CONNECTED_ERROR;
             break;
@@ -277,6 +286,7 @@ void _MD_unix_readdir_error(int err)
     PRErrorCode prError;
 
     switch (err) {
+        case 0:
         case ENOENT:
             prError = PR_NO_MORE_FILES_ERROR;
             break;
@@ -844,7 +854,21 @@ void _MD_hpux_map_sendfile_error(int err)
 #ifdef SOLARIS
 void _MD_solaris_map_sendfile_error(int err)
 {
-    _MD_unix_map_default_error(err) ;
+    PRErrorCode prError;
+
+    switch (err) {
+        /*
+         * Solaris defines a 0 return value for sendfile to mean end-of-file.
+         */
+        case 0:
+            prError = PR_END_OF_FILE_ERROR;
+            break;
+
+        default:
+            _MD_unix_map_default_error(err) ;
+            return;
+    }
+    PR_SetError(prError, err);
 }
 #endif /* SOLARIS */
 

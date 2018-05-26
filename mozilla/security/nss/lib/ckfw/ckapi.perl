@@ -1,71 +1,13 @@
 #!perl
 # 
-# The contents of this file are subject to the Mozilla Public
-# License Version 1.1 (the "License"); you may not use this file
-# except in compliance with the License. You may obtain a copy of
-# the License at http://www.mozilla.org/MPL/
-# 
-# Software distributed under the License is distributed on an "AS
-# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
-# implied. See the License for the specific language governing
-# rights and limitations under the License.
-# 
-# The Original Code is the Netscape security libraries.
-# 
-# The Initial Developer of the Original Code is Netscape
-# Communications Corporation.  Portions created by Netscape are 
-# Copyright (C) 1994-2000 Netscape Communications Corporation.  All
-# Rights Reserved.
-# 
-# Contributor(s):
-# 
-# Alternatively, the contents of this file may be used under the
-# terms of the GNU General Public License Version 2 or later (the
-# "GPL"), in which case the provisions of the GPL are applicable 
-# instead of those above.  If you wish to allow use of your 
-# version of this file only under the terms of the GPL and not to
-# allow others to use your version of this file under the MPL,
-# indicate your decision by deleting the provisions above and
-# replace them with the notice and other provisions required by
-# the GPL.  If you do not delete the provisions above, a recipient
-# may use your version of this file under either the MPL or the
-# GPL.
-#
-$cvs_id = '@(#) $RCSfile: ckapi.perl,v $ $Revision: 1.5 $ $Date: 2002/05/20 14:38:48 $ $Name:  $';
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 $copyright = '/* THIS IS A GENERATED FILE */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 ';
 
 $count = -1;
@@ -132,10 +74,6 @@ print <<EOD
 #ifndef NSSCKG_H
 #define NSSCKG_H
 
-#ifdef DEBUG
-static const char NSSCKG_CVS_ID[] = "$g{CVS_ID} ; $cvs_id";
-#endif /* DEBUG */
-
 /*
  * nssckg.h
  *
@@ -175,10 +113,6 @@ print $copyright;
 print <<EOD
 #ifndef NSSCKFT_H
 #define NSSCKFT_H
-
-#ifdef DEBUG
-static const char NSSCKFT_CVS_ID[] = "$g{CVS_ID} ; $cvs_id";
-#endif /* DEBUG */
 
 /*
  * nssckft.h
@@ -220,10 +154,6 @@ print <<EOD
 #ifndef NSSCKEPV_H
 #define NSSCKEPV_H
 
-#ifdef DEBUG
-static const char NSSCKEPV_CVS_ID[] = "$g{CVS_ID} ; $cvs_id";
-#endif /* DEBUG */
-
 /*
  * nssckepv.h
  *
@@ -263,10 +193,6 @@ select API;
 
 print $copyright;
 print <<EOD
-
-#ifdef DEBUG
-static const char NSSCKAPI_CVS_ID[] = "$g{CVS_ID} ; $cvs_id";
-#endif /* DEBUG */
 
 /*
  * nssck.api
@@ -489,11 +415,7 @@ __ADJOIN(MODULE_NAME,C_GetFunctionList)
 }
 
 /* This one is always present */
-#ifdef WIN32
-CK_RV _declspec(dllexport)
-#else
 CK_RV CK_ENTRY
-#endif
 C_GetFunctionList
 (
   CK_FUNCTION_LIST_PTR_PTR ppFunctionList

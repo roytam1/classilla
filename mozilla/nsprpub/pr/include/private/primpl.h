@@ -1,36 +1,39 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 #ifndef primpl_h___
 #define primpl_h___
@@ -304,7 +307,8 @@ typedef struct _PRInterruptTable {
 #define _PR_CPU_PTR(_qp) \
     ((_PRCPU*) ((char*) (_qp) - offsetof(_PRCPU,links)))
 
-#if !defined(IRIX) && !defined(WIN32)
+#if !defined(IRIX) && !defined(WIN32) && !defined(XP_OS2) \
+        && !(defined(SOLARIS) && defined(_PR_GLOBAL_THREADS_ONLY))
 #define _MD_GET_ATTACHED_THREAD()        (_PR_MD_CURRENT_THREAD())
 #endif
 
@@ -1094,13 +1098,13 @@ extern void _PR_MD_MAKE_NONBLOCK(PRFileDesc *fd);
 #define    _PR_MD_MAKE_NONBLOCK _MD_MAKE_NONBLOCK
 
 /* File I/O related */
-extern PRInt32 _PR_MD_OPEN(const char *name, PRIntn osflags, PRIntn mode);
+extern PROsfd _PR_MD_OPEN(const char *name, PRIntn osflags, PRIntn mode);
 #define    _PR_MD_OPEN _MD_OPEN
 
-extern PRInt32 _PR_MD_OPEN_FILE(const char *name, PRIntn osflags, PRIntn mode);
+extern PROsfd _PR_MD_OPEN_FILE(const char *name, PRIntn osflags, PRIntn mode);
 #define    _PR_MD_OPEN_FILE _MD_OPEN_FILE
 
-extern PRInt32 _PR_MD_CLOSE_FILE(PRInt32 osfd);
+extern PRInt32 _PR_MD_CLOSE_FILE(PROsfd osfd);
 #define    _PR_MD_CLOSE_FILE _MD_CLOSE_FILE
 
 extern PRInt32 _PR_MD_READ(PRFileDesc *fd, void *buf, PRInt32 amount);
@@ -1143,7 +1147,7 @@ extern PRInt32 _PR_MD_RMDIR(const char *name);
 extern PRStatus _PR_MD_OPEN_DIR_UTF16(_MDDirUTF16 *md, const PRUnichar *name);
 #define    _PR_MD_OPEN_DIR_UTF16 _MD_OPEN_DIR_UTF16
 
-extern PRInt32 _PR_MD_OPEN_FILE_UTF16(const PRUnichar *name, PRIntn osflags, PRIntn mode);
+extern PROsfd _PR_MD_OPEN_FILE_UTF16(const PRUnichar *name, PRIntn osflags, PRIntn mode);
 #define    _PR_MD_OPEN_FILE_UTF16 _MD_OPEN_FILE_UTF16
 
 extern PRUnichar * _PR_MD_READ_DIR_UTF16(_MDDirUTF16 *md, PRIntn flags);
@@ -1160,7 +1164,7 @@ extern PRInt32 _PR_MD_GETFILEINFO64_UTF16(const PRUnichar *fn, PRFileInfo64 *inf
 extern void _PR_MD_INIT_IO(void);
 #define    _PR_MD_INIT_IO _MD_INIT_IO
 
-extern PRInt32 _PR_MD_CLOSE_SOCKET(PRInt32 osfd);
+extern PRInt32 _PR_MD_CLOSE_SOCKET(PROsfd osfd);
 #define    _PR_MD_CLOSE_SOCKET _MD_CLOSE_SOCKET
 
 extern PRInt32 _PR_MD_CONNECT(
@@ -1168,7 +1172,7 @@ extern PRInt32 _PR_MD_CONNECT(
     PRUint32 addrlen, PRIntervalTime timeout);
 #define    _PR_MD_CONNECT _MD_CONNECT
 
-extern PRInt32 _PR_MD_ACCEPT(
+extern PROsfd _PR_MD_ACCEPT(
     PRFileDesc *fd, PRNetAddr *addr,
     PRUint32 *addrlen, PRIntervalTime timeout);
 #define    _PR_MD_ACCEPT _MD_ACCEPT
@@ -1191,25 +1195,25 @@ extern PRInt32 _PR_MD_SEND(
     PRIntervalTime timeout);
 #define    _PR_MD_SEND _MD_SEND
 
-extern PRInt32 _PR_MD_ACCEPT_READ(PRFileDesc *sd, PRInt32 *newSock, 
+extern PRInt32 _PR_MD_ACCEPT_READ(PRFileDesc *sd, PROsfd *newSock, 
                                 PRNetAddr **raddr, void *buf, PRInt32 amount,
                                 PRIntervalTime timeout);
 #define _PR_MD_ACCEPT_READ _MD_ACCEPT_READ
 
 #ifdef WIN32
-extern PRInt32 _PR_MD_FAST_ACCEPT(PRFileDesc *fd, PRNetAddr *addr, 
+extern PROsfd _PR_MD_FAST_ACCEPT(PRFileDesc *fd, PRNetAddr *addr, 
                                 PRUint32 *addrlen, PRIntervalTime timeout,
                                 PRBool fast,
                                 _PR_AcceptTimeoutCallback callback,
                                 void *callbackArg);
 
-extern PRInt32 _PR_MD_FAST_ACCEPT_READ(PRFileDesc *sd, PRInt32 *newSock, 
+extern PRInt32 _PR_MD_FAST_ACCEPT_READ(PRFileDesc *sd, PROsfd *newSock, 
                                 PRNetAddr **raddr, void *buf, PRInt32 amount,
                                 PRIntervalTime timeout, PRBool fast,
                                 _PR_AcceptTimeoutCallback callback,
                                 void *callbackArg);
 
-extern void _PR_MD_UPDATE_ACCEPT_CONTEXT(PRInt32 s, PRInt32 ls);
+extern void _PR_MD_UPDATE_ACCEPT_CONTEXT(PROsfd s, PROsfd ls);
 #define _PR_MD_UPDATE_ACCEPT_CONTEXT _MD_UPDATE_ACCEPT_CONTEXT
 #endif /* WIN32 */
 
@@ -1251,10 +1255,10 @@ extern PRInt32 _PR_MD_SENDTO(
     const PRNetAddr *addr, PRUint32 addrlen, PRIntervalTime timeout);
 #define    _PR_MD_SENDTO _MD_SENDTO
 
-extern PRInt32 _PR_MD_SOCKETPAIR(int af, int type, int flags, PRInt32 *osfd);
+extern PRInt32 _PR_MD_SOCKETPAIR(int af, int type, int flags, PROsfd *osfd);
 #define    _PR_MD_SOCKETPAIR _MD_SOCKETPAIR
 
-extern PRInt32 _PR_MD_SOCKET(int af, int type, int flags);
+extern PROsfd _PR_MD_SOCKET(int af, int type, int flags);
 #define    _PR_MD_SOCKET _MD_SOCKET
 
 extern PRInt32 _PR_MD_SOCKETAVAILABLE(PRFileDesc *fd);
@@ -1394,7 +1398,7 @@ extern PRUintn _PR_NetAddrSize(const PRNetAddr* addr);
 ** struct sockaddr_in6.
 */
 
-#if defined(XP_UNIX)
+#if defined(XP_UNIX) || defined(XP_OS2)
 #define PR_NETADDR_SIZE(_addr) 					\
         ((_addr)->raw.family == PR_AF_INET		\
         ? sizeof((_addr)->inet)					\
@@ -1405,12 +1409,12 @@ extern PRUintn _PR_NetAddrSize(const PRNetAddr* addr);
 #define PR_NETADDR_SIZE(_addr) 					\
         ((_addr)->raw.family == PR_AF_INET		\
         ? sizeof((_addr)->inet)					\
-        : sizeof(struct _md_sockaddr_in6)
+        : sizeof(struct _md_sockaddr_in6))
 #endif /* defined(XP_UNIX) */
 
 #else
 
-#if defined(XP_UNIX)
+#if defined(XP_UNIX) || defined(XP_OS2)
 #define PR_NETADDR_SIZE(_addr) 					\
         ((_addr)->raw.family == PR_AF_INET		\
         ? sizeof((_addr)->inet)					\
@@ -1459,8 +1463,12 @@ struct PRCondVar {
     pthread_cond_t cv;          /* underlying pthreads condition */
     PRInt32 notify_pending;     /* CV has destroy pending notification */
 #elif defined(_PR_BTHREADS)
-    sem_id	isem;		/* Semaphore used to lock threadQ */
-    int32	benaphoreCount; /* Number of people in lock */
+    sem_id    sem;              /* the underlying lock */
+    sem_id    handshakeSem;     /* the lock for 'notify'-threads waiting for confirmation */
+    sem_id    signalSem;        /* the lock for threads waiting for someone to notify */
+    volatile int32    nw;       /* the number waiting */
+    volatile int32    ns;       /* the number signalling */
+    long signalBenCount;        /* the number waiting on the underlying sem */
 #else /* not pthreads or Be threads */
     PRCList condQ;              /* Condition variable wait Q */
     _MDLock ilock;              /* Internal Lock to protect condQ */
@@ -1730,18 +1738,31 @@ struct PRFilePrivate {
     PRInt32 peekBufSize;
     PRInt32 peekBytes;
 #endif
-#if !defined(XP_UNIX)   /* BugZilla: 4090 */
-    PRBool  appendMode;                             
+#if !defined(_PR_HAVE_O_APPEND)
+    PRBool  appendMode; /* Some platforms don't have O_APPEND or its
+                         * equivalent, so they have to seek to end of
+                         * file on write if the file was opened in
+                         * append mode.  See Bugzilla 4090, 276330. */
 #endif
     _MDFileDesc md;
-#ifdef _PR_STRICT_ADDR_LEN
-    PRUint16 af;        /* If the platform requires passing the exact
-                         * length of the sockaddr structure for the
-                         * address family of the socket to socket
-                         * functions like accept(), we need to save
-                         * the address family of the socket. */
+#ifdef _PR_NEED_SECRET_AF
+    PRUint16 af;        /* If the platform's implementation of accept()
+                         * requires knowing the address family of the 
+			 * socket, we save the address family here. */
 #endif
 };
+
+#ifdef _WIN64
+#define PR_PRIdOSFD "lld"       /* for printing PROsfd */
+#define PR_PRIxOSFD "llx"
+#define PR_SCNdOSFD "lld"       /* for scanning PROsfd */
+#define PR_SCNxOSFD "llx"
+#else
+#define PR_PRIdOSFD "ld"        /* for printing PROsfd */
+#define PR_PRIxOSFD "lx"
+#define PR_SCNdOSFD "ld"        /* for scanning PROsfd */
+#define PR_SCNxOSFD "lx"
+#endif
 
 struct PRDir {
     PRDirEntry d;
@@ -1769,16 +1790,19 @@ extern void _PR_InitLinker(void);
 extern void _PR_InitAtomic(void);
 extern void _PR_InitCPUs(void);
 extern void _PR_InitDtoa(void);
+extern void _PR_InitTime(void);
 extern void _PR_InitMW(void);
 extern void _PR_InitRWLocks(void);
 extern void _PR_NotifyCondVar(PRCondVar *cvar, PRThread *me);
 extern void _PR_CleanupThread(PRThread *thread);
 extern void _PR_CleanupCallOnce(void);
 extern void _PR_CleanupMW(void);
+extern void _PR_CleanupTime(void);
 extern void _PR_CleanupDtoa(void);
 extern void _PR_ShutdownLinker(void);
 extern void _PR_CleanupEnv(void);
 extern void _PR_CleanupIO(void);
+extern void _PR_CleanupCMon(void);
 extern void _PR_CleanupNet(void);
 extern void _PR_CleanupLayerCache(void);
 extern void _PR_CleanupStacks(void);
@@ -1953,13 +1977,13 @@ extern PRInt32 _PR_MD_GETTHREADAFFINITYMASK(PRThread *thread, PRUint32 *mask);
 
 /* File locking */
 
-extern PRStatus _PR_MD_LOCKFILE(PRInt32 osfd);
+extern PRStatus _PR_MD_LOCKFILE(PROsfd osfd);
 #define    _PR_MD_LOCKFILE _MD_LOCKFILE
 
-extern PRStatus _PR_MD_TLOCKFILE(PRInt32 osfd);
+extern PRStatus _PR_MD_TLOCKFILE(PROsfd osfd);
 #define    _PR_MD_TLOCKFILE _MD_TLOCKFILE
 
-extern PRStatus _PR_MD_UNLOCKFILE(PRInt32 osfd);
+extern PRStatus _PR_MD_UNLOCKFILE(PROsfd osfd);
 #define    _PR_MD_UNLOCKFILE _MD_UNLOCKFILE
 
 /* Memory-mapped files */

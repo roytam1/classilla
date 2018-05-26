@@ -1,40 +1,9 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * CMS encryptedData methods.
- *
- * $Id: cmsencdata.c,v 1.5.30.1 2003/02/10 22:39:05 relyea%netscape.com Exp $
  */
 
 #include "cmslocal.h"
@@ -58,7 +27,8 @@
  * (Retrieve specific errors via PORT_GetError()/XP_GetError().)
  */
 NSSCMSEncryptedData *
-NSS_CMSEncryptedData_Create(NSSCMSMessage *cmsg, SECOidTag algorithm, int keysize)
+NSS_CMSEncryptedData_Create(NSSCMSMessage *cmsg, SECOidTag algorithm, 
+			    int keysize)
 {
     void *mark;
     NSSCMSEncryptedData *encd;
@@ -70,7 +40,7 @@ NSS_CMSEncryptedData_Create(NSSCMSMessage *cmsg, SECOidTag algorithm, int keysiz
 
     mark = PORT_ArenaMark(poolp);
 
-    encd = (NSSCMSEncryptedData *)PORT_ArenaZAlloc(poolp, sizeof(NSSCMSEncryptedData));
+    encd = PORT_ArenaZNew(poolp, NSSCMSEncryptedData);
     if (encd == NULL)
 	goto loser;
 
@@ -78,23 +48,25 @@ NSS_CMSEncryptedData_Create(NSSCMSMessage *cmsg, SECOidTag algorithm, int keysiz
 
     /* version is set in NSS_CMSEncryptedData_Encode_BeforeStart() */
 
-    switch (algorithm) {
-    /* XXX hmmm... hardcoded algorithms? */
-    case SEC_OID_RC2_CBC:
-    case SEC_OID_DES_EDE3_CBC:
-    case SEC_OID_DES_CBC:
-	rv = NSS_CMSContentInfo_SetContentEncAlg(poolp, &(encd->contentInfo), algorithm, NULL, keysize);
-	break;
-    default:
-	/* Assume password-based-encryption.  At least, try that. */
+    if (!SEC_PKCS5IsAlgorithmPBEAlgTag(algorithm)) {
+	rv = NSS_CMSContentInfo_SetContentEncAlg(poolp, &(encd->contentInfo), 
+						 algorithm, NULL, keysize);
+    } else {
+	/* Assume password-based-encryption.  
+	 * Note: we can't generate pkcs5v2 from this interface.
+	 * PK11_CreateBPEAlgorithmID generates pkcs5v2 by accepting
+	 * non-PBE oids and assuming that they are pkcs5v2 oids, but
+	 * NSS_CMSEncryptedData_Create accepts non-PBE oids as regular
+	 * CMS encrypted data, so we can't tell NSS_CMS_EncryptedData_Create
+	 * to create pkcs5v2 PBEs */
 	pbe_algid = PK11_CreatePBEAlgorithmID(algorithm, 1, NULL);
 	if (pbe_algid == NULL) {
 	    rv = SECFailure;
-	    break;
+	} else {
+	    rv = NSS_CMSContentInfo_SetContentEncAlgID(poolp, 
+				&(encd->contentInfo), pbe_algid, keysize);
+	    SECOID_DestroyAlgorithmID (pbe_algid, PR_TRUE);
 	}
-	rv = NSS_CMSContentInfo_SetContentEncAlgID(poolp, &(encd->contentInfo), pbe_algid, keysize);
-	SECOID_DestroyAlgorithmID (pbe_algid, PR_TRUE);
-	break;
     }
     if (rv != SECSuccess)
 	goto loser;
@@ -161,7 +133,7 @@ NSS_CMSEncryptedData_Encode_BeforeStart(NSSCMSEncryptedData *encd)
 
     /* store the bulk key in the contentInfo so that the encoder can find it */
     NSS_CMSContentInfo_SetBulkKey(cinfo, bulkkey);
-    PK11_FreeSymKey(bulkkey);
+    PK11_FreeSymKey (bulkkey);
 
     return SECSuccess;
 }
@@ -175,6 +147,7 @@ NSS_CMSEncryptedData_Encode_BeforeData(NSSCMSEncryptedData *encd)
     NSSCMSContentInfo *cinfo;
     PK11SymKey *bulkkey;
     SECAlgorithmID *algid;
+    SECStatus rv;
 
     cinfo = &(encd->contentInfo);
 
@@ -186,12 +159,16 @@ NSS_CMSEncryptedData_Encode_BeforeData(NSSCMSEncryptedData *encd)
     if (algid == NULL)
 	return SECFailure;
 
+    rv = NSS_CMSContentInfo_Private_Init(cinfo);
+    if (rv != SECSuccess) {
+	return SECFailure;
+    }
     /* this may modify algid (with IVs generated in a token).
      * it is therefore essential that algid is a pointer to the "real" contentEncAlg,
      * not just to a copy */
-    cinfo->ciphcx = NSS_CMSCipherContext_StartEncrypt(encd->cmsg->poolp, bulkkey, algid);
+    cinfo->privateInfo->ciphcx = NSS_CMSCipherContext_StartEncrypt(encd->cmsg->poolp, bulkkey, algid);
     PK11_FreeSymKey(bulkkey);
-    if (cinfo->ciphcx == NULL)
+    if (cinfo->privateInfo->ciphcx == NULL)
 	return SECFailure;
 
     return SECSuccess;
@@ -203,9 +180,9 @@ NSS_CMSEncryptedData_Encode_BeforeData(NSSCMSEncryptedData *encd)
 SECStatus
 NSS_CMSEncryptedData_Encode_AfterData(NSSCMSEncryptedData *encd)
 {
-    if (encd->contentInfo.ciphcx) {
-	NSS_CMSCipherContext_Destroy(encd->contentInfo.ciphcx);
-	encd->contentInfo.ciphcx = NULL;
+    if (encd->contentInfo.privateInfo && encd->contentInfo.privateInfo->ciphcx) {
+	NSS_CMSCipherContext_Destroy(encd->contentInfo.privateInfo->ciphcx);
+	encd->contentInfo.privateInfo->ciphcx = NULL;
     }
 
     /* nothing to do after data */
@@ -238,20 +215,16 @@ NSS_CMSEncryptedData_Decode_BeforeData(NSSCMSEncryptedData *encd)
 
     NSS_CMSContentInfo_SetBulkKey(cinfo, bulkkey);
 
-    cinfo->ciphcx = NSS_CMSCipherContext_StartDecrypt(bulkkey, bulkalg);
-    if (cinfo->ciphcx == NULL)
+    rv = NSS_CMSContentInfo_Private_Init(cinfo);
+    if (rv != SECSuccess) {
+	goto loser;
+    }
+    rv = SECFailure;
+
+    cinfo->privateInfo->ciphcx = NSS_CMSCipherContext_StartDecrypt(bulkkey, bulkalg);
+    if (cinfo->privateInfo->ciphcx == NULL)
 	goto loser;		/* error has been set by NSS_CMSCipherContext_StartDecrypt */
 
-    /* 
-     * HACK ALERT!!
-     * For PKCS5 Encryption Algorithms, the bulkkey is actually a different
-     * structure.  Therefore, we need to set the bulkkey to the actual key 
-     * prior to freeing it.
-     */
-    if (SEC_PKCS5IsAlgorithmPBEAlg(bulkalg)) {
-	SEC_PKCS5KeyAndPassword *keyPwd = (SEC_PKCS5KeyAndPassword *)bulkkey;
-	bulkkey = keyPwd->key;
-    }
 
     /* we are done with (this) bulkkey now. */
     PK11_FreeSymKey(bulkkey);
@@ -268,9 +241,9 @@ loser:
 SECStatus
 NSS_CMSEncryptedData_Decode_AfterData(NSSCMSEncryptedData *encd)
 {
-    if (encd->contentInfo.ciphcx) {
-	NSS_CMSCipherContext_Destroy(encd->contentInfo.ciphcx);
-	encd->contentInfo.ciphcx = NULL;
+    if (encd->contentInfo.privateInfo && encd->contentInfo.privateInfo->ciphcx) {
+	NSS_CMSCipherContext_Destroy(encd->contentInfo.privateInfo->ciphcx);
+	encd->contentInfo.privateInfo->ciphcx = NULL;
     }
 
     return SECSuccess;

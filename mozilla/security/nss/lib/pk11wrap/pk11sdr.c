@@ -1,39 +1,6 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- *   thayes@netscape.com
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- *
- * PKCS #11 Wrapper functions which handles authenticating to the card's
- * choosing the best cards, etc.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "seccomon.h"
 #include "secoid.h"
@@ -54,10 +21,13 @@ struct SDRResult
 };
 typedef struct SDRResult SDRResult;
 
+SEC_ASN1_MKSUB(SECOID_AlgorithmIDTemplate)
+
 static SEC_ASN1Template template[] = {
   { SEC_ASN1_SEQUENCE, 0, NULL, sizeof (SDRResult) },
   { SEC_ASN1_OCTET_STRING, offsetof(SDRResult, keyid) },
-  { SEC_ASN1_INLINE, offsetof(SDRResult, alg), SECOID_AlgorithmIDTemplate },
+  { SEC_ASN1_INLINE | SEC_ASN1_XTRN, offsetof(SDRResult, alg),
+    SEC_ASN1_SUB(SECOID_AlgorithmIDTemplate) },
   { SEC_ASN1_OCTET_STRING, offsetof(SDRResult, data) },
   { 0 }
 };
@@ -108,6 +78,7 @@ unpadBlock(SECItem *data, int blockSize, SECItem *result)
 {
   SECStatus rv = SECSuccess;
   int padLength;
+  unsigned int i;
 
   result->data = 0;
   result->len = 0;
@@ -118,11 +89,23 @@ unpadBlock(SECItem *data, int blockSize, SECItem *result)
   padLength = data->data[data->len-1];
   if (padLength > blockSize) { rv = SECFailure; goto loser; }
 
+  /* verify padding */
+  for (i=data->len - padLength; i < data->len; i++) {
+    if (data->data[i] != padLength) {
+	rv = SECFailure;
+	goto loser;
+    }
+  }
+
   result->len = data->len - padLength;
   result->data = (unsigned char *)PORT_Alloc(result->len);
   if (!result->data) { rv = SECFailure; goto loser; }
 
   PORT_Memcpy(result->data, data->data, result->len);
+
+  if (padLength < 2) {
+    return SECWouldBlock;
+  }
 
 loser:
   return rv;
@@ -249,6 +232,41 @@ loser:
   return rv;
 }
 
+/* decrypt a block */
+static SECStatus
+pk11Decrypt(PK11SlotInfo *slot, PLArenaPool *arena, 
+	    CK_MECHANISM_TYPE type, PK11SymKey *key, 
+	    SECItem *params, SECItem *in, SECItem *result)
+{
+  PK11Context *ctx = 0;
+  SECItem paddedResult;
+  SECStatus rv;
+
+  paddedResult.len = 0;
+  paddedResult.data = 0;
+
+  ctx = PK11_CreateContextBySymKey(type, CKA_DECRYPT, key, params);
+  if (!ctx) { rv = SECFailure; goto loser; }
+
+  paddedResult.len = in->len;
+  paddedResult.data = PORT_ArenaAlloc(arena, paddedResult.len);
+
+  rv = PK11_CipherOp(ctx, paddedResult.data, 
+			(int*)&paddedResult.len, paddedResult.len,
+			in->data, in->len);
+  if (rv != SECSuccess) goto loser;
+
+  PK11_Finalize(ctx);
+
+  /* Remove the padding */
+  rv = unpadBlock(&paddedResult, PK11_GetBlockSize(type, 0), result);
+  if (rv) goto loser;
+
+loser:
+  if (ctx) PK11_DestroyContext(ctx, PR_TRUE);
+  return rv;
+}
+
 /*
  * PK11SDR_Decrypt
  *  Decrypt a block of data produced by PK11SDR_Encrypt.  The key used is identified
@@ -260,60 +278,100 @@ PK11SDR_Decrypt(SECItem *data, SECItem *result, void *cx)
   SECStatus rv = SECSuccess;
   PK11SlotInfo *slot = 0;
   PK11SymKey *key = 0;
-  PK11Context *ctx = 0;
   CK_MECHANISM_TYPE type;
   SDRResult sdrResult;
   SECItem *params = 0;
-  SECItem paddedResult;
+  SECItem possibleResult = { 0, NULL, 0 };
   PLArenaPool *arena = 0;
-
-  paddedResult.len = 0;
-  paddedResult.data = 0;
 
   arena = PORT_NewArena(SEC_ASN1_DEFAULT_ARENA_SIZE);
   if (!arena) { rv = SECFailure; goto loser; }
 
   /* Decode the incoming data */
   memset(&sdrResult, 0, sizeof sdrResult);
-  rv = SEC_ASN1DecodeItem(arena, &sdrResult, template, data);
+  rv = SEC_QuickDERDecodeItem(arena, &sdrResult, template, data);
   if (rv != SECSuccess) goto loser;  /* Invalid format */
 
   /* Find the slot and key for the given keyid */
   slot = PK11_GetInternalKeySlot();
   if (!slot) { rv = SECFailure; goto loser; }
 
-  /* Use triple-DES (Should look up the algorithm) */
-  type = CKM_DES3_CBC;
-  key = PK11_FindFixedKey(slot, type, &sdrResult.keyid, cx);
-  if (!key) { rv = SECFailure; goto loser; }
+  rv = PK11_Authenticate(slot, PR_TRUE, cx);
+  if (rv != SECSuccess) goto loser;
 
   /* Get the parameter values from the data */
   params = PK11_ParamFromAlgid(&sdrResult.alg);
   if (!params) { rv = SECFailure; goto loser; }
 
-  ctx = PK11_CreateContextBySymKey(type, CKA_DECRYPT, key, params);
-  if (!ctx) { rv = SECFailure; goto loser; }
+  /* Use triple-DES (Should look up the algorithm) */
+  type = CKM_DES3_CBC;
+  key = PK11_FindFixedKey(slot, type, &sdrResult.keyid, cx);
+  if (!key) { 
+	rv = SECFailure;  
+  } else {
+	rv = pk11Decrypt(slot, arena, type, key, params, 
+			&sdrResult.data, result);
+  }
 
-  paddedResult.len = sdrResult.data.len;
-  paddedResult.data = PORT_ArenaAlloc(arena, paddedResult.len);
+  /*
+   * if the pad value was too small (1 or 2), then it's statistically
+   * 'likely' that (1 in 256) that we may not have the correct key.
+   * Check the other keys for a better match. If we find none, use
+   * this result.
+   */
+  if (rv == SECWouldBlock) {
+	possibleResult = *result;
+  }
 
-  rv = PK11_CipherOp(ctx, paddedResult.data, (int*)&paddedResult.len, paddedResult.len,
-                     sdrResult.data.data, sdrResult.data.len);
-  if (rv != SECSuccess) goto loser;
+  /*
+   * handle the case where your key indicies may have been broken
+   */
+  if (rv != SECSuccess) {
+	PK11SymKey *keyList = PK11_ListFixedKeysInSlot(slot, NULL, cx);
+	PK11SymKey *testKey = NULL;
+	PK11SymKey *nextKey = NULL;
 
-  PK11_Finalize(ctx);
+	for (testKey = keyList; testKey; 
+				testKey = PK11_GetNextSymKey(testKey)) {
+	    rv = pk11Decrypt(slot, arena, type, testKey, params, 
+			     &sdrResult.data, result);
+	    if (rv == SECSuccess) {
+		break;
+	    } 
+	    /* found a close match. If it's our first remember it */
+	    if (rv == SECWouldBlock) {
+		if (possibleResult.data) {
+		    /* this is unlikely but possible. If we hit this condition,
+		     * we have no way of knowing which possibility to prefer.
+		     * in this case we just match the key the application
+		     * thought was the right one */
+		    SECITEM_ZfreeItem(result, PR_FALSE);
+		} else {
+		    possibleResult = *result;
+		}
+	    }
+	}
 
-  /* Remove the padding */
-  rv = unpadBlock(&paddedResult, PK11_GetBlockSize(type, 0), result);
-  if (rv) goto loser;
+	/* free the list */
+	for (testKey = keyList; testKey; testKey = nextKey) {
+	    nextKey = PK11_GetNextSymKey(testKey);
+	    PK11_FreeSymKey(testKey);
+	}
+  }
+
+  /* we didn't find a better key, use the one with a small pad value */
+  if ((rv != SECSuccess) && (possibleResult.data)) {
+	*result = possibleResult;
+	possibleResult.data = NULL;
+	rv = SECSuccess;
+  }
 
 loser:
-  /* SECITEM_ZfreeItem(&paddedResult, PR_FALSE); */
   if (arena) PORT_FreeArena(arena, PR_TRUE);
-  if (ctx) PK11_DestroyContext(ctx, PR_TRUE);
   if (key) PK11_FreeSymKey(key);
   if (params) SECITEM_ZfreeItem(params, PR_TRUE);
   if (slot) PK11_FreeSlot(slot);
+  if (possibleResult.data) SECITEM_ZfreeItem(&possibleResult, PR_FALSE);
 
   return rv;
 }

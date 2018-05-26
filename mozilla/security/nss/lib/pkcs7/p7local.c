@@ -1,43 +1,12 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Support routines for PKCS7 implementation, none of which are exported.
  * This file should only contain things that are needed by both the
  * encoding/creation side *and* the decoding/decryption side.  Anything
  * else should be static routines in the appropriate file.
- *
- * $Id: p7local.c,v 1.5 2002/09/07 01:48:46 jpierre%netscape.com Exp $
  */
 
 #include "p7local.h"
@@ -100,9 +69,9 @@ sec_PKCS7CreateDecryptObject (PK11SymKey *key, SECAlgorithmID *algid)
     sec_PKCS7CipherObject *result;
     SECOidTag algtag;
     void *ciphercx;
-    CK_MECHANISM_TYPE mechanism;
-    SECItem *param;
+    CK_MECHANISM_TYPE cryptoMechType;
     PK11SlotInfo *slot;
+    SECItem *param = NULL;
 
     result = (struct sec_pkcs7_cipher_object*)
       PORT_ZAlloc (sizeof(struct sec_pkcs7_cipher_object));
@@ -113,41 +82,22 @@ sec_PKCS7CreateDecryptObject (PK11SymKey *key, SECAlgorithmID *algid)
     algtag = SECOID_GetAlgorithmTag (algid);
 
     if (SEC_PKCS5IsAlgorithmPBEAlg(algid)) {
-	CK_MECHANISM pbeMech, cryptoMech;
-	SECItem *pbeParams, *pwitem;
-	SEC_PKCS5KeyAndPassword *keyPwd;
+	SECItem *pwitem;
 
-	keyPwd = (SEC_PKCS5KeyAndPassword *)key;
-	key = keyPwd->key;
-	pwitem = keyPwd->pwitem;
-
-	pbeMech.mechanism = PK11_AlgtagToMechanism(algtag);
-	pbeParams = PK11_ParamFromAlgid(algid);
-	if (!pbeParams) {
+	pwitem = (SECItem *)PK11_GetSymKeyUserData(key);
+	if (!pwitem) {
 	    PORT_Free(result);
 	    return NULL;
 	}
 
-	pbeMech.pParameter = pbeParams->data;
-	pbeMech.ulParameterLen = pbeParams->len;
-	if (PK11_MapPBEMechanismToCryptoMechanism(&pbeMech, &cryptoMech, pwitem,
-						  PR_FALSE) != CKR_OK) { 
+	cryptoMechType = PK11_GetPBECryptoMechanism(algid, &param, pwitem);
+	if (cryptoMechType == CKM_INVALID_MECHANISM) {
 	    PORT_Free(result);
-	    SECITEM_ZfreeItem(pbeParams, PR_TRUE);
+	    SECITEM_FreeItem(param,PR_TRUE);
 	    return NULL;
 	}
-	SECITEM_ZfreeItem(pbeParams, PR_TRUE);
-
-	param = (SECItem *)PORT_ZAlloc(sizeof(SECItem));
-	if(!param) {
-	     PORT_Free(result);
-	     return NULL;
-	}
-	param->data = (unsigned char *)cryptoMech.pParameter;
-	param->len = cryptoMech.ulParameterLen;
-	mechanism = cryptoMech.mechanism;
     } else {
-	mechanism = PK11_AlgtagToMechanism(algtag);
+	cryptoMechType = PK11_AlgtagToMechanism(algtag);
 	param = PK11_ParamFromAlgid(algid);
 	if (param == NULL) {
 	    PORT_Free(result);
@@ -155,11 +105,12 @@ sec_PKCS7CreateDecryptObject (PK11SymKey *key, SECAlgorithmID *algid)
 	}
     }
 
-    result->pad_size = PK11_GetBlockSize(mechanism,param);
+    result->pad_size = PK11_GetBlockSize(cryptoMechType, param);
     slot = PK11_GetSlotFromKey(key);
     result->block_size = PK11_IsHW(slot) ? BLOCK_SIZE : result->pad_size;
     PK11_FreeSlot(slot);
-    ciphercx = PK11_CreateContextBySymKey(mechanism, CKA_DECRYPT, key, param);
+    ciphercx = PK11_CreateContextBySymKey(cryptoMechType, CKA_DECRYPT, 
+					  key, param);
     SECITEM_FreeItem(param,PR_TRUE);
     if (ciphercx == NULL) {
 	PORT_Free (result);
@@ -189,16 +140,16 @@ sec_PKCS7CreateDecryptObject (PK11SymKey *key, SECAlgorithmID *algid)
  * have two simple cover functions which call it. 
  */
 sec_PKCS7CipherObject *
-sec_PKCS7CreateEncryptObject (PRArenaPool *poolp, PK11SymKey *key,
+sec_PKCS7CreateEncryptObject (PLArenaPool *poolp, PK11SymKey *key,
 			      SECOidTag algtag, SECAlgorithmID *algid)
 {
     sec_PKCS7CipherObject *result;
     void *ciphercx;
-    SECItem *param;
     SECStatus rv;
-    CK_MECHANISM_TYPE mechanism;
-    PRBool needToEncodeAlgid = PR_FALSE;
+    CK_MECHANISM_TYPE cryptoMechType;
     PK11SlotInfo *slot;
+    SECItem *param = NULL;
+    PRBool needToEncodeAlgid = PR_FALSE;
 
     result = (struct sec_pkcs7_cipher_object*)
 	      PORT_ZAlloc (sizeof(struct sec_pkcs7_cipher_object));
@@ -207,43 +158,23 @@ sec_PKCS7CreateEncryptObject (PRArenaPool *poolp, PK11SymKey *key,
 
     ciphercx = NULL;
     if (SEC_PKCS5IsAlgorithmPBEAlg(algid)) {
-	CK_MECHANISM pbeMech, cryptoMech;
-	SECItem *pbeParams;
-	SEC_PKCS5KeyAndPassword *keyPwd;
+	SECItem *pwitem;
 
-	PORT_Memset(&pbeMech, 0, sizeof(CK_MECHANISM));
-	PORT_Memset(&cryptoMech, 0, sizeof(CK_MECHANISM));
-
-	pbeMech.mechanism = PK11_AlgtagToMechanism(algtag);
-	pbeParams = PK11_ParamFromAlgid(algid);
-	if(!pbeParams) {
+	pwitem = (SECItem *)PK11_GetSymKeyUserData(key);
+	if (!pwitem) {
 	    PORT_Free(result);
 	    return NULL;
 	}
-	keyPwd = (SEC_PKCS5KeyAndPassword *)key;
-	key = keyPwd->key;
 
-	pbeMech.pParameter = pbeParams->data;
-	pbeMech.ulParameterLen = pbeParams->len;
-	if(PK11_MapPBEMechanismToCryptoMechanism(&pbeMech, &cryptoMech, 
-					 keyPwd->pwitem, PR_FALSE) != CKR_OK) {
+	cryptoMechType = PK11_GetPBECryptoMechanism(algid, &param, pwitem);
+	if (cryptoMechType == CKM_INVALID_MECHANISM) {
 	    PORT_Free(result);
-	    SECITEM_ZfreeItem(pbeParams, PR_TRUE);
+	    SECITEM_FreeItem(param,PR_TRUE);
 	    return NULL;
 	}
-	SECITEM_ZfreeItem(pbeParams, PR_TRUE);
-
-	param = (SECItem *)PORT_ZAlloc(sizeof(SECItem));
-	if(!param) {
-	     PORT_Free(result);
-	     return NULL;
-	}
-	param->data = (unsigned char *)cryptoMech.pParameter;
-	param->len = cryptoMech.ulParameterLen;
-	mechanism = cryptoMech.mechanism;
     } else {
-	mechanism = PK11_AlgtagToMechanism(algtag);
-	param = PK11_GenerateNewParam(mechanism,key);
+	cryptoMechType = PK11_AlgtagToMechanism(algtag);
+	param = PK11_GenerateNewParam(cryptoMechType, key);
 	if (param == NULL) {
 	    PORT_Free(result);
 	    return NULL;
@@ -251,11 +182,11 @@ sec_PKCS7CreateEncryptObject (PRArenaPool *poolp, PK11SymKey *key,
 	needToEncodeAlgid = PR_TRUE;
     }
 
-    result->pad_size = PK11_GetBlockSize(mechanism,param);
+    result->pad_size = PK11_GetBlockSize(cryptoMechType,param);
     slot = PK11_GetSlotFromKey(key);
     result->block_size = PK11_IsHW(slot) ? BLOCK_SIZE : result->pad_size;
     PK11_FreeSlot(slot);
-    ciphercx = PK11_CreateContextBySymKey(mechanism, CKA_ENCRYPT, 
+    ciphercx = PK11_CreateContextBySymKey(cryptoMechType, CKA_ENCRYPT, 
     					  key, param);
     if (ciphercx == NULL) {
 	PORT_Free (result);
@@ -271,6 +202,8 @@ sec_PKCS7CreateEncryptObject (PRArenaPool *poolp, PK11SymKey *key,
     if (needToEncodeAlgid) {
 	rv = PK11_ParamToAlgid(algtag,param,poolp,algid);
 	if(rv != SECSuccess) {
+	    PORT_Free (result);
+            SECITEM_FreeItem(param,PR_TRUE);
 	    return NULL;
 	}
     }
@@ -620,7 +553,6 @@ sec_PKCS7Decrypt (sec_PKCS7CipherObject *obj, unsigned char *output,
      */
     if (final && (padsize != 0)) {
 	unsigned int padlen = *(output + ofraglen - 1);
-	PORT_Assert (padlen > 0 && padlen <= padsize);
 	if (padlen == 0 || padlen > padsize) {
 	    PORT_SetError (SEC_ERROR_BAD_DATA);
 	    return SECFailure;
@@ -895,6 +827,7 @@ static const SEC_ASN1Template *
 sec_attr_choose_attr_value_template(void *src_or_dest, PRBool encoding)
 {
     const SEC_ASN1Template *theTemplate;
+
     SEC_PKCS7Attribute *attribute;
     SECOidData *oiddata;
     PRBool encoded;
@@ -939,7 +872,7 @@ sec_attr_choose_attr_value_template(void *src_or_dest, PRBool encoding)
 	    break;
 	  case SEC_OID_PKCS9_SIGNING_TIME:
 	    encoded = PR_FALSE;
-	    theTemplate = SEC_ASN1_GET(SEC_UTCTimeTemplate);
+            theTemplate = SEC_ASN1_GET(CERT_TimeChoiceTemplate);
 	    break;
 	  /* XXX Want other types here, too */
 	}
@@ -990,7 +923,7 @@ static const SEC_ASN1Template sec_pkcs7_set_of_attribute_template[] = {
  * do the reordering.)
  */
 SECItem *
-sec_PKCS7EncodeAttributes (PRArenaPool *poolp, SECItem *dest, void *src)
+sec_PKCS7EncodeAttributes (PLArenaPool *poolp, SECItem *dest, void *src)
 {
     return SEC_ASN1EncodeItem (poolp, dest, src,
 			       sec_pkcs7_set_of_attribute_template);
@@ -1004,7 +937,7 @@ sec_PKCS7EncodeAttributes (PRArenaPool *poolp, SECItem *dest, void *src)
 SECStatus
 sec_PKCS7ReorderAttributes (SEC_PKCS7Attribute **attrs)
 {
-    PRArenaPool *poolp;
+    PLArenaPool *poolp;
     int num_attrs, i, pass, besti;
     unsigned int j;
     SECItem **enc_attrs;
@@ -1341,63 +1274,6 @@ static const SEC_ASN1Template SEC_PointerToPKCS7EncryptedDataTemplate[] = {
     { SEC_ASN1_POINTER, 0, SEC_PKCS7EncryptedDataTemplate }
 };
 
-const SEC_ASN1Template SEC_SMIMEKEAParamTemplateSkipjack[] = {
-	{ SEC_ASN1_SEQUENCE,
-	  0, NULL, sizeof(SEC_PKCS7SMIMEKEAParameters) },
-	{ SEC_ASN1_OCTET_STRING /* | SEC_ASN1_OPTIONAL */,
-	  offsetof(SEC_PKCS7SMIMEKEAParameters,originatorKEAKey) },
-	{ SEC_ASN1_OCTET_STRING,
-	  offsetof(SEC_PKCS7SMIMEKEAParameters,originatorRA) },
-	{ 0 }
-};
-
-const SEC_ASN1Template SEC_SMIMEKEAParamTemplateNoSkipjack[] = {
-	{ SEC_ASN1_SEQUENCE,
-	  0, NULL, sizeof(SEC_PKCS7SMIMEKEAParameters) },
-	{ SEC_ASN1_OCTET_STRING /* | SEC_ASN1_OPTIONAL */,
-	  offsetof(SEC_PKCS7SMIMEKEAParameters,originatorKEAKey) },
-	{ SEC_ASN1_OCTET_STRING,
-	  offsetof(SEC_PKCS7SMIMEKEAParameters,originatorRA) },
-	{ SEC_ASN1_OCTET_STRING  | SEC_ASN1_OPTIONAL ,
-	  offsetof(SEC_PKCS7SMIMEKEAParameters,nonSkipjackIV) },
-	{ 0 }
-};
-
-const SEC_ASN1Template SEC_SMIMEKEAParamTemplateAllParams[] = {
-	{ SEC_ASN1_SEQUENCE,
-	  0, NULL, sizeof(SEC_PKCS7SMIMEKEAParameters) },
-	{ SEC_ASN1_OCTET_STRING /* | SEC_ASN1_OPTIONAL */,
-	  offsetof(SEC_PKCS7SMIMEKEAParameters,originatorKEAKey) },
-	{ SEC_ASN1_OCTET_STRING,
-	  offsetof(SEC_PKCS7SMIMEKEAParameters,originatorRA) },
-	{ SEC_ASN1_OCTET_STRING  | SEC_ASN1_OPTIONAL ,
-	  offsetof(SEC_PKCS7SMIMEKEAParameters,nonSkipjackIV) },
-	{ SEC_ASN1_OCTET_STRING  | SEC_ASN1_OPTIONAL ,
-	  offsetof(SEC_PKCS7SMIMEKEAParameters,bulkKeySize) },
-	{ 0 }
-};
-
-const SEC_ASN1Template*
-sec_pkcs7_get_kea_template(SECKEATemplateSelector whichTemplate)
-{
-	const SEC_ASN1Template *returnVal = NULL;
-
-	switch(whichTemplate)
-	{
-	case SECKEAUsesNonSkipjack:
-		returnVal = SEC_SMIMEKEAParamTemplateNoSkipjack;
-		break;
-	case SECKEAUsesSkipjack:
-		returnVal = SEC_SMIMEKEAParamTemplateSkipjack;
-		break;
-	case SECKEAUsesNonSkipjackWithPaddedEncKey:
-	default:
-		returnVal = SEC_SMIMEKEAParamTemplateAllParams;
-		break;
-	}
-	return returnVal;
-}
-	
 static const SEC_ASN1Template *
 sec_pkcs7_choose_content_template(void *src_or_dest, PRBool encoding)
 {

@@ -1,40 +1,9 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Code for dealing with x.509 v3 crl and crl entries extensions.
- *
- * $Id: crlv2.c,v 1.1 2000/03/31 19:43:00 relyea%netscape.com Exp $
  */
 
 #include "cert.h"
@@ -75,33 +44,98 @@ CERT_StartCRLExtensions(CERTCrl *crl)
     return (cert_StartExtensions ((void *)crl, crl->arena, SetCrlExts));
 }
 
+static void
+SetCrlEntryExts(void *object, CERTCertExtension **exts)
+{
+    CERTCrlEntry *crlEntry = (CERTCrlEntry *)object;
 
-SECStatus CERT_FindCRLNumberExten (CERTCrl *crl, CERTCrlNumber *value)
+    crlEntry->extensions = exts;
+}
+
+void *
+CERT_StartCRLEntryExtensions(CERTCrl *crl, CERTCrlEntry *entry)
+{
+    return (cert_StartExtensions (entry, crl->arena, SetCrlEntryExts));
+}
+
+SECStatus CERT_FindCRLNumberExten (PLArenaPool *arena, CERTCrl *crl,
+                                   SECItem *value)
 {
     SECItem encodedExtenValue;
+    SECItem *tmpItem = NULL;
     SECStatus rv;
+    void *mark = NULL;
 
     encodedExtenValue.data = NULL;
     encodedExtenValue.len = 0;
 
-    rv = cert_FindExtension
-	 (crl->extensions, SEC_OID_X509_CRL_NUMBER, &encodedExtenValue);
+    rv = cert_FindExtension(crl->extensions, SEC_OID_X509_CRL_NUMBER,
+			  &encodedExtenValue);
     if ( rv != SECSuccess )
 	return (rv);
 
-    rv = SEC_ASN1DecodeItem (NULL, value, SEC_IntegerTemplate,
-			     &encodedExtenValue);
+    mark = PORT_ArenaMark(arena);
+
+    tmpItem = SECITEM_ArenaDupItem(arena, &encodedExtenValue);
+    if (tmpItem) {
+        rv = SEC_QuickDERDecodeItem (arena, value,
+                                     SEC_ASN1_GET(SEC_IntegerTemplate),
+                                     tmpItem);
+    } else {
+        rv = SECFailure;
+    }
+
     PORT_Free (encodedExtenValue.data);
+    if (rv == SECFailure) {
+        PORT_ArenaRelease(arena, mark);
+    } else {
+        PORT_ArenaUnmark(arena, mark);
+    }
     return (rv);
 }
 
-SECStatus CERT_FindCRLReasonExten (CERTCrl *crl, SECItem *value)
+SECStatus CERT_FindCRLEntryReasonExten (CERTCrlEntry *crlEntry,
+                                        CERTCRLEntryReasonCode *value)
 {
-    return (CERT_FindBitStringExtension
-	    (crl->extensions, SEC_OID_X509_REASON_CODE, value));    
+    SECItem wrapperItem = {siBuffer,0};
+    SECItem tmpItem = {siBuffer,0};
+    SECStatus rv;
+    PLArenaPool *arena = NULL;
+
+    arena = PORT_NewArena(DER_DEFAULT_CHUNKSIZE);   
+    if ( ! arena ) {
+	return(SECFailure);
+    }
+    
+    rv = cert_FindExtension(crlEntry->extensions, SEC_OID_X509_REASON_CODE, 
+                            &wrapperItem);
+    if ( rv != SECSuccess ) {
+	goto loser;
+    }
+
+    rv = SEC_QuickDERDecodeItem(arena, &tmpItem,
+                                SEC_ASN1_GET(SEC_EnumeratedTemplate),
+                                &wrapperItem);
+
+    if ( rv != SECSuccess ) {
+	goto loser;
+    }
+
+    *value = (CERTCRLEntryReasonCode) DER_GetInteger(&tmpItem);
+
+loser:
+    if ( arena ) {
+	PORT_FreeArena(arena, PR_FALSE);
+    }
+    
+    if ( wrapperItem.data ) {
+	PORT_Free(wrapperItem.data);
+    }
+
+    return (rv);
 }
 
-SECStatus CERT_FindInvalidDateExten (CERTCrl *crl, int64 *value)
+SECStatus CERT_FindInvalidDateExten (CERTCrl *crl, PRTime *value)
 {
     SECItem encodedExtenValue;
     SECItem decodedExtenValue = {siBuffer,0};
@@ -116,10 +150,10 @@ SECStatus CERT_FindInvalidDateExten (CERTCrl *crl, int64 *value)
 	return (rv);
 
     rv = SEC_ASN1DecodeItem (NULL, &decodedExtenValue,
-			     SEC_GeneralizedTimeTemplate, &encodedExtenValue);
-    if (rv != SECSuccess)
-	return (rv);
-    rv = DER_GeneralizedTimeToTime(value, &encodedExtenValue);
+			     SEC_ASN1_GET(SEC_GeneralizedTimeTemplate),
+                             &encodedExtenValue);
+    if (rv == SECSuccess)
+	rv = DER_GeneralizedTimeToTime(value, &encodedExtenValue);
     PORT_Free (decodedExtenValue.data);
     PORT_Free (encodedExtenValue.data);
     return (rv);

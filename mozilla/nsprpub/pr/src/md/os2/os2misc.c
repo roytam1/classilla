@@ -1,41 +1,51 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *   Davide Bresolin <davide@teamos2.it>
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 /*
  * os2misc.c
  *
  */
+
+#ifdef MOZ_OS2_HIGH_MEMORY
+/* os2safe.h has to be included before os2.h, needed for high mem */
+#include <os2safe.h>
+#endif
+
 #include <string.h>
 #include "primpl.h"
 
@@ -112,6 +122,10 @@ PR_Now(void)
 
 /*
  * Assemble the command line by concatenating the argv array.
+ * Special characters intentionally do not get escaped, and it is
+ * expected that the caller wraps arguments in quotes if needed
+ * (e.g. for filename with spaces).
+ *
  * On success, this function returns 0 and the resulting command
  * line is returned in *cmdLine.  On failure, it returns -1.
  */
@@ -245,12 +259,24 @@ PRProcess * _PR_CreateOS2Process(
     APIRET    rc;
     ULONG     ulAppType = 0;
     PID       pid = 0;
-    char     *pEnvWPS = NULL;
     char     *pszComSpec;
     char      pszEXEName[CCHMAXPATH] = "";
     char      pszFormatString[CCHMAXPATH];
     char      pszObjectBuffer[CCHMAXPATH];
     char     *pszFormatResult = NULL;
+
+    /*
+     * Variables for DosExecPgm
+     */
+    char szFailed[CCHMAXPATH];
+    char *pszCmdLine = NULL;
+    RESULTCODES procInfo;
+    HFILE hStdIn  = 0,
+          hStdOut = 0,
+          hStdErr = 0;
+    HFILE hStdInSave  = -1,
+          hStdOutSave = -1,
+          hStdErrSave = -1;
 
     proc = PR_NEW(PRProcess);
     if (!proc) {
@@ -262,6 +288,19 @@ PRProcess * _PR_CreateOS2Process(
         PR_SetError(PR_OUT_OF_MEMORY_ERROR, 0);
         goto errorExit;
     }
+
+#ifdef MOZ_OS2_HIGH_MEMORY
+    /*
+     * DosQueryAppType() fails if path (the char* in the first argument) is in
+     * high memory. If that is the case, the following moves it to low memory.
+     */ 
+    if ((ULONG)path >= 0x20000000) {
+        size_t len = strlen(path) + 1;
+        char *copy = (char *)alloca(len);
+        memcpy(copy, path, len);
+        path = copy;
+    }
+#endif
    
     if (envp == NULL) {
         newEnvp = NULL;
@@ -282,17 +321,13 @@ PRProcess * _PR_CreateOS2Process(
         goto errorExit;
     }
   
-    if (attr) {
-       PR_ASSERT(!"Not implemented");
-    }
-
     rc = DosQueryAppType(path, &ulAppType);
     if (rc != NO_ERROR) {
        char *pszDot = strrchr(path, '.');
        if (pszDot) {
           /* If it is a CMD file, launch the users command processor */
           if (!stricmp(pszDot, ".cmd")) {
-             rc = DosScanEnv("COMSPEC", &pszComSpec);
+             rc = DosScanEnv("COMSPEC", (PSZ *)&pszComSpec);
              if (!rc) {
                 strcpy(pszFormatString, "/C %s %s");
                 strcpy(pszEXEName, pszComSpec);
@@ -341,18 +376,89 @@ PRProcess * _PR_CreateOS2Process(
     startData.ObjectBuffLen = CCHMAXPATH;
     startData.Environment = envBlock;
  
-    rc = DosStartSession(&startData, &ulAppType, &pid);
+    if (attr) {
+        /* On OS/2, there is really no way to pass file handles for stdin,
+         * stdout, and stderr to a new process.  Instead, we can make it
+         * a child process and make the given file handles a copy of our
+         * stdin, stdout, and stderr.  The child process then inherits
+         * ours, and we set ours back.  Twisted and gross I know. If you
+         * know a better way, please use it.
+         */
+        if (attr->stdinFd) {
+            hStdIn = 0;
+            DosDupHandle(hStdIn, &hStdInSave);
+            DosDupHandle((HFILE) attr->stdinFd->secret->md.osfd, &hStdIn);
+        }
 
-    if ((rc != NO_ERROR) && (rc != ERROR_SMG_START_IN_BACKGROUND)) {
-        PR_SetError(PR_UNKNOWN_ERROR, 0);
-    }
+        if (attr->stdoutFd) {
+            hStdOut = 1;
+            DosDupHandle(hStdOut, &hStdOutSave);
+            DosDupHandle((HFILE) attr->stdoutFd->secret->md.osfd, &hStdOut);
+        }
+
+        if (attr->stderrFd) {
+            hStdErr = 2;
+            DosDupHandle(hStdErr, &hStdErrSave);
+            DosDupHandle((HFILE) attr->stderrFd->secret->md.osfd, &hStdErr);
+        }
+        /*
+         * Build up the Command Line for DosExecPgm
+         */
+        pszCmdLine = PR_MALLOC(strlen(pszEXEName) +
+                               strlen(startData.PgmInputs) + 3);
+        sprintf(pszCmdLine, "%s%c%s%c", pszEXEName, '\0',
+                startData.PgmInputs, '\0');
+        rc = DosExecPgm(szFailed,
+                        CCHMAXPATH,
+                        EXEC_ASYNCRESULT,
+                        pszCmdLine,
+                        envBlock,
+                        &procInfo,
+                        pszEXEName);
+        PR_DELETE(pszCmdLine);
+
+        /* Restore our old values.  Hope this works */
+        if (hStdInSave != -1) {
+            DosDupHandle(hStdInSave, &hStdIn);
+            DosClose(hStdInSave);
+        }
+
+        if (hStdOutSave != -1) {
+            DosDupHandle(hStdOutSave, &hStdOut);
+            DosClose(hStdOutSave);
+        }
+
+        if (hStdErrSave != -1) {
+            DosDupHandle(hStdErrSave, &hStdErr);
+            DosClose(hStdErrSave);
+        }
+
+        if (rc != NO_ERROR) {
+            /* XXX what error code? */
+            PR_SetError(PR_UNKNOWN_ERROR, rc);
+            goto errorExit;
+        }
+
+        proc->md.pid = procInfo.codeTerminate;
+    } else {	
+        /*
+         * If no STDIN/STDOUT redirection is not needed, use DosStartSession
+         * to create a new, independent session
+         */
+        rc = DosStartSession(&startData, &ulAppType, &pid);
+
+        if ((rc != NO_ERROR) && (rc != ERROR_SMG_START_IN_BACKGROUND)) {
+            PR_SetError(PR_UNKNOWN_ERROR, rc);
+            goto errorExit;
+        }
  
-    proc->md.pid = pid;
+        proc->md.pid = pid;
+    }
 
     if (pszFormatResult) {
         PR_DELETE(pszFormatResult);
     }
- 
+
     PR_DELETE(cmdLine);
     if (newEnvp) {
         PR_DELETE(newEnvp);
@@ -380,12 +486,9 @@ errorExit:
 
 PRStatus _PR_DetachOS2Process(PRProcess *process)
 {
-    /* This is basically what they did on Windows (CloseHandle)
-     * but I don't think it will do much on OS/2. A process is
-     * either created as a child or not.  You can't 'detach' it
-     * later on.
+    /* On OS/2, a process is either created as a child or not. 
+     * You can't 'detach' it later on.
      */
-    DosClose(process->md.pid);
     PR_DELETE(process);
     return PR_SUCCESS;
 }
@@ -482,79 +585,4 @@ PRStatus _MD_CloseFileMap(PRFileMap *fmap)
     PR_SetError(PR_NOT_IMPLEMENTED_ERROR, 0);
     return PR_FAILURE;
 }
-
-/*
- *  Automatically set apptype switch for interactive and other
- *  tests that create an invisible plevent window.
- */
-unsigned long _System _DLL_InitTerm( unsigned long mod_handle, unsigned long flag)
-{
-   unsigned long rc = 0; /* failure */
-
-   if( !flag)
-   {
-      /* init */
-      if( _CRT_init() == 0)
-      {
-         PPIB pPib;
-         PTIB pTib;
-
-         /* probably superfluous, but can't hurt */
-         __ctordtorInit(0);
-
-         DosGetInfoBlocks( &pTib, &pPib);
-         pPib->pib_ultype = 3; /* PM */
-
-         rc = 1;
-      }
-   }
-   else
-   {
-      __ctordtorTerm(0);
-      _CRT_term();
-      rc = 1;
-   }
-
-   return rc;
-}
-
-#ifndef XP_OS2_VACPP
-
-PRInt32 _PR_MD_ATOMIC_SET(PRInt32 *intp, PRInt32 val)
-{
-  PRInt32 result;
-  asm volatile ("lock ; xchg %0, %1" 
-                : "=r"(result), "=m"(intp)
-                : "0"(val), "m"(intp));
-  return result;
-}
-
-PRInt32 _PR_MD_ATOMIC_ADD(PRInt32 *intp, PRInt32 val)
-{
-  PRInt32 result;
-  asm volatile ("lock ; xadd %0, %1" 
-                : "=r"(result), "=m"(intp)
-                : "0"(val), "m"(intp));
-  return result + val;
-}
-
-PRInt32 _PR_MD_ATOMIC_INCREMENT(PRInt32 *val)
-{    
-  PRInt32 result;
-  asm volatile ("lock ; xadd %0, %1" 
-                : "=r"(result), "=m"(*val)
-                : "0"(1), "m"(*val));
-  return result + 1;
-}
-
-PRInt32 _PR_MD_ATOMIC_DECREMENT(PRInt32 *val)
-{
-  PRInt32 result;
-  asm volatile ("lock ; xadd %0, %1" 
-                : "=r"(result), "=m"(*val)
-                : "0"(1), "m"(*val));
-  return result - 1;
-}
-
-#endif
 

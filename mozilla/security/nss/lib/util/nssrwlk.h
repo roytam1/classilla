@@ -1,35 +1,6 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
 ** File:		nsrwlock.h
@@ -50,6 +21,7 @@
 #ifndef nssrwlk_h___
 #define nssrwlk_h___
 
+#include "utilrename.h"
 #include "prtypes.h"
 #include "nssrwlkt.h"
 
@@ -70,7 +42,7 @@ PR_BEGIN_EXTERN_C
 **   is returned.
 **  
 ***********************************************************************/
-PR_EXTERN(NSSRWLock*) NSSRWLock_New(PRUint32 lock_rank, const char *lock_name);
+extern NSSRWLock* NSSRWLock_New(PRUint32 lock_rank, const char *lock_name);
 
 /***********************************************************************
 ** FUNCTION:    NSSRWLock_AtomicCreate
@@ -88,7 +60,7 @@ PR_EXTERN(NSSRWLock*) NSSRWLock_New(PRUint32 lock_rank, const char *lock_name);
 **   the pointer will be left NULL.
 **  
 ***********************************************************************/
-PR_EXTERN(NSSRWLock *)
+extern NSSRWLock *
 nssRWLock_AtomicCreate( NSSRWLock  ** prwlock, 
 			PRUint32      lock_rank, 
 			const char *  lock_name);
@@ -101,7 +73,7 @@ nssRWLock_AtomicCreate( NSSRWLock  ** prwlock,
 ** OUTPUTS:     void
 ** RETURN:      None
 ***********************************************************************/
-PR_EXTERN(void) NSSRWLock_Destroy(NSSRWLock *lock);
+extern void NSSRWLock_Destroy(NSSRWLock *lock);
 
 /***********************************************************************
 ** FUNCTION:    NSSRWLock_LockRead
@@ -111,7 +83,7 @@ PR_EXTERN(void) NSSRWLock_Destroy(NSSRWLock *lock);
 ** OUTPUTS:     void
 ** RETURN:      None
 ***********************************************************************/
-PR_EXTERN(void) NSSRWLock_LockRead(NSSRWLock *lock);
+extern void NSSRWLock_LockRead(NSSRWLock *lock);
 
 /***********************************************************************
 ** FUNCTION:    NSSRWLock_LockWrite
@@ -121,7 +93,7 @@ PR_EXTERN(void) NSSRWLock_LockRead(NSSRWLock *lock);
 ** OUTPUTS:     void
 ** RETURN:      None
 ***********************************************************************/
-PR_EXTERN(void) NSSRWLock_LockWrite(NSSRWLock *lock);
+extern void NSSRWLock_LockWrite(NSSRWLock *lock);
 
 /***********************************************************************
 ** FUNCTION:    NSSRWLock_UnlockRead
@@ -131,7 +103,7 @@ PR_EXTERN(void) NSSRWLock_LockWrite(NSSRWLock *lock);
 ** OUTPUTS:     void
 ** RETURN:      void
 ***********************************************************************/
-PR_EXTERN(void) NSSRWLock_UnlockRead(NSSRWLock *lock);
+extern void NSSRWLock_UnlockRead(NSSRWLock *lock);
 
 /***********************************************************************
 ** FUNCTION:    NSSRWLock_UnlockWrite
@@ -141,7 +113,7 @@ PR_EXTERN(void) NSSRWLock_UnlockRead(NSSRWLock *lock);
 ** OUTPUTS:     void
 ** RETURN:      void
 ***********************************************************************/
-PR_EXTERN(void) NSSRWLock_UnlockWrite(NSSRWLock *lock);
+extern void NSSRWLock_UnlockWrite(NSSRWLock *lock);
 
 /***********************************************************************
 ** FUNCTION:    NSSRWLock_HaveWriteLock
@@ -152,7 +124,7 @@ PR_EXTERN(void) NSSRWLock_UnlockWrite(NSSRWLock *lock);
 ** RETURN:      PRBool	PR_TRUE IFF the current thread holds the write lock.
 ***********************************************************************/
 
-PR_EXTERN(PRBool) NSSRWLock_HaveWriteLock(NSSRWLock *rwlock);
+extern PRBool NSSRWLock_HaveWriteLock(NSSRWLock *rwlock);
 
 /* SEC_END_PROTOS */
 PR_END_EXTERN_C

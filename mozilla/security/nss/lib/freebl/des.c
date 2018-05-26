@@ -5,35 +5,9 @@
  *  Make key schedule from DES key.
  *  Encrypt/Decrypt one 8-byte block.
  *
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- *
- * The Original Code is the DES-150 library.
- *
- * The Initial Developer of the Original Code is Nelson B. Bolyard,
- * nelsonb@iname.com.  Portions created by Nelson B. Bolyard are 
- * Copyright (C) 1990, 2000  Nelson B. Bolyard, All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable
- * instead of those above.  If you wish to allow use of your
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the GPL.
- */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "des.h"
 #include <stddef.h>	/* for ptrdiff_t */
@@ -394,10 +368,33 @@ static const HALF PC2[8][64] = {
     temp  = (word ^ (word >> 9)) & 0x00550055; \
     word ^=  temp | (temp << 9);
 
+#if defined(__GNUC__) && defined(NSS_X86_OR_X64)
+#define BYTESWAP(word, temp) \
+    __asm("bswap	%0" : "+r" (word));
+#elif (_MSC_VER >= 1300) && defined(NSS_X86_OR_X64)
+#include <stdlib.h>
+#pragma intrinsic(_byteswap_ulong)
+#define BYTESWAP(word, temp) \
+    word = _byteswap_ulong(word);
+#elif defined(__GNUC__) && (defined(__thumb2__) || \
+      (!defined(__thumb__) && \
+      (defined(__ARM_ARCH_6__) || \
+       defined(__ARM_ARCH_6J__) || \
+       defined(__ARM_ARCH_6K__) || \
+       defined(__ARM_ARCH_6Z__) || \
+       defined(__ARM_ARCH_6ZK__) || \
+       defined(__ARM_ARCH_6T2__) || \
+       defined(__ARM_ARCH_7__) || \
+       defined(__ARM_ARCH_7A__) || \
+       defined(__ARM_ARCH_7R__))))
+#define BYTESWAP(word, temp) \
+    __asm("rev %0, %0" : "+r" (word));
+#else
 #define BYTESWAP(word, temp) \
     word = (word >> 16) | (word << 16); \
     temp = 0x00ff00ff; \
     word = ((word & temp) << 8) | ((word >> 8) & temp); 
+#endif
 
 #define PC1(left, right, c0, d0, temp) \
     right ^= temp = ((left >> 4) ^ right) & 0x0f0f0f0f; \
@@ -424,7 +421,7 @@ DES_MakeSchedule( HALF * ks, const BYTE * key,   DESDirection direction)
     int           delta;
     unsigned int  ls;
 
-#if defined(_X86_)
+#if defined(NSS_X86_OR_X64)
     left  = HALFPTR(key)[0]; 
     right = HALFPTR(key)[1]; 
     BYTESWAP(left, temp);
@@ -575,7 +572,7 @@ DES_Do1Block(HALF * ks, const BYTE * inbuf, BYTE * outbuf)
     register HALF left, right;
     register HALF temp;
 
-#if defined(_X86_)
+#if defined(NSS_X86_OR_X64)
     left  = HALFPTR(inbuf)[0]; 
     right = HALFPTR(inbuf)[1]; 
     BYTESWAP(left, temp);
@@ -646,13 +643,13 @@ DES_Do1Block(HALF * ks, const BYTE * inbuf, BYTE * outbuf)
 
     FP(left, right, temp);
 
-#if defined(_X86_)
+#if defined(NSS_X86_OR_X64)
     BYTESWAP(left, temp);
     BYTESWAP(right, temp);
     HALFPTR(outbuf)[0]  = left; 
     HALFPTR(outbuf)[1]  = right; 
 #else
-    if (((ptrdiff_t)inbuf & 0x03) == 0) {
+    if (((ptrdiff_t)outbuf & 0x03) == 0) {
 #if defined(IS_LITTLE_ENDIAN)
 	BYTESWAP(left, temp);
 	BYTESWAP(right, temp);

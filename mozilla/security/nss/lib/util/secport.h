@@ -1,59 +1,21 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * secport.h - portability interfaces for security libraries
- *
- * This file abstracts out libc functionality that libsec depends on
- * 
- * NOTE - These are not public interfaces
- *
- * $Id: secport.h,v 1.6 2002/05/01 00:06:39 wtc%netscape.com Exp $
  */
 
 #ifndef _SECPORT_H_
 #define _SECPORT_H_
 
+#include "utilrename.h"
+#include "prlink.h"
+
 /*
- * define XP_MAC, XP_WIN, XP_BEOS, or XP_UNIX, in case they are not defined
+ * define XP_WIN, XP_BEOS, or XP_UNIX, in case they are not defined
  * by anyone else
  */
-#ifdef macintosh
-# ifndef XP_MAC
-# define XP_MAC 1
-# endif
-#endif
-
 #ifdef _WINDOWS
 # ifndef XP_WIN
 # define XP_WIN
@@ -61,10 +23,6 @@
 #if defined(_WIN32) || defined(WIN32)
 # ifndef XP_WIN32
 # define XP_WIN32
-# endif
-#else
-# ifndef XP_WIN16
-# define XP_WIN16
 # endif
 #endif
 #endif
@@ -81,33 +39,11 @@
 # endif
 #endif
 
-#if defined(__WATCOMC__) || defined(__WATCOM_CPLUSPLUS__)
-#include "watcomfx.h"
-#endif
-
-#if defined(_WIN32_WCE)
-#include <windef.h>
-#include <types.h>
-#elif defined( XP_MAC ) 
-#include <types.h>
-#include <time.h> /* for time_t below */
-#else
 #include <sys/types.h>
-#endif
-
-#ifdef notdef
-#ifdef XP_MAC
-#include "NSString.h"
-#endif
-#endif
 
 #include <ctype.h>
 #include <string.h>
-#if defined(_WIN32_WCE)
-#include <stdlib.h>	/* WinCE puts some stddef symbols here. */
-#else
 #include <stddef.h>
-#endif
 #include <stdlib.h>
 #include "prtypes.h"
 #include "prlog.h"	/* for PR_ASSERT */
@@ -131,6 +67,7 @@ extern void PORT_FreeBlock(void *ptr);
 extern void *PORT_ZAlloc(size_t len);
 extern void PORT_Free(void *ptr);
 extern void PORT_ZFree(void *ptr, size_t len);
+extern char *PORT_Strdup(const char *s);
 extern time_t PORT_Time(void);
 extern void PORT_SetError(int value);
 extern int PORT_GetError(void);
@@ -143,12 +80,11 @@ extern void *PORT_ArenaGrow(PLArenaPool *arena, void *ptr,
 			    size_t oldsize, size_t newsize);
 extern void *PORT_ArenaMark(PLArenaPool *arena);
 extern void PORT_ArenaRelease(PLArenaPool *arena, void *mark);
+extern void PORT_ArenaZRelease(PLArenaPool *arena, void *mark);
 extern void PORT_ArenaUnmark(PLArenaPool *arena, void *mark);
 extern char *PORT_ArenaStrdup(PLArenaPool *arena, const char *str);
 
-#ifdef __cplusplus
-}
-#endif
+SEC_END_PROTOS
 
 #define PORT_Assert PR_ASSERT
 #define PORT_ZNew(type) (type*)PORT_ZAlloc(sizeof(type))
@@ -166,37 +102,19 @@ extern char *PORT_ArenaStrdup(PLArenaPool *arena, const char *str);
 #define PORT_ArenaZNewArray(poolp, type, num)	\
 		(type*) PORT_ArenaZAlloc (poolp, sizeof(type)*(num))
 
-/* Please, keep these defines sorted alphbetically.  Thanks! */
+/* Please, keep these defines sorted alphabetically.  Thanks! */
 
-#ifdef XP_STRING_FUNCS
+#define PORT_Atoi(buff)	(int)strtol(buff, NULL, 10)
 
-#define PORT_Atoi 	XP_ATOI
+/* Returns a UTF-8 encoded constant error string for err.
+ * Returns NULL if initialization of the error tables fails
+ * due to insufficient memory.
+ *
+ * This string must not be modified by the application.
+ */
+#define PORT_ErrorToString(err) PR_ErrorToString((err), PR_LANGUAGE_I_DEFAULT)
 
-#define PORT_Memcmp 	XP_MEMCMP
-#define PORT_Memcpy 	XP_MEMCPY
-#define PORT_Memmove 	XP_MEMMOVE
-#define PORT_Memset 	XP_MEMSET
-
-#define PORT_Strcasecmp XP_STRCASECMP
-#define PORT_Strcat 	XP_STRCAT
-#define PORT_Strchr 	XP_STRCHR
-#define PORT_Strrchr	XP_STRRCHR
-#define PORT_Strcmp 	XP_STRCMP
-#define PORT_Strcpy 	XP_STRCPY
-#define PORT_Strdup 	XP_STRDUP
-#define PORT_Strlen(s) 	XP_STRLEN(s)
-#define PORT_Strncasecmp XP_STRNCASECMP
-#define PORT_Strncat 	strncat
-#define PORT_Strncmp 	XP_STRNCMP
-#define PORT_Strncpy 	strncpy
-#define PORT_Strstr 	XP_STRSTR
-#define PORT_Strtok 	XP_STRTOK_R
-
-#define PORT_Tolower 	XP_TO_LOWER
-
-#else /* XP_STRING_FUNCS */
-
-#define PORT_Atoi 	atoi
+#define PORT_ErrorToName PR_ErrorToName
 
 #define PORT_Memcmp 	memcmp
 #define PORT_Memcpy 	memcpy
@@ -213,18 +131,16 @@ extern char *PORT_ArenaStrdup(PLArenaPool *arena, const char *str);
 #define PORT_Strrchr    strrchr
 #define PORT_Strcmp 	strcmp
 #define PORT_Strcpy 	strcpy
-extern char *PORT_Strdup(const char *s);
 #define PORT_Strlen(s) 	strlen(s)
 #define PORT_Strncasecmp PL_strncasecmp
 #define PORT_Strncat 	strncat
 #define PORT_Strncmp 	strncmp
 #define PORT_Strncpy 	strncpy
+#define PORT_Strpbrk    strpbrk
 #define PORT_Strstr 	strstr
 #define PORT_Strtok 	strtok
 
 #define PORT_Tolower 	tolower
-
-#endif /* XP_STRING_FUNCS */
 
 typedef PRBool (PR_CALLBACK * PORTCharConversionWSwapFunc) (PRBool toUnicode,
 			unsigned char *inBuf, unsigned int inBufLen,
@@ -236,9 +152,7 @@ typedef PRBool (PR_CALLBACK * PORTCharConversionFunc) (PRBool toUnicode,
 			unsigned char *outBuf, unsigned int maxOutBufLen,
 			unsigned int *outBufLen);
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+SEC_BEGIN_PROTOS
 
 void PORT_SetUCS4_UTF8ConversionFunction(PORTCharConversionFunc convFunc);
 void PORT_SetUCS2_ASCIIConversionFunction(PORTCharConversionWSwapFunc convFunc);
@@ -254,7 +168,12 @@ PRBool PORT_UCS2_UTF8Conversion(PRBool toUnicode, unsigned char *inBuf,
 			unsigned int inBufLen, unsigned char *outBuf,
 			unsigned int maxOutBufLen, unsigned int *outBufLen);
 
-PR_EXTERN(PRBool)
+/* One-way conversion from ISO-8859-1 to UTF-8 */
+PRBool PORT_ISO88591_UTF8Conversion(const unsigned char *inBuf,
+			unsigned int inBufLen, unsigned char *outBuf,
+			unsigned int maxOutBufLen, unsigned int *outBufLen);
+
+extern PRBool
 sec_port_ucs4_utf8_conversion_function
 (
   PRBool toUnicode,
@@ -265,7 +184,7 @@ sec_port_ucs4_utf8_conversion_function
   unsigned int *outBufLen
 );
 
-PR_EXTERN(PRBool)
+extern PRBool
 sec_port_ucs2_utf8_conversion_function
 (
   PRBool toUnicode,
@@ -276,7 +195,55 @@ sec_port_ucs2_utf8_conversion_function
   unsigned int *outBufLen
 );
 
+/* One-way conversion from ISO-8859-1 to UTF-8 */
+extern PRBool
+sec_port_iso88591_utf8_conversion_function
+(
+  const unsigned char *inBuf,
+  unsigned int inBufLen,
+  unsigned char *outBuf,
+  unsigned int maxOutBufLen,
+  unsigned int *outBufLen
+);
+
 extern int NSS_PutEnv(const char * envVarName, const char * envValue);
+
+extern int NSS_SecureMemcmp(const void *a, const void *b, size_t n);
+
+/*
+ * Load a shared library called "newShLibName" in the same directory as
+ * a shared library that is already loaded, called existingShLibName.
+ * A pointer to a static function in that shared library,
+ * staticShLibFunc, is required.
+ *
+ * existingShLibName:
+ *   The file name of the shared library that shall be used as the 
+ *   "reference library". The loader will attempt to load the requested
+ *   library from the same directory as the reference library.
+ *
+ * staticShLibFunc:
+ *   Pointer to a static function in the "reference library".
+ *
+ * newShLibName:
+ *   The simple file name of the new shared library to be loaded.
+ *
+ * We use PR_GetLibraryFilePathname to get the pathname of the loaded 
+ * shared lib that contains this function, and then do a
+ * PR_LoadLibraryWithFlags with an absolute pathname for the shared
+ * library to be loaded.
+ *
+ * On Windows, the "alternate search path" strategy is employed, if available.
+ * On Unix, if existingShLibName is a symbolic link, and no link exists for the
+ * new library, the original link will be resolved, and the new library loaded
+ * from the resolved location.
+ *
+ * If the new shared library is not found in the same location as the reference
+ * library, it will then be loaded from the normal system library path.
+ */
+PRLibrary *
+PORT_LoadLibraryFromOrigin(const char* existingShLibName,
+                 PRFuncPtr staticShLibFunc,
+                 const char *newShLibName);
 
 SEC_END_PROTOS
 

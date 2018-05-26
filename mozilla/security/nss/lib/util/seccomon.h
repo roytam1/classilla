@@ -1,35 +1,6 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * seccomon.h - common data structures for security libraries
@@ -37,13 +8,12 @@
  * This file should have lowest-common-denominator datastructures
  * for security libraries.  It should not be dependent on any other
  * headers, and should not require linking with any libraries.
- *
- * $Id: seccomon.h,v 1.3 2002/02/21 22:41:44 ian.mcgreer%sun.com Exp $
  */
 
 #ifndef _SECCOMMON_H_
 #define _SECCOMMON_H_
 
+#include "utilrename.h"
 #include "prtypes.h"
 
 
@@ -68,7 +38,12 @@ typedef enum {
     siAsciiNameString = 7,
     siAsciiString = 8,
     siDEROID = 9,
-    siUnsignedInteger = 10
+    siUnsignedInteger = 10,
+    siUTCTime = 11,
+    siGeneralizedTime = 12,
+    siVisibleString = 13,
+    siUTF8String = 14,
+    siBMPString = 15
 } SECItemType;
 
 typedef struct SECItemStr SECItem;
@@ -76,6 +51,13 @@ typedef struct SECItemStr SECItem;
 struct SECItemStr {
     SECItemType type;
     unsigned char *data;
+    unsigned int len;
+};
+
+typedef struct SECItemArrayStr SECItemArray;
+
+struct SECItemArrayStr {
+    SECItem *items;
     unsigned int len;
 };
 

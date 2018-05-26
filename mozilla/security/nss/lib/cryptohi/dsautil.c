@@ -1,41 +1,13 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+#include "cryptohi.h"
 #include "secasn1.h"
 #include "secitem.h"
 #include "prerr.h"
 
-#ifndef DSA_SUBPRIME_LEN
-#define DSA_SUBPRIME_LEN 20	/* bytes */
+#ifndef DSA1_SUBPRIME_LEN
+#define DSA1_SUBPRIME_LEN 20	/* bytes */
 #endif
 
 typedef struct {
@@ -66,10 +38,9 @@ DSAU_ConvertUnsignedToSigned(SECItem *dest, SECItem *src)
     unsigned char *pSrc = src->data;
     unsigned char *pDst = dest->data;
     unsigned int   cntSrc = src->len;
-    unsigned char  c;
 
     /* skip any leading zeros. */
-    while (cntSrc && !(c = *pSrc)) { 
+    while (cntSrc && !(*pSrc)) { 
     	pSrc++; 
 	cntSrc--;
     }
@@ -79,7 +50,7 @@ DSAU_ConvertUnsignedToSigned(SECItem *dest, SECItem *src)
 	return; 
     }
 
-    if (c & 0x80)
+    if (*pSrc & 0x80)
     	*pDst++ = 0;
 
     PORT_Memcpy(pDst, pSrc, cntSrc);
@@ -124,25 +95,33 @@ loser:
     return SECFailure;
 }
 
-/* src is a "raw" DSA signature, 20 bytes of r followed by 20 bytes of s.
-** dest is the signature DER encoded. ?
+/* src is a "raw" ECDSA or DSA signature, the first half contains r
+ * and the second half contains s. dest is the DER encoded signature.
 */
-SECStatus
-DSAU_EncodeDerSig(SECItem *dest, SECItem *src)
+static SECStatus
+common_EncodeDerSig(SECItem *dest, SECItem *src)
 {
     SECItem *         item;
     SECItem           srcItem;
     DSA_ASN1Signature sig;
-    unsigned char     signedR[DSA_SUBPRIME_LEN + 1];
-    unsigned char     signedS[DSA_SUBPRIME_LEN + 1];
+    unsigned char     *signedR;
+    unsigned char     *signedS;
+    unsigned int len;
 
-    PORT_Memset(&sig, 0, sizeof(sig));
-
-    PORT_Assert(src->len == 2 * DSA_SUBPRIME_LEN);
-    if (src->len != 2 * DSA_SUBPRIME_LEN) {
-    	PORT_SetError( PR_INVALID_ARGUMENT_ERROR );
+    /* Allocate memory with room for an extra byte that
+     * may be required if the top bit in the first byte
+     * is already set.
+     */
+    len = src->len/2;
+    signedR = (unsigned char *) PORT_Alloc(len + 1);
+    if (!signedR) return SECFailure;
+    signedS = (unsigned char *) PORT_ZAlloc(len + 1);
+    if (!signedS) {
+        if (signedR) PORT_Free(signedR);
 	return SECFailure;
     }
+
+    PORT_Memset(&sig, 0, sizeof(sig));
 
     /* Must convert r and s from "unsigned" integers to "signed" integers.
     ** If the high order bit of the first byte (MSB) is 1, then must
@@ -157,13 +136,15 @@ DSAU_EncodeDerSig(SECItem *dest, SECItem *src)
     sig.s.len  = sizeof signedR;
 
     srcItem.data = src->data;
-    srcItem.len  = DSA_SUBPRIME_LEN;
+    srcItem.len  = len;
 
     DSAU_ConvertUnsignedToSigned(&sig.r, &srcItem);
-    srcItem.data += DSA_SUBPRIME_LEN;
+    srcItem.data += len;
     DSAU_ConvertUnsignedToSigned(&sig.s, &srcItem);
 
     item = SEC_ASN1EncodeItem(NULL, dest, &sig, DSA_SignatureTemplate);
+    if (signedR) PORT_Free(signedR);
+    if (signedS) PORT_Free(signedS);
     if (item == NULL)
 	return SECFailure;
 
@@ -171,13 +152,14 @@ DSAU_EncodeDerSig(SECItem *dest, SECItem *src)
     return SECSuccess;
 }
 
-/* src is a DER-encoded DSA signature.
+/* src is a DER-encoded ECDSA or DSA signature.
 ** Returns a newly-allocated SECItem structure, pointing at a newly allocated
-** buffer containing the "raw" DSA signature, which is 20 bytes of r,
-** followed by 20 bytes of s.
+** buffer containing the "raw" signature, which is len bytes of r,
+** followed by len bytes of s. For DSA, len is the length of q.
+** For ECDSA, len depends on the key size used to create the signature.
 */
-SECItem *
-DSAU_DecodeDerSig(SECItem *item)
+static SECItem *
+common_DecodeDerSig(const SECItem *item, unsigned int len)
 {
     SECItem *         result = NULL;
     SECStatus         status;
@@ -190,8 +172,8 @@ DSAU_DecodeDerSig(SECItem *item)
     if (result == NULL)
 	goto loser;
 
-    result->len  = 2 * DSA_SUBPRIME_LEN;
-    result->data = (unsigned char*)PORT_Alloc(2 * DSA_SUBPRIME_LEN);
+    result->len  = 2 * len;
+    result->data = (unsigned char*)PORT_Alloc(2 * len);
     if (result->data == NULL)
 	goto loser;
 
@@ -205,12 +187,12 @@ DSAU_DecodeDerSig(SECItem *item)
     ** fixed length unsigned integers.
     */
     dst.data = result->data;
-    dst.len  = DSA_SUBPRIME_LEN;
+    dst.len  = len;
     status = DSAU_ConvertSignedToFixedUnsigned(&dst, &sig.r);
     if (status != SECSuccess)
     	goto loser;
 
-    dst.data += DSA_SUBPRIME_LEN;
+    dst.data += len;
     status = DSAU_ConvertSignedToFixedUnsigned(&dst, &sig.s);
     if (status != SECSuccess)
     	goto loser;
@@ -229,4 +211,57 @@ loser:
 	result = NULL;
     }
     goto done;
+}
+
+/* src is a "raw" DSA1 signature, 20 bytes of r followed by 20 bytes of s.
+** dest is the signature DER encoded. ?
+*/
+SECStatus
+DSAU_EncodeDerSig(SECItem *dest, SECItem *src)
+{
+    PORT_Assert(src->len == 2 * DSA1_SUBPRIME_LEN);
+    if (src->len != 2 * DSA1_SUBPRIME_LEN) {
+    	PORT_SetError( PR_INVALID_ARGUMENT_ERROR );
+	return SECFailure;
+    }
+
+    return common_EncodeDerSig(dest, src);
+}
+
+/* src is a "raw" DSA signature of length len (len/2 bytes of r followed
+** by len/2 bytes of s). dest is the signature DER encoded.
+*/
+SECStatus
+DSAU_EncodeDerSigWithLen(SECItem *dest, SECItem *src, unsigned int len)
+{
+
+    PORT_Assert((src->len == len) && (len % 2 == 0));
+    if ((src->len != len) || (src->len % 2 != 0)) {
+    	PORT_SetError( PR_INVALID_ARGUMENT_ERROR );
+	return SECFailure;
+    }
+
+    return common_EncodeDerSig(dest, src);
+}
+
+/* src is a DER-encoded DSA signature.
+** Returns a newly-allocated SECItem structure, pointing at a newly allocated
+** buffer containing the "raw" DSA1 signature, which is 20 bytes of r,
+** followed by 20 bytes of s.
+*/
+SECItem *
+DSAU_DecodeDerSig(const SECItem *item)
+{
+    return common_DecodeDerSig(item, DSA1_SUBPRIME_LEN);
+}
+
+/* src is a DER-encoded ECDSA signature.
+** Returns a newly-allocated SECItem structure, pointing at a newly allocated
+** buffer containing the "raw" ECDSA signature of length len containing
+** r followed by s (both padded to take up exactly len/2 bytes).
+*/
+SECItem *
+DSAU_DecodeDerSigToLen(const SECItem *item, unsigned int len)
+{
+    return common_DecodeDerSig(item, len/2);
 }

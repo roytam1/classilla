@@ -1,35 +1,6 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /****************************************************************************
  *  SSL client program that tests  a server for proper operation of SSL2,   *
@@ -63,6 +34,8 @@
 #include "prio.h"
 #include "prnetdb.h"
 #include "nss.h"
+#include "secutil.h"
+#include "ocsp.h"
 
 #include "vfyserv.h"
 
@@ -74,15 +47,53 @@ extern int ssl3CipherSuites[];
 GlobalThreadMgr threadMGR;
 char *certNickname = NULL;
 char *hostName = NULL;
-char *password = NULL;
+secuPWData  pwdata          = { PW_NONE, 0 };
 unsigned short port = 0;
+PRBool dumpChain;
 
 static void
 Usage(const char *progName)
 {
-	fprintf(stderr, 
-	  "Usage: %s [-p port] [-c connections] [-C cipher(s)] hostname\n",
-	progName);
+    PRFileDesc *pr_stderr;
+
+    pr_stderr = PR_STDERR;
+
+    PR_fprintf(pr_stderr, "Usage:\n"
+               "   %s  [-c ] [-o] [-p port] [-d dbdir] [-w password] [-f pwfile]\n"
+               "   \t\t[-C cipher(s)]  [-l <url> -t <nickname> ] hostname",
+               progName);
+    PR_fprintf (pr_stderr, "\nWhere:\n");
+    PR_fprintf (pr_stderr,
+                "  %-13s dump server cert chain into files\n",
+                "-c");
+    PR_fprintf (pr_stderr,
+                "  %-13s perform server cert OCSP check\n",
+                "-o");
+    PR_fprintf (pr_stderr,
+                "  %-13s server port to be used\n",
+                "-p");
+    PR_fprintf (pr_stderr,
+                "  %-13s use security databases in \"dbdir\"\n",
+                "-d dbdir");
+    PR_fprintf (pr_stderr,
+                "  %-13s key database password\n",
+                "-w password");
+    PR_fprintf (pr_stderr,
+                "  %-13s token password file\n",
+                "-f pwfile");
+    PR_fprintf (pr_stderr,
+                "  %-13s communication cipher list\n",
+                "-C cipher(s)");
+    PR_fprintf (pr_stderr,
+                "  %-13s OCSP responder location. This location is used to\n"
+                "  %-13s check  status  of a server  certificate.  If  not \n"
+                "  %-13s specified, location  will  be taken  from the AIA\n"
+                "  %-13s server certificate extension.\n",
+                "-l url", "", "", "");
+    PR_fprintf (pr_stderr,
+                "  %-13s OCSP Trusted Responder Cert nickname\n\n",
+                "-t nickname");
+
 	exit(1);
 }
 
@@ -157,8 +168,8 @@ setupSSLSocket(PRNetAddr *addr)
 	}
 
 	secStatus = SSL_HandshakeCallback(sslSocket, 
-	                                 (SSLHandshakeCallback)myHandshakeCallback,
-	                                 NULL);
+	                                  myHandshakeCallback,
+	                                  NULL);
 	if (secStatus != SECSuccess) {
 		errWarn("SSL_HandshakeCallback");
 		goto loser;
@@ -248,7 +259,7 @@ do_connects(void *a, int connection)
 		return SECFailure;
 	}
 
-	secStatus = SSL_SetPKCS11PinArg(sslSocket, password);
+	secStatus = SSL_SetPKCS11PinArg(sslSocket, &pwdata);
 	if (secStatus != SECSuccess) {
 		errWarn("SSL_SetPKCS11PinArg");
 		return secStatus;
@@ -330,10 +341,10 @@ client_main(unsigned short      port,
 	PRInt32     rv;
 	PRNetAddr	addr;
 	PRHostEnt   hostEntry;
-	char        buffer[256];
+	char        buffer[PR_NETDB_BUF_SIZE];
 
 	/* Setup network connection. */
-	prStatus = PR_GetHostByName(hostName, buffer, 256, &hostEntry);
+	prStatus = PR_GetHostByName(hostName, buffer, sizeof(buffer), &hostEntry);
 	if (prStatus != PR_SUCCESS) {
 		exitErr("PR_GetHostByName");
 	}
@@ -364,6 +375,17 @@ client_main(unsigned short      port,
 	destroy_thread_data(&threadMGR);
 }
 
+#define HEXCHAR_TO_INT(c, i) \
+    if (((c) >= '0') && ((c) <= '9')) { \
+	i = (c) - '0'; \
+    } else if (((c) >= 'a') && ((c) <= 'f')) { \
+	i = (c) - 'a' + 10; \
+    } else if (((c) >= 'A') && ((c) <= 'F')) { \
+	i = (c) - 'A' + 10; \
+    } else { \
+	Usage(progName); \
+    }
+
 int
 main(int argc, char **argv)
 {
@@ -371,9 +393,12 @@ main(int argc, char **argv)
 	char *               progName     = NULL;
 	int                  connections  = 1;
 	char *               cipherString = NULL;
+	char *               respUrl = NULL;
+	char *               respCertName = NULL;
 	SECStatus            secStatus;
 	PLOptState *         optstate;
 	PLOptStatus          status;
+	PRBool               doOcspCheck = PR_FALSE;
 
 	/* Call the NSPR initialization routines */
 	PR_Init( PR_SYSTEM_THREAD, PR_PRIORITY_NORMAL, 1);
@@ -381,14 +406,25 @@ main(int argc, char **argv)
 	progName = PORT_Strdup(argv[0]);
 
 	hostName = NULL;
-	optstate = PL_CreateOptState(argc, argv, "C:c:d:n:p:w:");
+	optstate = PL_CreateOptState(argc, argv, "C:cd:f:l:n:p:ot:w:");
 	while ((status = PL_GetNextOpt(optstate)) == PL_OPT_OK) {
 		switch(optstate->option) {
 		case 'C' : cipherString = PL_strdup(optstate->value); break;
-		case 'c' : connections = PORT_Atoi(optstate->value);  break;
+ 		case 'c' : dumpChain = PR_TRUE;                       break;
 		case 'd' : certDir = PL_strdup(optstate->value);      break;
+		case 'l' : respUrl = PL_strdup(optstate->value);      break;
 		case 'p' : port = PORT_Atoi(optstate->value);         break;
-		case 'w' : password = PL_strdup(optstate->value);      break;
+		case 'o' : doOcspCheck = PR_TRUE;                     break;
+		case 't' : respCertName = PL_strdup(optstate->value); break;
+                case 'w':
+                           pwdata.source = PW_PLAINTEXT;
+                           pwdata.data = PORT_Strdup(optstate->value);
+                           break;
+
+                case 'f':
+                           pwdata.source = PW_FROMFILE;
+                           pwdata.data = PORT_Strdup(optstate->value);
+                           break;
 		case '\0': hostName = PL_strdup(optstate->value);     break;
 		default  : Usage(progName);
 		}
@@ -401,8 +437,15 @@ main(int argc, char **argv)
 	if (port == 0 || hostName == NULL)
 		Usage(progName);
 
-	/* Set our password function callback. */
-	PK11_SetPasswordFunc(myPasswd);
+        if (doOcspCheck &&
+            ((respCertName != NULL && respUrl == NULL) ||
+             (respUrl != NULL && respCertName == NULL))) {
+	    SECU_PrintError (progName, "options -l <url> and -t "
+	                     "<responder> must be used together");
+	    Usage(progName);
+        }
+    
+	PK11_SetPasswordFunc(SECU_GetModulePassword);
 
 	/* Initialize the NSS libraries. */
 	if (certDir) {
@@ -416,6 +459,39 @@ main(int argc, char **argv)
 	}
 	if (secStatus != SECSuccess) {
 		exitErr("NSS_Init");
+	}
+	SECU_RegisterDynamicOids();
+
+	if (doOcspCheck == PR_TRUE) {
+            SECStatus rv;
+            CERTCertDBHandle *handle = CERT_GetDefaultCertDB();
+            if (handle == NULL) {
+                SECU_PrintError (progName, "problem getting certdb handle");
+                goto cleanup;
+            }
+            
+            rv = CERT_EnableOCSPChecking (handle);
+            if (rv != SECSuccess) {
+                SECU_PrintError (progName, "error enabling OCSP checking");
+                goto cleanup;
+            }
+
+            if (respUrl != NULL) {
+                rv = CERT_SetOCSPDefaultResponder (handle, respUrl,
+                                                   respCertName);
+                if (rv != SECSuccess) {
+                    SECU_PrintError (progName,
+                                     "error setting default responder");
+                    goto cleanup;
+                }
+                
+                rv = CERT_EnableOCSPDefaultResponder (handle);
+                if (rv != SECSuccess) {
+                    SECU_PrintError (progName,
+                                     "error enabling default responder");
+                    goto cleanup;
+                }
+            }
 	}
 
 	/* All cipher suites except RSA_NULL_MD5 are enabled by 
@@ -431,23 +507,53 @@ main(int argc, char **argv)
 	    disableAllSSLCiphers();
 
 	    while (0 != (ndx = *cipherString++)) {
-		int *cptr;
 		int  cipher;
 
-		if (! isalpha(ndx))
-		    Usage(progName);
-		cptr = islower(ndx) ? ssl3CipherSuites : ssl2CipherSuites;
-		for (ndx &= 0x1f; (cipher = *cptr++) != 0 && --ndx > 0; )
-		    /* do nothing */;
-		if (cipher) {
+		if (ndx == ':') {
+		    int ctmp;
+
+		    cipher = 0;
+		    HEXCHAR_TO_INT(*cipherString, ctmp)
+		    cipher |= (ctmp << 12);
+		    cipherString++;
+		    HEXCHAR_TO_INT(*cipherString, ctmp)
+		    cipher |= (ctmp << 8);
+		    cipherString++;
+		    HEXCHAR_TO_INT(*cipherString, ctmp)
+		    cipher |= (ctmp << 4);
+		    cipherString++;
+		    HEXCHAR_TO_INT(*cipherString, ctmp)
+		    cipher |= ctmp;
+		    cipherString++;
+		} else {
+		    const int *cptr;
+		    if (! isalpha(ndx))
+			Usage(progName);
+		    cptr = islower(ndx) ? ssl3CipherSuites : ssl2CipherSuites;
+		    for (ndx &= 0x1f; (cipher = *cptr++) != 0 && --ndx > 0; )
+			/* do nothing */;
+		}
+		if (cipher > 0) {
 		    SSL_CipherPrefSetDefault(cipher, PR_TRUE);
+		} else {
+		    Usage(progName);
 		}
 	    }
 	}
 
 	client_main(port, connections, hostName);
 
-	NSS_Shutdown();
+cleanup:
+        if (doOcspCheck) {
+            CERTCertDBHandle *handle = CERT_GetDefaultCertDB();
+            CERT_DisableOCSPDefaultResponder(handle);        
+            CERT_DisableOCSPChecking (handle);
+        }
+
+        if (NSS_Shutdown() != SECSuccess) {
+            exit(1);
+        }
+
 	PR_Cleanup();
 	PORT_Free(progName);
 	return 0;

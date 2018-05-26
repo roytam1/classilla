@@ -1,35 +1,6 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /*
  * Internal data structures and functions used by pkcs11.c
  */
@@ -39,10 +10,11 @@
 #include "nssilock.h"
 #include "seccomon.h"
 #include "secoidt.h"
-#include "lowkeyti.h"
+#include "lowkeyti.h" 
 #include "pkcs11t.h"
-#include "pcertt.h"
 
+#include "sftkdbt.h" 
+#include "hasht.h"
 
 /* 
  * Configuration Defines 
@@ -53,28 +25,11 @@
  * the expense of space.
  */
 
-#define PKCS11_USE_THREADS	/* set to true of you are need threads */
 /* 
- *  Attribute Allocation strategy:
- *
- * 1) static allocation (PKCS11_STATIC_ATTRIBUTES set
- *			 PKCS11_REF_COUNT_ATTRIBUTES not set)
+ * The attribute allocation strategy is static allocation:
  *   Attributes are pre-allocated as part of the session object and used from
  *   the object array.
- *
- * 2) heap allocation with ref counting (PKCS11_STATIC_ATTRIBUTES not set
- *			 		PKCS11_REF_COUNT_ATTRIBUTES set)
- *   Attributes are allocated from the heap when needed and freed when their
- *   reference count goes to zero.
- *
- * 3) arena allocation (PKCS11_STATIC_ATTRIBUTES  not set
- *			 PKCS11_REF_COUNT_ATTRIBUTE not set)
- *   Attributes are allocated from the arena when needed and freed only when
- *   the object goes away.
  */
-#define PKCS11_STATIC_ATTRIBUTES	
-/*#define   PKCS11_REF_COUNT_ATTRIBUTES		 */
-/* the next two are only active if PKCS11_STATIC_ATTRIBUTES is set */
 #define MAX_OBJS_ATTRS 45	/* number of attributes to preallocate in
 				 * the object (must me the absolute max) */
 #define ATTR_SPACE 50  		/* Maximum size of attribute data before extra
@@ -102,17 +57,15 @@
  * NSS is a shared library.
  */
 #define SPACE_ATTRIBUTE_HASH_SIZE 32 
-#define SPACE_TOKEN_OBJECT_HASH_SIZE 32
+#define SPACE_SESSION_OBJECT_HASH_SIZE 32
 #define SPACE_SESSION_HASH_SIZE 32
 #define TIME_ATTRIBUTE_HASH_SIZE 32
-#define TIME_TOKEN_OBJECT_HASH_SIZE 1024
+#define TIME_SESSION_OBJECT_HASH_SIZE 1024
 #define TIME_SESSION_HASH_SIZE 1024
 #define MAX_OBJECT_LIST_SIZE 800  
 				  /* how many objects to keep on the free list
 				   * before we start freeing them */
-#define MAX_KEY_LEN 256
-
-#define MULTIACCESS "multiaccess:"
+#define MAX_KEY_LEN 256 	  /* maximum symmetric key length in bytes */
 
 /*
  * LOG2_BUCKETS_PER_SESSION_LOCK must be a prime number.
@@ -134,37 +87,34 @@
 #define BUCKETS_PER_SESSION_LOCK (1 << (LOG2_BUCKETS_PER_SESSION_LOCK))
 /* NOSPREAD sessionID to hash table index macro has been slower. */
 
-#ifdef PKCS11_USE_THREADS
-#define PK11_USE_THREADS(x) x
-#else
-#define PK11_USE_THREADS(x) 
-#endif
-
 /* define typedefs, double as forward declarations as well */
-typedef struct PK11AttributeStr PK11Attribute;
-typedef struct PK11ObjectListStr PK11ObjectList;
-typedef struct PK11ObjectFreeListStr PK11ObjectFreeList;
-typedef struct PK11ObjectListElementStr PK11ObjectListElement;
-typedef struct PK11ObjectStr PK11Object;
-typedef struct PK11SessionObjectStr PK11SessionObject;
-typedef struct PK11TokenObjectStr PK11TokenObject;
-typedef struct PK11SessionStr PK11Session;
-typedef struct PK11SlotStr PK11Slot;
-typedef struct PK11SessionContextStr PK11SessionContext;
-typedef struct PK11SearchResultsStr PK11SearchResults;
-typedef struct PK11HashVerifyInfoStr PK11HashVerifyInfo;
-typedef struct PK11HashSignInfoStr PK11HashSignInfo;
-typedef struct PK11SSLMACInfoStr PK11SSLMACInfo;
+typedef struct SFTKAttributeStr SFTKAttribute;
+typedef struct SFTKObjectListStr SFTKObjectList;
+typedef struct SFTKObjectFreeListStr SFTKObjectFreeList;
+typedef struct SFTKObjectListElementStr SFTKObjectListElement;
+typedef struct SFTKObjectStr SFTKObject;
+typedef struct SFTKSessionObjectStr SFTKSessionObject;
+typedef struct SFTKTokenObjectStr SFTKTokenObject;
+typedef struct SFTKSessionStr SFTKSession;
+typedef struct SFTKSlotStr SFTKSlot;
+typedef struct SFTKSessionContextStr SFTKSessionContext;
+typedef struct SFTKSearchResultsStr SFTKSearchResults;
+typedef struct SFTKHashVerifyInfoStr SFTKHashVerifyInfo;
+typedef struct SFTKHashSignInfoStr SFTKHashSignInfo;
+typedef struct SFTKOAEPEncryptInfoStr SFTKOAEPEncryptInfo;
+typedef struct SFTKOAEPDecryptInfoStr SFTKOAEPDecryptInfo;
+typedef struct SFTKSSLMACInfoStr SFTKSSLMACInfo;
+typedef struct SFTKItemTemplateStr SFTKItemTemplate;
 
 /* define function pointer typdefs for pointer tables */
-typedef void (*PK11Destroy)(void *, PRBool);
-typedef void (*PK11Begin)(void *);
-typedef SECStatus (*PK11Cipher)(void *,void *,unsigned int *,unsigned int,
+typedef void (*SFTKDestroy)(void *, PRBool);
+typedef void (*SFTKBegin)(void *);
+typedef SECStatus (*SFTKCipher)(void *,void *,unsigned int *,unsigned int,
 					void *, unsigned int);
-typedef SECStatus (*PK11Verify)(void *,void *,unsigned int,void *,unsigned int);
-typedef void (*PK11Hash)(void *,void *,unsigned int);
-typedef void (*PK11End)(void *,void *,unsigned int *,unsigned int);
-typedef void (*PK11Free)(void *);
+typedef SECStatus (*SFTKVerify)(void *,void *,unsigned int,void *,unsigned int);
+typedef void (*SFTKHash)(void *,void *,unsigned int);
+typedef void (*SFTKEnd)(void *,void *,unsigned int *,unsigned int);
+typedef void (*SFTKFree)(void *);
 
 /* Value to tell if an attribute is modifiable or not.
  *    NEVER: attribute is only set on creation.
@@ -173,54 +123,48 @@ typedef void (*PK11Free)(void *);
  *    ALWAYS: attribute can always be changed.
  */
 typedef enum {
-	PK11_NEVER = 0,
-	PK11_ONCOPY = 1,
-	PK11_SENSITIVE = 2,
-	PK11_ALWAYS = 3
-} PK11ModifyType;
+	SFTK_NEVER = 0,
+	SFTK_ONCOPY = 1,
+	SFTK_SENSITIVE = 2,
+	SFTK_ALWAYS = 3
+} SFTKModifyType;
 
 /*
  * Free Status Enum... tell us more information when we think we're
  * deleting an object.
  */
 typedef enum {
-	PK11_DestroyFailure,
-	PK11_Destroyed,
-	PK11_Busy
-} PK11FreeStatus;
+	SFTK_DestroyFailure,
+	SFTK_Destroyed,
+	SFTK_Busy
+} SFTKFreeStatus;
 
 /*
  * attribute values of an object.
  */
-struct PK11AttributeStr {
-    PK11Attribute  	*next;
-    PK11Attribute  	*prev;
+struct SFTKAttributeStr {
+    SFTKAttribute  	*next;
+    SFTKAttribute  	*prev;
     PRBool		freeAttr;
     PRBool		freeData;
-#ifdef PKCS11_REF_COUNT_ATTRIBUTES
-    int 		refCount;
-    PZLock 		*refLock;
-#endif
-    /*must be called handle to make pk11queue_find work */
+    /*must be called handle to make sftkqueue_find work */
     CK_ATTRIBUTE_TYPE	handle;
     CK_ATTRIBUTE 	attrib;
-#ifdef PKCS11_STATIC_ATTRIBUTES
     unsigned char space[ATTR_SPACE];
-#endif
 };
 
 
 /*
  * doubly link list of objects
  */
-struct PK11ObjectListStr {
-    PK11ObjectList *next;
-    PK11ObjectList *prev;
-    PK11Object	   *parent;
+struct SFTKObjectListStr {
+    SFTKObjectList *next;
+    SFTKObjectList *prev;
+    SFTKObject	   *parent;
 };
 
-struct PK11ObjectFreeListStr {
-    PK11Object	*head;
+struct SFTKObjectFreeListStr {
+    SFTKObject	*head;
     PZLock	*lock;
     int		count;
 };
@@ -228,53 +172,48 @@ struct PK11ObjectFreeListStr {
 /*
  * PKCS 11 crypto object structure
  */
-struct PK11ObjectStr {
-    PK11Object *next;
-    PK11Object	*prev;
+struct SFTKObjectStr {
+    SFTKObject *next;
+    SFTKObject	*prev;
     CK_OBJECT_CLASS 	objclass;
     CK_OBJECT_HANDLE	handle;
     int 		refCount;
     PZLock 		*refLock;
-    PK11Slot	   	*slot;
+    SFTKSlot	   	*slot;
     void 		*objectInfo;
-    PK11Free 		infoFree;
-#ifndef PKCS11_STATIC_ATTRIBUTES
-    PLArenaPool	*arena;
-#endif
+    SFTKFree 		infoFree;
 };
 
-struct PK11TokenObjectStr {
-    PK11Object  obj;
+struct SFTKTokenObjectStr {
+    SFTKObject  obj;
     SECItem	dbKey;
 };
 
-struct PK11SessionObjectStr {
-    PK11Object	   obj;
-    PK11ObjectList sessionList;
+struct SFTKSessionObjectStr {
+    SFTKObject	   obj;
+    SFTKObjectList sessionList;
     PZLock		*attributeLock;
-    PK11Session   	*session;
+    SFTKSession   	*session;
     PRBool		wasDerived;
-#ifdef PKCS11_STATIC_ATTRIBUTES
     int nextAttr;
-    PK11Attribute	attrList[MAX_OBJS_ATTRS];
-#endif
+    SFTKAttribute	attrList[MAX_OBJS_ATTRS];
     PRBool		optimizeSpace;
     unsigned int	hashSize;
-    PK11Attribute 	*head[1];
+    SFTKAttribute 	*head[1];
 };
 
 /*
  * struct to deal with a temparary list of objects
  */
-struct PK11ObjectListElementStr {
-    PK11ObjectListElement	*next;
-    PK11Object 			*object;
+struct SFTKObjectListElementStr {
+    SFTKObjectListElement	*next;
+    SFTKObject 			*object;
 };
 
 /*
  * Area to hold Search results
  */
-struct PK11SearchResultsStr {
+struct SFTKSearchResultsStr {
     CK_OBJECT_HANDLE	*handles;
     int			size;
     int			index;
@@ -286,50 +225,61 @@ struct PK11SearchResultsStr {
  * the universal crypto/hash/sign/verify context structure
  */
 typedef enum {
-    PK11_ENCRYPT,
-    PK11_DECRYPT,
-    PK11_HASH,
-    PK11_SIGN,
-    PK11_SIGN_RECOVER,
-    PK11_VERIFY,
-    PK11_VERIFY_RECOVER
-} PK11ContextType;
+    SFTK_ENCRYPT,
+    SFTK_DECRYPT,
+    SFTK_HASH,
+    SFTK_SIGN,
+    SFTK_SIGN_RECOVER,
+    SFTK_VERIFY,
+    SFTK_VERIFY_RECOVER
+} SFTKContextType;
 
+/** max block size of supported block ciphers */
+#define SFTK_MAX_BLOCK_SIZE 16
+/** currently SHA512 is the biggest hash length */
+#define SFTK_MAX_MAC_LENGTH 64
+#define SFTK_INVALID_MAC_SIZE 0xffffffff
 
-#define PK11_MAX_BLOCK_SIZE 16
-/* currently SHA1 is the biggest hash length */
-#define PK11_MAX_MAC_LENGTH 20
-#define PK11_INVALID_MAC_SIZE 0xffffffff
-
-struct PK11SessionContextStr {
-    PK11ContextType	type;
+/** Particular ongoing operation in session (sign/verify/digest/encrypt/...)
+ *
+ *  Understanding sign/verify context:
+ *      multi=1 hashInfo=0   block (symmetric) cipher MACing
+ *      multi=1 hashInfo=X   PKC S/V with prior hashing
+ *      multi=0 hashInfo=0   PKC S/V one shot (w/o hashing)
+ *      multi=0 hashInfo=X   *** shouldn't happen ***
+ */
+struct SFTKSessionContextStr {
+    SFTKContextType	type;
     PRBool		multi; 		/* is multipart */
+    PRBool		rsa; 		/* is rsa */
     PRBool		doPad; 		/* use PKCS padding for block ciphers */
     unsigned int	blockSize; 	/* blocksize for padding */
     unsigned int	padDataLength; 	/* length of the valid data in padbuf */
-    unsigned char	padBuf[PK11_MAX_BLOCK_SIZE];
-    unsigned char	macBuf[PK11_MAX_BLOCK_SIZE];
+    /** latest incomplete block of data for block cipher */
+    unsigned char	padBuf[SFTK_MAX_BLOCK_SIZE];
+    /** result of MAC'ing of latest full block of data with block cipher */
+    unsigned char	macBuf[SFTK_MAX_BLOCK_SIZE];
     CK_ULONG		macSize;	/* size of a general block cipher mac*/
     void		*cipherInfo;
     void		*hashInfo;
     unsigned int	cipherInfoLen;
     CK_MECHANISM_TYPE	currentMech;
-    PK11Cipher		update;
-    PK11Hash		hashUpdate;
-    PK11End		end;
-    PK11Destroy		destroy;
-    PK11Destroy		hashdestroy;
-    PK11Verify		verify;
+    SFTKCipher		update;
+    SFTKHash		hashUpdate;
+    SFTKEnd		end;
+    SFTKDestroy		destroy;
+    SFTKDestroy		hashdestroy;
+    SFTKVerify		verify;
     unsigned int	maxLen;
-    PK11Object		*key;
+    SFTKObject		*key;
 };
 
 /*
  * Sessions (have objects)
  */
-struct PK11SessionStr {
-    PK11Session        *next;
-    PK11Session        *prev;
+struct SFTKSessionStr {
+    SFTKSession        *next;
+    SFTKSession        *prev;
     CK_SESSION_HANDLE	handle;
     int			refCount;
     PZLock		*objectLock;
@@ -337,12 +287,12 @@ struct PK11SessionStr {
     CK_SESSION_INFO	info;
     CK_NOTIFY		notify;
     CK_VOID_PTR		appData;
-    PK11Slot		*slot;
-    PK11SearchResults	*search;
-    PK11SessionContext	*enc_context;
-    PK11SessionContext	*hash_context;
-    PK11SessionContext	*sign_context;
-    PK11ObjectList	*objects[1];
+    SFTKSlot		*slot;
+    SFTKSearchResults	*search;
+    SFTKSessionContext	*enc_context;
+    SFTKSessionContext	*hash_context;
+    SFTKSessionContext	*sign_context;
+    SFTKObjectList	*objects[1];
 };
 
 /*
@@ -350,63 +300,99 @@ struct PK11SessionStr {
  *
  * The array of sessionLock's protect the session hash table (head[])
  * as well as the reference count of session objects in that bucket
- * (head[]->refCount),  objectLock protects all elements of the token
- * object hash table (tokObjects[], tokenIDCount, and tokenHashTable),
- * and slotLock protects the remaining protected elements:
- * password, isLoggedIn, ssoLoggedIn, sessionCount, and rwSessionCount.
+ * (head[]->refCount),  objectLock protects all elements of the slot's
+ * object hash tables (sessObjHashTable[] and tokObjHashTable), and
+ * sessionObjectHandleCount.
+ * slotLock protects the remaining protected elements:
+ * password, isLoggedIn, ssoLoggedIn, and sessionCount,
+ * and pwCheckLock serializes the key database password checks in
+ * NSC_SetPIN and NSC_Login.
+ *
+ * Each of the fields below has the following lifetime as commented
+ * next to the fields:
+ *   invariant  - This value is set when the slot is first created and
+ * never changed until it is destroyed.
+ *   per load   - This value is set when the slot is first created, or 
+ * when the slot is used to open another directory. Between open and close
+ * this field does not change.
+ *   variable - This value changes through the normal process of slot operation.
+ *      - reset. The value of this variable is cleared during an open/close 
+ *   cycles.
+ *      - preserved. The value of this variable is preserved over open/close
+ *   cycles.
  */
-struct PK11SlotStr {
-    CK_SLOT_ID		slotID;
-    PZLock		*slotLock;
-    PZLock		**sessionLock;
-    unsigned int	numSessionLocks;
-    unsigned long	sessionLockMask;
-    PZLock		*objectLock;
-    SECItem		*password;
-    PRBool		hasTokens;
-    PRBool		isLoggedIn;
-    PRBool		ssoLoggedIn;
-    PRBool		needLogin;
-    PRBool		DB_loaded;
-    PRBool		readOnly;
-    PRBool		optimizeSpace;
-    NSSLOWCERTCertDBHandle *certDB;
-    NSSLOWKEYDBHandle	*keyDB;
-    int			minimumPinLen;
-    PRInt32		sessionIDCount;  /* atomically incremented */
-    int			sessionIDConflict;  /* not protected by a lock */
-    int			sessionCount;
-    int			rwSessionCount;
-    int			tokenIDCount;
-    int			index;
-    PLHashTable		*tokenHashTable;
-    PK11Object		**tokObjects;
-    unsigned int	tokObjHashSize;
-    PK11Session		**head;
-    unsigned int	sessHashSize;
-    char		tokDescription[33];
-    char		slotDescription[64];
+struct SFTKSlotStr {
+    CK_SLOT_ID		slotID;			/* invariant */
+    PZLock		*slotLock;		/* invariant */
+    PZLock		**sessionLock;		/* invariant */
+    unsigned int	numSessionLocks;	/* invariant */
+    unsigned long	sessionLockMask;	/* invariant */
+    PZLock		*objectLock;		/* invariant */
+    PRLock		*pwCheckLock;		/* invariant */
+    PRBool		present;		/* variable -set */
+    PRBool		hasTokens;		/* per load */
+    PRBool		isLoggedIn;		/* variable - reset */
+    PRBool		ssoLoggedIn;		/* variable - reset */
+    PRBool		needLogin;		/* per load */
+    PRBool		DB_loaded;		/* per load */
+    PRBool		readOnly;		/* per load */
+    PRBool		optimizeSpace;		/* invariant */
+    SFTKDBHandle	*certDB;		/* per load */
+    SFTKDBHandle	*keyDB;			/* per load */
+    int			minimumPinLen;		/* per load */
+    PRInt32		sessionIDCount;		/* atomically incremented */
+                                        	/* (preserved) */
+    int			sessionIDConflict; 	/* not protected by a lock */
+                                            	/* (preserved) */
+    int			sessionCount;           /* variable - reset */
+    PRInt32             rwSessionCount;    	/* set by atomic operations */
+                                          	/* (reset) */
+    int			sessionObjectHandleCount;/* variable - perserved */
+    int			index;			/* invariant */
+    PLHashTable		*tokObjHashTable;	/* invariant */
+    SFTKObject		**sessObjHashTable;	/* variable - reset */
+    unsigned int	sessObjHashSize;	/* invariant */
+    SFTKSession		**head;			/* variable -reset */
+    unsigned int	sessHashSize;		/* invariant */
+    char		tokDescription[33];	/* per load */
+    char		updateTokDescription[33]; /* per load */
+    char		slotDescription[65];	/* invariant */
 };
 
 /*
  * special joint operations Contexts
  */
-struct PK11HashVerifyInfoStr {
+struct SFTKHashVerifyInfoStr {
     SECOidTag   	hashOid;
+    void		*params;
     NSSLOWKEYPublicKey	*key;
 };
 
-struct PK11HashSignInfoStr {
+struct SFTKHashSignInfoStr {
     SECOidTag   	hashOid;
+    void		*params;
     NSSLOWKEYPrivateKey	*key;
 };
 
+/**
+ * Contexts for RSA-OAEP
+ */
+struct SFTKOAEPEncryptInfoStr {
+    CK_RSA_PKCS_OAEP_PARAMS *params;
+    NSSLOWKEYPublicKey *key;
+};
+
+struct SFTKOAEPDecryptInfoStr {
+    CK_RSA_PKCS_OAEP_PARAMS *params;
+    NSSLOWKEYPrivateKey *key;
+};
+
 /* context for the Final SSLMAC message */
-struct PK11SSLMACInfoStr {
+struct SFTKSSLMACInfoStr {
     void 		*hashContext;
-    PK11Begin		begin;
-    PK11Hash		update;
-    PK11End		end;
+    SFTKBegin		begin;
+    SFTKHash		update;
+    SFTKEnd		end;
     CK_ULONG		macSize;
     int			padSize;
     unsigned char	key[MAX_KEY_LEN];
@@ -414,29 +400,46 @@ struct PK11SSLMACInfoStr {
 };
 
 /*
+ * Template based on SECItems, suitable for passing as arrays
+ */
+struct SFTKItemTemplateStr {
+    CK_ATTRIBUTE_TYPE	type;
+    SECItem		*item;
+};
+
+/* macro for setting SFTKTemplates. */
+#define SFTK_SET_ITEM_TEMPLATE(templ, count, itemPtr, attr) \
+   templ[count].type = attr; \
+   templ[count].item = itemPtr
+
+#define SFTK_MAX_ITEM_TEMPLATE 10
+
+/*
  * session handle modifiers
  */
-#define PK11_SESSION_SLOT_MASK	0xff000000L
+#define SFTK_SESSION_SLOT_MASK	0xff000000L
 
 /*
  * object handle modifiers
  */
-#define PK11_TOKEN_MASK		0x80000000L
-#define PK11_TOKEN_MAGIC	0x80000000L
-#define PK11_TOKEN_TYPE_MASK	0x70000000L
+#define SFTK_TOKEN_MASK		0x80000000L
+#define SFTK_TOKEN_MAGIC	0x80000000L
+#define SFTK_TOKEN_TYPE_MASK	0x70000000L
 /* keydb (high bit == 0) */
-#define PK11_TOKEN_TYPE_PRIV	0x10000000L
-#define PK11_TOKEN_TYPE_PUB	0x20000000L
-#define PK11_TOKEN_TYPE_KEY	0x30000000L
+#define SFTK_TOKEN_TYPE_PRIV	0x10000000L
+#define SFTK_TOKEN_TYPE_PUB	0x20000000L
+#define SFTK_TOKEN_TYPE_KEY	0x30000000L
 /* certdb (high bit == 1) */
-#define PK11_TOKEN_TYPE_TRUST	0x40000000L
-#define PK11_TOKEN_TYPE_CRL	0x50000000L
-#define PK11_TOKEN_TYPE_SMIME	0x60000000L
-#define PK11_TOKEN_TYPE_CERT	0x70000000L
+#define SFTK_TOKEN_TYPE_TRUST	0x40000000L
+#define SFTK_TOKEN_TYPE_CRL	0x50000000L
+#define SFTK_TOKEN_TYPE_SMIME	0x60000000L
+#define SFTK_TOKEN_TYPE_CERT	0x70000000L
 
-#define PK11_TOKEN_KRL_HANDLE	(PK11_TOKEN_MAGIC|PK11_TOKEN_TYPE_CRL|1)
-/* how big a password/pin we can deal with */
-#define PK11_MAX_PIN	255
+#define SFTK_TOKEN_KRL_HANDLE	(SFTK_TOKEN_MAGIC|SFTK_TOKEN_TYPE_CRL|1)
+/* how big (in bytes) a password/pin we can deal with */
+#define SFTK_MAX_PIN	255
+/* minimum password/pin length (in Unicode characters) in FIPS mode */
+#define FIPS_MIN_PIN	7
 
 /* slot ID's */
 #define NETSCAPE_SLOT_ID 1
@@ -444,54 +447,91 @@ struct PK11SSLMACInfoStr {
 #define FIPS_SLOT_ID 3
 
 /* slot helper macros */
-#define pk11_SlotFromSession(sp) ((sp)->slot)
-#define pk11_isToken(id) (((id) & PK11_TOKEN_MASK) == PK11_TOKEN_MAGIC)
+#define sftk_SlotFromSession(sp) ((sp)->slot)
+#define sftk_isToken(id) (((id) & SFTK_TOKEN_MASK) == SFTK_TOKEN_MAGIC)
+
+/* the session hash multiplier (see bug 201081) */
+#define SHMULTIPLIER 1791398085
 
 /* queueing helper macros */
-#define pk11_hash(value,size) ((value) & (size-1))/*size must be a power of 2*/
-#define pk11queue_add(element,id,head,hash_size) \
-	{ int tmp = pk11_hash(id,hash_size); \
+#define sftk_hash(value,size) \
+	((PRUint32)((value) * SHMULTIPLIER) & (size-1))
+#define sftkqueue_add(element,id,head,hash_size) \
+	{ int tmp = sftk_hash(id,hash_size); \
 	(element)->next = (head)[tmp]; \
 	(element)->prev = NULL; \
 	if ((head)[tmp]) (head)[tmp]->prev = (element); \
 	(head)[tmp] = (element); }
-#define pk11queue_find(element,id,head,hash_size) \
-	for( (element) = (head)[pk11_hash(id,hash_size)]; (element) != NULL; \
+#define sftkqueue_find(element,id,head,hash_size) \
+	for( (element) = (head)[sftk_hash(id,hash_size)]; (element) != NULL; \
 					 (element) = (element)->next) { \
 	    if ((element)->handle == (id)) { break; } }
-#define pk11queue_is_queued(element,id,head,hash_size) \
+#define sftkqueue_is_queued(element,id,head,hash_size) \
 	( ((element)->next) || ((element)->prev) || \
-	 ((head)[pk11_hash(id,hash_size)] == (element)) )
-#define pk11queue_delete(element,id,head,hash_size) \
+	 ((head)[sftk_hash(id,hash_size)] == (element)) )
+#define sftkqueue_delete(element,id,head,hash_size) \
 	if ((element)->next) (element)->next->prev = (element)->prev; \
 	if ((element)->prev) (element)->prev->next = (element)->next; \
-	   else (head)[pk11_hash(id,hash_size)] = ((element)->next); \
+	   else (head)[sftk_hash(id,hash_size)] = ((element)->next); \
 	(element)->next = NULL; \
 	(element)->prev = NULL; \
+
+#define sftkqueue_init_element(element) \
+    (element)->prev = NULL;
+
+#define sftkqueue_add2(element, id, index, head) \
+    {                                            \
+	(element)->next = (head)[index];         \
+	if ((head)[index])                       \
+	    (head)[index]->prev = (element);     \
+	(head)[index] = (element);               \
+    }
+
+#define sftkqueue_find2(element, id, index, head) \
+    for ( (element) = (head)[index];              \
+          (element) != NULL;                      \
+          (element) = (element)->next) {          \
+	if ((element)->handle == (id)) { break; } \
+    }
+
+#define sftkqueue_delete2(element, id, index, head) \
+	if ((element)->next) (element)->next->prev = (element)->prev; \
+	if ((element)->prev) (element)->prev->next = (element)->next; \
+	   else (head)[index] = ((element)->next);
+
+#define sftkqueue_clear_deleted_element(element) \
+	(element)->next = NULL; \
+	(element)->prev = NULL; \
+
 
 /* sessionID (handle) is used to determine session lock bucket */
 #ifdef NOSPREAD
 /* NOSPREAD:	(ID>>L2LPB) & (perbucket-1) */
-#define PK11_SESSION_LOCK(slot,handle) \
+#define SFTK_SESSION_LOCK(slot,handle) \
     ((slot)->sessionLock[((handle) >> LOG2_BUCKETS_PER_SESSION_LOCK) \
         & (slot)->sessionLockMask])
 #else
 /* SPREAD:	ID & (perbucket-1) */
-#define PK11_SESSION_LOCK(slot,handle) \
+#define SFTK_SESSION_LOCK(slot,handle) \
     ((slot)->sessionLock[(handle) & (slot)->sessionLockMask])
 #endif
 
 /* expand an attribute & secitem structures out */
-#define pk11_attr_expand(ap) (ap)->type,(ap)->pValue,(ap)->ulValueLen
-#define pk11_item_expand(ip) (ip)->data,(ip)->len
+#define sftk_attr_expand(ap) (ap)->type,(ap)->pValue,(ap)->ulValueLen
+#define sftk_item_expand(ip) (ip)->data,(ip)->len
 
-typedef struct pk11_token_parametersStr {
+typedef struct sftk_token_parametersStr {
     CK_SLOT_ID slotID;
     char *configdir;
     char *certPrefix;
     char *keyPrefix;
+    char *updatedir;
+    char *updCertPrefix;
+    char *updKeyPrefix;
+    char *updateID;
     char *tokdes;
     char *slotdes;
+    char *updtokdes;
     int minPW; 
     PRBool readOnly;
     PRBool noCertDB;
@@ -499,10 +539,12 @@ typedef struct pk11_token_parametersStr {
     PRBool forceOpen;
     PRBool pwRequired;
     PRBool optimizeSpace;
-} pk11_token_parameters;
+} sftk_token_parameters;
 
-typedef struct pk11_parametersStr {
+typedef struct sftk_parametersStr {
     char *configdir;
+    char *updatedir;
+    char *updateID;
     char *secmodName;
     char *man;
     char *libdes; 
@@ -512,160 +554,191 @@ typedef struct pk11_parametersStr {
     PRBool forceOpen;
     PRBool pwRequired;
     PRBool optimizeSpace;
-    pk11_token_parameters *tokens;
+    sftk_token_parameters *tokens;
     int token_count;
-} pk11_parameters;
+} sftk_parameters;
 
 
-/* machine dependent path stuff used by dbinit.c and pk11db.c */
-#ifdef macintosh
-#define PATH_SEPARATOR ":"
-#define SECMOD_DB "Security Modules"
-#define CERT_DB_FMT "%sCertificates%s"
-#define KEY_DB_FMT "%sKey Database%s"
-#else
-#define PATH_SEPARATOR "/"
-#define SECMOD_DB "secmod.db"
+/* path stuff (was machine dependent) used by dbinit.c and pk11db.c */
 #define CERT_DB_FMT "%scert%s.db"
 #define KEY_DB_FMT "%skey%s.db"
-#endif
 
 SEC_BEGIN_PROTOS
 
-extern int nsf_init;
+/* shared functions between pkcs11.c and fipstokn.c */
+extern PRBool nsf_init;
 extern CK_RV nsc_CommonInitialize(CK_VOID_PTR pReserved, PRBool isFIPS);
 extern CK_RV nsc_CommonFinalize(CK_VOID_PTR pReserved, PRBool isFIPS);
+extern PRBool sftk_ForkReset(CK_VOID_PTR pReserved, CK_RV* crv);
 extern CK_RV nsc_CommonGetSlotList(CK_BBOOL tokPresent, 
 	CK_SLOT_ID_PTR pSlotList, CK_ULONG_PTR pulCount, int moduleIndex);
-/* shared functions between PKCS11.c and PK11FIPS.c */
-extern CK_RV PK11_SlotInit(char *configdir,pk11_token_parameters *params, 
-							int moduleIndex);
+
+/* slot initialization, reinit, shutdown and destruction */
+extern CK_RV SFTK_SlotInit(char *configdir, char *updatedir, char *updateID,
+			sftk_token_parameters *params, int moduleIndex);
+extern CK_RV SFTK_SlotReInit(SFTKSlot *slot, char *configdir,
+			char *updatedir, char *updateID,
+			sftk_token_parameters *params, int moduleIndex);
+extern CK_RV SFTK_DestroySlotData(SFTKSlot *slot);
+extern CK_RV SFTK_ShutdownSlot(SFTKSlot *slot);
+extern CK_RV sftk_CloseAllSessions(SFTKSlot *slot, PRBool logout);
+
 
 /* internal utility functions used by pkcs11.c */
-extern PK11Attribute *pk11_FindAttribute(PK11Object *object,
+extern SFTKAttribute *sftk_FindAttribute(SFTKObject *object,
 					 CK_ATTRIBUTE_TYPE type);
-extern void pk11_FreeAttribute(PK11Attribute *attribute);
-extern CK_RV pk11_AddAttributeType(PK11Object *object, CK_ATTRIBUTE_TYPE type,
-				   void *valPtr,
-				  CK_ULONG length);
-extern CK_RV pk11_Attribute2SecItem(PLArenaPool *arena, SECItem *item,
-				    PK11Object *object, CK_ATTRIBUTE_TYPE type);
-extern PRBool pk11_hasAttribute(PK11Object *object, CK_ATTRIBUTE_TYPE type);
-extern PRBool pk11_isTrue(PK11Object *object, CK_ATTRIBUTE_TYPE type);
-extern void pk11_DeleteAttributeType(PK11Object *object,
+extern void sftk_FreeAttribute(SFTKAttribute *attribute);
+extern CK_RV sftk_AddAttributeType(SFTKObject *object, CK_ATTRIBUTE_TYPE type,
+				   const void *valPtr, CK_ULONG length);
+extern CK_RV sftk_Attribute2SecItem(PLArenaPool *arena, SECItem *item,
+				    SFTKObject *object, CK_ATTRIBUTE_TYPE type);
+extern CK_RV sftk_MultipleAttribute2SecItem(PLArenaPool *arena, 
+		SFTKObject *object, SFTKItemTemplate *templ, int count);
+extern unsigned int sftk_GetLengthInBits(unsigned char *buf,
+							 unsigned int bufLen);
+extern CK_RV sftk_ConstrainAttribute(SFTKObject *object, 
+	CK_ATTRIBUTE_TYPE type, int minLength, int maxLength, int minMultiple);
+extern PRBool sftk_hasAttribute(SFTKObject *object, CK_ATTRIBUTE_TYPE type);
+extern PRBool sftk_isTrue(SFTKObject *object, CK_ATTRIBUTE_TYPE type);
+extern void sftk_DeleteAttributeType(SFTKObject *object,
 				     CK_ATTRIBUTE_TYPE type);
-extern CK_RV pk11_Attribute2SecItem(PLArenaPool *arena, SECItem *item,
-				    PK11Object *object, CK_ATTRIBUTE_TYPE type);
-extern CK_RV pk11_Attribute2SSecItem(PLArenaPool *arena, SECItem *item,
-				     PK11Object *object,
+extern CK_RV sftk_Attribute2SecItem(PLArenaPool *arena, SECItem *item,
+				    SFTKObject *object, CK_ATTRIBUTE_TYPE type);
+extern CK_RV sftk_Attribute2SSecItem(PLArenaPool *arena, SECItem *item,
+				     SFTKObject *object,
 				     CK_ATTRIBUTE_TYPE type);
-extern PK11ModifyType pk11_modifyType(CK_ATTRIBUTE_TYPE type,
+extern SFTKModifyType sftk_modifyType(CK_ATTRIBUTE_TYPE type,
 				      CK_OBJECT_CLASS inClass);
-extern PRBool pk11_isSensitive(CK_ATTRIBUTE_TYPE type, CK_OBJECT_CLASS inClass);
-extern char *pk11_getString(PK11Object *object, CK_ATTRIBUTE_TYPE type);
-extern void pk11_nullAttribute(PK11Object *object,CK_ATTRIBUTE_TYPE type);
-extern CK_RV pk11_forceAttribute(PK11Object *object, CK_ATTRIBUTE_TYPE type,
-				 void *value, unsigned int len);
-extern CK_RV pk11_defaultAttribute(PK11Object *object, CK_ATTRIBUTE_TYPE type,
-				   void *value, unsigned int len);
-extern unsigned int pk11_MapTrust(CK_TRUST trust, PRBool clientAuth);
+extern PRBool sftk_isSensitive(CK_ATTRIBUTE_TYPE type, CK_OBJECT_CLASS inClass);
+extern char *sftk_getString(SFTKObject *object, CK_ATTRIBUTE_TYPE type);
+extern void sftk_nullAttribute(SFTKObject *object,CK_ATTRIBUTE_TYPE type);
+extern CK_RV sftk_GetULongAttribute(SFTKObject *object, CK_ATTRIBUTE_TYPE type,
+                                                         CK_ULONG *longData);
+extern CK_RV sftk_forceAttribute(SFTKObject *object, CK_ATTRIBUTE_TYPE type,
+				 const void *value, unsigned int len);
+extern CK_RV sftk_defaultAttribute(SFTKObject *object, CK_ATTRIBUTE_TYPE type,
+				   const void *value, unsigned int len);
+extern unsigned int sftk_MapTrust(CK_TRUST trust, PRBool clientAuth);
 
-extern PK11Object *pk11_NewObject(PK11Slot *slot);
-extern CK_RV pk11_CopyObject(PK11Object *destObject, PK11Object *srcObject);
-extern PK11FreeStatus pk11_FreeObject(PK11Object *object);
-extern CK_RV pk11_DeleteObject(PK11Session *session, PK11Object *object);
-extern void pk11_ReferenceObject(PK11Object *object);
-extern PK11Object *pk11_ObjectFromHandle(CK_OBJECT_HANDLE handle,
-					 PK11Session *session);
-extern void pk11_AddSlotObject(PK11Slot *slot, PK11Object *object);
-extern void pk11_AddObject(PK11Session *session, PK11Object *object);
+extern SFTKObject *sftk_NewObject(SFTKSlot *slot);
+extern CK_RV sftk_CopyObject(SFTKObject *destObject, SFTKObject *srcObject);
+extern SFTKFreeStatus sftk_FreeObject(SFTKObject *object);
+extern CK_RV sftk_DeleteObject(SFTKSession *session, SFTKObject *object);
+extern void sftk_ReferenceObject(SFTKObject *object);
+extern SFTKObject *sftk_ObjectFromHandle(CK_OBJECT_HANDLE handle,
+					 SFTKSession *session);
+extern void sftk_AddSlotObject(SFTKSlot *slot, SFTKObject *object);
+extern void sftk_AddObject(SFTKSession *session, SFTKObject *object);
+/* clear out all the existing object ID to database key mappings.
+ * used to reinit a token */
+extern CK_RV SFTK_ClearTokenKeyHashTable(SFTKSlot *slot);
 
-extern CK_RV pk11_searchObjectList(PK11SearchResults *search,
-				   PK11Object **head, unsigned int size,
+extern CK_RV sftk_searchObjectList(SFTKSearchResults *search,
+				   SFTKObject **head, unsigned int size,
 				   PZLock *lock, CK_ATTRIBUTE_PTR inTemplate,
 				   int count, PRBool isLoggedIn);
-extern PK11ObjectListElement *pk11_FreeObjectListElement(
-					     PK11ObjectListElement *objectList);
-extern void pk11_FreeObjectList(PK11ObjectListElement *objectList);
-extern void pk11_FreeSearch(PK11SearchResults *search);
-extern CK_RV pk11_handleObject(PK11Object *object, PK11Session *session);
+extern SFTKObjectListElement *sftk_FreeObjectListElement(
+					     SFTKObjectListElement *objectList);
+extern void sftk_FreeObjectList(SFTKObjectListElement *objectList);
+extern void sftk_FreeSearch(SFTKSearchResults *search);
+extern CK_RV sftk_handleObject(SFTKObject *object, SFTKSession *session);
 
-extern PK11Slot *pk11_SlotFromID(CK_SLOT_ID slotID);
-extern PK11Slot *pk11_SlotFromSessionHandle(CK_SESSION_HANDLE handle);
-extern PK11Session *pk11_SessionFromHandle(CK_SESSION_HANDLE handle);
-extern void pk11_FreeSession(PK11Session *session);
-extern PK11Session *pk11_NewSession(CK_SLOT_ID slotID, CK_NOTIFY notify,
+extern SFTKSlot *sftk_SlotFromID(CK_SLOT_ID slotID, PRBool all);
+extern SFTKSlot *sftk_SlotFromSessionHandle(CK_SESSION_HANDLE handle);
+extern SFTKSession *sftk_SessionFromHandle(CK_SESSION_HANDLE handle);
+extern void sftk_FreeSession(SFTKSession *session);
+extern SFTKSession *sftk_NewSession(CK_SLOT_ID slotID, CK_NOTIFY notify,
 				    CK_VOID_PTR pApplication, CK_FLAGS flags);
-extern void pk11_update_state(PK11Slot *slot,PK11Session *session);
-extern void pk11_update_all_states(PK11Slot *slot);
-extern void pk11_FreeContext(PK11SessionContext *context);
-extern void pk11_CleanupFreeLists(void);
+extern void sftk_update_state(SFTKSlot *slot,SFTKSession *session);
+extern void sftk_update_all_states(SFTKSlot *slot);
+extern void sftk_FreeContext(SFTKSessionContext *context);
+extern void sftk_InitFreeLists(void);
+extern void sftk_CleanupFreeLists(void);
 
-extern NSSLOWKEYPublicKey *pk11_GetPubKey(PK11Object *object,
+extern NSSLOWKEYPublicKey *sftk_GetPubKey(SFTKObject *object,
 					  CK_KEY_TYPE key_type, CK_RV *crvp);
-extern NSSLOWKEYPrivateKey *pk11_GetPrivKey(PK11Object *object,
+extern NSSLOWKEYPrivateKey *sftk_GetPrivKey(SFTKObject *object,
 					    CK_KEY_TYPE key_type, CK_RV *crvp);
-extern void pk11_FormatDESKey(unsigned char *key, int length);
-extern PRBool pk11_CheckDESKey(unsigned char *key);
-extern PRBool pk11_IsWeakKey(unsigned char *key,CK_KEY_TYPE key_type);
+extern void sftk_FormatDESKey(unsigned char *key, int length);
+extern PRBool sftk_CheckDESKey(unsigned char *key);
+extern PRBool sftk_IsWeakKey(unsigned char *key,CK_KEY_TYPE key_type);
 
-extern CK_RV secmod_parseParameters(char *param, pk11_parameters *parsed,
-								PRBool isFIPS);
-extern void secmod_freeParams(pk11_parameters *params);
-extern char *secmod_getSecmodName(char *params, char **domain, 
-						char **filename, PRBool *rw);
-extern char ** secmod_ReadPermDB(const char *domain, const char *filename, 
-			const char *dbname, char *params, PRBool rw);
-extern SECStatus secmod_DeletePermDB(const char *domain, const char *filename,
-			const char *dbname, char *args, PRBool rw);
-extern SECStatus secmod_AddPermDB(const char *domain, const char *filename,
-			const char *dbname, char *module, PRBool rw);
-extern SECStatus secmod_ReleasePermDBData(const char *domain, 
-	const char *filename, const char *dbname, char **specList, PRBool rw);
+/* mechanism allows this operation */
+extern CK_RV sftk_MechAllowsOperation(CK_MECHANISM_TYPE type, CK_ATTRIBUTE_TYPE op);
+
+/* helper function which calls nsslowkey_FindKeyByPublicKey after safely
+ * acquiring a reference to the keydb from the slot */
+NSSLOWKEYPrivateKey *sftk_FindKeyByPublicKey(SFTKSlot *slot, SECItem *dbKey);
+
 /*
- * OK there are now lots of options here, lets go through them all:
- *
- * configdir - base directory where all the cert, key, and module datbases live.
- * certPrefix - prefix added to the beginning of the cert database example: "
- *                      "https-server1-"
- * keyPrefix - prefix added to the beginning of the key database example: "
- *                      "https-server1-"
- * secmodName - name of the security module database (usually "secmod.db").
- * readOnly - Boolean: true if the databases are to be openned read only.
- * nocertdb - Don't open the cert DB and key DB's, just initialize the
- *                      Volatile certdb.
- * nomoddb - Don't open the security module DB, just initialize the
- *                      PKCS #11 module.
- * forceOpen - Continue to force initializations even if the databases cannot
- *                      be opened.
+ * parameter parsing functions
  */
-CK_RV pk11_DBInit(const char *configdir, const char *certPrefix,
-	 	const char *keyPrefix, PRBool readOnly, PRBool noCertDB, 
-		PRBool noKeyDB, PRBool forceOpen, 
-		NSSLOWCERTCertDBHandle **certDB, NSSLOWKEYDBHandle **keyDB);
+CK_RV sftk_parseParameters(char *param, sftk_parameters *parsed, PRBool isFIPS);
+void sftk_freeParams(sftk_parameters *params);
 
-void pk11_DBShutdown(NSSLOWCERTCertDBHandle *certHandle, 
-		     NSSLOWKEYDBHandle *keyHandle);
-
-const char *pk11_EvaluateConfigDir(const char *configdir, char **domain);
 
 /*
  * narrow objects
  */
-PK11SessionObject * pk11_narrowToSessionObject(PK11Object *);
-PK11TokenObject * pk11_narrowToTokenObject(PK11Object *);
+SFTKSessionObject * sftk_narrowToSessionObject(SFTKObject *);
+SFTKTokenObject * sftk_narrowToTokenObject(SFTKObject *);
 
 /*
  * token object utilities
  */
-void pk11_addHandle(PK11SearchResults *search, CK_OBJECT_HANDLE handle);
-PRBool pk11_tokenMatch(PK11Slot *slot, SECItem *dbKey, CK_OBJECT_HANDLE class,
-                                        CK_ATTRIBUTE_PTR theTemplate,int count);
-CK_OBJECT_HANDLE pk11_mkHandle(PK11Slot *slot, 
-					SECItem *dbKey, CK_OBJECT_HANDLE class);
-PK11Object * pk11_NewTokenObject(PK11Slot *slot, SECItem *dbKey, 
+void sftk_addHandle(SFTKSearchResults *search, CK_OBJECT_HANDLE handle);
+PRBool sftk_poisonHandle(SFTKSlot *slot, SECItem *dbkey, 
 						CK_OBJECT_HANDLE handle);
-PK11TokenObject *pk11_convertSessionToToken(PK11Object *so);
+SFTKObject * sftk_NewTokenObject(SFTKSlot *slot, SECItem *dbKey, 
+						CK_OBJECT_HANDLE handle);
+SFTKTokenObject *sftk_convertSessionToToken(SFTKObject *so);
+
+
+/* J-PAKE (jpakesftk.c) */
+extern
+CK_RV jpake_Round1(HASH_HashType hashType,
+                   CK_NSS_JPAKERound1Params * params,
+                   SFTKObject * key);
+extern
+CK_RV jpake_Round2(HASH_HashType hashType,
+                   CK_NSS_JPAKERound2Params * params,
+                   SFTKObject * sourceKey, SFTKObject * key);
+extern
+CK_RV jpake_Final(HASH_HashType hashType,
+                  const CK_NSS_JPAKEFinalParams * params,
+                  SFTKObject * sourceKey, SFTKObject * key);
+
+/* Constant time MAC functions (hmacct.c) */
+
+struct sftk_MACConstantTimeCtxStr {
+    const SECHashObject *hash;
+    unsigned char mac[64];
+    unsigned char secret[64];
+    unsigned int headerLength;
+    unsigned int secretLength;
+    unsigned int totalLength;
+    unsigned char header[75];
+};
+typedef struct sftk_MACConstantTimeCtxStr sftk_MACConstantTimeCtx;
+sftk_MACConstantTimeCtx* sftk_HMACConstantTime_New(
+	CK_MECHANISM_PTR mech, SFTKObject *key);
+sftk_MACConstantTimeCtx* sftk_SSLv3MACConstantTime_New(
+	CK_MECHANISM_PTR mech, SFTKObject *key);
+void sftk_HMACConstantTime_Update(void *pctx, void *data, unsigned int len);
+void sftk_SSLv3MACConstantTime_Update(void *pctx, void *data, unsigned int len);
+void sftk_MACConstantTime_EndHash(
+	void *pctx, void *out, unsigned int *outLength, unsigned int maxLength);
+void sftk_MACConstantTime_DestroyContext(void *pctx, PRBool);
+
+/****************************************
+ * implement TLS Pseudo Random Function (PRF)
+ */
+
+extern CK_RV
+sftk_TLSPRFInit(SFTKSessionContext *context, 
+		  SFTKObject *        key, 
+		  CK_KEY_TYPE         key_type,
+		  HASH_HashType       hash_alg);
 
 SEC_END_PROTOS
 

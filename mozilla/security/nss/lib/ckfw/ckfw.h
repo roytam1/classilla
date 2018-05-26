@@ -1,42 +1,9 @@
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef CKFW_H
 #define CKFW_H
-
-#ifdef DEBUG
-static const char CKFW_CVS_ID[] = "@(#) $RCSfile: ckfw.h,v $ $Revision: 1.3 $ $Date: 2000/05/16 01:54:45 $ $Name:  $";
-#endif /* DEBUG */
 
 /*
  * ckfw.h
@@ -73,6 +40,7 @@ static const char CKFW_CVS_ID[] = "@(#) $RCSfile: ckfw.h,v $ $Revision: 1.3 $ $D
  *  nssCKFWInstance_MayCreatePthreads
  *  nssCKFWInstance_CreateMutex
  *  nssCKFWInstance_GetConfigurationData
+ *  nssCKFWInstance_GetInitArgs 
  *
  *  -- private accessors --
  *  nssCKFWInstance_CreateSessionHandle
@@ -107,6 +75,7 @@ NSS_EXTERN NSSCKFWInstance *
 nssCKFWInstance_Create
 (
   CK_C_INITIALIZE_ARGS_PTR pInitArgs,
+  CryptokiLockingState LockingState,
   NSSCKMDInstance *mdInstance,
   CK_RV *pError
 );
@@ -175,6 +144,16 @@ nssCKFWInstance_GetConfigurationData
 );
 
 /*
+ * nssCKFWInstance_GetInitArgs
+ *
+ */
+NSS_EXTERN CK_C_INITIALIZE_ARGS_PTR
+nssCKFWInstance_GetInitArgs
+(
+  NSSCKFWInstance *fwInstance
+);
+
+/*
  * nssCKFWInstance_CreateSessionHandle
  *
  */
@@ -232,17 +211,6 @@ nssCKFWInstance_CreateObjectHandle
 );
 
 /*
- * nssCKFWInstance_FindObjectHandle
- *
- */
-NSS_EXTERN CK_OBJECT_HANDLE
-nssCKFWInstance_FindObjectHandle
-(
-  NSSCKFWInstance *fwInstance,
-  NSSCKFWObject *fwObject
-);
-
-/*
  * nssCKFWInstance_ResolveObjectHandle
  *
  */
@@ -280,7 +248,7 @@ nssCKFWInstance_DestroyObjectHandle
  * nssCKFWInstance_FindObjectHandle
  *
  */
-NSS_IMPLEMENT CK_OBJECT_HANDLE
+NSS_EXTERN CK_OBJECT_HANDLE
 nssCKFWInstance_FindObjectHandle
 (
   NSSCKFWInstance *fwInstance,
@@ -1101,7 +1069,6 @@ nssCKFWToken_GetObjectHandleHash
  *
  *  -- implement public accessors --
  *  nssCKFWMechanism_GetMDMechanism
- *  nssCKFWMechanism_GetParameter
  *
  *  -- private accessors --
  *
@@ -1109,6 +1076,30 @@ nssCKFWToken_GetObjectHandleHash
  *  nssCKFWMechanism_GetMinKeySize
  *  nssCKFWMechanism_GetMaxKeySize
  *  nssCKFWMechanism_GetInHardware
+ *  nssCKFWMechanism_GetCanEncrypt
+ *  nssCKFWMechanism_GetCanDecrypt
+ *  nssCKFWMechanism_GetCanDigest
+ *  nssCKFWMechanism_GetCanSignRecover
+ *  nssCKFWMechanism_GetCanVerify
+ *  nssCKFWMechanism_GetCanVerifyRecover
+ *  nssCKFWMechanism_GetCanGenerate
+ *  nssCKFWMechanism_GetCanGenerateKeyPair
+ *  nssCKFWMechanism_GetCanWrap
+ *  nssCKFWMechanism_GetCanUnwrap
+ *  nssCKFWMechanism_GetCanDerive
+ *  nssCKFWMechanism_EncryptInit
+ *  nssCKFWMechanism_DecryptInit
+ *  nssCKFWMechanism_DigestInit
+ *  nssCKFWMechanism_SignInit
+ *  nssCKFWMechanism_SignRecoverInit
+ *  nssCKFWMechanism_VerifyInit
+ *  nssCKFWMechanism_VerifyRecoverInit
+ *  nssCKFWMechanism_GenerateKey
+ *  nssCKFWMechanism_GenerateKeyPair
+ *  nssCKFWMechanism_GetWrapKeyLength
+ *  nssCKFWMechanism_WrapKey
+ *  nssCKFWMechanism_UnwrapKey
+ *  nssCKFWMechanism_DeriveKey
  */
 
 /*
@@ -1118,14 +1109,18 @@ nssCKFWToken_GetObjectHandleHash
 NSS_EXTERN NSSCKFWMechanism *
 nssCKFWMechanism_Create
 (
-  void /* XXX fgmr */
+  NSSCKMDMechanism *mdMechanism,
+  NSSCKMDToken *mdToken,
+  NSSCKFWToken *fwToken,
+  NSSCKMDInstance *mdInstance,
+  NSSCKFWInstance *fwInstance
 );
 
 /*
  * nssCKFWMechanism_Destroy
  *
  */
-NSS_EXTERN CK_RV
+NSS_EXTERN void
 nssCKFWMechanism_Destroy
 (
   NSSCKFWMechanism *fwMechanism
@@ -1143,24 +1138,14 @@ nssCKFWMechanism_GetMDMechanism
 );
 
 /*
- * nssCKFWMechanism_GetParameter
- *
- * XXX fgmr-- or as an additional parameter to the crypto ops?
- */
-NSS_EXTERN NSSItem *
-nssCKFWMechanism_GetParameter
-(
-  NSSCKFWMechanism *fwMechanism
-);
-
-/*
  * nssCKFWMechanism_GetMinKeySize
  *
  */
 NSS_EXTERN CK_ULONG
 nssCKFWMechanism_GetMinKeySize
 (
-  NSSCKFWMechanism *fwMechanism
+  NSSCKFWMechanism *fwMechanism,
+  CK_RV *pError
 );
 
 /*
@@ -1170,7 +1155,8 @@ nssCKFWMechanism_GetMinKeySize
 NSS_EXTERN CK_ULONG
 nssCKFWMechanism_GetMaxKeySize
 (
-  NSSCKFWMechanism *fwMechanism
+  NSSCKFWMechanism *fwMechanism,
+  CK_RV *pError
 );
 
 /*
@@ -1180,7 +1166,469 @@ nssCKFWMechanism_GetMaxKeySize
 NSS_EXTERN CK_BBOOL
 nssCKFWMechanism_GetInHardware
 (
-  NSSCKFWMechanism *fwMechanism
+  NSSCKFWMechanism *fwMechanism,
+  CK_RV *pError
+);
+
+/*
+ * the following are determined automatically by which of the cryptographic
+ * functions are defined for this mechanism.
+ */
+/*
+ * nssCKFWMechanism_GetCanEncrypt
+ *
+ */
+NSS_EXTERN CK_BBOOL
+nssCKFWMechanism_GetCanEncrypt
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_RV *pError
+);
+
+/*
+ * nssCKFWMechanism_GetCanDecrypt
+ *
+ */
+NSS_EXTERN CK_BBOOL
+nssCKFWMechanism_GetCanDecrypt
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_RV *pError
+);
+
+/*
+ * nssCKFWMechanism_GetCanDigest
+ *
+ */
+NSS_EXTERN CK_BBOOL
+nssCKFWMechanism_GetCanDigest
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_RV *pError
+);
+
+/*
+ * nssCKFWMechanism_GetCanSign
+ *
+ */
+NSS_EXTERN CK_BBOOL
+nssCKFWMechanism_GetCanSign
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_RV *pError
+);
+
+/*
+ * nssCKFWMechanism_GetCanSignRecover
+ *
+ */
+NSS_EXTERN CK_BBOOL
+nssCKFWMechanism_GetCanSignRecover
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_RV *pError
+);
+
+/*
+ * nssCKFWMechanism_GetCanVerify
+ *
+ */
+NSS_EXTERN CK_BBOOL
+nssCKFWMechanism_GetCanVerify
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_RV *pError
+);
+
+/*
+ * nssCKFWMechanism_GetCanVerifyRecover
+ *
+ */
+NSS_EXTERN CK_BBOOL
+nssCKFWMechanism_GetCanVerifyRecover
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_RV *pError
+);
+
+/*
+ * nssCKFWMechanism_GetCanGenerate
+ *
+ */
+NSS_EXTERN CK_BBOOL
+nssCKFWMechanism_GetCanGenerate
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_RV *pError
+);
+
+/*
+ * nssCKFWMechanism_GetCanGenerateKeyPair
+ *
+ */
+NSS_EXTERN CK_BBOOL
+nssCKFWMechanism_GetCanGenerateKeyPair
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_RV *pError
+);
+
+/*
+ * nssCKFWMechanism_GetCanWrap
+ *
+ */
+NSS_EXTERN CK_BBOOL
+nssCKFWMechanism_GetCanWrap
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_RV *pError
+);
+
+/*
+ * nssCKFWMechanism_GetCanUnwrap
+ *
+ */
+NSS_EXTERN CK_BBOOL
+nssCKFWMechanism_GetCanUnwrap
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_RV *pError
+);
+
+/*
+ * nssCKFWMechanism_GetCanDerive
+ *
+ */
+NSS_EXTERN CK_BBOOL
+nssCKFWMechanism_GetCanDerive
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_RV *pError
+);
+
+/*
+ *  nssCKFWMechanism_EncryptInit
+ */
+NSS_EXTERN CK_RV
+nssCKFWMechanism_EncryptInit
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_MECHANISM      *pMechanism,
+  NSSCKFWSession    *fwSession,
+  NSSCKFWObject     *fwObject
+);
+
+/*
+ *  nssCKFWMechanism_DecryptInit
+ */
+NSS_EXTERN CK_RV
+nssCKFWMechanism_DecryptInit
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_MECHANISM      *pMechanism,
+  NSSCKFWSession    *fwSession,
+  NSSCKFWObject     *fwObject
+);
+
+/*
+ *  nssCKFWMechanism_DigestInit
+ */
+NSS_EXTERN CK_RV
+nssCKFWMechanism_DigestInit
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_MECHANISM      *pMechanism,
+  NSSCKFWSession    *fwSession
+);
+
+/*
+ *  nssCKFWMechanism_SignInit
+ */
+NSS_EXTERN CK_RV
+nssCKFWMechanism_SignInit
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_MECHANISM      *pMechanism,
+  NSSCKFWSession    *fwSession,
+  NSSCKFWObject     *fwObject
+);
+
+/*
+ *  nssCKFWMechanism_SignRecoverInit
+ */
+NSS_EXTERN CK_RV
+nssCKFWMechanism_SignRecoverInit
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_MECHANISM      *pMechanism,
+  NSSCKFWSession    *fwSession,
+  NSSCKFWObject     *fwObject
+);
+
+/*
+ *  nssCKFWMechanism_VerifyInit
+ */
+NSS_EXTERN CK_RV
+nssCKFWMechanism_VerifyInit
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_MECHANISM      *pMechanism,
+  NSSCKFWSession    *fwSession,
+  NSSCKFWObject     *fwObject
+);
+
+/*
+ *  nssCKFWMechanism_VerifyRecoverInit
+ */
+NSS_EXTERN CK_RV
+nssCKFWMechanism_VerifyRecoverInit
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_MECHANISM      *pMechanism,
+  NSSCKFWSession    *fwSession,
+  NSSCKFWObject     *fwObject
+);
+
+/*
+ * nssCKFWMechanism_GenerateKey
+ */
+NSS_EXTERN NSSCKFWObject *
+nssCKFWMechanism_GenerateKey
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_MECHANISM_PTR pMechanism,
+  NSSCKFWSession   *fwSession,
+  CK_ATTRIBUTE_PTR pTemplate,
+  CK_ULONG         ulAttributeCount,
+  CK_RV            *pError
+);
+
+/*
+ * nssCKFWMechanism_GenerateKeyPair
+ */
+NSS_EXTERN CK_RV
+nssCKFWMechanism_GenerateKeyPair
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_MECHANISM_PTR pMechanism,
+  NSSCKFWSession   *fwSession,
+  CK_ATTRIBUTE_PTR pPublicKeyTemplate,
+  CK_ULONG         ulPublicKeyAttributeCount,
+  CK_ATTRIBUTE_PTR pPrivateKeyTemplate,
+  CK_ULONG         ulPrivateKeyAttributeCount,
+  NSSCKFWObject    **fwPublicKeyObject,
+  NSSCKFWObject    **fwPrivateKeyObject
+);
+
+/*
+ * nssCKFWMechanism_GetWrapKeyLength
+ */
+NSS_EXTERN CK_ULONG
+nssCKFWMechanism_GetWrapKeyLength
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_MECHANISM_PTR pMechanism,
+  NSSCKFWSession   *fwSession,
+  NSSCKFWObject    *fwWrappingKeyObject,
+  NSSCKFWObject    *fwObject,
+  CK_RV		   *pError
+);
+
+/*
+ * nssCKFWMechanism_WrapKey
+ */
+NSS_EXTERN CK_RV
+nssCKFWMechanism_WrapKey
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_MECHANISM_PTR pMechanism,
+  NSSCKFWSession   *fwSession,
+  NSSCKFWObject    *fwWrappingKeyObject,
+  NSSCKFWObject    *fwObject,
+  NSSItem          *wrappedKey
+);
+
+/*
+ * nssCKFWMechanism_UnwrapKey
+ */
+NSS_EXTERN NSSCKFWObject *
+nssCKFWMechanism_UnwrapKey
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_MECHANISM_PTR pMechanism,
+  NSSCKFWSession   *fwSession,
+  NSSCKFWObject    *fwWrappingKeyObject,
+  NSSItem          *wrappedKey,
+  CK_ATTRIBUTE_PTR pTemplate,
+  CK_ULONG         ulAttributeCount,
+  CK_RV            *pError
+);
+
+/* 
+ * nssCKFWMechanism_DeriveKey
+ */
+NSS_EXTERN NSSCKFWObject *
+nssCKFWMechanism_DeriveKey
+(
+  NSSCKFWMechanism *fwMechanism,
+  CK_MECHANISM_PTR pMechanism,
+  NSSCKFWSession   *fwSession,
+  NSSCKFWObject    *fwBaseKeyObject,
+  CK_ATTRIBUTE_PTR pTemplate,
+  CK_ULONG         ulAttributeCount,
+  CK_RV            *pError
+);
+
+/*
+ * NSSCKFWCryptoOperation
+ *
+ *  -- create/destroy --
+ *  nssCKFWCryptoOperation_Create
+ *  nssCKFWCryptoOperation_Destroy
+ *
+ *  -- implement public accessors --
+ *  nssCKFWCryptoOperation_GetMDCryptoOperation
+ *  nssCKFWCryptoOperation_GetType
+ *
+ *  -- private accessors --
+ *
+ *  -- module fronts --
+ * nssCKFWCryptoOperation_GetFinalLength
+ * nssCKFWCryptoOperation_GetOperationLength
+ * nssCKFWCryptoOperation_Final
+ * nssCKFWCryptoOperation_Update
+ * nssCKFWCryptoOperation_DigestUpdate
+ * nssCKFWCryptoOperation_DigestKey
+ * nssCKFWCryptoOperation_UpdateFinal
+ */
+
+/*
+ *  nssCKFWCrytoOperation_Create
+ */
+NSS_EXTERN NSSCKFWCryptoOperation *
+nssCKFWCryptoOperation_Create
+(
+  NSSCKMDCryptoOperation *mdOperation,
+  NSSCKMDSession *mdSession,
+  NSSCKFWSession *fwSession,
+  NSSCKMDToken *mdToken,
+  NSSCKFWToken *fwToken,
+  NSSCKMDInstance *mdInstance,
+  NSSCKFWInstance *fwInstance,
+  NSSCKFWCryptoOperationType type,
+  CK_RV *pError
+);
+
+/*
+ *  nssCKFWCryptoOperation_Destroy
+ */
+NSS_EXTERN void
+nssCKFWCryptoOperation_Destroy
+(
+  NSSCKFWCryptoOperation *fwOperation
+);
+
+/*
+ *  nssCKFWCryptoOperation_GetMDCryptoOperation
+ */
+NSS_EXTERN NSSCKMDCryptoOperation *
+nssCKFWCryptoOperation_GetMDCryptoOperation
+(
+  NSSCKFWCryptoOperation *fwOperation
+);
+
+/*
+ *  nssCKFWCryptoOperation_GetType
+ */
+NSS_EXTERN NSSCKFWCryptoOperationType
+nssCKFWCryptoOperation_GetType
+(
+  NSSCKFWCryptoOperation *fwOperation
+);
+
+/*
+ * nssCKFWCryptoOperation_GetFinalLength
+ */
+NSS_EXTERN CK_ULONG
+nssCKFWCryptoOperation_GetFinalLength
+(
+  NSSCKFWCryptoOperation *fwOperation,
+  CK_RV *pError
+);
+
+/*
+ * nssCKFWCryptoOperation_GetOperationLength
+ */
+NSS_EXTERN CK_ULONG
+nssCKFWCryptoOperation_GetOperationLength
+(
+  NSSCKFWCryptoOperation *fwOperation,
+  NSSItem *inputBuffer,
+  CK_RV *pError
+);
+
+/*
+ * nssCKFWCryptoOperation_Final
+ */
+NSS_EXTERN CK_RV
+nssCKFWCryptoOperation_Final
+(
+  NSSCKFWCryptoOperation *fwOperation,
+  NSSItem *outputBuffer
+);
+
+/*
+ * nssCKFWCryptoOperation_Update
+ */
+NSS_EXTERN CK_RV
+nssCKFWCryptoOperation_Update
+(
+  NSSCKFWCryptoOperation *fwOperation,
+  NSSItem *inputBuffer,
+  NSSItem *outputBuffer
+);
+
+/*
+ * nssCKFWCryptoOperation_DigestUpdate
+ */
+NSS_EXTERN CK_RV
+nssCKFWCryptoOperation_DigestUpdate
+(
+  NSSCKFWCryptoOperation *fwOperation,
+  NSSItem *inputBuffer
+);
+
+/*
+ * nssCKFWCryptoOperation_DigestKey
+ */
+NSS_EXTERN CK_RV
+nssCKFWCryptoOperation_DigestKey
+(
+  NSSCKFWCryptoOperation *fwOperation,
+  NSSCKFWObject *fwKey
+);
+
+/*
+ * nssCKFWCryptoOperation_UpdateFinal
+ */
+NSS_EXTERN CK_RV
+nssCKFWCryptoOperation_UpdateFinal
+(
+  NSSCKFWCryptoOperation *fwOperation,
+  NSSItem *inputBuffer,
+  NSSItem *outputBuffer
+);
+
+/*
+ * nssCKFWCryptoOperation_UpdateCombo
+ */
+NSS_EXTERN CK_RV
+nssCKFWCryptoOperation_UpdateCombo
+(
+  NSSCKFWCryptoOperation *fwOperation,
+  NSSCKFWCryptoOperation *fwPeerOperation,
+  NSSItem *inputBuffer,
+  NSSItem *outputBuffer
 );
 
 /*
@@ -1196,6 +1644,7 @@ nssCKFWMechanism_GetInHardware
  *  nssCKFWSession_CallNotification
  *  nssCKFWSession_IsRWSession
  *  nssCKFWSession_IsSO
+ *  nssCKFWSession_GetCurrentCryptoOperation
  *
  *  -- private accessors --
  *  nssCKFWSession_GetFWSlot
@@ -1207,6 +1656,7 @@ nssCKFWMechanism_GetInHardware
  *  nssCKFWSession_GetHandle
  *  nssCKFWSession_RegisterSessionObject
  *  nssCKFWSession_DeregisterSessionObject
+ *  nssCKFWSession_SetCurrentCryptoOperation
  *
  *  -- module fronts --
  *  nssCKFWSession_GetDeviceError
@@ -1222,6 +1672,12 @@ nssCKFWMechanism_GetInHardware
  *  nssCKFWSession_FindObjectsInit
  *  nssCKFWSession_SeedRandom
  *  nssCKFWSession_GetRandom
+ *  nssCKFWSession_Final
+ *  nssCKFWSession_Update
+ *  nssCKFWSession_DigestUpdate
+ *  nssCKFWSession_DigestKey
+ *  nssCKFWSession_UpdateFinal
+ *  nssCKFWSession_UpdateCombo
  */
 
 /*
@@ -1528,6 +1984,115 @@ nssCKFWSession_FindObjectsInit
 );
 
 /*
+ * nssCKFWSession_SetCurrentCryptoOperation
+ */
+NSS_IMPLEMENT void
+nssCKFWSession_SetCurrentCryptoOperation
+(
+  NSSCKFWSession *fwSession,
+  NSSCKFWCryptoOperation * fwOperation,
+  NSSCKFWCryptoOperationState state
+);
+
+/*
+ * nssCKFWSession_GetCurrentCryptoOperation
+ */
+NSS_IMPLEMENT NSSCKFWCryptoOperation *
+nssCKFWSession_GetCurrentCryptoOperation
+(
+  NSSCKFWSession *fwSession,
+  NSSCKFWCryptoOperationState state
+);
+
+/*
+ * nssCKFWSession_Final
+ * (terminate a cryptographic operation and get the result)
+ */
+NSS_IMPLEMENT CK_RV
+nssCKFWSession_Final
+(
+  NSSCKFWSession *fwSession,
+  NSSCKFWCryptoOperationType type,
+  NSSCKFWCryptoOperationState state,
+  CK_BYTE_PTR  outBuf,
+  CK_ULONG_PTR outBufLen
+);
+
+/*
+ * nssCKFWSession_Update
+ * (get the next step of an encrypt/decrypt operation)
+ */
+NSS_IMPLEMENT CK_RV
+nssCKFWSession_Update
+(
+  NSSCKFWSession *fwSession,
+  NSSCKFWCryptoOperationType type,
+  NSSCKFWCryptoOperationState state,
+  CK_BYTE_PTR  inBuf,
+  CK_ULONG     inBufLen,
+  CK_BYTE_PTR  outBuf,
+  CK_ULONG_PTR outBufLen
+);
+
+/*
+ * nssCKFWSession_DigestUpdate
+ * (do the next step of an digest/sign/verify operation)
+ */
+NSS_IMPLEMENT CK_RV
+nssCKFWSession_DigestUpdate
+(
+  NSSCKFWSession *fwSession,
+  NSSCKFWCryptoOperationType type,
+  NSSCKFWCryptoOperationState state,
+  CK_BYTE_PTR  inBuf,
+  CK_ULONG     inBufLen
+);
+
+/*
+ * nssCKFWSession_DigestKey
+ * (do the next step of an digest/sign/verify operation)
+ */
+NSS_IMPLEMENT CK_RV
+nssCKFWSession_DigestKey
+(
+  NSSCKFWSession *fwSession,
+  NSSCKFWObject *fwKey
+);
+
+/*
+ * nssCKFWSession_UpdateFinal
+ * (do a single-step of a cryptographic operation and get the result)
+ */
+NSS_IMPLEMENT CK_RV
+nssCKFWSession_UpdateFinal
+(
+  NSSCKFWSession *fwSession,
+  NSSCKFWCryptoOperationType type,
+  NSSCKFWCryptoOperationState state,
+  CK_BYTE_PTR  inBuf,
+  CK_ULONG     inBufLen,
+  CK_BYTE_PTR  outBuf,
+  CK_ULONG_PTR outBufLen
+);
+
+/*
+ * nssCKFWSession_UpdateCombo
+ * (do a combination encrypt/decrypt and sign/digest/verify operation)
+ */
+NSS_IMPLEMENT CK_RV
+nssCKFWSession_UpdateCombo
+(
+  NSSCKFWSession *fwSession,
+  NSSCKFWCryptoOperationType encryptType,
+  NSSCKFWCryptoOperationType digestType,
+  NSSCKFWCryptoOperationState digestState,
+  CK_BYTE_PTR  inBuf,
+  CK_ULONG     inBufLen,
+  CK_BYTE_PTR  outBuf,
+  CK_ULONG_PTR outBufLen
+);
+
+/*
  * nssCKFWSession_SeedRandom
  *
  */
@@ -1597,7 +2162,8 @@ nssCKFWObject_Create
 NSS_EXTERN void
 nssCKFWObject_Finalize
 (
-  NSSCKFWObject *fwObject
+  NSSCKFWObject *fwObject,
+  PRBool removeFromHash
 );
 
 /*
@@ -1635,7 +2201,7 @@ nssCKFWObject_GetArena
  * nssCKFWObject_SetHandle
  *
  */
-NSS_IMPLEMENT CK_RV
+NSS_EXTERN CK_RV
 nssCKFWObject_SetHandle
 (
   NSSCKFWObject *fwObject,
@@ -1646,7 +2212,7 @@ nssCKFWObject_SetHandle
  * nssCKFWObject_GetHandle
  *
  */
-NSS_IMPLEMENT CK_OBJECT_HANDLE
+NSS_EXTERN CK_OBJECT_HANDLE
 nssCKFWObject_GetHandle
 (
   NSSCKFWObject *fwObject
@@ -1725,6 +2291,7 @@ NSS_EXTERN CK_RV
 nssCKFWObject_SetAttribute
 (
   NSSCKFWObject *fwObject,
+  NSSCKFWSession *fwSession,
   CK_ATTRIBUTE_TYPE attribute,
   NSSItem *value
 );
@@ -1821,6 +2388,7 @@ NSS_EXTERN NSSCKFWMutex *
 nssCKFWMutex_Create
 (
   CK_C_INITIALIZE_ARGS_PTR pInitArgs,
+  CryptokiLockingState LockingState,
   NSSArena *arena,
   CK_RV *pError
 );

@@ -1,39 +1,6 @@
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
-
-#ifdef DEBUG
-static const char CVS_ID[] = "@(#) $RCSfile: instance.c,v $ $Revision: 1.7 $ $Date: 2002/10/10 22:39:22 $ $Name:  $";
-#endif /* DEBUG */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * instance.c
@@ -97,6 +64,8 @@ struct NSSCKFWInstanceStr {
   NSSArena *arena;
   NSSCKMDInstance *mdInstance;
   CK_C_INITIALIZE_ARGS_PTR pInitArgs;
+  CK_C_INITIALIZE_ARGS initArgs;
+  CryptokiLockingState LockingState;
   CK_BBOOL mayCreatePthreads;
   NSSUTF8 *configurationData;
   CK_ULONG nSlots;
@@ -188,6 +157,7 @@ NSS_IMPLEMENT NSSCKFWInstance *
 nssCKFWInstance_Create
 (
   CK_C_INITIALIZE_ARGS_PTR pInitArgs,
+  CryptokiLockingState LockingState,
   NSSCKMDInstance *mdInstance,
   CK_RV *pError
 )
@@ -202,28 +172,30 @@ nssCKFWInstance_Create
     return (NSSCKFWInstance *)NULL;
   }
 
-  if( (NSSCKMDInstance *)NULL == mdInstance ) {
+  if (!mdInstance) {
     *pError = CKR_ARGUMENTS_BAD;
     return (NSSCKFWInstance *)NULL;
   }
 #endif /* NSSDEBUG */
 
   arena = NSSArena_Create();
-  if( (NSSArena *)NULL == arena ) {
+  if (!arena) {
     *pError = CKR_HOST_MEMORY;
     return (NSSCKFWInstance *)NULL;
   }
 
   fwInstance = nss_ZNEW(arena, NSSCKFWInstance);
-  if( (NSSCKFWInstance *)NULL == fwInstance ) {
+  if (!fwInstance) {
     goto nomem;
   }
 
   fwInstance->arena = arena;
   fwInstance->mdInstance = mdInstance;
-  fwInstance->pInitArgs = pInitArgs;
 
+  fwInstance->LockingState = LockingState;
   if( (CK_C_INITIALIZE_ARGS_PTR)NULL != pInitArgs ) {
+    fwInstance->initArgs = *pInitArgs;
+    fwInstance->pInitArgs = &fwInstance->initArgs;
     if( pInitArgs->flags & CKF_LIBRARY_CANT_CREATE_OS_THREADS ) {
       fwInstance->mayCreatePthreads = CK_FALSE;
     } else {
@@ -234,15 +206,16 @@ nssCKFWInstance_Create
     fwInstance->mayCreatePthreads = CK_TRUE;
   }
 
-  fwInstance->mutex = nssCKFWMutex_Create(pInitArgs, arena, pError);
-  if( (NSSCKFWMutex *)NULL == fwInstance->mutex ) {
+  fwInstance->mutex = nssCKFWMutex_Create(pInitArgs, LockingState, arena,
+                                          pError);
+  if (!fwInstance->mutex) {
     if( CKR_OK == *pError ) {
       *pError = CKR_GENERAL_ERROR;
     }
     goto loser;
   }
 
-  if( (void *)NULL != (void *)mdInstance->Initialize ) {
+  if (mdInstance->Initialize) {
     *pError = mdInstance->Initialize(mdInstance, fwInstance, fwInstance->configurationData);
     if( CKR_OK != *pError ) {
       goto loser;
@@ -251,14 +224,14 @@ nssCKFWInstance_Create
     called_Initialize = CK_TRUE;
   }
 
-  if( (void *)NULL != (void *)mdInstance->ModuleHandlesSessionObjects ) {
+  if (mdInstance->ModuleHandlesSessionObjects) {
     fwInstance->moduleHandlesSessionObjects = 
       mdInstance->ModuleHandlesSessionObjects(mdInstance, fwInstance);
   } else {
     fwInstance->moduleHandlesSessionObjects = CK_FALSE;
   }
 
-  if( (void *)NULL == (void *)mdInstance->GetNSlots ) {
+  if (!mdInstance->GetNSlots) {
     /* That routine is required */
     *pError = CKR_GENERAL_ERROR;
     goto loser;
@@ -285,17 +258,17 @@ nssCKFWInstance_Create
 
   fwInstance->sessionHandleHash = nssCKFWHash_Create(fwInstance, 
     fwInstance->arena, pError);
-  if( (nssCKFWHash *)NULL == fwInstance->sessionHandleHash ) {
+  if (!fwInstance->sessionHandleHash) {
     goto loser;
   }
 
   fwInstance->objectHandleHash = nssCKFWHash_Create(fwInstance,
     fwInstance->arena, pError);
-  if( (nssCKFWHash *)NULL == fwInstance->objectHandleHash ) {
+  if (!fwInstance->objectHandleHash) {
     goto loser;
   }
 
-  if( (void *)NULL == (void *)mdInstance->GetSlots ) {
+  if (!mdInstance->GetSlots) {
     /* That routine is required */
     *pError = CKR_GENERAL_ERROR;
     goto loser;
@@ -309,7 +282,7 @@ nssCKFWInstance_Create
   for( i = 0; i < fwInstance->nSlots; i++ ) {
     NSSCKMDSlot *mdSlot = fwInstance->mdSlotList[i];
 
-    if( (NSSCKMDSlot *)NULL == mdSlot ) {
+    if (!mdSlot) {
       *pError = CKR_GENERAL_ERROR;
       goto loser;
     }
@@ -324,7 +297,7 @@ nssCKFWInstance_Create
 
       for( j = i; j < fwInstance->nSlots; j++ ) {
         NSSCKMDSlot *mds = fwInstance->mdSlotList[j];
-        if( (void *)NULL != (void *)mds->Destroy ) {
+        if (mds->Destroy) {
           mds->Destroy(mds, (NSSCKFWSlot *)NULL, mdInstance, fwInstance);
         }
       }
@@ -353,12 +326,18 @@ nssCKFWInstance_Create
  loser:
 
   if( CK_TRUE == called_Initialize ) {
-    if( (void *)NULL != (void *)mdInstance->Finalize ) {
+    if (mdInstance->Finalize) {
       mdInstance->Finalize(mdInstance, fwInstance);
     }
   }
 
-  (void)NSSArena_Destroy(arena);
+  if (fwInstance && fwInstance->mutex) {
+    nssCKFWMutex_Destroy(fwInstance->mutex);
+  }
+
+  if (arena) {
+    (void)NSSArena_Destroy(arena);
+  }
   return (NSSCKFWInstance *)NULL;
 }
 
@@ -390,7 +369,7 @@ nssCKFWInstance_Destroy
     (void)nssCKFWSlot_Destroy(fwInstance->fwSlotList[i]);
   }
 
-  if( (void *)NULL != (void *)fwInstance->mdInstance->Finalize ) {
+  if (fwInstance->mdInstance->Finalize) {
     fwInstance->mdInstance->Finalize(fwInstance->mdInstance, fwInstance);
   }
 
@@ -441,7 +420,7 @@ nssCKFWInstance_GetArena
 )
 {
 #ifdef NSSDEBUG
-  if( (CK_RV *)NULL == pError ) {
+  if (!pError) {
     return (NSSArena *)NULL;
   }
 
@@ -489,7 +468,7 @@ nssCKFWInstance_CreateMutex
   NSSCKFWMutex *mutex;
 
 #ifdef NSSDEBUG
-  if( (CK_RV *)NULL == pError ) {
+  if (!pError) {
     return (NSSCKFWMutex *)NULL;
   }
 
@@ -499,8 +478,9 @@ nssCKFWInstance_CreateMutex
   }
 #endif /* NSSDEBUG */
 
-  mutex = nssCKFWMutex_Create(fwInstance->pInitArgs, arena, pError);
-  if( (NSSCKFWMutex *)NULL == mutex ) {
+  mutex = nssCKFWMutex_Create(fwInstance->pInitArgs, fwInstance->LockingState,
+                              arena, pError);
+  if (!mutex) {
     if( CKR_OK == *pError ) {
       *pError = CKR_GENERAL_ERROR;
     }
@@ -564,7 +544,7 @@ nssCKFWInstance_CreateSessionHandle
   CK_SESSION_HANDLE hSession;
 
 #ifdef NSSDEBUG
-  if( (CK_RV *)NULL == pError ) {
+  if (!pError) {
     return (CK_SESSION_HANDLE)0;
   }
 
@@ -658,9 +638,10 @@ nssCKFWInstance_DestroySessionHandle
 
   fwSession = (NSSCKFWSession *)nssCKFWHash_Lookup(
                 fwInstance->sessionHandleHash, (const void *)hSession);
-
-  nssCKFWHash_Remove(fwInstance->sessionHandleHash, (const void *)hSession);
-  nssCKFWSession_SetHandle(fwSession, (CK_SESSION_HANDLE)0);
+  if (fwSession) {
+    nssCKFWHash_Remove(fwInstance->sessionHandleHash, (const void *)hSession);
+    nssCKFWSession_SetHandle(fwSession, (CK_SESSION_HANDLE)0);
+  }
 
   (void)nssCKFWMutex_Unlock(fwInstance->mutex);
 
@@ -707,7 +688,7 @@ nssCKFWInstance_CreateObjectHandle
   CK_OBJECT_HANDLE hObject;
 
 #ifdef NSSDEBUG
-  if( (CK_RV *)NULL == pError ) {
+  if (!pError) {
     return (CK_OBJECT_HANDLE)0;
   }
 
@@ -803,9 +784,11 @@ nssCKFWInstance_ReassignObjectHandle
 
   oldObject = (NSSCKFWObject *)nssCKFWHash_Lookup(
                  fwInstance->objectHandleHash, (const void *)hObject);
-  /* Assert(hObject == nssCKFWObject_GetHandle(oldObject) */
-  (void)nssCKFWObject_SetHandle(oldObject, (CK_SESSION_HANDLE)0);
-  nssCKFWHash_Remove(fwInstance->objectHandleHash, (const void *)hObject);
+  if(oldObject) {
+    /* Assert(hObject == nssCKFWObject_GetHandle(oldObject) */
+    (void)nssCKFWObject_SetHandle(oldObject, (CK_SESSION_HANDLE)0);
+    nssCKFWHash_Remove(fwInstance->objectHandleHash, (const void *)hObject);
+  }
 
   error = nssCKFWObject_SetHandle(fwObject, hObject);
   if( CKR_OK != error ) {
@@ -844,9 +827,11 @@ nssCKFWInstance_DestroyObjectHandle
 
   fwObject = (NSSCKFWObject *)nssCKFWHash_Lookup(
                 fwInstance->objectHandleHash, (const void *)hObject);
-  /* Assert(hObject = nssCKFWObject_GetHandle(fwObject)) */
-  nssCKFWHash_Remove(fwInstance->objectHandleHash, (const void *)hObject);
-  (void)nssCKFWObject_SetHandle(fwObject, (CK_SESSION_HANDLE)0);
+  if (fwObject) {
+    /* Assert(hObject = nssCKFWObject_GetHandle(fwObject)) */
+    nssCKFWHash_Remove(fwInstance->objectHandleHash, (const void *)hObject);
+    (void)nssCKFWObject_SetHandle(fwObject, (CK_SESSION_HANDLE)0);
+  }
 
   (void)nssCKFWMutex_Unlock(fwInstance->mutex);
   return;
@@ -888,7 +873,7 @@ nssCKFWInstance_GetNSlots
 )
 {
 #ifdef NSSDEBUG
-  if( (CK_RV *)NULL == pError ) {
+  if (!pError) {
     return (CK_ULONG)0;
   }
 
@@ -932,7 +917,7 @@ nssCKFWInstance_GetCryptokiVersion
     goto done;
   }
 
-  if( (void *)NULL != (void *)fwInstance->mdInstance->GetCryptokiVersion ) {
+  if (fwInstance->mdInstance->GetCryptokiVersion) {
     fwInstance->cryptokiVersion = fwInstance->mdInstance->GetCryptokiVersion(
       fwInstance->mdInstance, fwInstance);
   } else {
@@ -976,11 +961,11 @@ nssCKFWInstance_GetManufacturerID
     return error;
   }
 
-  if( (NSSUTF8 *)NULL == fwInstance->manufacturerID ) {
-    if( (void *)NULL != (void *)fwInstance->mdInstance->GetManufacturerID ) {
+  if (!fwInstance->manufacturerID) {
+    if (fwInstance->mdInstance->GetManufacturerID) {
       fwInstance->manufacturerID = fwInstance->mdInstance->GetManufacturerID(
         fwInstance->mdInstance, fwInstance, &error);
-      if( ((NSSUTF8 *)NULL == fwInstance->manufacturerID) && (CKR_OK != error) ) {
+      if ((!fwInstance->manufacturerID) && (CKR_OK != error)) {
         goto done;
       }
     } else {
@@ -1045,11 +1030,11 @@ nssCKFWInstance_GetLibraryDescription
     return error;
   }
 
-  if( (NSSUTF8 *)NULL == fwInstance->libraryDescription ) {
-    if( (void *)NULL != (void *)fwInstance->mdInstance->GetLibraryDescription ) {
+  if (!fwInstance->libraryDescription) {
+    if (fwInstance->mdInstance->GetLibraryDescription) {
       fwInstance->libraryDescription = fwInstance->mdInstance->GetLibraryDescription(
         fwInstance->mdInstance, fwInstance, &error);
-      if( ((NSSUTF8 *)NULL == fwInstance->libraryDescription) && (CKR_OK != error) ) {
+      if ((!fwInstance->libraryDescription) && (CKR_OK != error)) {
         goto done;
       }
     } else {
@@ -1095,7 +1080,7 @@ nssCKFWInstance_GetLibraryVersion
     goto done;
   }
 
-  if( (void *)NULL != (void *)fwInstance->mdInstance->GetLibraryVersion ) {
+  if (fwInstance->mdInstance->GetLibraryVersion) {
     fwInstance->libraryVersion = fwInstance->mdInstance->GetLibraryVersion(
       fwInstance->mdInstance, fwInstance);
   } else {
@@ -1140,7 +1125,7 @@ nssCKFWInstance_GetSlots
 )
 {
 #ifdef NSSDEBUG
-  if( (CK_RV *)NULL == pError ) {
+  if (!pError) {
     return (NSSCKFWSlot **)NULL;
   }
 
@@ -1170,7 +1155,7 @@ nssCKFWInstance_WaitForSlotEvent
   CK_ULONG i, n;
 
 #ifdef NSSDEBUG
-  if( (CK_RV *)NULL == pError ) {
+  if (!pError) {
     return (NSSCKFWSlot *)NULL;
   }
 
@@ -1189,7 +1174,7 @@ nssCKFWInstance_WaitForSlotEvent
   }
 #endif /* NSSDEBUG */
 
-  if( (void *)NULL == (void *)fwInstance->mdInstance->WaitForSlotEvent ) {
+  if (!fwInstance->mdInstance->WaitForSlotEvent) {
     *pError = CKR_NO_EVENT;
     return (NSSCKFWSlot *)NULL;
   }
@@ -1201,7 +1186,7 @@ nssCKFWInstance_WaitForSlotEvent
     pError
   );
 
-  if( (NSSCKMDSlot *)NULL == mdSlot ) {
+  if (!mdSlot) {
     return (NSSCKFWSlot *)NULL;
   }
 
@@ -1217,7 +1202,7 @@ nssCKFWInstance_WaitForSlotEvent
     }
   }
 
-  if( (NSSCKFWSlot *)NULL == fwSlot ) {
+  if (!fwSlot) {
     /* Internal error */
     *pError = CKR_GENERAL_ERROR;
     return (NSSCKFWSlot *)NULL;
@@ -1257,7 +1242,7 @@ NSSCKFWInstance_GetArena
 )
 {
 #ifdef DEBUG
-  if( (CK_RV *)NULL == pError ) {
+  if (!pError) {
     return (NSSArena *)NULL;
   }
 
@@ -1302,7 +1287,7 @@ NSSCKFWInstance_CreateMutex
 )
 {
 #ifdef DEBUG
-  if( (CK_RV *)NULL == pError ) {
+  if (!pError) {
     return (NSSCKFWMutex *)NULL;
   }
 

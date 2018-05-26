@@ -4,38 +4,9 @@
  *  Utilities for finding and working with prime and pseudo-prime
  *  integers
  *
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- *
- * The Original Code is the MPI Arbitrary Precision Integer Arithmetic
- * library.
- *
- * The Initial Developer of the Original Code is Michael J. Fromberger.
- * Portions created by Michael J. Fromberger are 
- * Copyright (C) 1997, 1998, 1999, 2000 Michael J. Fromberger. 
- * All Rights Reserved.
- *
- * Contributor(s):
- *	Netscape Communications Corporation
- *
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable
- * instead of those above.  If you wish to allow use of your
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the GPL.
- */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "mpi-priv.h"
 #include "mpprime.h"
@@ -325,10 +296,14 @@ mp_err  mpp_pprime(mp_int *a, int nt)
   /* Do the test nt times... */
   for(iter = 0; iter < nt; iter++) {
 
-    /* Choose a random value for x < a          */
+    /* Choose a random value for 1 < x < a      */
     s_mp_pad(&x, USED(a));
     mpp_random(&x);
     MP_CHECKOK( mp_mod(&x, a, &x) );
+    if(mp_cmp_d(&x, 1) <= 0) {
+      iter--;    /* don't count this iteration */
+      continue;  /* choose a new x */
+    }
 
     /* Compute z = (x ** m) mod a               */
     MP_CHECKOK( mp_exptmod(&x, &m, a, &z) );
@@ -423,23 +398,13 @@ mp_err mpp_make_prime(mp_int *start, mp_size nBits, mp_size strong,
   mp_int        trial;
   mp_int        q;
   mp_size       num_tests;
-  /*
-   * Always make sieve the last variabale allocated so that 
-   * Mac builds don't break by adding an extra variable
-   * on the stack. -javi
-   */
-#if defined(macintosh) || defined (XP_OS2) \
-    || (defined(HPUX) && defined(__ia64))
   unsigned char *sieve;
   
-  sieve = malloc(SIEVE_SIZE);
-  ARGCHK(sieve != NULL, MP_MEM);
-#else
-  unsigned char sieve[SIEVE_SIZE];
-#endif  
-
   ARGCHK(start != 0, MP_BADARG);
   ARGCHK(nBits > 16, MP_RANGE);
+
+  sieve = malloc(SIEVE_SIZE);
+  ARGCHK(sieve != NULL, MP_MEM);
 
   MP_DIGITS(&trial) = 0;
   MP_DIGITS(&q) = 0;
@@ -571,13 +536,10 @@ CLEANUP:
   mp_clear(&q);
   if (nTries)
     *nTries += i;
-#if defined(macintosh) || defined(XP_OS2) \
-    || (defined(HPUX) && defined(__ia64))
   if (sieve != NULL) {
   	memset(sieve, 0, SIEVE_SIZE);
   	free (sieve);
   }
-#endif    
   return res;
 }
 

@@ -1,40 +1,9 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Base64 decoding (ascii to binary).
- *
- * $Id: nssb64d.c,v 1.5 2002/09/07 03:19:56 jpierre%netscape.com Exp $
  */
 
 #include "nssb64.h"
@@ -50,7 +19,7 @@
  *    - giving everything names that are accepted by the NSPR module owners
  *	(though I tried to choose ones that would work without modification)
  *    - exporting the functions (remove static declarations and add
- *	PR_IMPLEMENT as necessary)
+ *	to nssutil.def as necessary)
  *    - put prototypes into appropriate header file (probably replacing
  *	the entire current lib/libc/include/plbase64.h in NSPR)
  *	along with a typedef for the context structure (which should be
@@ -560,8 +529,10 @@ PL_Base64DecodeBuffer (const char *src, PRUint32 srclen, unsigned char *dest,
     PRStatus status;
 
     PR_ASSERT(srclen > 0);
-    if (srclen == 0)
-	return dest;
+    if (srclen == 0) {
+	PR_SetError(PR_INVALID_ARGUMENT_ERROR, 0);
+	return NULL;
+    }
 
     /*
      * How much space could we possibly need for decoding this input?
@@ -741,20 +712,24 @@ NSSBase64Decoder_Destroy (NSSBase64Decoder *data, PRBool abort_p)
  * Return value is NULL on error, the Item (allocated or provided) otherwise.
  */
 SECItem *
-NSSBase64_DecodeBuffer (PRArenaPool *arenaOpt, SECItem *outItemOpt,
+NSSBase64_DecodeBuffer (PLArenaPool *arenaOpt, SECItem *outItemOpt,
 			const char *inStr, unsigned int inLen)
 {
-    SECItem *out_item = outItemOpt;
-    PRUint32 max_out_len = PL_Base64MaxDecodedLength (inLen);
+    SECItem *out_item = NULL;
+    PRUint32 max_out_len = 0;
     PRUint32 out_len;
     void *mark = NULL;
     unsigned char *dummy;
 
-    PORT_Assert(outItemOpt == NULL || outItemOpt->data == NULL);
+    if ((outItemOpt != NULL && outItemOpt->data != NULL) || inLen == 0) {
+	PORT_SetError (SEC_ERROR_INVALID_ARGS);
+	return NULL;
+    }
 
     if (arenaOpt != NULL)
 	mark = PORT_ArenaMark (arenaOpt);
 
+    max_out_len = PL_Base64MaxDecodedLength (inLen);
     out_item = SECITEM_AllocItem (arenaOpt, outItemOpt, max_out_len);
     if (out_item == NULL) {
 	if (arenaOpt != NULL)
@@ -832,7 +807,7 @@ ATOB_AsciiToData(const char *string, unsigned int *lenp)
 ** Convert from ascii to binary encoding of an item.
 */
 SECStatus
-ATOB_ConvertAsciiToItem(SECItem *binary_item, char *ascii)
+ATOB_ConvertAsciiToItem(SECItem *binary_item, const char *ascii)
 {
     SECItem *dummy;
 

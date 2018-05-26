@@ -1,37 +1,9 @@
-#! /bin/sh
+#! /bin/bash
 #
-# The contents of this file are subject to the Mozilla Public
-# License Version 1.1 (the "License"); you may not use this file
-# except in compliance with the License. You may obtain a copy of
-# the License at http://www.mozilla.org/MPL/
-# 
-# Software distributed under the License is distributed on an "AS
-# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
-# implied. See the License for the specific language governing
-# rights and limitations under the License.
-# 
-# The Original Code is the Netscape security libraries.
-# 
-# The Initial Developer of the Original Code is Netscape
-# Communications Corporation.  Portions created by Netscape are 
-# Copyright (C) 1994-2000 Netscape Communications Corporation.  All
-# Rights Reserved.
-# 
-# Contributor(s):
-# 
-# Alternatively, the contents of this file may be used under the
-# terms of the GNU General Public License Version 2 or later (the
-# "GPL"), in which case the provisions of the GPL are applicable 
-# instead of those above.  If you wish to allow use of your 
-# version of this file only under the terms of the GPL and not to
-# allow others to use your version of this file under the MPL,
-# indicate your decision by deleting the provisions above and
-# replace them with the notice and other provisions required by
-# the GPL.  If you do not delete the provisions above, a recipient
-# may use your version of this file under either the MPL or the
-# GPL.
-#
-#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 ########################################################################
 #
 # mozilla/security/nss/tests/common/init.sh
@@ -69,21 +41,111 @@
 #
 ########################################################################
 
+NSS_STRICT_SHUTDOWN=1
+export NSS_STRICT_SHUTDOWN
 
+# Init directories based on HOSTDIR variable
 if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
+    init_directories()
+    {
+        TMP=${HOSTDIR}      #TMP=${TMP-/tmp}
+        TEMP=${TMP}
+        TMPDIR=${TMP}
+
+        CADIR=${HOSTDIR}/CA
+        SERVERDIR=${HOSTDIR}/server
+        CLIENTDIR=${HOSTDIR}/client
+        ALICEDIR=${HOSTDIR}/alicedir
+        BOBDIR=${HOSTDIR}/bobdir
+        DAVEDIR=${HOSTDIR}/dave
+        EVEDIR=${HOSTDIR}/eve
+        FIPSDIR=${HOSTDIR}/fips
+        DBPASSDIR=${HOSTDIR}/dbpass
+        ECCURVES_DIR=${HOSTDIR}/eccurves
+        DISTRUSTDIR=${HOSTDIR}/distrust
+
+        SERVER_CADIR=${HOSTDIR}/serverCA
+        CLIENT_CADIR=${HOSTDIR}/clientCA
+        EXT_SERVERDIR=${HOSTDIR}/ext_server
+        EXT_CLIENTDIR=${HOSTDIR}/ext_client
+
+        IOPR_CADIR=${HOSTDIR}/CA_iopr
+        IOPR_SSL_SERVERDIR=${HOSTDIR}/server_ssl_iopr
+        IOPR_SSL_CLIENTDIR=${HOSTDIR}/client_ssl_iopr
+        IOPR_OCSP_CLIENTDIR=${HOSTDIR}/client_ocsp_iopr
+
+        CERT_EXTENSIONS_DIR=${HOSTDIR}/cert_extensions
+        STAPLINGDIR=${HOSTDIR}/stapling
+
+        PWFILE=${HOSTDIR}/tests.pw
+        NOISE_FILE=${HOSTDIR}/tests_noise
+        CORELIST_FILE=${HOSTDIR}/clist
+
+        FIPSPWFILE=${HOSTDIR}/tests.fipspw
+        FIPSBADPWFILE=${HOSTDIR}/tests.fipsbadpw
+        FIPSP12PWFILE=${HOSTDIR}/tests.fipsp12pw
+
+        echo "fIps140" > ${FIPSPWFILE}
+        echo "fips104" > ${FIPSBADPWFILE}
+        echo "pKcs12fips140" > ${FIPSP12PWFILE}
+
+        noise
+
+        P_SERVER_CADIR=${SERVER_CADIR}
+        P_CLIENT_CADIR=${CLIENT_CADIR}
+    
+        if [ -n "${MULTIACCESS_DBM}" ]; then
+            P_SERVER_CADIR="multiaccess:${D_SERVER_CA}"
+            P_CLIENT_CADIR="multiaccess:${D_CLIENT_CA}"
+        fi
+
+
+        # a new log file, short - fast to search, mostly for tools to
+        # see if their portion of the cert has succeeded, also for me -
+        CERT_LOG_FILE=${HOSTDIR}/cert.log      #the output.log is so crowded...
+
+        TEMPFILES=foobar   # keep "${PWFILE} ${NOISE_FILE}" around
+
+        export HOSTDIR
+    }
+
+# Generate noise file
+    noise()
+    {
+        # NOTE: these keys are only suitable for testing, as this whole thing 
+        # bypasses the entropy gathering. Don't use this method to generate 
+        # keys and certs for product use or deployment.
+        ps -efl > ${NOISE_FILE} 2>&1
+        ps aux >> ${NOISE_FILE} 2>&1
+        date >> ${NOISE_FILE} 2>&1
+    }
+
+# Print selected environment variable (used for backup)
+    env_backup()
+    {
+        echo "HOSTDIR=\"${HOSTDIR}\""
+        echo "TABLE_ARGS="
+        echo "NSS_TEST_DISABLE_CRL=${NSS_TEST_DISABLE_CRL}"
+        echo "NSS_SSL_TESTS=\"${NSS_SSL_TESTS}\""
+        echo "NSS_SSL_RUN=\"${NSS_SSL_RUN}\""
+        echo "NSS_DEFAULT_DB_TYPE=${NSS_DEFAULT_DB_TYPE}"
+        echo "export NSS_DEFAULT_DB_TYPE"
+        echo "NSS_ENABLE_PKIX_VERIFY=${NSS_ENABLE_PKIX_VERIFY}"
+        echo "export NSS_ENABLE_PKIX_VERIFY"
+        echo "init_directories"
+    }
 
 # Exit shellfunction to clean up at exit (error, regular or signal)
     Exit()
     {
         if [ -n "$1" ] ; then
-            echo "$SCRIPTNAME: Exit: $*"
-            html_failed "<TR><TD>$*"
+            echo "$SCRIPTNAME: Exit: $* - FAILED"
+            html_failed "$*"
         fi
         echo "</TABLE><BR>" >> ${RESULTS}
         if [ -n "${SERVERPID}" -a -f "${SERVERPID}" ]; then
             ${KILL} `cat ${SERVERPID}`
         fi
-        CLEANUP=${SCRIPTNAME}
         cd ${QADIR}
         . common/cleanup.sh
         case $1 in
@@ -96,6 +158,19 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
         esac
     }
 
+    detect_core()
+    {
+        [ ! -f $CORELIST_FILE ] && touch $CORELIST_FILE
+        mv $CORELIST_FILE ${CORELIST_FILE}.old
+        coreStr=`find $HOSTDIR -type f -name '*core*'`
+        res=0
+        if [ -n "$coreStr" ]; then
+            sum $coreStr > $CORELIST_FILE
+            res=`cat $CORELIST_FILE ${CORELIST_FILE}.old | sort | uniq -u | wc -l`
+        fi
+        return $res
+    }
+
 #html functions to give the resultfiles a consistant look
     html() #########################    write the results.html file
     {      # 3 functions so we can put targets in the output.log easier
@@ -103,40 +178,70 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
     }
     html_passed()
     {
-        html "$* ${HTML_PASSED}"
+        html_detect_core "$@" || return
+        MSG_ID=`cat ${MSG_ID_FILE}`
+        MSG_ID=`expr ${MSG_ID} + 1`
+        echo ${MSG_ID} > ${MSG_ID_FILE}
+        html "<TR><TD>#${MSG_ID}: $1 ${HTML_PASSED}"
+        echo "${SCRIPTNAME}: #${MSG_ID}: $* - PASSED"
     }
     html_failed()
     {
-        html "$* ${HTML_FAILED}"
+        html_detect_core "$@" || return
+        MSG_ID=`cat ${MSG_ID_FILE}`
+        MSG_ID=`expr ${MSG_ID} + 1`
+        echo ${MSG_ID} > ${MSG_ID_FILE}
+        html "<TR><TD>#${MSG_ID}: $1 ${HTML_FAILED}"
+        echo "${SCRIPTNAME}: #${MSG_ID}: $* - FAILED"
+    }
+    html_unknown()
+    {
+        html_detect_core "$@" || return
+        MSG_ID=`cat ${MSG_ID_FILE}`
+        MSG_ID=`expr ${MSG_ID} + 1`
+        echo ${MSG_ID} > ${MSG_ID_FILE}
+        html "<TR><TD>#${MSG_ID}: $1 ${HTML_UNKNOWN}"
+        echo "${SCRIPTNAME}: #${MSG_ID}: $* - UNKNOWN"
+    }
+    html_detect_core()
+    {
+        detect_core
+        if [ $? -ne 0 ]; then
+            MSG_ID=`cat ${MSG_ID_FILE}`
+            MSG_ID=`expr ${MSG_ID} + 1`
+            echo ${MSG_ID} > ${MSG_ID_FILE}
+            html "<TR><TD>#${MSG_ID}: $* ${HTML_FAILED_CORE}"
+            echo "${SCRIPTNAME}: #${MSG_ID}: $* - Core file is detected - FAILED"
+            return 1
+        fi
+        return 0
     }
     html_head()
     {
-        html "<TABLE BORDER=1><TR><TH COLSPAN=3>$*</TH></TR>"
+	
+        html "<TABLE BORDER=1 ${TABLE_ARGS}><TR><TH COLSPAN=3>$*</TH></TR>"
         html "<TR><TH width=500>Test Case</TH><TH width=50>Result</TH></TR>" 
         echo "$SCRIPTNAME: $* ==============================="
     }
     html_msg()
     {
         if [ "$1" -ne "$2" ] ; then
-            html_failed "<TR><TD>$3"
-            if [ -n "$4" ] ; then
-                echo "$SCRIPTNAME: $3 $4 FAILED"
-            fi
+            html_failed "$3" "$4"
         else
-            html_passed "<TR><TD>$3"
-            if [ -n "$4" ] ; then
-                echo "$SCRIPTNAME: $3 $4 PASSED"
-            fi
+            html_passed "$3" "$4"
         fi
     }
     HTML_FAILED='</TD><TD bgcolor=red>Failed</TD><TR>'
+    HTML_FAILED_CORE='</TD><TD bgcolor=red>Failed Core</TD><TR>'
     HTML_PASSED='</TD><TD bgcolor=lightGreen>Passed</TD><TR>'
+    HTML_UNKNOWN='</TD><TD>Unknown/TD><TR>'
+    TABLE_ARGS=
 
 
 #directory name init
     SCRIPTNAME=init.sh
 
-    mozilla_root=`(cd ../../../..; pwd)`
+    mozilla_root=`(cd ../../..; pwd)`
     MOZILLA_ROOT=${MOZILLA_ROOT-$mozilla_root}
 
     qadir=`(cd ..; pwd)`
@@ -147,29 +252,81 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
     export COMMON
 
     DIST=${DIST-${MOZILLA_ROOT}/dist}
-    SECURITY_ROOT=${SECURITY_ROOT-${MOZILLA_ROOT}/security/nss}
     TESTDIR=${TESTDIR-${MOZILLA_ROOT}/tests_results/security}
-    OBJDIR=`(cd $COMMON; gmake objdir_name)`
-    OS_ARCH=`(cd $COMMON; gmake os_arch)`
-    OS_NAME=`uname -s | sed -e "s/-[0-9]*\.[0-9]*//"`
+
+    # Allow for override options from a config file
+    if [ -n "${OBJDIR}" -a -f ${DIST}/${OBJDIR}/platform.cfg ]; then
+	. ${DIST}/${OBJDIR}/platform.cfg
+    fi
+
+    # only need make if we don't already have certain variables set
+    if [ -z "${OBJDIR}" -o -z "${OS_ARCH}" -o -z "${DLL_PREFIX}" -o -z "${DLL_SUFFIX}" ]; then
+        MAKE=gmake
+        $MAKE -v >/dev/null 2>&1 || MAKE=make
+        $MAKE -v >/dev/null 2>&1 || { echo "You are missing make."; exit 5; }
+        MAKE="$MAKE --no-print-directory"
+    fi
+
+    if [ "${OBJDIR}" = "" ]; then
+        OBJDIR=`(cd $COMMON; $MAKE objdir_name)`
+    fi
+    if [ "${OS_ARCH}" = "" ]; then
+        OS_ARCH=`(cd $COMMON; $MAKE os_arch)`
+    fi
+    if [ "${DLL_PREFIX}" = "" ]; then
+        DLL_PREFIX=`(cd $COMMON; $MAKE dll_prefix)`
+    fi
+    if [ "${DLL_SUFFIX}" = "" ]; then
+        DLL_SUFFIX=`(cd $COMMON; $MAKE dll_suffix)`
+    fi
+    OS_NAME=`uname -s | sed -e "s/-[0-9]*\.[0-9]*//" | sed -e "s/-WOW64//"`
+
+    BINDIR="${DIST}/${OBJDIR}/bin"
+
+    # Pathnames constructed from ${TESTDIR} are passed to NSS tools
+    # such as certutil, which don't understand Cygwin pathnames.
+    # So we need to convert ${TESTDIR} to a Windows pathname (with
+    # regular slashes).
+    if [ "${OS_ARCH}" = "WINNT" -a "$OS_NAME" = "CYGWIN_NT" ]; then
+        TESTDIR=`cygpath -m ${TESTDIR}`
+        QADIR=`cygpath -m ${QADIR}`
+    fi
+
+    # Same problem with MSYS/Mingw, except we need to start over with pwd -W
+    if [ "${OS_ARCH}" = "WINNT" -a "$OS_NAME" = "MINGW32_NT" ]; then
+		mingw_mozilla_root=`(cd ../../..; pwd -W)`
+		MINGW_MOZILLA_ROOT=${MINGW_MOZILLA_ROOT-$mingw_mozilla_root}
+		TESTDIR=${MINGW_TESTDIR-${MINGW_MOZILLA_ROOT}/tests_results/security}
+    fi
+
+    # Same problem with MSYS/Mingw, except we need to start over with pwd -W
+    if [ "${OS_ARCH}" = "WINNT" -a "$OS_NAME" = "MINGW32_NT" ]; then
+		mingw_mozilla_root=`(cd ../../..; pwd -W)`
+		MINGW_MOZILLA_ROOT=${MINGW_MOZILLA_ROOT-$mingw_mozilla_root}
+		TESTDIR=${MINGW_TESTDIR-${MINGW_MOZILLA_ROOT}/tests_results/security}
+    fi
+    echo testdir is $TESTDIR
 
 #in case of backward comp. tests the calling scripts set the
 #PATH and LD_LIBRARY_PATH and do not want them to be changed
     if [ -z "${DON_T_SET_PATHS}" -o "${DON_T_SET_PATHS}" != "TRUE" ] ; then
-        if [ "${OS_ARCH}" = "WINNT" -a "$OS_NAME"  != "CYGWIN_NT" ]; then
+        if [ "${OS_ARCH}" = "WINNT" -a "$OS_NAME"  != "CYGWIN_NT" -a "$OS_NAME" != "MINGW32_NT" ]; then
             PATH=.\;${DIST}/${OBJDIR}/bin\;${DIST}/${OBJDIR}/lib\;$PATH
             PATH=`perl ../path_uniq -d ';' "$PATH"`
-        else
-            PATH=.:/bin:/usr/bin:${DIST}/${OBJDIR}/bin:${DIST}/${OBJDIR}/lib:$PATH
+        elif [ "${OS_ARCH}" = "Android" ]; then
+	    # android doesn't have perl, skip the uniq step
+            PATH=.:${DIST}/${OBJDIR}/bin:${DIST}/${OBJDIR}/lib:$PATH
+	else 
+            PATH=.:${DIST}/${OBJDIR}/bin:${DIST}/${OBJDIR}/lib:/bin:/usr/bin:$PATH
             # added /bin and /usr/bin in the beginning so a local perl will 
             # be used
             PATH=`perl ../path_uniq -d ':' "$PATH"`
         fi
 
-        LD_LIBRARY_PATH=${DIST}/${OBJDIR}/lib
-        SHLIB_PATH=${DIST}/${OBJDIR}/lib
-        LIBPATH=${DIST}/${OBJDIR}/lib
-        DYLD_LIBRARY_PATH=${DIST}/${OBJDIR}/lib
+        LD_LIBRARY_PATH=${DIST}/${OBJDIR}/lib:$LD_LIBRARY_PATH
+        SHLIB_PATH=${DIST}/${OBJDIR}/lib:$SHLIB_PATH
+        LIBPATH=${DIST}/${OBJDIR}/lib:$LIBPATH
+        DYLD_LIBRARY_PATH=${DIST}/${OBJDIR}/lib:$DYLD_LIBRARY_PATH
     fi
 
     if [ ! -d "${TESTDIR}" ]; then
@@ -177,9 +334,18 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
         mkdir -p ${TESTDIR}
     fi
 
-#HOST and DOMSUF are needed for the server cert 
+#HOST and DOMSUF are needed for the server cert
+
+    DOMAINNAME=`which domainname`
+    if [ -z "${DOMSUF}" -a $? -eq 0 -a -n "${DOMAINNAME}" ]; then
+        DOMSUF=`domainname`
+    fi
+
     case $HOST in
         *\.*)
+            if [ -z "${DOMSUF}" ]; then
+                DOMSUF=`echo $HOST | sed -e "s/^[^.]*\.//"`
+            fi
             HOST=`echo $HOST | sed -e "s/\..*//"`
             ;;
         ?*)
@@ -188,6 +354,9 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
             HOST=`uname -n`
             case $HOST in
                 *\.*)
+                    if [ -z "${DOMSUF}" ]; then
+                        DOMSUF=`echo $HOST | sed -e "s/^[^.]*\.//"`
+                    fi
                     HOST=`echo $HOST | sed -e "s/\..*//"`
                     ;;
                 ?*)
@@ -200,18 +369,20 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
             ;;
     esac
 
-    if [ -z "${DOMSUF}" ]; then
-        DOMSUF=`domainname`
-        if  [ -z "${DOMSUF}" ]; then
-            echo "$SCRIPTNAME: Fatal DOMSUF env. variable is not defined."
-            exit 1 #does not need to be Exit, very early in script
-        fi
+    if [ -z "${DOMSUF}" -a "${OS_ARCH}" != "Android" ]; then
+        echo "$SCRIPTNAME: Fatal DOMSUF env. variable is not defined."
+        exit 1 #does not need to be Exit, very early in script
     fi
+
 #HOSTADDR was a workaround for the dist. stress test, and is probably 
 #not needed anymore (purpose: be able to use IP address for the server 
 #cert instead of PC name which was not in the DNS because of dyn IP address
     if [ -z "$USE_IP" -o "$USE_IP" != "TRUE" ] ; then
-        HOSTADDR=${HOST}.${DOMSUF}
+	if [ -z "${DOMSUF}" ]; then
+            HOSTADDR=${HOST}
+	else
+            HOSTADDR=${HOST}.${DOMSUF}
+	fi
     else
         HOSTADDR=${IP_ADDRESS}
     fi
@@ -279,23 +450,24 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
         html "<HR><BR>" 
         html "<HTML><BODY>" 
 
-        echo "********************************************" | tee ${LOGFILE}
-        echo "   Platform: ${OBJDIR}" | tee ${LOGFILE}
-        echo "   Results: ${HOST}.$version" | tee ${LOGFILE}
-        echo "********************************************" | tee ${LOGFILE}
-	echo "$BC_ACTION" | tee ${LOGFILE}
-    #if running remote side of the distributed stress test let the user know who it is...
+        echo "********************************************" | tee -a ${LOGFILE}
+        echo "   Platform: ${OBJDIR}"                       | tee -a ${LOGFILE}
+        echo "   Results: ${HOST}.$version"                 | tee -a ${LOGFILE}
+        echo "********************************************" | tee -a ${LOGFILE}
+	echo "$BC_ACTION"                                   | tee -a ${LOGFILE}
+#if running remote side of the distributed stress test 
+# let the user know who it is...
     elif [ -n "$DO_REM_ST" -a "$DO_REM_ST" = "TRUE" ] ; then
-        echo "********************************************" | tee ${LOGFILE}
-        echo "   Platform: ${OBJDIR}" | tee ${LOGFILE}
-        echo "   Results: ${HOST}.$version" | tee ${LOGFILE}
-        echo "   remote side of distributed stress test " | tee ${LOGFILE}
-        echo "   `uname -n -s`" | tee ${LOGFILE}
-        echo "********************************************" | tee ${LOGFILE}
+        echo "********************************************" | tee -a ${LOGFILE}
+        echo "   Platform: ${OBJDIR}"                       | tee -a ${LOGFILE}
+        echo "   Results: ${HOST}.$version"                 | tee -a ${LOGFILE}
+        echo "   remote side of distributed stress test "   | tee -a ${LOGFILE}
+        echo "   `uname -n -s`"                             | tee -a ${LOGFILE}
+        echo "********************************************" | tee -a ${LOGFILE}
     fi
 
-    echo "$SCRIPTNAME init: Testing PATH $PATH against LIB $LD_LIBRARY_PATH" |
-        tee ${LOGFILE}
+    echo "$SCRIPTNAME init: Testing PATH $PATH against LIB $LD_LIBRARY_PATH" |\
+        tee -a ${LOGFILE}
 
     KILL="kill"
 
@@ -326,31 +498,9 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
     # would like to preserve some tmp files, also easier to see if there 
     # are "leftovers" - another possibility ${HOSTDIR}/tmp
 
-    TMP=${HOSTDIR}      #TMP=${TMP-/tmp}
-    TEMP=${TMP}
-    TMPDIR=${TMP}
+    init_directories
 
-    CADIR=${HOSTDIR}/CA
-    SERVERDIR=${HOSTDIR}/server
-    CLIENTDIR=${HOSTDIR}/client
-    ALICEDIR=${HOSTDIR}/alicedir
-    BOBDIR=${HOSTDIR}/bobdir
-    DAVEDIR=${HOSTDIR}/dave
-    EVEDIR=${HOSTDIR}/eve
-    FIPSDIR=${HOSTDIR}/fips
-
-    SERVER_CADIR=${HOSTDIR}/serverCA
-    CLIENT_CADIR=${HOSTDIR}/clientCA
-    EXT_SERVERDIR=${HOSTDIR}/ext_server
-    EXT_CLIENTDIR=${HOSTDIR}/ext_client
-
-    PWFILE=${TMP}/tests.pw.$$
-    NOISE_FILE=${TMP}/tests_noise.$$
-
-    FIPSPWFILE=${TMP}/tests.fipspw.$$
-    FIPSBADPWFILE=${TMP}/tests.fipsbadpw.$$
-    FIPSP12PWFILE=${TMP}/tests.fipsp12pw.$$
-    FIPSCERTNICK="FIPS_PUB_140-1_Test_Certificate"
+    FIPSCERTNICK="FIPS_PUB_140_Test_Certificate"
 
     # domains to handle ipc based access to databases
     D_CA="TestCA.$version"
@@ -363,8 +513,12 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
     D_SERVER="Server.$version"
     D_CLIENT="Client.$version"
     D_FIPS="FIPS.$version"
+    D_DBPASS="DBPASS.$version"
+    D_ECCURVES="ECCURVES.$version"
     D_EXT_SERVER="ExtendedServer.$version"
     D_EXT_CLIENT="ExtendedClient.$version"
+    D_CERT_EXTENSTIONS="CertExtensions.$version"
+    D_DISTRUST="Distrust.$version"
 
     # we need relative pathnames of these files abd directories, since our 
     # tools can't handle the unix style absolut pathnames on cygnus
@@ -372,12 +526,18 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
     R_CADIR=../CA
     R_SERVERDIR=../server
     R_CLIENTDIR=../client
+    R_IOPR_CADIR=../CA_iopr
+    R_IOPR_SSL_SERVERDIR=../server_ssl_iopr
+    R_IOPR_SSL_CLIENTDIR=../client_ssl_iopr
+    R_IOPR_OCSP_CLIENTDIR=../client_ocsp_iopr
     R_ALICEDIR=../alicedir
     R_BOBDIR=../bobdir
     R_DAVEDIR=../dave
     R_EVEDIR=../eve
     R_EXT_SERVERDIR=../ext_server
     R_EXT_CLIENTDIR=../ext_client
+    R_CERT_EXT=../cert_extensions
+    R_STAPLINGDIR=../stapling
 
     #
     # profiles are either paths or domains depending on the setting of
@@ -392,8 +552,6 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
     P_R_CLIENTDIR=${R_CLIENTDIR}
     P_R_EXT_SERVERDIR=${R_EXT_SERVERDIR}
     P_R_EXT_CLIENTDIR=${R_EXT_CLIENTDIR}
-    P_SERVER_CADIR=${SERVER_CADIR}
-    P_CLIENT_CADIR=${CLIENT_CADIR}
     if [ -n "${MULTIACCESS_DBM}" ]; then
 	P_R_CADIR="multiaccess:${D_CA}"
 	P_R_ALICEDIR="multiaccess:${D_ALICE}"
@@ -404,32 +562,21 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
 	P_R_CLIENTDIR="multiaccess:${D_CLIENT}"
 	P_R_EXT_SERVERDIR="multiaccess:${D_EXT_SERVER}"
 	P_R_EXT_CLIENTDIR="multiaccess:${D_EXT_CLIENT}"
-	P_SERVER_CADIR="multiaccess:${D_SERVER_CA}"
-	P_CLIENT_CADIR="multiaccess:${D_CLIENT_CA}"
     fi
 
-    R_PWFILE=../tests.pw.$$
-    R_NOISE_FILE=../tests_noise.$$
+    R_PWFILE=../tests.pw
+    R_NOISE_FILE=../tests_noise
 
-    R_FIPSPWFILE=../tests.fipspw.$$
-    R_FIPSBADPWFILE=../tests.fipsbadpw.$$
-    R_FIPSP12PWFILE=../tests.fipsp12pw.$$
+    R_FIPSPWFILE=../tests.fipspw
+    R_FIPSBADPWFILE=../tests.fipsbadpw
+    R_FIPSP12PWFILE=../tests.fipsp12pw
 
-    echo "fips140" > ${FIPSPWFILE}
-    echo "fips104" > ${FIPSBADPWFILE}
-    echo "pkcs12fips140" > ${FIPSP12PWFILE}
-
-    # a new log file, short - fast to search, mostly for tools to
-    # see if their portion of the cert has succeeded, also for me -
-    CERT_LOG_FILE=${HOSTDIR}/cert.log      #the output.log is so crowded...
-
-    TEMPFILES="${PWFILE} ${NOISE_FILE}"
     trap "Exit $0 Signal_caught" 2 3
 
     export PATH LD_LIBRARY_PATH SHLIB_PATH LIBPATH DYLD_LIBRARY_PATH
     export DOMSUF HOSTADDR
     export KILL PS
-    export MOZILLA_ROOT SECURITY_ROOT DIST TESTDIR OBJDIR HOSTDIR QADIR
+    export MOZILLA_ROOT DIST TESTDIR OBJDIR QADIR
     export LOGFILE SCRIPTNAME
 
 #used for the distributed stress test, the server generates certificates 
@@ -450,6 +597,55 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
     if [ -z "$MAX_CERT" ] ; then
         MAX_CERT=$GLOB_MAX_CERT
     fi
+
+    #################################################
+    # CRL SSL testing constatnts
+    #
+
+
+    CRL_GRP_1_BEGIN=40
+    CRL_GRP_1_RANGE=3
+    UNREVOKED_CERT_GRP_1=41
+
+    CRL_GRP_2_BEGIN=43
+    CRL_GRP_2_RANGE=6
+    UNREVOKED_CERT_GRP_2=46
+
+    CRL_GRP_3_BEGIN=49
+    CRL_GRP_3_RANGE=4
+    UNREVOKED_CERT_GRP_3=51
+
+    TOTAL_CRL_RANGE=`expr ${CRL_GRP_1_RANGE} + ${CRL_GRP_2_RANGE} + \
+                     ${CRL_GRP_3_RANGE}`
+
+    TOTAL_GRP_NUM=3
+    
+    RELOAD_CRL=1
+
+    NSS_DEFAULT_DB_TYPE="dbm"
+    export NSS_DEFAULT_DB_TYPE
+
+    MSG_ID_FILE="${HOSTDIR}/id"
+    MSG_ID=0
+    echo ${MSG_ID} > ${MSG_ID_FILE}
+
+    #################################################
+    # Interoperability testing constatnts
+    #
+    # if suite is setup for testing, IOPR_HOSTADDR_LIST should have
+    # at least one host name(FQDN)
+    # Example   IOPR_HOSTADDR_LIST="goa1.SFBay.Sun.COM"
+
+    if [ -z "`echo ${IOPR_HOSTADDR_LIST} | grep '[A-Za-z]'`" ]; then
+        IOPR=0
+    else
+        IOPR=1
+    fi
+    #################################################
+
+    if [ "${OS_ARCH}" != "WINNT" -a "${OS_ARCH}" != "Android" ]; then
+        ulimit -c unlimited
+    fi 
 
     SCRIPTNAME=$0
     INIT_SOURCED=TRUE   #whatever one does - NEVER export this one please

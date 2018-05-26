@@ -1,43 +1,10 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * PKCS7 decoding, verification.
- *
- * $Id: p7decode.c,v 1.8.12.1 2003/06/11 01:50:29 wtc%netscape.com Exp $
  */
-
-#include "nssrenam.h"
 
 #include "p7local.h"
 
@@ -77,7 +44,7 @@ struct SEC_PKCS7DecoderContextStr {
     SECKEYGetPasswordKey pwfn;
     void *pwfn_arg;
     struct sec_pkcs7_decoder_worker worker;
-    PRArenaPool *tmp_poolp;
+    PLArenaPool *tmp_poolp;
     int error;
     SEC_PKCS7GetDecryptKeyCallback dkcb;
     void *dkcb_arg;
@@ -263,10 +230,6 @@ static SECStatus
 sec_pkcs7_decoder_start_digests (SEC_PKCS7DecoderContext *p7dcx, int depth,
 				 SECAlgorithmID **digestalgs)
 {
-    SECAlgorithmID *algid;
-    SECOidData *oiddata;
-    const SECHashObject *digobj;
-    void *digcx;
     int i, digcnt;
 
     if (digestalgs == NULL)
@@ -302,26 +265,10 @@ sec_pkcs7_decoder_start_digests (SEC_PKCS7DecoderContext *p7dcx, int depth,
      * Create a digest context for each algorithm.
      */
     for (i = 0; i < digcnt; i++) {
-	algid = digestalgs[i];
-	oiddata = SECOID_FindOID(&(algid->algorithm));
-	if (oiddata == NULL) {
-	    digobj = NULL;
-	} else {
-	    switch (oiddata->offset) {
-	      case SEC_OID_MD2:
-		digobj = HASH_GetHashObject(HASH_AlgMD2);
-		break;
-	      case SEC_OID_MD5:
-		digobj = HASH_GetHashObject(HASH_AlgMD5);
-		break;
-	      case SEC_OID_SHA1:
-		digobj = HASH_GetHashObject(HASH_AlgSHA1);
-		break;
-	      default:
-		digobj = NULL;
-		break;
-	    }
-	}
+	SECAlgorithmID *     algid  = digestalgs[i];
+	SECOidTag            oidTag = SECOID_FindOIDTag(&(algid->algorithm));
+	const SECHashObject *digobj = HASH_GetHashObjectByOidTag(oidTag);
+	void *digcx;
 
 	/*
 	 * Skip any algorithm we do not even recognize; obviously,
@@ -359,7 +306,7 @@ sec_pkcs7_decoder_start_digests (SEC_PKCS7DecoderContext *p7dcx, int depth,
  */
 static SECStatus
 sec_pkcs7_decoder_finish_digests (SEC_PKCS7DecoderContext *p7dcx,
-				  PRArenaPool *poolp,
+				  PLArenaPool *poolp,
 				  SECItem ***digestsp)
 {
     struct sec_pkcs7_decoder_worker *worker;
@@ -446,7 +393,6 @@ sec_pkcs7_decoder_finish_digests (SEC_PKCS7DecoderContext *p7dcx,
  * XXX Need comment explaining following helper function (which is used
  * by sec_pkcs7_decoder_start_decrypt).
  */
-extern const SEC_ASN1Template SEC_SMIMEKEAParamTemplateAllParams[];
 
 static PK11SymKey *
 sec_pkcs7_decoder_get_recipient_key (SEC_PKCS7DecoderContext *p7dcx,
@@ -456,10 +402,9 @@ sec_pkcs7_decoder_get_recipient_key (SEC_PKCS7DecoderContext *p7dcx,
     SEC_PKCS7RecipientInfo *ri;
     CERTCertificate *cert = NULL;
     SECKEYPrivateKey *privkey = NULL;
-    PK11SymKey *bulkkey;
+    PK11SymKey *bulkkey = NULL;
     SECOidTag keyalgtag, bulkalgtag, encalgtag;
-    PK11SlotInfo *slot;
-    int bulkLength = 0;
+    PK11SlotInfo *slot = NULL;
 
     if (recipientinfos == NULL || recipientinfos[0] == NULL) {
 	p7dcx->error = SEC_ERROR_NOT_A_RECIPIENT;
@@ -478,7 +423,7 @@ sec_pkcs7_decoder_get_recipient_key (SEC_PKCS7DecoderContext *p7dcx,
 
     keyalgtag = SECOID_GetAlgorithmTag(&(cert->subjectPublicKeyInfo.algorithm));
     encalgtag = SECOID_GetAlgorithmTag (&(ri->keyEncAlg));
-    if ((encalgtag != SEC_OID_NETSCAPE_SMIME_KEA) && (keyalgtag != encalgtag)) {
+    if (keyalgtag != encalgtag) {
 	p7dcx->error = SEC_ERROR_PKCS7_KEYALG_MISMATCH;
 	goto no_key_found;
     }
@@ -495,129 +440,18 @@ sec_pkcs7_decoder_get_recipient_key (SEC_PKCS7DecoderContext *p7dcx,
 	    goto no_key_found;
 	}
 	break;
-	/* ### mwelch -- KEA */ 
-        case SEC_OID_NETSCAPE_SMIME_KEA:
-	  {
-	      SECStatus err;
-	      CK_MECHANISM_TYPE bulkType;
-	      PK11SymKey *tek;
-	      SECKEYPublicKey *senderPubKey;
-	      SEC_PKCS7SMIMEKEAParameters   keaParams;
-
-	      (void) memset(&keaParams, 0, sizeof(keaParams));
-
-	      /* Decode the KEA algorithm parameters. */
-	      err = SEC_ASN1DecodeItem(NULL,
-				       &keaParams,
-				       SEC_SMIMEKEAParamTemplateAllParams,
-				       &(ri->keyEncAlg.parameters));
-	      if (err != SECSuccess)
-	      {
-		  p7dcx->error = err;
-		  PORT_SetError(0);
-		  goto no_key_found;
-	      }
-	  
-
-	      /* We just got key data, no key structure. So, we
-		 create one. */
-	     senderPubKey = 
-		  PK11_MakeKEAPubKey(keaParams.originatorKEAKey.data,
-				     keaParams.originatorKEAKey.len);
-	     if (senderPubKey == NULL)
-	     {
-		    p7dcx->error = PORT_GetError();
-		    PORT_SetError(0);
-		    goto no_key_found;
-	     }
-	      
-	     /* Generate the TEK (token exchange key) which we use
-	         to unwrap the bulk encryption key. */
-	     tek = PK11_PubDerive(privkey, senderPubKey, 
-				   PR_FALSE,
-				   &keaParams.originatorRA,
-				   NULL,
-				   CKM_KEA_KEY_DERIVE, CKM_SKIPJACK_WRAP,
-				   CKA_WRAP, 0, p7dcx->pwfn_arg);
-	     SECKEY_DestroyPublicKey(senderPubKey);
-	      
-	     if (tek == NULL)
-	     {
-		  p7dcx->error = PORT_GetError();
-		  PORT_SetError(0);
-		  goto no_key_found;
-	     }
-	      
-	      /* Now that we have the TEK, unwrap the bulk key
-	         with which to decrypt the message. We have to
-		 do one of two different things depending on 
-		 whether Skipjack was used for bulk encryption 
-		 of the message. */
-	      bulkType = PK11_AlgtagToMechanism (bulkalgtag);
-	      switch(bulkType)
-	      {
-	      case CKM_SKIPJACK_CBC64:
-	      case CKM_SKIPJACK_ECB64:
-	      case CKM_SKIPJACK_OFB64:
-	      case CKM_SKIPJACK_CFB64:
-	      case CKM_SKIPJACK_CFB32:
-	      case CKM_SKIPJACK_CFB16:
-	      case CKM_SKIPJACK_CFB8:
-		  /* Skipjack is being used as the bulk encryption algorithm.*/
-		  /* Unwrap the bulk key. */
-		  bulkkey = PK11_UnwrapSymKey(tek, CKM_SKIPJACK_WRAP,
-					      NULL, &ri->encKey, 
-					      CKM_SKIPJACK_CBC64, 
-					      CKA_DECRYPT, 0);
-		  break;
-	      default:
-		  /* Skipjack was not used for bulk encryption of this
-		     message. Use Skipjack CBC64, with the nonSkipjackIV
-		     part of the KEA key parameters, to decrypt 
-		     the bulk key. If we got a parameter indicating that the
-		     bulk key size is different than the encrypted key size,
-		     pass in the real key size. */
-		  
-		  /* Check for specified bulk key length (unspecified implies
-		     that the bulk key length is the same as encrypted length) */
-		  if (keaParams.bulkKeySize.len > 0)
-		  {
-		      p7dcx->error = SEC_ASN1DecodeItem(NULL, &bulkLength,
-					SEC_ASN1_GET(SEC_IntegerTemplate),
-					&keaParams.bulkKeySize);
-		  }
-		  
-		  if (p7dcx->error != SECSuccess)
-		      goto no_key_found;
-		  
-		  bulkkey = PK11_UnwrapSymKey(tek, CKM_SKIPJACK_CBC64,
-					      &keaParams.nonSkipjackIV, 
-					      &ri->encKey,
-					      bulkType,
-					      CKA_DECRYPT, bulkLength);
-	      }
-	      
-	      
-	      if (bulkkey == NULL)
-	      {
-		  p7dcx->error = PORT_GetError();
-		  PORT_SetError(0);
-		  goto no_key_found;
-	      }
-	      break;
-	  }
       default:
 	p7dcx->error = SEC_ERROR_UNSUPPORTED_KEYALG;
-	goto no_key_found;
+	break;
     }
-
-    return bulkkey;
 
 no_key_found:
     if (privkey != NULL)
 	SECKEY_DestroyPrivateKey (privkey);
+    if (slot != NULL)
+	PK11_FreeSlot(slot);
 
-    return NULL;
+    return bulkkey;
 }
  
 /*
@@ -707,16 +541,6 @@ sec_pkcs7_decoder_start_decrypt (SEC_PKCS7DecoderContext *p7dcx, int depth,
     decryptobj = sec_PKCS7CreateDecryptObject (bulkkey,
 					       &(enccinfo->contentEncAlg));
 
-    /* 
-     * For PKCS5 Encryption Algorithms, the bulkkey is actually a different
-     * structure.  Therefore, we need to set the bulkkey to the actual key 
-     * prior to freeing it.
-     */
-    if ( SEC_PKCS5IsAlgorithmPBEAlg(&(enccinfo->contentEncAlg)) && bulkkey ) {
-	SEC_PKCS5KeyAndPassword *keyPwd = (SEC_PKCS5KeyAndPassword *)bulkkey;
-	bulkkey = keyPwd->key;
-    }
-
     /*
      * We are done with (this) bulkkey now.
      */
@@ -759,7 +583,7 @@ no_decryption:
 
 static SECStatus
 sec_pkcs7_decoder_finish_decrypt (SEC_PKCS7DecoderContext *p7dcx,
-				  PRArenaPool *poolp,
+				  PLArenaPool *poolp,
 				  SEC_PKCS7EncryptedContentInfo *enccinfo)
 {
     struct sec_pkcs7_decoder_worker *worker;
@@ -1134,7 +958,7 @@ SEC_PKCS7DecoderStart(SEC_PKCS7DecoderContentCallback cb, void *cb_arg,
     SEC_PKCS7DecoderContext *p7dcx;
     SEC_ASN1DecoderContext *dcx;
     SEC_PKCS7ContentInfo *cinfo;
-    PRArenaPool *poolp;
+    PLArenaPool *poolp;
 
     poolp = PORT_NewArena (1024);		/* XXX what is right value? */
     if (poolp == NULL)
@@ -1265,8 +1089,22 @@ SEC_PKCS7DecodeItem(SECItem *p7item,
 
     p7dcx = SEC_PKCS7DecoderStart(cb, cb_arg, pwfn, pwfn_arg, decrypt_key_cb,
 				  decrypt_key_cb_arg, decrypt_allowed_cb);
+    if (!p7dcx) {
+        /* error code is set */
+        return NULL;
+    }
     (void) SEC_PKCS7DecoderUpdate(p7dcx, (char *) p7item->data, p7item->len);
     return SEC_PKCS7DecoderFinish(p7dcx);
+}
+
+/*
+ * Abort the ASN.1 stream. Used by pkcs 12
+ */
+void
+SEC_PKCS7DecoderAbort(SEC_PKCS7DecoderContext *p7dcx, int error)
+{
+    PORT_Assert(p7dcx);
+    SEC_ASN1DecoderAbort(p7dcx->dcx, error);
 }
 
 
@@ -1406,13 +1244,17 @@ SEC_PKCS7ContentIsSigned(SEC_PKCS7ContentInfo *cinfo)
 
 
 /*
- * SEC_PKCS7ContentVerifySignature
+ * sec_pkcs7_verify_signature
+ *
  *	Look at a PKCS7 contentInfo and check if the signature is good.
  *	The digest was either calculated earlier (and is stored in the
  *	contentInfo itself) or is passed in via "detached_digest".
  *
  *	The verification checks that the signing cert is valid and trusted
- *	for the purpose specified by "certusage".
+ *	for the purpose specified by "certusage" at
+ * 	- "*atTime" if "atTime" is not null, or
+ * 	- the signing time if the signing time is available in "cinfo", or
+ *	- the current time (as returned by PR_Now).
  *
  *	In addition, if "keepcerts" is true, add any new certificates found
  *	into our local database.
@@ -1439,12 +1281,13 @@ SEC_PKCS7ContentIsSigned(SEC_PKCS7ContentInfo *cinfo)
 static PRBool
 sec_pkcs7_verify_signature(SEC_PKCS7ContentInfo *cinfo,
 			   SECCertUsage certusage,
-			   SECItem *detached_digest,
+			   const SECItem *detached_digest,
 			   HASH_HashType digest_type,
-			   PRBool keepcerts)
+			   PRBool keepcerts,
+			   const PRTime *atTime)
 {
     SECAlgorithmID **digestalgs, *bulkid;
-    SECItem *digest;
+    const SECItem *digest;
     SECItem **digests;
     SECItem **rawcerts;
     CERTSignedCrl **crls;
@@ -1452,13 +1295,15 @@ sec_pkcs7_verify_signature(SEC_PKCS7ContentInfo *cinfo,
     CERTCertificate *cert, **certs;
     PRBool goodsig;
     CERTCertDBHandle *certdb, *defaultdb; 
-    SECOidData *algiddata;
+    SECOidTag encTag,digestTag;
+    HASH_HashType found_type;
     int i, certcount;
     SECKEYPublicKey *publickey;
     SECItem *content_type;
     PK11SymKey *sigkey;
-    SECItem *utc_stime;
-    int64 stime;
+    SECItem *encoded_stime;
+    PRTime stime;
+    PRTime verificationTime;
     SECStatus rv;
 
     /*
@@ -1581,10 +1426,10 @@ sec_pkcs7_verify_signature(SEC_PKCS7ContentInfo *cinfo,
      * both on the cert verification and for importing the sender
      * email profile.
      */
-    utc_stime = SEC_PKCS7GetSigningTime (cinfo);
-    if (utc_stime != NULL) {
-	if (DER_UTCTimeToTime (&stime, utc_stime) != SECSuccess)
-	    utc_stime = NULL;	/* conversion failed, so pretend none */
+    encoded_stime = SEC_PKCS7GetSigningTime (cinfo);
+    if (encoded_stime != NULL) {
+	if (DER_DecodeTimeChoice (&stime, encoded_stime) != SECSuccess)
+	    encoded_stime = NULL;	/* conversion failed, so pretend none */
     }
 
     /*
@@ -1595,8 +1440,14 @@ sec_pkcs7_verify_signature(SEC_PKCS7ContentInfo *cinfo,
      * in a time (and for non-S/MIME callers to pass in nothing, or
      * maybe make them pass in the current time, always?).
      */
-    if (CERT_VerifyCert (certdb, cert, PR_TRUE, certusage,
-			 utc_stime != NULL ? stime : PR_Now(),
+    if (atTime) {
+	verificationTime = *atTime;
+    } else if (encoded_stime != NULL) {
+	verificationTime = stime;
+    } else {
+	verificationTime = PR_Now();
+    }
+    if (CERT_VerifyCert (certdb, cert, PR_TRUE, certusage, verificationTime,
 			 cinfo->pwfn_arg, NULL) != SECSuccess)
 	{
 	/*
@@ -1631,35 +1482,22 @@ sec_pkcs7_verify_signature(SEC_PKCS7ContentInfo *cinfo,
     /*
      * Find and confirm digest algorithm.
      */
-    algiddata = SECOID_FindOID (&(signerinfo->digestAlg.algorithm));
+    digestTag = SECOID_FindOIDTag(&(signerinfo->digestAlg.algorithm));
+
+    /* make sure we understand the digest type first */
+    found_type = HASH_GetHashTypeByOidTag(digestTag);
+    if ((digestTag == SEC_OID_UNKNOWN) || (found_type == HASH_AlgNULL)) {
+	PORT_SetError (SEC_ERROR_PKCS7_BAD_SIGNATURE);
+	goto done;
+    }
 
     if (detached_digest != NULL) {
-	switch (digest_type) {
-	  default:
-	  case HASH_AlgNULL:
+	unsigned int hashLen     = HASH_ResultLen(found_type);
+
+	if (digest_type != found_type || 
+	    detached_digest->len != hashLen) {
 	    PORT_SetError (SEC_ERROR_PKCS7_BAD_SIGNATURE);
 	    goto done;
-	  case HASH_AlgMD2:
-	    PORT_Assert (detached_digest->len == MD2_LENGTH);
-	    if (algiddata->offset != SEC_OID_MD2) {
-		PORT_SetError (SEC_ERROR_PKCS7_BAD_SIGNATURE);
-		goto done;
-	    }
-	    break;
-	  case HASH_AlgMD5:
-	    PORT_Assert (detached_digest->len == MD5_LENGTH);
-	    if (algiddata->offset != SEC_OID_MD5) {
-		PORT_SetError (SEC_ERROR_PKCS7_BAD_SIGNATURE);
-		goto done;
-	    }
-	    break;
-	  case HASH_AlgSHA1:
-	    PORT_Assert (detached_digest->len == SHA1_LENGTH);
-	    if (algiddata->offset != SEC_OID_SHA1) {
-		PORT_SetError (SEC_ERROR_PKCS7_BAD_SIGNATURE);
-		goto done;
-	    }
-	    break;
 	}
 	digest = detached_digest;
     } else {
@@ -1672,12 +1510,8 @@ sec_pkcs7_verify_signature(SEC_PKCS7ContentInfo *cinfo,
 	/*
 	 * pick digest matching signerinfo->digestAlg from digests
 	 */
-	if (algiddata == NULL) {
-	    PORT_SetError (SEC_ERROR_PKCS7_BAD_SIGNATURE);
-	    goto done;
-	}
 	for (i = 0; digestalgs[i] != NULL; i++) {
-	    if (SECOID_FindOID (&(digestalgs[i]->algorithm)) == algiddata)
+	    if (SECOID_FindOIDTag(&(digestalgs[i]->algorithm)) == digestTag)
 		break;
 	}
 	if (digestalgs[i] == NULL) {
@@ -1688,18 +1522,8 @@ sec_pkcs7_verify_signature(SEC_PKCS7ContentInfo *cinfo,
 	digest = digests[i];
     }
 
-    /*
-     * XXX This may not be the right set of algorithms to check.
-     * I'd prefer to trust that just calling VFY_Verify{Data,Digest}
-     * would do the right thing (and set an error if it could not);
-     * then additional algorithms could be handled by that code
-     * and we would Just Work.  So this check should just be removed,
-     * but not until the VFY code is better at setting errors.
-     */
-    algiddata = SECOID_FindOID (&(signerinfo->digestEncAlg.algorithm));
-    if (algiddata == NULL ||
-	((algiddata->offset != SEC_OID_PKCS1_RSA_ENCRYPTION) &&
-	 (algiddata->offset != SEC_OID_ANSIX9_DSA_SIGNATURE))) {
+    encTag = SECOID_FindOIDTag(&(signerinfo->digestEncAlg.algorithm));
+    if (encTag == SEC_OID_UNKNOWN) {
 	PORT_SetError (SEC_ERROR_PKCS7_BAD_SIGNATURE);
 	goto done;
     }
@@ -1768,10 +1592,10 @@ sec_pkcs7_verify_signature(SEC_PKCS7ContentInfo *cinfo,
 	    goto done;
 	}
 
-	goodsig = (PRBool)(VFY_VerifyData (encoded_attrs.data, 
+	goodsig = (PRBool)(VFY_VerifyDataDirect(encoded_attrs.data, 
 				   encoded_attrs.len,
 				   publickey, &(signerinfo->encDigest),
-				   SECOID_GetAlgorithmTag(&(signerinfo->digestEncAlg)),
+				   encTag, digestTag, NULL,
 				   cinfo->pwfn_arg) == SECSuccess);
 	PORT_Free (encoded_attrs.data);
     } else {
@@ -1826,10 +1650,9 @@ sec_pkcs7_verify_signature(SEC_PKCS7ContentInfo *cinfo,
 	    sig = &holder;
 	}
 
-	goodsig = (PRBool)(VFY_VerifyDigest (digest, publickey, sig,
-				     SECOID_GetAlgorithmTag(&(signerinfo->digestEncAlg)),
-				     cinfo->pwfn_arg)
-		   == SECSuccess);
+	goodsig = (PRBool)(VFY_VerifyDigestDirect(digest, publickey, sig,
+				     encTag, digestTag, cinfo->pwfn_arg)
+                            == SECSuccess);
 
 	if (sigkey != NULL) {
 	    PORT_Assert (sig == &holder);
@@ -1863,7 +1686,7 @@ savecert:
      * Only save the smime profile if we are checking an email message and
      * the cert has an email address in it.
      */
-    if ( ( cert->emailAddr != NULL ) &&
+    if ( cert->emailAddr && cert->emailAddr[0] &&
 	( ( certusage == certUsageEmailSigner ) ||
 	 ( certusage == certUsageEmailRecipient ) ) ) {
 	SECItem *profile = NULL;
@@ -1888,7 +1711,7 @@ savecert:
 	    profile = sec_PKCS7AttributeValue (attr);
 	}
 
-	rv = CERT_SaveSMimeProfile (cert, profile, utc_stime);
+	rv = CERT_SaveSMimeProfile (cert, profile, encoded_stime);
 
 	/*
 	 * Restore the saved error in case the calls above set a new
@@ -1935,7 +1758,7 @@ SEC_PKCS7VerifySignature(SEC_PKCS7ContentInfo *cinfo,
 			 PRBool keepcerts)
 {
     return sec_pkcs7_verify_signature (cinfo, certusage,
-				       NULL, HASH_AlgNULL, keepcerts);
+				       NULL, HASH_AlgNULL, keepcerts, NULL);
 }
 
 /*
@@ -1951,15 +1774,37 @@ SEC_PKCS7VerifySignature(SEC_PKCS7ContentInfo *cinfo,
 PRBool
 SEC_PKCS7VerifyDetachedSignature(SEC_PKCS7ContentInfo *cinfo,
 				 SECCertUsage certusage,
-				 SECItem *detached_digest,
+				 const SECItem *detached_digest,
 				 HASH_HashType digest_type,
 				 PRBool keepcerts)
 {
     return sec_pkcs7_verify_signature (cinfo, certusage,
 				       detached_digest, digest_type,
-				       keepcerts);
+				       keepcerts, NULL);
 }
 
+/*
+ * SEC_PKCS7VerifyDetachedSignatureAtTime
+ *      Look at a PKCS7 contentInfo and check if the signature matches
+ *      a passed-in digest (calculated, supposedly, from detached contents).
+ *      The verification checks that the signing cert is valid and trusted
+ *      for the purpose specified by "certusage" at time "atTime".
+ *
+ *	In addition, if "keepcerts" is true, add any new certificates found
+ *	into our local database.
+ */
+PRBool
+SEC_PKCS7VerifyDetachedSignatureAtTime(SEC_PKCS7ContentInfo *cinfo,
+				       SECCertUsage certusage,
+				       const SECItem *detached_digest,
+				       HASH_HashType digest_type,
+				       PRBool keepcerts,
+				       PRTime atTime)
+{
+    return sec_pkcs7_verify_signature (cinfo, certusage,
+				       detached_digest, digest_type,
+				       keepcerts, &atTime);
+}
 
 /*
  * Return the asked-for portion of the name of the signer of a PKCS7
@@ -2022,7 +1867,7 @@ sec_pkcs7_get_signer_cert_info(SEC_PKCS7ContentInfo *cinfo, int selector)
 	 * some valid usage to pass in.
 	 */
 	(void) sec_pkcs7_verify_signature (cinfo, certUsageEmailSigner,
-					   NULL, HASH_AlgNULL, PR_FALSE);
+					   NULL, HASH_AlgNULL, PR_FALSE, NULL);
 	signercert = signerinfos[0]->cert;
 	if (signercert == NULL)
 	    return NULL;
@@ -2033,7 +1878,7 @@ sec_pkcs7_get_signer_cert_info(SEC_PKCS7ContentInfo *cinfo, int selector)
 	container = CERT_GetCommonName (&signercert->subject);
 	break;
       case sec_email_address:
-	if(signercert->emailAddr) {
+	if(signercert->emailAddr && signercert->emailAddr[0]) {
 	    container = PORT_Strdup(signercert->emailAddr);
 	} else {
 	    container = NULL;

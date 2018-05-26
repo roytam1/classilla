@@ -3,39 +3,9 @@
  * are mostly defined by the SSL2, SSL3, or TLS protocol specifications.
  * Cipher kinds and ciphersuites are part of the public API.
  *
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- *
- * $Id: sslproto.h,v 1.3 2001/09/21 03:07:35 nelsonb%netscape.com Exp $
- */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef __sslproto_h_
 #define __sslproto_h_
@@ -43,7 +13,17 @@
 /* All versions less than 3_0 are treated as SSL version 2 */
 #define SSL_LIBRARY_VERSION_2			0x0002
 #define SSL_LIBRARY_VERSION_3_0			0x0300
-#define SSL_LIBRARY_VERSION_3_1_TLS		0x0301
+#define SSL_LIBRARY_VERSION_TLS_1_0		0x0301
+#define SSL_LIBRARY_VERSION_TLS_1_1		0x0302
+#define SSL_LIBRARY_VERSION_TLS_1_2		0x0303
+/* Note: this is the internal format, not the wire format */
+#define SSL_LIBRARY_VERSION_DTLS_1_0		0x0302
+
+/* deprecated old name */
+#define SSL_LIBRARY_VERSION_3_1_TLS SSL_LIBRARY_VERSION_TLS_1_0 
+
+/* The DTLS version used in the spec */
+#define SSL_LIBRARY_VERSION_DTLS_1_0_WIRE       ((~0x0100) & 0xffff)
 
 /* Header lengths of some of the messages */
 #define SSL_HL_ERROR_HBYTES			3
@@ -135,9 +115,9 @@
 #define SSL_DH_ANON_WITH_DES_CBC_SHA		0x001a
 #define SSL_DH_ANON_WITH_3DES_EDE_CBC_SHA	0x001b
 
-#define SSL_FORTEZZA_DMS_WITH_NULL_SHA		0x001c
-#define SSL_FORTEZZA_DMS_WITH_FORTEZZA_CBC_SHA	0x001d
-#define SSL_FORTEZZA_DMS_WITH_RC4_128_SHA	0x001e
+#define SSL_FORTEZZA_DMS_WITH_NULL_SHA		0x001c /* deprecated */
+#define SSL_FORTEZZA_DMS_WITH_FORTEZZA_CBC_SHA	0x001d /* deprecated */
+#define SSL_FORTEZZA_DMS_WITH_RC4_128_SHA	0x001e /* deprecated */
 
 /* New TLS cipher suites */
 #define TLS_RSA_WITH_AES_128_CBC_SHA      	0x002F
@@ -153,6 +133,16 @@
 #define TLS_DHE_DSS_WITH_AES_256_CBC_SHA  	0x0038
 #define TLS_DHE_RSA_WITH_AES_256_CBC_SHA  	0x0039
 #define TLS_DH_ANON_WITH_AES_256_CBC_SHA  	0x003A
+#define TLS_RSA_WITH_NULL_SHA256		0x003B
+#define TLS_RSA_WITH_AES_128_CBC_SHA256  	0x003C
+#define TLS_RSA_WITH_AES_256_CBC_SHA256  	0x003D
+
+#define TLS_RSA_WITH_CAMELLIA_128_CBC_SHA      	0x0041
+#define TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA   	0x0042
+#define TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA   	0x0043
+#define TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA  	0x0044
+#define TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA  	0x0045
+#define TLS_DH_ANON_WITH_CAMELLIA_128_CBC_SHA  	0x0046
 
 #define TLS_RSA_EXPORT1024_WITH_DES_CBC_SHA     0x0062
 #define TLS_RSA_EXPORT1024_WITH_RC4_56_SHA      0x0064
@@ -160,6 +150,68 @@
 #define TLS_DHE_DSS_EXPORT1024_WITH_DES_CBC_SHA 0x0063
 #define TLS_DHE_DSS_EXPORT1024_WITH_RC4_56_SHA  0x0065
 #define TLS_DHE_DSS_WITH_RC4_128_SHA            0x0066
+#define TLS_DHE_RSA_WITH_AES_128_CBC_SHA256     0x0067
+#define TLS_DHE_RSA_WITH_AES_256_CBC_SHA256     0x006B
+
+#define TLS_RSA_WITH_CAMELLIA_256_CBC_SHA      	0x0084
+#define TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA   	0x0085
+#define TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA   	0x0086
+#define TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA  	0x0087
+#define TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA  	0x0088
+#define TLS_DH_ANON_WITH_CAMELLIA_256_CBC_SHA  	0x0089
+
+#define TLS_RSA_WITH_SEED_CBC_SHA		0x0096
+
+#define TLS_RSA_WITH_AES_128_GCM_SHA256         0x009C
+#define TLS_DHE_RSA_WITH_AES_128_GCM_SHA256     0x009E
+#define TLS_DHE_DSS_WITH_AES_128_GCM_SHA256     0x00A2
+
+/* TLS "Signaling Cipher Suite Value" (SCSV). May be requested by client.
+ * Must NEVER be chosen by server.  SSL 3.0 server acknowledges by sending
+ * back an empty Renegotiation Info (RI) server hello extension.
+ */
+#define TLS_EMPTY_RENEGOTIATION_INFO_SCSV	0x00FF
+
+/* Cipher Suite Values starting with 0xC000 are defined in informational
+ * RFCs.
+ */
+#define TLS_ECDH_ECDSA_WITH_NULL_SHA            0xC001
+#define TLS_ECDH_ECDSA_WITH_RC4_128_SHA         0xC002
+#define TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA    0xC003
+#define TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA     0xC004
+#define TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA     0xC005
+
+#define TLS_ECDHE_ECDSA_WITH_NULL_SHA           0xC006
+#define TLS_ECDHE_ECDSA_WITH_RC4_128_SHA        0xC007
+#define TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA   0xC008
+#define TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA    0xC009
+#define TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA    0xC00A
+
+#define TLS_ECDH_RSA_WITH_NULL_SHA              0xC00B
+#define TLS_ECDH_RSA_WITH_RC4_128_SHA           0xC00C
+#define TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA      0xC00D
+#define TLS_ECDH_RSA_WITH_AES_128_CBC_SHA       0xC00E
+#define TLS_ECDH_RSA_WITH_AES_256_CBC_SHA       0xC00F
+
+#define TLS_ECDHE_RSA_WITH_NULL_SHA             0xC010
+#define TLS_ECDHE_RSA_WITH_RC4_128_SHA          0xC011
+#define TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA     0xC012
+#define TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA      0xC013
+#define TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA      0xC014
+
+#define TLS_ECDH_anon_WITH_NULL_SHA             0xC015
+#define TLS_ECDH_anon_WITH_RC4_128_SHA          0xC016
+#define TLS_ECDH_anon_WITH_3DES_EDE_CBC_SHA     0xC017
+#define TLS_ECDH_anon_WITH_AES_128_CBC_SHA      0xC018
+#define TLS_ECDH_anon_WITH_AES_256_CBC_SHA      0xC019
+
+#define TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256 0xC023
+#define TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256   0xC027
+
+#define TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 0xC02B
+#define TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256  0xC02D
+#define TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256   0xC02F
+#define TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256    0xC031
 
 /* Netscape "experimental" cipher suites. */
 #define SSL_RSA_OLDFIPS_WITH_3DES_EDE_CBC_SHA	0xffe0
@@ -168,5 +220,12 @@
 /* New non-experimental openly spec'ed versions of those cipher suites. */
 #define SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA 	0xfeff
 #define SSL_RSA_FIPS_WITH_DES_CBC_SHA      	0xfefe
+
+/* DTLS-SRTP cipher suites from RFC 5764 */
+/* If you modify this, also modify MAX_DTLS_SRTP_CIPHER_SUITES in sslimpl.h */
+#define SRTP_AES128_CM_HMAC_SHA1_80		0x0001
+#define SRTP_AES128_CM_HMAC_SHA1_32		0x0002
+#define SRTP_NULL_HMAC_SHA1_80			0x0005
+#define SRTP_NULL_HMAC_SHA1_32			0x0006
 
 #endif /* __sslproto_h_ */

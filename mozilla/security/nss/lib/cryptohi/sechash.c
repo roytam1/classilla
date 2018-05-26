@@ -1,37 +1,9 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include "sechash.h"
 #include "secoidt.h"
+#include "secerr.h"
 #include "blapi.h"
 #include "pk11func.h"	/* for the PK11_ calls below. */
 
@@ -88,8 +60,23 @@ sha1_NewContext(void) {
 }
 
 static void *
+sha224_NewContext(void) {
+	return (void *) PK11_CreateDigestContext(SEC_OID_SHA224);
+}
+
+static void *
 sha256_NewContext(void) {
 	return (void *) PK11_CreateDigestContext(SEC_OID_SHA256);
+}
+
+static void *
+sha384_NewContext(void) {
+	return (void *) PK11_CreateDigestContext(SEC_OID_SHA384);
+}
+
+static void *
+sha512_NewContext(void) {
+	return (void *) PK11_CreateDigestContext(SEC_OID_SHA512);
 }
 
 const SECHashObject SECHashObjects[] = {
@@ -100,7 +87,9 @@ const SECHashObject SECHashObjects[] = {
     (void (*)(void *)) null_hash_begin,
     (void (*)(void *, const unsigned char *, unsigned int)) null_hash_update,
     (void (*)(void *, unsigned char *, unsigned int *,
-	      unsigned int)) null_hash_end
+	      unsigned int)) null_hash_end,
+    0,
+    HASH_AlgNULL
   },
   { MD2_LENGTH,
     (void * (*)(void)) md2_NewContext,
@@ -109,7 +98,9 @@ const SECHashObject SECHashObjects[] = {
     (void (*)(void *)) PK11_DigestBegin,
     (void (*)(void *, const unsigned char *, unsigned int)) PK11_DigestOp,
     (void (*)(void *, unsigned char *, unsigned int *, unsigned int)) 
-							PK11_DigestFinal
+							PK11_DigestFinal,
+    MD2_BLOCK_LENGTH,
+    HASH_AlgMD2
   },
   { MD5_LENGTH,
     (void * (*)(void)) md5_NewContext,
@@ -118,7 +109,9 @@ const SECHashObject SECHashObjects[] = {
     (void (*)(void *)) PK11_DigestBegin,
     (void (*)(void *, const unsigned char *, unsigned int)) PK11_DigestOp,
     (void (*)(void *, unsigned char *, unsigned int *, unsigned int)) 
-							PK11_DigestFinal
+							PK11_DigestFinal,
+    MD5_BLOCK_LENGTH,
+    HASH_AlgMD5
   },
   { SHA1_LENGTH,
     (void * (*)(void)) sha1_NewContext,
@@ -127,9 +120,10 @@ const SECHashObject SECHashObjects[] = {
     (void (*)(void *)) PK11_DigestBegin,
     (void (*)(void *, const unsigned char *, unsigned int)) PK11_DigestOp,
     (void (*)(void *, unsigned char *, unsigned int *, unsigned int)) 
-							PK11_DigestFinal
+							PK11_DigestFinal,
+    SHA1_BLOCK_LENGTH,
+    HASH_AlgSHA1
   },
-  // Classilla issue 220
   { SHA256_LENGTH,
     (void * (*)(void)) sha256_NewContext,
     (void * (*)(void *)) PK11_CloneContext,
@@ -137,7 +131,42 @@ const SECHashObject SECHashObjects[] = {
     (void (*)(void *)) PK11_DigestBegin,
     (void (*)(void *, const unsigned char *, unsigned int)) PK11_DigestOp,
     (void (*)(void *, unsigned char *, unsigned int *, unsigned int)) 
-							PK11_DigestFinal
+							PK11_DigestFinal,
+    SHA256_BLOCK_LENGTH,
+    HASH_AlgSHA256
+  },
+  { SHA384_LENGTH,
+    (void * (*)(void)) sha384_NewContext,
+    (void * (*)(void *)) PK11_CloneContext,
+    (void (*)(void *, PRBool)) PK11_DestroyContext,
+    (void (*)(void *)) PK11_DigestBegin,
+    (void (*)(void *, const unsigned char *, unsigned int)) PK11_DigestOp,
+    (void (*)(void *, unsigned char *, unsigned int *, unsigned int)) 
+							PK11_DigestFinal,
+    SHA384_BLOCK_LENGTH,
+    HASH_AlgSHA384
+  },
+  { SHA512_LENGTH,
+    (void * (*)(void)) sha512_NewContext,
+    (void * (*)(void *)) PK11_CloneContext,
+    (void (*)(void *, PRBool)) PK11_DestroyContext,
+    (void (*)(void *)) PK11_DigestBegin,
+    (void (*)(void *, const unsigned char *, unsigned int)) PK11_DigestOp,
+    (void (*)(void *, unsigned char *, unsigned int *, unsigned int)) 
+							PK11_DigestFinal,
+    SHA512_BLOCK_LENGTH,
+    HASH_AlgSHA512
+  },
+  { SHA224_LENGTH,
+    (void * (*)(void)) sha224_NewContext,
+    (void * (*)(void *)) PK11_CloneContext,
+    (void (*)(void *, PRBool)) PK11_DestroyContext,
+    (void (*)(void *)) PK11_DigestBegin,
+    (void (*)(void *, const unsigned char *, unsigned int)) PK11_DigestOp,
+    (void (*)(void *, unsigned char *, unsigned int *, unsigned int))
+							PK11_DigestFinal,
+    SHA224_BLOCK_LENGTH,
+    HASH_AlgSHA224
   },
 };
 
@@ -147,11 +176,92 @@ HASH_GetHashObject(HASH_HashType type)
     return &SECHashObjects[type];
 }
 
+HASH_HashType
+HASH_GetHashTypeByOidTag(SECOidTag hashOid)
+{
+    HASH_HashType ht	= HASH_AlgNULL;
 
+    switch(hashOid) {
+    case SEC_OID_MD2:	 ht = HASH_AlgMD2;    break;
+    case SEC_OID_MD5:	 ht = HASH_AlgMD5;    break;
+    case SEC_OID_SHA1:	 ht = HASH_AlgSHA1;   break;
+    case SEC_OID_SHA224: ht = HASH_AlgSHA224; break;
+    case SEC_OID_SHA256: ht = HASH_AlgSHA256; break;
+    case SEC_OID_SHA384: ht = HASH_AlgSHA384; break;
+    case SEC_OID_SHA512: ht = HASH_AlgSHA512; break;
+    default:             ht = HASH_AlgNULL;   
+	PORT_SetError(SEC_ERROR_INVALID_ALGORITHM);
+	break;
+    }
+    return ht;
+}
+
+SECOidTag
+HASH_GetHashOidTagByHMACOidTag(SECOidTag hmacOid)
+{
+    SECOidTag hashOid = SEC_OID_UNKNOWN;
+
+    switch(hmacOid) {
+    /* no oid exists for HMAC_MD2 */
+    /* NSS does not define a oid for HMAC_MD4 */
+    case SEC_OID_HMAC_SHA1:   hashOid = SEC_OID_SHA1;   break;
+    case SEC_OID_HMAC_SHA224: hashOid = SEC_OID_SHA224; break;
+    case SEC_OID_HMAC_SHA256: hashOid = SEC_OID_SHA256; break;
+    case SEC_OID_HMAC_SHA384: hashOid = SEC_OID_SHA384; break;
+    case SEC_OID_HMAC_SHA512: hashOid = SEC_OID_SHA512; break;
+    default:                  hashOid = SEC_OID_UNKNOWN;   
+	PORT_SetError(SEC_ERROR_INVALID_ALGORITHM);
+	break;
+    }
+    return hashOid;
+}
+
+SECOidTag
+HASH_GetHMACOidTagByHashOidTag(SECOidTag hashOid)
+{
+    SECOidTag hmacOid = SEC_OID_UNKNOWN;
+
+    switch(hashOid) {
+    /* no oid exists for HMAC_MD2 */
+    /* NSS does not define a oid for HMAC_MD4 */
+    case SEC_OID_SHA1:   hmacOid = SEC_OID_HMAC_SHA1;   break;
+    case SEC_OID_SHA224: hmacOid = SEC_OID_HMAC_SHA224; break;
+    case SEC_OID_SHA256: hmacOid = SEC_OID_HMAC_SHA256; break;
+    case SEC_OID_SHA384: hmacOid = SEC_OID_HMAC_SHA384; break;
+    case SEC_OID_SHA512: hmacOid = SEC_OID_HMAC_SHA512; break;
+    default:             hmacOid = SEC_OID_UNKNOWN;   
+	PORT_SetError(SEC_ERROR_INVALID_ALGORITHM);
+	break;
+    }
+    return hmacOid;
+}
+
+const SECHashObject * 
+HASH_GetHashObjectByOidTag(SECOidTag hashOid)
+{
+    HASH_HashType ht	= HASH_GetHashTypeByOidTag(hashOid);
+
+    return (ht == HASH_AlgNULL) ? NULL : &SECHashObjects[ht];
+}
+
+/* returns zero for unknown hash OID */
+unsigned int
+HASH_ResultLenByOidTag(SECOidTag hashOid)
+{
+    const SECHashObject * hashObject = HASH_GetHashObjectByOidTag(hashOid);
+    unsigned int          resultLen = 0;
+
+    if (hashObject)
+    	resultLen = hashObject->length;
+    return resultLen;
+}
+
+/* returns zero if hash type invalid. */
 unsigned int
 HASH_ResultLen(HASH_HashType type)
 {
     if ( ( type < HASH_AlgNULL ) || ( type >= HASH_AlgTOTAL ) ) {
+	PORT_SetError(SEC_ERROR_INVALID_ALGORITHM);
 	return(0);
     }
     
@@ -169,8 +279,8 @@ HASH_ResultLenContext(HASHContext *context)
 SECStatus
 HASH_HashBuf(HASH_HashType type,
 	     unsigned char *dest,
-	     unsigned char *src,
-	     uint32 src_len)
+	     const unsigned char *src,
+	     PRUint32 src_len)
 {
     HASHContext *cx;
     unsigned int part;
@@ -292,5 +402,8 @@ HASH_End(HASHContext *context,
     return;
 }
 
-
-
+HASH_HashType
+HASH_GetType(HASHContext *context)
+{
+    return(context->hashobj->type);
+}

@@ -1,39 +1,6 @@
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
-
-#ifdef DEBUG
-static const char CVS_ID[] = "@(#) $RCSfile: pki3hack.c,v $ $Revision: 1.71.2.2 $ $Date: 2003/01/09 02:05:07 $ $Name:  $";
-#endif /* DEBUG */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Hacks to integrate NSS 3.4 and NSS 4.0 certificates.
@@ -67,9 +34,11 @@ static const char CVS_ID[] = "@(#) $RCSfile: pki3hack.c,v $ $Revision: 1.71.2.2 
 #include "certdb.h"
 #include "certt.h"
 #include "cert.h"
+#include "certi.h"
 #include "pk11func.h"
 #include "pkistore.h"
 #include "secmod.h"
+#include "nssrwlk.h"
 
 NSSTrustDomain *g_default_trust_domain = NULL;
 
@@ -88,6 +57,48 @@ STAN_GetDefaultCryptoContext()
 }
 
 extern const NSSError NSS_ERROR_ALREADY_INITIALIZED;
+extern const NSSError NSS_ERROR_INTERNAL_ERROR;
+
+NSS_IMPLEMENT PRStatus
+STAN_InitTokenForSlotInfo(NSSTrustDomain *td, PK11SlotInfo *slot)
+{
+    NSSToken *token;
+    if (!td) {
+	td = g_default_trust_domain;
+	if (!td) {
+	    /* we're called while still initting. slot will get added
+	     * appropriately through normal init processes */
+	    return PR_SUCCESS;
+	}
+    }
+    token = nssToken_CreateFromPK11SlotInfo(td, slot);
+    PK11Slot_SetNSSToken(slot, token);
+    /* Don't add nonexistent token to TD's token list */
+    if (token) {
+	NSSRWLock_LockWrite(td->tokensLock);
+	nssList_Add(td->tokenList, token);
+	NSSRWLock_UnlockWrite(td->tokensLock);
+    }
+    return PR_SUCCESS;
+}
+
+NSS_IMPLEMENT PRStatus
+STAN_ResetTokenInterator(NSSTrustDomain *td)
+{
+    if (!td) {
+	td = g_default_trust_domain;
+	if (!td) {
+	    /* we're called while still initting. slot will get added
+	     * appropriately through normal init processes */
+	    return PR_SUCCESS;
+	}
+    }
+    NSSRWLock_LockWrite(td->tokensLock);
+    nssListIterator_Destroy(td->tokens);
+    td->tokens = nssList_CreateIterator(td->tokenList);
+    NSSRWLock_UnlockWrite(td->tokensLock);
+    return PR_SUCCESS;
+}
 
 NSS_IMPLEMENT PRStatus
 STAN_LoadDefaultNSS3TrustDomain (
@@ -95,7 +106,6 @@ STAN_LoadDefaultNSS3TrustDomain (
 )
 {
     NSSTrustDomain *td;
-    NSSToken *token;
     SECMODModuleList *mlp;
     SECMODListLock *moduleLock = SECMOD_GetDefaultModuleListLock();
     int i;
@@ -109,41 +119,61 @@ STAN_LoadDefaultNSS3TrustDomain (
     if (!td) {
 	return PR_FAILURE;
     }
+    /*
+     * Deadlock warning: we should never acquire the moduleLock while
+     * we hold the tokensLock. We can use the NSSRWLock Rank feature to
+     * guarrentee this. tokensLock have a higher rank than module lock.
+     */
     td->tokenList = nssList_Create(td->arena, PR_TRUE);
+    if (!td->tokenList) {
+	goto loser;
+    }
     SECMOD_GetReadLock(moduleLock);
+    NSSRWLock_LockWrite(td->tokensLock);
     for (mlp = SECMOD_GetDefaultModuleList(); mlp != NULL; mlp=mlp->next) {
 	for (i=0; i < mlp->module->slotCount; i++) {
-	    token = nssToken_CreateFromPK11SlotInfo(td, mlp->module->slots[i]);
-	    PK11Slot_SetNSSToken(mlp->module->slots[i], token);
-	    nssList_Add(td->tokenList, token);
+	    STAN_InitTokenForSlotInfo(td, mlp->module->slots[i]);
 	}
     }
-    SECMOD_ReleaseReadLock(moduleLock);
     td->tokens = nssList_CreateIterator(td->tokenList);
-    g_default_trust_domain = td;
+    NSSRWLock_UnlockWrite(td->tokensLock);
+    SECMOD_ReleaseReadLock(moduleLock);
+    if (!td->tokens) {
+	goto loser;
+    }
     g_default_crypto_context = NSSTrustDomain_CreateCryptoContext(td, NULL);
+    if (!g_default_crypto_context) {
+	goto loser;
+    }
+    g_default_trust_domain = td;
     return PR_SUCCESS;
+
+  loser:
+    NSSTrustDomain_Destroy(td);
+    return PR_FAILURE;
 }
 
+/*
+ * must be called holding the ModuleListLock (either read or write).
+ */
 NSS_IMPLEMENT SECStatus
 STAN_AddModuleToDefaultTrustDomain (
   SECMODModule *module
 )
 {
-    NSSToken *token;
     NSSTrustDomain *td;
     int i;
     td = STAN_GetDefaultTrustDomain();
     for (i=0; i<module->slotCount; i++) {
-	token = nssToken_CreateFromPK11SlotInfo(td, module->slots[i]);
-	PK11Slot_SetNSSToken(module->slots[i], token);
-	nssList_Add(td->tokenList, token);
+	STAN_InitTokenForSlotInfo(td, module->slots[i]);
     }
-    nssListIterator_Destroy(td->tokens);
-    td->tokens = nssList_CreateIterator(td->tokenList);
+    STAN_ResetTokenInterator(td);
     return SECSuccess;
 }
 
+/*
+ * must be called holding the ModuleListLock (either read or write).
+ */
 NSS_IMPLEMENT SECStatus
 STAN_RemoveModuleFromDefaultTrustDomain (
   SECMODModule *module
@@ -153,6 +183,7 @@ STAN_RemoveModuleFromDefaultTrustDomain (
     NSSTrustDomain *td;
     int i;
     td = STAN_GetDefaultTrustDomain();
+    NSSRWLock_LockWrite(td->tokensLock);
     for (i=0; i<module->slotCount; i++) {
 	token = PK11Slot_GetNSSToken(module->slots[i]);
 	if (token) {
@@ -164,6 +195,7 @@ STAN_RemoveModuleFromDefaultTrustDomain (
     }
     nssListIterator_Destroy(td->tokens);
     td->tokens = nssList_CreateIterator(td->tokenList);
+    NSSRWLock_UnlockWrite(td->tokensLock);
     return SECSuccess;
 }
 
@@ -196,7 +228,7 @@ STAN_GetCertIdentifierFromDER(NSSArena *arenaOpt, NSSDER *der)
     SECItem secDER;
     SECItem secKey = { 0 };
     SECStatus secrv;
-    PRArenaPool *arena;
+    PLArenaPool *arena;
 
     SECITEM_FROM_NSSITEM(&secDER, der);
 
@@ -264,21 +296,18 @@ nss3certificate_matchIdentifier(nssDecodedCert *dc, void *id)
     nssCertIDMatch match = nssCertIDMatch_Unknown;
 
     /* keyIdentifier */
-// bug 384459
-#if(0)
-    if (authKeyID->keyID.len > 0) {
-	if (CERT_FindSubjectKeyIDExtension(c, &skid) == SECSuccess) {
-	    PRBool skiEqual;
-	    skiEqual = SECITEM_ItemsAreEqual(&authKeyID->keyID, &skid);
-	    PORT_Free(skid.data);
-	    if (skiEqual) {
-		/* change the state to positive match, but keep going */
-		match = nssCertIDMatch_Yes;
-	    } else {
-		/* exit immediately on failure */
-		return nssCertIDMatch_No;
-	    }
-	} /* else fall through */
+    if (authKeyID->keyID.len > 0 &&
+	CERT_FindSubjectKeyIDExtension(c, &skid) == SECSuccess) {
+	PRBool skiEqual;
+	skiEqual = SECITEM_ItemsAreEqual(&authKeyID->keyID, &skid);
+	PORT_Free(skid.data);
+	if (skiEqual) {
+	    /* change the state to positive match, but keep going */
+	    match = nssCertIDMatch_Yes;
+	} else {
+	    /* exit immediately on failure */
+	    return nssCertIDMatch_No;
+	}
     }
 
     /* issuer/serial (treated as pair) */
@@ -289,40 +318,15 @@ nss3certificate_matchIdentifier(nssDecodedCert *dc, void *id)
 	caName = (SECItem *)CERT_GetGeneralNameByType(
 	                                        authKeyID->authCertIssuer,
 						certDirectoryName, PR_TRUE);
-	if (caName == NULL) {
-	    /* this is some kind of error, so treat it as unknown */
-	    return nssCertIDMatch_Unknown;
-	}
-	if (SECITEM_ItemsAreEqual(&c->derIssuer, caName) &&
+	if (caName != NULL &&
+	    SECITEM_ItemsAreEqual(&c->derIssuer, caName) &&
 	    SECITEM_ItemsAreEqual(&c->serialNumber, caSN)) 
 	{
-	    /* change the state to positive match, but keep going */
 	    match = nssCertIDMatch_Yes;
 	} else {
-	    /* exit immediately on failure */
-	    return nssCertIDMatch_No;
+	    match = nssCertIDMatch_Unknown;
 	}
     }
-#endif
-    if (authKeyID->keyID.len > 0 &&
-        CERT_FindSubjectKeyIDExtension(c, &skid) == SECSuccess) {
-      PRBool skiEqual;
-      skiEqual = SECITEM_ItemsAreEqual(&authKeyID->keyID, &skid);
-      PORT_Free(skid.data);
-      if (skiEqual) {
-        match = nssCertIDMatch_Yes;
-      } else {
-        match = nssCertIDMatch_No;
-      }
-    }
-// end bug
-
-    /* If the issued cert has a keyIdentifier field with a value, but
-     * this issuer cert does not have a subjectKeyID extension, and
-     * the issuer/serial number fields of the authKeyID extension
-     * are empty, the state will be Unknown.  Otherwise it should have
-     * been set to Yes.
-     */
     return match;
 }
 
@@ -367,48 +371,93 @@ nss3certificate_isNewerThan(nssDecodedCert *dc, nssDecodedCert *cmpdc)
 
 /* CERT_FilterCertListByUsage */
 static PRBool
-nss3certificate_matchUsage(nssDecodedCert *dc, NSSUsage *usage)
+nss3certificate_matchUsage(nssDecodedCert *dc, const NSSUsage *usage)
 {
+    CERTCertificate *cc;
+    unsigned int requiredKeyUsage = 0;
+    unsigned int requiredCertType = 0;
     SECStatus secrv;
-    unsigned int requiredKeyUsage;
-    unsigned int requiredCertType;
-    unsigned int certType;
     PRBool match;
-    CERTCertificate *cc = (CERTCertificate *)dc->data;
-    SECCertUsage secUsage = usage->nss3usage;
-    PRBool ca = usage->nss3lookingForCA;
+    PRBool ca;
 
     /* This is for NSS 3.3 functions that do not specify a usage */
     if (usage->anyUsage) {
 	return PR_TRUE;
     }
-    secrv = CERT_KeyUsageAndTypeForCertUsage(secUsage, ca,
+    ca = usage->nss3lookingForCA;
+    secrv = CERT_KeyUsageAndTypeForCertUsage(usage->nss3usage, ca,
                                              &requiredKeyUsage,
                                              &requiredCertType);
     if (secrv != SECSuccess) {
 	return PR_FALSE;
     }
-    match = PR_TRUE;
+    cc = (CERTCertificate *)dc->data;
     secrv = CERT_CheckKeyUsage(cc, requiredKeyUsage);
-    if (secrv != SECSuccess) {
-	match = PR_FALSE;
-    }
-    if (ca) {
-	(void)CERT_IsCACert(cc, &certType);
-    } else {
-	certType = cc->nsCertType;
-    }
-    if (!(certType & requiredCertType)) {
-	match = PR_FALSE;
+    match = (PRBool)(secrv == SECSuccess);
+    if (match) {
+	unsigned int certType = 0;
+	if (ca) {
+	    (void)CERT_IsCACert(cc, &certType);
+	} else {
+	    certType = cc->nsCertType;
+	}
+	if (!(certType & requiredCertType)) {
+	    match = PR_FALSE;
+	}
     }
     return match;
+}
+
+static PRBool
+nss3certificate_isTrustedForUsage(nssDecodedCert *dc, const NSSUsage *usage)
+{
+    CERTCertificate *cc;
+    PRBool ca;
+    SECStatus secrv;
+    unsigned int requiredFlags;
+    unsigned int trustFlags;
+    SECTrustType trustType;
+    CERTCertTrust trust;
+
+    /* This is for NSS 3.3 functions that do not specify a usage */
+    if (usage->anyUsage) {
+	return PR_FALSE;  /* XXX is this right? */
+    }
+    cc = (CERTCertificate *)dc->data;
+    ca = usage->nss3lookingForCA;
+    if (!ca) {
+	PRBool trusted;
+	unsigned int failedFlags;
+	secrv = cert_CheckLeafTrust(cc, usage->nss3usage,
+				    &failedFlags, &trusted);
+	return secrv == SECSuccess && trusted;
+    }
+    secrv = CERT_TrustFlagsForCACertUsage(usage->nss3usage, &requiredFlags,
+					  &trustType);
+    if (secrv != SECSuccess) {
+	return PR_FALSE;
+    }
+    secrv = CERT_GetCertTrust(cc, &trust);
+    if (secrv != SECSuccess) {
+	return PR_FALSE;
+    }
+    if (trustType == trustTypeNone) {
+	/* normally trustTypeNone usages accept any of the given trust bits
+	 * being on as acceptable. */
+	trustFlags = trust.sslFlags | trust.emailFlags |
+		     trust.objectSigningFlags;
+    } else {
+	trustFlags = SEC_GET_TRUST_FLAGS(&trust, trustType);
+    }
+    return (trustFlags & requiredFlags) == requiredFlags;
 }
 
 static NSSASCII7 *
 nss3certificate_getEmailAddress(nssDecodedCert *dc)
 {
     CERTCertificate *cc = (CERTCertificate *)dc->data;
-    return cc ? (NSSASCII7 *)cc->emailAddr : NULL;
+    return (cc && cc->emailAddr && cc->emailAddr[0])
+	    ? (NSSASCII7 *)cc->emailAddr : NULL;
 }
 
 static PRStatus
@@ -427,28 +476,39 @@ nss3certificate_getDERSerialNumber(nssDecodedCert *dc,
     return PR_FAILURE;
 }
 
+/* Returns NULL if "encoding" cannot be decoded. */
 NSS_IMPLEMENT nssDecodedCert *
 nssDecodedPKIXCertificate_Create (
   NSSArena *arenaOpt,
   NSSDER *encoding
 )
 {
-    nssDecodedCert *rvDC;
-    SECItem secDER;
-    rvDC = nss_ZNEW(arenaOpt, nssDecodedCert);
-    rvDC->type = NSSCertificateType_PKIX;
+    nssDecodedCert  *rvDC = NULL;
+    CERTCertificate *cert;
+    SECItem          secDER;
+
     SECITEM_FROM_NSSITEM(&secDER, encoding);
-    rvDC->data = (void *)CERT_DecodeDERCertificate(&secDER, PR_TRUE, NULL);
-    rvDC->getIdentifier = nss3certificate_getIdentifier;
-    rvDC->getIssuerIdentifier = nss3certificate_getIssuerIdentifier;
-    rvDC->matchIdentifier = nss3certificate_matchIdentifier;
-    rvDC->isValidIssuer = nss3certificate_isValidIssuer;
-    rvDC->getUsage = nss3certificate_getUsage;
-    rvDC->isValidAtTime = nss3certificate_isValidAtTime;
-    rvDC->isNewerThan = nss3certificate_isNewerThan;
-    rvDC->matchUsage = nss3certificate_matchUsage;
-    rvDC->getEmailAddress = nss3certificate_getEmailAddress;
-    rvDC->getDERSerialNumber = nss3certificate_getDERSerialNumber;
+    cert = CERT_DecodeDERCertificate(&secDER, PR_TRUE, NULL);
+    if (cert) {
+	rvDC = nss_ZNEW(arenaOpt, nssDecodedCert);
+	if (rvDC) {
+	    rvDC->type                = NSSCertificateType_PKIX;
+	    rvDC->data                = (void *)cert;
+	    rvDC->getIdentifier       = nss3certificate_getIdentifier;
+	    rvDC->getIssuerIdentifier = nss3certificate_getIssuerIdentifier;
+	    rvDC->matchIdentifier     = nss3certificate_matchIdentifier;
+	    rvDC->isValidIssuer       = nss3certificate_isValidIssuer;
+	    rvDC->getUsage            = nss3certificate_getUsage;
+	    rvDC->isValidAtTime       = nss3certificate_isValidAtTime;
+	    rvDC->isNewerThan         = nss3certificate_isNewerThan;
+	    rvDC->matchUsage          = nss3certificate_matchUsage;
+	    rvDC->isTrustedForUsage   = nss3certificate_isTrustedForUsage;
+	    rvDC->getEmailAddress     = nss3certificate_getEmailAddress;
+	    rvDC->getDERSerialNumber  = nss3certificate_getDERSerialNumber;
+	} else {
+	    CERT_DestroyCertificate(cert);
+	}
+    }
     return rvDC;
 }
 
@@ -458,19 +518,22 @@ create_decoded_pkix_cert_from_nss3cert (
   CERTCertificate *cc
 )
 {
-    nssDecodedCert *rvDC;
-    rvDC = nss_ZNEW(arenaOpt, nssDecodedCert);
-    rvDC->type = NSSCertificateType_PKIX;
-    rvDC->data = (void *)cc;
-    rvDC->getIdentifier = nss3certificate_getIdentifier;
-    rvDC->getIssuerIdentifier = nss3certificate_getIssuerIdentifier;
-    rvDC->matchIdentifier = nss3certificate_matchIdentifier;
-    rvDC->isValidIssuer = nss3certificate_isValidIssuer;
-    rvDC->getUsage = nss3certificate_getUsage;
-    rvDC->isValidAtTime = nss3certificate_isValidAtTime;
-    rvDC->isNewerThan = nss3certificate_isNewerThan;
-    rvDC->matchUsage = nss3certificate_matchUsage;
-    rvDC->getEmailAddress = nss3certificate_getEmailAddress;
+    nssDecodedCert *rvDC = nss_ZNEW(arenaOpt, nssDecodedCert);
+    if (rvDC) {
+	rvDC->type                = NSSCertificateType_PKIX;
+	rvDC->data                = (void *)cc;
+	rvDC->getIdentifier       = nss3certificate_getIdentifier;
+	rvDC->getIssuerIdentifier = nss3certificate_getIssuerIdentifier;
+	rvDC->matchIdentifier     = nss3certificate_matchIdentifier;
+	rvDC->isValidIssuer       = nss3certificate_isValidIssuer;
+	rvDC->getUsage            = nss3certificate_getUsage;
+	rvDC->isValidAtTime       = nss3certificate_isValidAtTime;
+	rvDC->isNewerThan         = nss3certificate_isNewerThan;
+	rvDC->matchUsage          = nss3certificate_matchUsage;
+	rvDC->isTrustedForUsage   = nss3certificate_isTrustedForUsage;
+	rvDC->getEmailAddress     = nss3certificate_getEmailAddress;
+	rvDC->getDERSerialNumber  = nss3certificate_getDERSerialNumber;
+    }
     return rvDC;
 }
 
@@ -487,7 +550,7 @@ nssDecodedPKIXCertificate_Destroy (
     if (cert) {
 	PRBool freeSlot = cert->ownSlot;
 	PK11SlotInfo *slot = cert->slot;
-	PRArenaPool *arena  = cert->arena;
+	PLArenaPool *arena  = cert->arena;
 	/* zero cert before freeing. Any stale references to this cert
 	 * after this point will probably cause an exception.  */
 	PORT_Memset(cert, 0, sizeof *cert);
@@ -503,17 +566,17 @@ nssDecodedPKIXCertificate_Destroy (
 
 /* see pk11cert.c:pk11_HandleTrustObject */
 static unsigned int
-get_nss3trust_from_nss4trust(CK_TRUST t)
+get_nss3trust_from_nss4trust(nssTrustLevel t)
 {
     unsigned int rt = 0;
     if (t == nssTrustLevel_Trusted) {
-	rt |= CERTDB_VALID_PEER | CERTDB_TRUSTED;
+	rt |= CERTDB_TERMINAL_RECORD | CERTDB_TRUSTED;
     }
     if (t == nssTrustLevel_TrustedDelegator) {
-	rt |= CERTDB_VALID_CA | CERTDB_TRUSTED_CA /*| CERTDB_NS_TRUSTED_CA*/;
+	rt |= CERTDB_VALID_CA | CERTDB_TRUSTED_CA;
     }
-    if (t == nssTrustLevel_Valid) {
-	rt |= CERTDB_VALID_PEER;
+    if (t == nssTrustLevel_NotTrusted) {
+	rt |= CERTDB_TERMINAL_RECORD;
     }
     if (t == nssTrustLevel_ValidDelegator) {
 	rt |= CERTDB_VALID_CA;
@@ -522,7 +585,7 @@ get_nss3trust_from_nss4trust(CK_TRUST t)
 }
 
 static CERTCertTrust *
-cert_trust_from_stan_trust(NSSTrust *t, PRArenaPool *arena)
+cert_trust_from_stan_trust(NSSTrust *t, PLArenaPool *arena)
 {
     CERTCertTrust *rvTrust;
     unsigned int client;
@@ -601,9 +664,12 @@ get_cert_instance(NSSCertificate *c)
 }
 
 char * 
-STAN_GetCERTCertificateName(NSSCertificate *c)
+STAN_GetCERTCertificateNameForInstance (
+  PLArenaPool *arenaOpt,
+  NSSCertificate *c,
+  nssCryptokiInstance *instance
+)
 {
-    nssCryptokiInstance *instance = get_cert_instance(c);
     NSSCryptoContext *context = c->object.cryptoContext;
     PRStatus nssrv;
     int nicklen, tokenlen, len;
@@ -619,7 +685,8 @@ STAN_GetCERTCertificateName(NSSCertificate *c)
     }
     if (stanNick) {
 	/* fill other fields needed by NSS3 functions using CERTCertificate */
-	if (instance && !PK11_IsInternal(instance->token->pk11slot)) {
+	if (instance && (!PK11_IsInternalKeySlot(instance->token->pk11slot) || 
+	                 PORT_Strchr(stanNick, ':') != NULL) ) {
 	    tokenName = nssToken_GetName(instance->token);
 	    tokenlen = nssUTF8_Size(tokenName, &nssrv);
 	} else {
@@ -628,7 +695,11 @@ STAN_GetCERTCertificateName(NSSCertificate *c)
 	}
 	nicklen = nssUTF8_Size(stanNick, &nssrv);
 	len = tokenlen + nicklen;
-	nickname = PORT_Alloc(len);
+	if (arenaOpt) {
+	    nickname = PORT_ArenaAlloc(arenaOpt, len);
+	} else {
+	    nickname = PORT_Alloc(len);
+	}
 	nick = nickname;
 	if (tokenName) {
 	    memcpy(nick, tokenName, tokenlen-1);
@@ -641,14 +712,33 @@ STAN_GetCERTCertificateName(NSSCertificate *c)
     return nickname;
 }
 
+char * 
+STAN_GetCERTCertificateName(PLArenaPool *arenaOpt, NSSCertificate *c)
+{
+    char * result;
+    nssCryptokiInstance *instance = get_cert_instance(c);
+    /* It's OK to call this function, even if instance is NULL */
+    result = STAN_GetCERTCertificateNameForInstance(arenaOpt, c, instance);
+    if (instance)
+	nssCryptokiObject_Destroy(instance);
+    return result;
+}
 
 static void
 fill_CERTCertificateFields(NSSCertificate *c, CERTCertificate *cc, PRBool forced)
 {
+    CERTCertTrust* trust = NULL;
     NSSTrust *nssTrust;
     NSSCryptoContext *context = c->object.cryptoContext;
-    nssCryptokiInstance *instance = get_cert_instance(c);
+    nssCryptokiInstance *instance;
     NSSUTF8 *stanNick = NULL;
+
+    /* We are holding the base class object's lock on entry of this function
+     * This lock protects writes to fields of the CERTCertificate .
+     * It is also needed by some functions to compute values such as trust.
+     */
+    instance = get_cert_instance(c);
+
     if (instance) {
 	stanNick = instance->label;
     } else if (context) {
@@ -660,7 +750,9 @@ fill_CERTCertificateFields(NSSCertificate *c, CERTCertificate *cc, PRBool forced
 	int nicklen, tokenlen, len;
 	NSSUTF8 *tokenName = NULL;
 	char *nick;
-	if (instance && !PK11_IsInternal(instance->token->pk11slot)) {
+	if (instance && 
+	     (!PK11_IsInternalKeySlot(instance->token->pk11slot) || 
+	      (stanNick && PORT_Strchr(stanNick, ':') != NULL))) {
 	    tokenName = nssToken_GetName(instance->token);
 	    tokenlen = nssUTF8_Size(tokenName, &nssrv);
 	} else {
@@ -670,15 +762,16 @@ fill_CERTCertificateFields(NSSCertificate *c, CERTCertificate *cc, PRBool forced
 	if (stanNick) {
 	    nicklen = nssUTF8_Size(stanNick, &nssrv);
 	    len = tokenlen + nicklen;
-	    cc->nickname = PORT_ArenaAlloc(cc->arena, len);
-	    nick = cc->nickname;
+	    nick = PORT_ArenaAlloc(cc->arena, len);
 	    if (tokenName) {
 		memcpy(nick, tokenName, tokenlen-1);
-		nick += tokenlen-1;
-		*nick++ = ':';
+		nick[tokenlen-1] = ':';
+		memcpy(nick+tokenlen, stanNick, nicklen-1);
+	    } else {
+		memcpy(nick, stanNick, nicklen-1);
 	    }
-	    memcpy(nick, stanNick, nicklen-1);
-	    cc->nickname[len-1] = '\0';
+	    nick[len-1] = '\0';
+            cc->nickname = nick;
 	} else {
 	    cc->nickname = NULL;
 	}
@@ -686,8 +779,32 @@ fill_CERTCertificateFields(NSSCertificate *c, CERTCertificate *cc, PRBool forced
     if (context) {
 	/* trust */
 	nssTrust = nssCryptoContext_FindTrustForCertificate(context, c);
+	if (!nssTrust) {
+	    /* chicken and egg issue:
+	     *
+	     * c->issuer and c->serial are empty at this point, but
+	     * nssTrustDomain_FindTrustForCertificate use them to look up
+	     * up the trust object, so we point them to cc->derIssuer and
+	     * cc->serialNumber.
+	     *
+	     * Our caller will fill these in with proper arena copies when we
+	     * return. */
+	    c->issuer.data = cc->derIssuer.data;
+	    c->issuer.size = cc->derIssuer.len;
+	    c->serial.data = cc->serialNumber.data;
+	    c->serial.size = cc->serialNumber.len;
+	    nssTrust = nssTrustDomain_FindTrustForCertificate(context->td, c);
+	}
 	if (nssTrust) {
-	    cc->trust = cert_trust_from_stan_trust(nssTrust, cc->arena);
+            trust = cert_trust_from_stan_trust(nssTrust, cc->arena);
+            if (trust) {
+                /* we should destroy cc->trust before replacing it, but it's
+                   allocated in cc->arena, so memory growth will occur on each
+                   refresh */
+                CERT_LockCertTrust(cc);
+                cc->trust = trust;
+                CERT_UnlockCertTrust(cc);
+            }
 	    nssTrust_Destroy(nssTrust);
 	}
     } else if (instance) {
@@ -702,7 +819,15 @@ fill_CERTCertificateFields(NSSCertificate *c, CERTCertificate *cc, PRBool forced
 	/* pkcs11ID */
 	cc->pkcs11ID = instance->handle;
 	/* trust */
-	cc->trust = nssTrust_GetCERTCertTrustForCert(c, cc);
+	trust = nssTrust_GetCERTCertTrustForCert(c, cc);
+        if (trust) {
+            /* we should destroy cc->trust before replacing it, but it's
+               allocated in cc->arena, so memory growth will occur on each
+               refresh */
+            CERT_LockCertTrust(cc);
+            cc->trust = trust;
+            CERT_UnlockCertTrust(cc);
+        }
 	nssCryptokiObject_Destroy(instance);
     } 
     /* database handle is now the trust domain */
@@ -713,32 +838,72 @@ fill_CERTCertificateFields(NSSCertificate *c, CERTCertificate *cc, PRBool forced
     cc->isperm = PR_TRUE;  /* by default */
     /* pointer back */
     cc->nssCertificate = c;
+    if (trust) {
+	/* force the cert type to be recomputed to include trust info */
+	PRUint32 nsCertType = cert_ComputeCertType(cc);
+
+	/* Assert that it is safe to cast &cc->nsCertType to "PRInt32 *" */
+	PORT_Assert(sizeof(cc->nsCertType) == sizeof(PRInt32));
+	PR_ATOMIC_SET((PRInt32 *)&cc->nsCertType, nsCertType);
+    }
 }
 
 static CERTCertificate *
 stan_GetCERTCertificate(NSSCertificate *c, PRBool forceUpdate)
 {
-    nssDecodedCert *dc;
-    CERTCertificate *cc;
-    if (!c->decoding) {
+    nssDecodedCert *dc = NULL;
+    CERTCertificate *cc = NULL;
+    CERTCertTrust certTrust;
+
+    nssPKIObject_Lock(&c->object);
+
+    dc = c->decoding;
+    if (!dc) {
 	dc = nssDecodedPKIXCertificate_Create(NULL, &c->encoding);
-	if (!dc) return NULL;
-	c->decoding = dc;
-    } else {
-	dc = c->decoding;
-    }
-    cc = (CERTCertificate *)dc->data;
-    if (cc) {
-	if (!cc->nssCertificate || forceUpdate) {
-	    fill_CERTCertificateFields(c, cc, forceUpdate);
-	} else if (!cc->trust && !c->object.cryptoContext) {
-	    /* if it's a perm cert, it might have been stored before the
-	     * trust, so look for the trust again.  But a temp cert can be
-	     * ignored.
-	     */
-	    cc->trust = nssTrust_GetCERTCertTrustForCert(c, cc);
+	if (!dc) {
+            goto loser;
+        }
+	cc = (CERTCertificate *)dc->data;
+	PORT_Assert(cc); /* software error */
+	if (!cc) {
+	    nssDecodedPKIXCertificate_Destroy(dc);
+	    nss_SetError(NSS_ERROR_INTERNAL_ERROR);
+	    goto loser;
+	}
+    	PORT_Assert(!c->decoding); 
+	if (!c->decoding) {
+	    c->decoding = dc;
+	} else { 
+            /* this should never happen. Fail. */
+	    nssDecodedPKIXCertificate_Destroy(dc);
+	    nss_SetError(NSS_ERROR_INTERNAL_ERROR);
+            goto loser;
 	}
     }
+    cc = (CERTCertificate *)dc->data;
+    PORT_Assert(cc);
+    if (!cc) {
+        nss_SetError(NSS_ERROR_INTERNAL_ERROR);
+        goto loser;
+    }
+    if (!cc->nssCertificate || forceUpdate) {
+        fill_CERTCertificateFields(c, cc, forceUpdate);
+    } else if (CERT_GetCertTrust(cc, &certTrust) != SECSuccess &&
+               !c->object.cryptoContext) {
+        /* if it's a perm cert, it might have been stored before the
+         * trust, so look for the trust again.  But a temp cert can be
+         * ignored.
+         */
+        CERTCertTrust* trust = NULL;
+        trust = nssTrust_GetCERTCertTrustForCert(c, cc);
+
+        CERT_LockCertTrust(cc);
+        cc->trust = trust;
+        CERT_UnlockCertTrust(cc);
+    }
+
+  loser:
+    nssPKIObject_Unlock(&c->object);
     return cc;
 }
 
@@ -756,6 +921,23 @@ STAN_GetCERTCertificate(NSSCertificate *c)
 {
     return stan_GetCERTCertificate(c, PR_FALSE);
 }
+/*
+ * many callers of STAN_GetCERTCertificate() intend that
+ * the CERTCertificate returned inherits the reference to the 
+ * NSSCertificate. For these callers it's convenient to have 
+ * this function 'own' the reference and either return a valid 
+ * CERTCertificate structure which inherits the reference or 
+ * destroy the reference to NSSCertificate and returns NULL.
+ */
+NSS_IMPLEMENT CERTCertificate *
+STAN_GetCERTCertificateOrRelease(NSSCertificate *c)
+{
+    CERTCertificate *nss3cert = stan_GetCERTCertificate(c, PR_FALSE);
+    if (!nss3cert) {
+	nssCertificate_Destroy(c);
+    }
+    return nss3cert;
+}
 
 static nssTrustLevel
 get_stan_trust(unsigned int t, PRBool isClientAuth) 
@@ -772,13 +954,13 @@ get_stan_trust(unsigned int t, PRBool isClientAuth)
     if (t & CERTDB_TRUSTED) {
 	return nssTrustLevel_Trusted;
     }
+    if (t & CERTDB_TERMINAL_RECORD) {
+	return nssTrustLevel_NotTrusted;
+    }
     if (t & CERTDB_VALID_CA) {
 	return nssTrustLevel_ValidDelegator;
     }
-    if (t & CERTDB_VALID_PEER) {
-	return nssTrustLevel_Valid;
-    }
-    return nssTrustLevel_NotTrusted;
+    return nssTrustLevel_MustVerify;
 }
 
 NSS_EXTERN NSSCertificate *
@@ -806,7 +988,7 @@ STAN_GetNSSCertificate(CERTCertificate *cc)
     }
     NSSITEM_FROM_SECITEM(&c->encoding, &cc->derCert);
     c->type = NSSCertificateType_PKIX;
-    pkiob = nssPKIObject_Create(arena, NULL, cc->dbhandle, NULL);
+    pkiob = nssPKIObject_Create(arena, NULL, cc->dbhandle, NULL, nssPKIMonitor);
     if (!pkiob) {
 	nssArena_Destroy(arena);
 	return NULL;
@@ -821,11 +1003,16 @@ STAN_GetNSSCertificate(CERTCertificate *cc)
 	* here.  sigh.
 	*/
 	SECItem derSerial;
-	CERT_SerialNumberFromDERCert(&cc->derCert, &derSerial);
+	SECStatus secrv;
+	secrv = CERT_SerialNumberFromDERCert(&cc->derCert, &derSerial);
+	if (secrv == SECFailure) {
+	    nssArena_Destroy(arena);
+	    return NULL;
+	}
 	nssItem_Create(arena, &c->serial, derSerial.len, derSerial.data);
 	PORT_Free(derSerial.data);
     }
-    if (cc->emailAddr) {
+    if (cc->emailAddr && cc->emailAddr[0]) {
         c->email = nssUTF8_Create(arena,
                                   nssStringType_PrintableString,
                                   (NSSUTF8 *)cc->emailAddr,
@@ -833,6 +1020,10 @@ STAN_GetNSSCertificate(CERTCertificate *cc)
     }
     if (cc->slot) {
 	instance = nss_ZNEW(arena, nssCryptokiInstance);
+	if (!instance) {
+	    nssArena_Destroy(arena);
+	    return NULL;
+	}
 	instance->token = nssToken_AddRef(PK11Slot_GetNSSToken(cc->slot));
 	instance->handle = cc->pkcs11ID;
 	instance->isTokenObject = PR_TRUE;
@@ -900,10 +1091,15 @@ STAN_ChangeCertTrust(CERTCertificate *cc, CERTCertTrust *trust)
     NSSTrust *nssTrust;
     NSSArena *arena;
     CERTCertTrust *oldTrust;
+    CERTCertTrust *newTrust;
     nssListIterator *tokens;
     PRBool moving_object;
     nssCryptokiObject *newInstance;
     nssPKIObject *pkiob;
+
+    if (c == NULL) {
+        return PR_FAILURE;
+    }
     oldTrust = nssTrust_GetCERTCertTrustForCert(c, cc);
     if (oldTrust) {
 	if (memcmp(oldTrust, trust, sizeof (CERTCertTrust)) == 0) {
@@ -911,17 +1107,24 @@ STAN_ChangeCertTrust(CERTCertificate *cc, CERTCertTrust *trust)
 	    return PR_SUCCESS;
 	} else {
 	    /* take over memory already allocated in cc's arena */
-	    cc->trust = oldTrust;
+	    newTrust = oldTrust;
 	}
     } else {
-	cc->trust = PORT_ArenaAlloc(cc->arena, sizeof(CERTCertTrust));
+	newTrust = PORT_ArenaAlloc(cc->arena, sizeof(CERTCertTrust));
     }
-    memcpy(cc->trust, trust, sizeof(CERTCertTrust));
+    memcpy(newTrust, trust, sizeof(CERTCertTrust));
+    CERT_LockCertTrust(cc);
+    cc->trust = newTrust;
+    CERT_UnlockCertTrust(cc);
     /* Set the NSSCerticate's trust */
     arena = nssArena_Create();
     if (!arena) return PR_FAILURE;
     nssTrust = nss_ZNEW(arena, NSSTrust);
-    pkiob = nssPKIObject_Create(arena, NULL, cc->dbhandle, NULL);
+    if (!nssTrust) {
+	nssArena_Destroy(arena);
+	return PR_FAILURE;
+    }
+    pkiob = nssPKIObject_Create(arena, NULL, cc->dbhandle, NULL, nssPKILock);
     if (!pkiob) {
 	nssArena_Destroy(arena);
 	return PR_FAILURE;
@@ -932,6 +1135,8 @@ STAN_ChangeCertTrust(CERTCertificate *cc, CERTCertTrust *trust)
     nssTrust->clientAuth = get_stan_trust(trust->sslFlags, PR_TRUE);
     nssTrust->emailProtection = get_stan_trust(trust->emailFlags, PR_FALSE);
     nssTrust->codeSigning = get_stan_trust(trust->objectSigningFlags, PR_FALSE);
+    nssTrust->stepUpApproved = 
+                    (PRBool)(trust->sslFlags & CERTDB_GOVT_APPROVED_CA);
     if (c->object.cryptoContext != NULL) {
 	/* The cert is in a context, set the trust there */
 	NSSCryptoContext *cc = c->object.cryptoContext;
@@ -948,9 +1153,11 @@ STAN_ChangeCertTrust(CERTCertificate *cc, CERTCertTrust *trust)
     tok = stan_GetTrustToken(c);
     moving_object = PR_FALSE;
     if (tok && PK11_IsReadOnly(tok->pk11slot))  {
+	NSSRWLock_LockRead(td->tokensLock);
 	tokens = nssList_CreateIterator(td->tokenList);
 	if (!tokens) {
 	    nssrv = PR_FAILURE;
+	    NSSRWLock_UnlockRead(td->tokensLock);
 	    goto done;
 	}
 	for (tok  = (NSSToken *)nssListIterator_Start(tokens);
@@ -961,6 +1168,7 @@ STAN_ChangeCertTrust(CERTCertificate *cc, CERTCertTrust *trust)
 	}
 	nssListIterator_Finish(tokens);
 	nssListIterator_Destroy(tokens);
+	NSSRWLock_UnlockRead(td->tokensLock);
 	moving_object = PR_TRUE;
     } 
     if (tok) {
@@ -984,6 +1192,8 @@ STAN_ChangeCertTrust(CERTCertificate *cc, CERTCertTrust *trust)
 	                                             &c->serial,
 						     email,
 	                                             PR_TRUE);
+            nss_ZFreeIf(nickname);
+            nickname = NULL;
 	    if (!newInstance) {
 		nssrv = PR_FAILURE;
 		goto done;
@@ -995,10 +1205,11 @@ STAN_ChangeCertTrust(CERTCertificate *cc, CERTCertTrust *trust)
 	                                   nssTrust->serverAuth,
 	                                   nssTrust->clientAuth,
 	                                   nssTrust->codeSigning,
-	                                   nssTrust->emailProtection, PR_TRUE);
+	                                   nssTrust->emailProtection,
+	                                   nssTrust->stepUpApproved, PR_TRUE);
 	/* If the selected token can't handle trust, dump the trust on 
 	 * the internal token */
-	if (!newInstance && !PK11_IsInternal(tok->pk11slot)) {
+	if (!newInstance && !PK11_IsInternalKeySlot(tok->pk11slot)) {
 	    PK11SlotInfo *slot = PK11_GetInternalKeySlot();
 	    NSSUTF8 *nickname = nssCertificate_GetNickname(c, NULL);
 	    NSSASCII7 *email = c->email;
@@ -1015,6 +1226,8 @@ STAN_ChangeCertTrust(CERTCertificate *cc, CERTCertTrust *trust)
 	                                             &c->serial,
 						     email,
 	                                             PR_TRUE);
+            nss_ZFreeIf(nickname);
+            nickname = NULL;
 	    if (!newInstance) {
 		nssrv = PR_FAILURE;
 		goto done;
@@ -1025,7 +1238,8 @@ STAN_ChangeCertTrust(CERTCertificate *cc, CERTCertTrust *trust)
 	                                   nssTrust->serverAuth,
 	                                   nssTrust->clientAuth,
 	                                   nssTrust->codeSigning,
-	                                   nssTrust->emailProtection, PR_TRUE);
+	                                   nssTrust->emailProtection,
+	                                   nssTrust->stepUpApproved, PR_TRUE);
 	}
 	if (newInstance) {
 	    nssCryptokiObject_Destroy(newInstance);
@@ -1038,6 +1252,98 @@ STAN_ChangeCertTrust(CERTCertificate *cc, CERTCertTrust *trust)
     }
 done:
     (void)nssTrust_Destroy(nssTrust);
+    return nssrv;
+}
+
+/*
+** Delete trust objects matching the given slot.
+** Returns error if a device fails to delete.
+**
+** This function has the side effect of moving the
+** surviving entries to the front of the object list
+** and nullifying the rest.
+*/
+static PRStatus
+DeleteCertTrustMatchingSlot(PK11SlotInfo *pk11slot, nssPKIObject *tObject)
+{
+    int numNotDestroyed = 0;     /* the ones skipped plus the failures */
+    int failureCount = 0;        /* actual deletion failures by devices */
+    int index;
+
+    nssPKIObject_Lock(tObject);
+    /* Keep going even if a module fails to delete. */
+    for (index = 0; index < tObject->numInstances; index++) {
+	nssCryptokiObject *instance = tObject->instances[index];
+	if (!instance) {
+	    continue;
+	}
+
+	/* ReadOnly and not matched treated the same */
+	if (PK11_IsReadOnly(instance->token->pk11slot) ||
+	    pk11slot != instance->token->pk11slot) {
+	    tObject->instances[numNotDestroyed++] = instance;
+	    continue;
+	}
+
+	/* Here we have found a matching one */
+	tObject->instances[index] = NULL;
+	if (nssToken_DeleteStoredObject(instance) == PR_SUCCESS) {
+	    nssCryptokiObject_Destroy(instance);
+	} else {
+	    tObject->instances[numNotDestroyed++] = instance;
+	    failureCount++;
+	}
+
+    }
+    if (numNotDestroyed == 0) {
+    	nss_ZFreeIf(tObject->instances);
+    	tObject->numInstances = 0;
+    } else {
+    	tObject->numInstances = numNotDestroyed;
+    }
+
+    nssPKIObject_Unlock(tObject);
+
+    return failureCount == 0 ? PR_SUCCESS : PR_FAILURE;
+}
+
+/*
+** Delete trust objects matching the slot of the given certificate.
+** Returns an error if any device fails to delete. 
+*/
+NSS_EXTERN PRStatus
+STAN_DeleteCertTrustMatchingSlot(NSSCertificate *c)
+{
+    PRStatus nssrv = PR_SUCCESS;
+
+    NSSTrustDomain *td = STAN_GetDefaultTrustDomain();
+    NSSTrust *nssTrust = nssTrustDomain_FindTrustForCertificate(td, c);
+    /* caller made sure nssTrust isn't NULL */
+    nssPKIObject *tobject = &nssTrust->object;
+    nssPKIObject *cobject = &c->object;
+    int i;
+
+    /* Iterate through the cert and trust object instances looking for
+     * those with matching pk11 slots to delete. Even if some device
+     * can't delete we keep going. Keeping a status variable for the
+     * loop so that once it's failed the other gets set.
+     */
+    NSSRWLock_LockRead(td->tokensLock);
+    nssPKIObject_Lock(cobject);
+    for (i = 0; i < cobject->numInstances; i++) {
+	nssCryptokiObject *cInstance = cobject->instances[i];
+	if (cInstance && !PK11_IsReadOnly(cInstance->token->pk11slot)) {
+		PRStatus status;
+	    if (!tobject->numInstances || !tobject->instances) continue;
+	    status = DeleteCertTrustMatchingSlot(cInstance->token->pk11slot, tobject);
+	    if (status == PR_FAILURE) {
+	    	/* set the outer one but keep going */
+	    	nssrv = PR_FAILURE;
+	    }
+	}
+    }
+    nssPKIObject_Unlock(cobject);
+    NSSRWLock_UnlockRead(td->tokensLock);
     return nssrv;
 }
 
@@ -1056,6 +1362,9 @@ nssTrustDomain_TraverseCertificatesBySubject (
     NSSCertificate *c;
     PRIntn i;
     tmpArena = NSSArena_Create();
+    if (!tmpArena) {
+        return PR_FAILURE;
+    }
     subjectCerts = NSSTrustDomain_FindCertificatesBySubject(td, subject, NULL,
                                                             0, tmpArena);
     if (subjectCerts) {
@@ -1083,6 +1392,9 @@ nssTrustDomain_TraverseCertificatesByNickname (
     NSSCertificate *c;
     PRIntn i;
     tmpArena = NSSArena_Create();
+    if (!tmpArena) {
+        return PR_FAILURE;
+    }
     nickCerts = NSSTrustDomain_FindCertificatesByNickname(td, nickname, NULL,
                                                           0, tmpArena);
     if (nickCerts) {

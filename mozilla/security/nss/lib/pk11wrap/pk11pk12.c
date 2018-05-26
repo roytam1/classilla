@@ -1,34 +1,7 @@
 
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /*
  * This file PKCS #12 fuctions that should really be moved to the
  * PKCS #12 directory, however we can't do that in a point release
@@ -57,7 +30,7 @@
 
 /* member names from PKCS#1, section 7.2 */
 struct SECKEYRSAPrivateKeyStr {
-    PRArenaPool * arena;
+    PLArenaPool * arena;
     SECItem version;
     SECItem modulus;
     SECItem publicExponent;
@@ -86,7 +59,7 @@ typedef struct SECKEYDSAPrivateKeyStr SECKEYDSAPrivateKey;
 ** Structure member names suggested by PKCS#3.
 */
 struct SECKEYDHPrivateKeyStr {
-    PRArenaPool * arena;
+    PLArenaPool * arena;
     SECItem prime;
     SECItem base;
     SECItem privateValue;
@@ -107,6 +80,8 @@ struct SECKEYRawPrivateKeyStr {
 };
 typedef struct SECKEYRawPrivateKeyStr SECKEYRawPrivateKey;
 
+SEC_ASN1_MKSUB(SEC_AnyTemplate)
+SEC_ASN1_MKSUB(SECOID_AlgorithmIDTemplate)
 
 /* ASN1 Templates for new decoder/encoder */
 /*
@@ -116,8 +91,8 @@ const SEC_ASN1Template SECKEY_AttributeTemplate[] = {
     { SEC_ASN1_SEQUENCE,
         0, NULL, sizeof(SECKEYAttribute) },
     { SEC_ASN1_OBJECT_ID, offsetof(SECKEYAttribute, attrType) },
-    { SEC_ASN1_SET_OF, offsetof(SECKEYAttribute, attrValue),
-        SEC_AnyTemplate },
+    { SEC_ASN1_SET_OF | SEC_ASN1_XTRN, offsetof(SECKEYAttribute, attrValue),
+        SEC_ASN1_SUB(SEC_AnyTemplate) },
     { 0 }
 };
 
@@ -128,8 +103,9 @@ const SEC_ASN1Template SECKEY_SetOfAttributeTemplate[] = {
 const SEC_ASN1Template SECKEY_PrivateKeyInfoTemplate[] = {
     { SEC_ASN1_SEQUENCE, 0, NULL, sizeof(SECKEYPrivateKeyInfo) },
     { SEC_ASN1_INTEGER, offsetof(SECKEYPrivateKeyInfo,version) },
-    { SEC_ASN1_INLINE, offsetof(SECKEYPrivateKeyInfo,algorithm),
-        SECOID_AlgorithmIDTemplate },
+    { SEC_ASN1_INLINE | SEC_ASN1_XTRN,
+        offsetof(SECKEYPrivateKeyInfo,algorithm),
+        SEC_ASN1_SUB(SECOID_AlgorithmIDTemplate) },
     { SEC_ASN1_OCTET_STRING, offsetof(SECKEYPrivateKeyInfo,privateKey) },
     { SEC_ASN1_OPTIONAL | SEC_ASN1_CONSTRUCTED | SEC_ASN1_CONTEXT_SPECIFIC | 0,
         offsetof(SECKEYPrivateKeyInfo,attributes),
@@ -168,9 +144,9 @@ const SEC_ASN1Template SECKEY_DHPrivateKeyExportTemplate[] = {
 const SEC_ASN1Template SECKEY_EncryptedPrivateKeyInfoTemplate[] = {
     { SEC_ASN1_SEQUENCE,
         0, NULL, sizeof(SECKEYEncryptedPrivateKeyInfo) },
-    { SEC_ASN1_INLINE,
+    { SEC_ASN1_INLINE | SEC_ASN1_XTRN,
         offsetof(SECKEYEncryptedPrivateKeyInfo,algorithm),
-        SECOID_AlgorithmIDTemplate },
+        SEC_ASN1_SUB(SECOID_AlgorithmIDTemplate) },
     { SEC_ASN1_OCTET_STRING,
         offsetof(SECKEYEncryptedPrivateKeyInfo,encryptedData) },
     { 0 }
@@ -241,11 +217,17 @@ PK11_ImportDERPrivateKeyInfoAndReturnKey(PK11SlotInfo *slot, SECItem *derPKI,
 	void *wincx) 
 {
     SECKEYPrivateKeyInfo *pki = NULL;
-    PRArenaPool *temparena = NULL;
+    PLArenaPool *temparena = NULL;
     SECStatus rv = SECFailure;
 
     temparena = PORT_NewArena(DER_DEFAULT_CHUNKSIZE);
+    if (!temparena)
+        return rv;
     pki = PORT_ArenaZNew(temparena, SECKEYPrivateKeyInfo);
+    if (!pki) {
+        PORT_FreeArena(temparena, PR_FALSE);
+        return rv;
+    }
     pki->arena = temparena;
 
     rv = SEC_ASN1DecodeItem(pki->arena, pki, SECKEY_PrivateKeyInfoTemplate,
@@ -258,10 +240,8 @@ PK11_ImportDERPrivateKeyInfoAndReturnKey(PK11SlotInfo *slot, SECItem *derPKI,
 		publicValue, isPerm, isPrivate, keyUsage, privk, wincx);
 
 finish:
-    if( pki != NULL ) {
-	/* this zeroes the key and frees the arena */
-	SECKEY_DestroyPrivateKeyInfo(pki, PR_TRUE /*freeit*/);
-    }
+    /* this zeroes the key and frees the arena */
+    SECKEY_DestroyPrivateKeyInfo(pki, PR_TRUE /*freeit*/);
     return rv;
 }
         
@@ -279,17 +259,11 @@ PK11_ImportAndReturnPrivateKey(PK11SlotInfo *slot, SECKEYRawPrivateKey *lpk,
     CK_ATTRIBUTE theTemplate[20];
     int templateCount = 0;
     SECStatus rv = SECFailure;
-    PRArenaPool *arena;
     CK_ATTRIBUTE *attrs;
     CK_ATTRIBUTE *signedattr = NULL;
     int signedcount = 0;
     CK_ATTRIBUTE *ap;
     SECItem *ck_id = NULL;
-
-    arena = PORT_NewArena(2048);
-    if(!arena) {
-	return SECFailure;
-    }
 
     attrs = theTemplate;
 
@@ -358,7 +332,7 @@ PK11_ImportAndReturnPrivateKey(PK11SlotInfo *slot, SECKEYRawPrivateKey *lpk,
 		goto loser;
 	    }
 	    if (PK11_IsInternal(slot)) {
-	        PK11_SETATTRS(attrs, CKA_NSS_DB,
+	        PK11_SETATTRS(attrs, CKA_NETSCAPE_DB,
 				publicValue->data, publicValue->len); attrs++;
 	    }
 	    PK11_SETATTRS(attrs, CKA_SIGN, &cktrue, sizeof(CK_BBOOL)); attrs++;
@@ -389,7 +363,7 @@ PK11_ImportAndReturnPrivateKey(PK11SlotInfo *slot, SECKEYRawPrivateKey *lpk,
 	     * this dh key. We have a netscape only CKA_ value to do this.
 	     * Only send it to internal slots */
 	    if (PK11_IsInternal(slot)) {
-	        PK11_SETATTRS(attrs, CKA_NSS_DB,
+	        PK11_SETATTRS(attrs, CKA_NETSCAPE_DB,
 				publicValue->data, publicValue->len); attrs++;
 	    }
 	    PK11_SETATTRS(attrs, CKA_DERIVE, &cktrue, sizeof(CK_BBOOL)); attrs++;
@@ -442,15 +416,6 @@ loser:
 }
 
 SECStatus
-PK11_ImportPrivateKey(PK11SlotInfo *slot, SECKEYRawPrivateKey *lpk, 
-	SECItem *nickname, SECItem *publicValue, PRBool isPerm, 
-	PRBool isPrivate, unsigned int keyUsage, void *wincx) 
-{
-    return PK11_ImportAndReturnPrivateKey(slot, lpk, nickname, publicValue,
-	isPerm, isPrivate, keyUsage, NULL, wincx);
-}
-
-SECStatus
 PK11_ImportPrivateKeyInfoAndReturnKey(PK11SlotInfo *slot,
 	SECKEYPrivateKeyInfo *pki, SECItem *nickname, SECItem *publicValue,
 	PRBool isPerm, PRBool isPrivate, unsigned int keyUsage,
@@ -461,7 +426,7 @@ PK11_ImportPrivateKeyInfoAndReturnKey(PK11SlotInfo *slot,
     SECKEYRawPrivateKey *lpk = NULL;
     const SEC_ASN1Template *keyTemplate, *paramTemplate;
     void *paramDest = NULL;
-    PRArenaPool *arena;
+    PLArenaPool *arena = NULL;
 
     arena = PORT_NewArena(2048);
     if(!arena) {
@@ -534,7 +499,7 @@ PK11_ImportPrivateKeyInfoAndReturnKey(PK11SlotInfo *slot,
 
 
 loser:
-    if (lpk!= NULL) {
+    if (arena != NULL) {
 	PORT_FreeArena(arena, PR_TRUE);
     }
 

@@ -1,40 +1,9 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * p7content -- A command to display pkcs7 content.
- *
- * $Id: p7content.c,v 1.7 2002/09/30 20:31:55 wtc%netscape.com Exp $
  */
 
 #include "nspr.h"
@@ -44,6 +13,7 @@
 #include "cert.h"
 #include "certdb.h"
 #include "nss.h"
+#include "pk11pub.h"
 
 #if defined(XP_UNIX)
 #include <unistd.h>
@@ -76,6 +46,7 @@ Usage(char *progName)
 }
 
 static PRBool saw_content;
+static secuPWData  pwdata          = { PW_NONE, 0 };
 
 static void
 PrintBytes(void *arg, const char *buf, unsigned long len)
@@ -107,7 +78,7 @@ DecodeAndPrintFile(FILE *out, PRFileDesc *in, char *progName)
     SEC_PKCS7ContentInfo *cinfo = NULL;
     SEC_PKCS7DecoderContext *dcx;
 
-    if (SECU_ReadDERFromFile(&derdata, in, PR_FALSE)) {
+    if (SECU_ReadDERFromFile(&derdata, in, PR_FALSE, PR_FALSE)) {
         SECU_PrintError(progName, "error converting der");
 	return -1;
     }
@@ -117,7 +88,7 @@ DecodeAndPrintFile(FILE *out, PRFileDesc *in, char *progName)
     fprintf(out, "\n---------------------------------------------\n");
 
     saw_content = PR_FALSE;
-    dcx = SEC_PKCS7DecoderStart(PrintBytes, out, NULL, NULL,
+    dcx = SEC_PKCS7DecoderStart(PrintBytes, out, NULL, &pwdata,
 				NULL, NULL, decryption_allowed);
     if (dcx != NULL) {
 #if 0	/* Test that decoder works when data is really streaming in. */
@@ -175,7 +146,7 @@ DecodeAndPrintFile(FILE *out, PRFileDesc *in, char *progName)
 
 	signing_time = SEC_PKCS7GetSigningTime(cinfo);
 	if (signing_time != NULL) {
-	    SECU_PrintUTCTime(out, signing_time, "Signing time", 0);
+	    SECU_PrintTimeChoice(out, signing_time, "Signing time", 0);
 	} else {
 	    fprintf(out, "No signing time included.\n");
 	}
@@ -189,7 +160,6 @@ DecodeAndPrintFile(FILE *out, PRFileDesc *in, char *progName)
     SEC_PKCS7DestroyContentInfo(cinfo);
     return 0;
 }
-
 
 /*
  * Print the contents of a PKCS7 message, indicating signatures, etc.
@@ -214,7 +184,7 @@ main(int argc, char **argv)
     /*
      * Parse command line arguments
      */
-    optstate = PL_CreateOptState(argc, argv, "d:i:o:");
+    optstate = PL_CreateOptState(argc, argv, "d:i:o:p:f:");
     while ((status = PL_GetNextOpt(optstate)) == PL_OPT_OK) {
 	switch (optstate->option) {
 	  case 'd':
@@ -239,6 +209,16 @@ main(int argc, char **argv)
 	    }
 	    break;
 
+	  case 'p':
+            pwdata.source = PW_PLAINTEXT;
+            pwdata.data = PORT_Strdup (optstate->value);
+            break;
+
+          case 'f':
+            pwdata.source = PW_FROMFILE;
+            pwdata.data = PORT_Strdup (optstate->value);
+            break;
+
 	  default:
 	    Usage(progName);
 	    break;
@@ -258,9 +238,15 @@ main(int argc, char **argv)
 	return -1;
     }
 
+    PK11_SetPasswordFunc(SECU_GetModulePassword);
+
     if (DecodeAndPrintFile(outFile, inFile, progName)) {
 	SECU_PrintError(progName, "problem decoding data");
 	return -1;
+    }
+    
+    if (NSS_Shutdown() != SECSuccess) {
+        exit(1);
     }
 
     return 0;

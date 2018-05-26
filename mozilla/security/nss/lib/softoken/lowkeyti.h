@@ -1,35 +1,6 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #ifndef _LOWKEYTI_H_
 #define _LOWKEYTI_H_ 1
 
@@ -39,31 +10,6 @@
 #include "secitem.h"
 #include "secasn1t.h"
 #include "secoidt.h"
-/*#include "secmodt.h"
-#include "pkcs11t.h" */
-
-
-/*
- * a key in/for the data base
- */
-struct NSSLOWKEYDBKeyStr {
-    PLArenaPool *arena;
-    int version;
-    char *nickname;
-    SECItem salt;
-    SECItem derPK;
-};
-typedef struct NSSLOWKEYDBKeyStr NSSLOWKEYDBKey;
-
-typedef struct NSSLOWKEYDBHandleStr NSSLOWKEYDBHandle;
-
-#ifdef NSS_USE_KEY4_DB
-#define NSSLOWKEY_DB_FILE_VERSION 4
-#else
-#define NSSLOWKEY_DB_FILE_VERSION 3
-#endif
-
-#define NSSLOWKEY_VERSION	    0	/* what we *create* */
 
 /*
 ** Typedef for callback to get a password "key".
@@ -74,6 +20,11 @@ extern const SEC_ASN1Template nsslowkey_DSAPrivateKeyTemplate[];
 extern const SEC_ASN1Template nsslowkey_DSAPrivateKeyExportTemplate[];
 extern const SEC_ASN1Template nsslowkey_DHPrivateKeyTemplate[];
 extern const SEC_ASN1Template nsslowkey_DHPrivateKeyExportTemplate[];
+#ifdef NSS_ENABLE_ECC
+#define NSSLOWKEY_EC_PRIVATE_KEY_VERSION   1  /* as per SECG 1 C.4 */
+extern const SEC_ASN1Template nsslowkey_ECParamsTemplate[];
+extern const SEC_ASN1Template nsslowkey_ECPrivateKeyTemplate[];
+#endif /* NSS_ENABLE_ECC */
 
 extern const SEC_ASN1Template nsslowkey_PrivateKeyInfoTemplate[];
 extern const SEC_ASN1Template nsslowkey_EncryptedPrivateKeyInfoTemplate[];
@@ -100,22 +51,12 @@ struct NSSLOWKEYPrivateKeyInfoStr {
 typedef struct NSSLOWKEYPrivateKeyInfoStr NSSLOWKEYPrivateKeyInfo;
 #define NSSLOWKEY_PRIVATE_KEY_INFO_VERSION	0	/* what we *create* */
 
-/*
-** A PKCS#8 private key info object
-*/
-struct NSSLOWKEYEncryptedPrivateKeyInfoStr {
-    PLArenaPool *arena;
-    SECAlgorithmID algorithm;
-    SECItem encryptedData;
-};
-typedef struct NSSLOWKEYEncryptedPrivateKeyInfoStr NSSLOWKEYEncryptedPrivateKeyInfo;
-
-
 typedef enum { 
     NSSLOWKEYNullKey = 0, 
     NSSLOWKEYRSAKey = 1, 
     NSSLOWKEYDSAKey = 2, 
-    NSSLOWKEYDHKey = 4
+    NSSLOWKEYDHKey = 4,
+    NSSLOWKEYECKey = 5
 } NSSLOWKEYType;
 
 /*
@@ -128,6 +69,7 @@ struct NSSLOWKEYPublicKeyStr {
         RSAPublicKey rsa;
 	DSAPublicKey dsa;
 	DHPublicKey  dh;
+	ECPublicKey  ec;
     } u;
 };
 typedef struct NSSLOWKEYPublicKeyStr NSSLOWKEYPublicKey;
@@ -144,6 +86,7 @@ struct NSSLOWKEYPrivateKeyStr {
         RSAPrivateKey rsa;
 	DSAPrivateKey dsa;
 	DHPrivateKey  dh;
+	ECPrivateKey  ec;
     } u;
 };
 typedef struct NSSLOWKEYPrivateKeyStr NSSLOWKEYPrivateKey;

@@ -1,36 +1,39 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 #include "primpl.h"
 
@@ -95,14 +98,13 @@ static PRInt32 PR_CALLBACK FileWrite(PRFileDesc *fd, const void *buf, PRInt32 am
     	return rv;
 
     count = 0;
-#if !defined(XP_UNIX)  /* BugZilla: 4090 */
-    if ( PR_TRUE == fd->secret->appendMode ) {
-        rv = PR_Seek(fd, 0, PR_SEEK_END );
-        if ( -1 == rv )  {
-            return rv;
+#if !defined(_PR_HAVE_O_APPEND)  /* Bugzilla: 4090, 276330 */
+    if (fd->secret->appendMode) {
+        if (PR_Seek64(fd, 0, PR_SEEK_END) == -1) {
+            return -1;
         }
     } /* if (fd->secret->appendMode...) */
-#endif /* XP_UNIX */
+#endif /* _PR_HAVE_O_APPEND */
     while (amount > 0) {
 		temp = _PR_MD_WRITE(fd, buf, amount);
 		if (temp < 0) {
@@ -356,9 +358,9 @@ PR_IMPLEMENT(const PRIOMethods*) PR_GetPipeMethods(void)
 
 PR_IMPLEMENT(PRFileDesc*) PR_Open(const char *name, PRIntn flags, PRIntn mode)
 {
-    PRInt32 osfd;
+    PROsfd osfd;
     PRFileDesc *fd = 0;
-#if !defined(XP_UNIX) /* BugZilla: 4090 */
+#if !defined(_PR_HAVE_O_APPEND)
     PRBool  appendMode = ( PR_APPEND & flags )? PR_TRUE : PR_FALSE;
 #endif
 
@@ -372,7 +374,7 @@ PR_IMPLEMENT(PRFileDesc*) PR_Open(const char *name, PRIntn flags, PRIntn mode)
         if (!fd) {
             (void) _PR_MD_CLOSE_FILE(osfd);
         } else {
-#if !defined(XP_UNIX) /* BugZilla: 4090 */
+#if !defined(_PR_HAVE_O_APPEND)
             fd->secret->appendMode = appendMode;
 #endif
             _PR_MD_INIT_FD_INHERITABLE(fd, PR_FALSE);
@@ -384,9 +386,9 @@ PR_IMPLEMENT(PRFileDesc*) PR_Open(const char *name, PRIntn flags, PRIntn mode)
 PR_IMPLEMENT(PRFileDesc*) PR_OpenFile(
     const char *name, PRIntn flags, PRIntn mode)
 {
-    PRInt32 osfd;
+    PROsfd osfd;
     PRFileDesc *fd = 0;
-#if !defined(XP_UNIX) /* BugZilla: 4090 */
+#if !defined(_PR_HAVE_O_APPEND)
     PRBool  appendMode = ( PR_APPEND & flags )? PR_TRUE : PR_FALSE;
 #endif
 
@@ -400,7 +402,7 @@ PR_IMPLEMENT(PRFileDesc*) PR_OpenFile(
         if (!fd) {
             (void) _PR_MD_CLOSE_FILE(osfd);
         } else {
-#if !defined(XP_UNIX) /* BugZilla: 4090 */
+#if !defined(_PR_HAVE_O_APPEND)
             fd->secret->appendMode = appendMode;
 #endif
             _PR_MD_INIT_FD_INHERITABLE(fd, PR_FALSE);
@@ -409,7 +411,7 @@ PR_IMPLEMENT(PRFileDesc*) PR_OpenFile(
     return fd;
 }
 
-PRInt32 PR_GetSysfdTableMax(void)
+PR_IMPLEMENT(PRInt32) PR_GetSysfdTableMax(void)
 {
 #if defined(XP_UNIX) && !defined(AIX) && !defined(NEXTSTEP) && !defined(QNX)
     struct rlimit rlim;
@@ -422,14 +424,18 @@ PRInt32 PR_GetSysfdTableMax(void)
     return rlim.rlim_max;
 #elif defined(AIX) || defined(NEXTSTEP) || defined(QNX)
     return sysconf(_SC_OPEN_MAX);
-#elif defined(WIN32) || defined(OS2)
+#elif defined(WIN32)
     /*
      * There is a systemwide limit of 65536 user handles.
-     * Not sure on OS/2, but sounds good.
      */
     return 16384;
 #elif defined (WIN16)
     return FOPEN_MAX;
+#elif defined(XP_OS2)
+    ULONG ulReqCount = 0;
+    ULONG ulCurMaxFH = 0;
+    DosSetRelMaxFH(&ulReqCount, &ulCurMaxFH);
+    return ulCurMaxFH;
 #elif defined (XP_MAC) || defined(XP_BEOS)
     PR_SetError(PR_NOT_IMPLEMENTED_ERROR, 0);
    return -1;
@@ -438,7 +444,7 @@ PRInt32 PR_GetSysfdTableMax(void)
 #endif
 }
 
-PRInt32 PR_SetSysfdTableSize(int table_size)
+PR_IMPLEMENT(PRInt32) PR_SetSysfdTableSize(int table_size)
 {
 #if defined(XP_UNIX) && !defined(AIX) && !defined(NEXTSTEP) && !defined(QNX)
     struct rlimit rlim;
@@ -464,9 +470,19 @@ PRInt32 PR_SetSysfdTableSize(int table_size)
     }
 
     return rlim.rlim_cur;
+#elif defined(XP_OS2)
+    PRInt32 tableMax = PR_GetSysfdTableMax();
+    if (table_size > tableMax) {
+      APIRET rc = NO_ERROR;
+      rc = DosSetMaxFH(table_size);
+      if (rc == NO_ERROR)
+        return table_size;
+      else
+        return -1;
+    } 
+    return tableMax;
 #elif defined(AIX) || defined(NEXTSTEP) || defined(QNX) \
-        || defined(WIN32) || defined(WIN16) || defined(OS2) \
-        || defined(XP_BEOS)
+        || defined(WIN32) || defined(WIN16) || defined(XP_BEOS)
     PR_SetError(PR_NOT_IMPLEMENTED_ERROR, 0);
     return -1;
 #elif defined (XP_MAC)
@@ -541,7 +557,7 @@ PRInt32 rv;
 /*
 ** Import an existing OS file to NSPR 
 */
-PR_IMPLEMENT(PRFileDesc*) PR_ImportFile(PRInt32 osfd)
+PR_IMPLEMENT(PRFileDesc*) PR_ImportFile(PROsfd osfd)
 {
     PRFileDesc *fd = NULL;
 
@@ -560,7 +576,7 @@ PR_IMPLEMENT(PRFileDesc*) PR_ImportFile(PRInt32 osfd)
 /*
 ** Import an existing OS pipe to NSPR 
 */
-PR_IMPLEMENT(PRFileDesc*) PR_ImportPipe(PRInt32 osfd)
+PR_IMPLEMENT(PRFileDesc*) PR_ImportPipe(PROsfd osfd)
 {
     PRFileDesc *fd = NULL;
 
@@ -716,13 +732,13 @@ PR_IMPLEMENT(PRStatus) PR_CreatePipe(
         PR_SetError(PR_UNKNOWN_ERROR, GetLastError());
         return PR_FAILURE;
     }
-    *readPipe = PR_AllocFileDesc((PRInt32)readEnd, &_pr_pipeMethods);
+    *readPipe = PR_AllocFileDesc((PROsfd)readEnd, &_pr_pipeMethods);
     if (NULL == *readPipe) {
         CloseHandle(readEnd);
         CloseHandle(writeEnd);
         return PR_FAILURE;
     }
-    *writePipe = PR_AllocFileDesc((PRInt32)writeEnd, &_pr_pipeMethods);
+    *writePipe = PR_AllocFileDesc((PROsfd)writeEnd, &_pr_pipeMethods);
     if (NULL == *writePipe) {
         PR_Close(*readPipe);
         CloseHandle(writeEnd);
@@ -785,9 +801,9 @@ PR_IMPLEMENT(PRStatus) PR_CreatePipe(
 PR_IMPLEMENT(PRFileDesc*) PR_OpenFileUTF16(
     const PRUnichar *name, PRIntn flags, PRIntn mode)
 { 
-    PRInt32 osfd;
+    PROsfd osfd;
     PRFileDesc *fd = 0;
-#if !defined(XP_UNIX) /* BugZilla: 4090 */
+#if !defined(_PR_HAVE_O_APPEND)
     PRBool  appendMode = ( PR_APPEND & flags )? PR_TRUE : PR_FALSE;
 #endif
    
@@ -800,7 +816,7 @@ PR_IMPLEMENT(PRFileDesc*) PR_OpenFileUTF16(
         if (!fd) {
             (void) _PR_MD_CLOSE_FILE(osfd);
         } else {
-#if !defined(XP_UNIX) /* BugZilla: 4090 */
+#if !defined(_PR_HAVE_O_APPEND)
             fd->secret->appendMode = appendMode;
 #endif
             _PR_MD_INIT_FD_INHERITABLE(fd, PR_FALSE);

@@ -1,36 +1,39 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 #ifndef nspr_win32_defs_h___
 #define nspr_win32_defs_h___
@@ -61,18 +64,67 @@
 
 #define PR_LINKER_ARCH      "win32"
 #define _PR_SI_SYSNAME        "WINNT"
-#define _PR_SI_ARCHITECTURE   "x86"    /* XXXMB hardcode for now */
+#if defined(_M_IX86) || defined(_X86_)
+#define _PR_SI_ARCHITECTURE   "x86"
+#elif defined(_AMD64_)
+#define _PR_SI_ARCHITECTURE   "x86-64"
+#elif defined(_IA64_)
+#define _PR_SI_ARCHITECTURE   "ia64"
+#else
+#error unknown processor architecture
+#endif
 
 #define HAVE_DLL
 #define HAVE_CUSTOM_USER_THREADS
 #define HAVE_THREAD_AFFINITY
+#define _PR_HAVE_GETADDRINFO
+#define _PR_INET6_PROBE
+#ifndef _PR_INET6
+#define AF_INET6 23
+/* newer ws2tcpip.h provides these */
+#ifndef AI_CANONNAME
+#define AI_CANONNAME 0x2
+#define AI_NUMERICHOST 0x4
+#define NI_NUMERICHOST 0x02
+struct addrinfo {
+    int ai_flags;
+    int ai_family;
+    int ai_socktype;
+    int ai_protocol;
+    size_t ai_addrlen;
+    char *ai_canonname;
+    struct sockaddr *ai_addr;
+    struct addrinfo *ai_next;
+};
+#endif
+#define _PR_HAVE_MD_SOCKADDR_IN6
+/* isomorphic to struct in6_addr on Windows */
+struct _md_in6_addr {
+    union {
+        PRUint8  _S6_u8[16];
+        PRUint16 _S6_u16[8];
+    } _S6_un;
+};
+/* isomorphic to struct sockaddr_in6 on Windows */
+struct _md_sockaddr_in6 {
+    PRInt16 sin6_family;
+    PRUint16 sin6_port;
+    PRUint32 sin6_flowinfo;
+    struct _md_in6_addr sin6_addr;
+    PRUint32 sin6_scope_id;
+};
+#endif
+#define _PR_HAVE_THREADSAFE_GETHOST
 #define _PR_HAVE_ATOMIC_OPS
+#if defined(_M_IX86) || defined(_X86_)
 #define _PR_HAVE_ATOMIC_CAS
+#endif
 #define PR_HAVE_WIN32_NAMED_SHARED_MEMORY
 #define _PR_HAVE_PEEK_BUFFER
 #define _PR_PEEK_BUFFER_MAX (32 * 1024)
 #define _PR_FD_NEED_EMULATE_MSG_PEEK(fd) \
     (!(fd)->secret->nonblocking && (fd)->secret->inheritable != _PR_TRI_TRUE)
+#define _PR_NEED_SECRET_AF
 
 /* --- Common User-Thread/Native-Thread Definitions --------------------- */
 
@@ -152,6 +204,9 @@ struct _MDThread {
     void            *fiber_arg;         /* arg to main fiber routine */
     PRUint32         fiber_stacksize;   /* stacksize for fiber */
     PRInt32          fiber_last_error;  /* last error for the fiber */
+    void (*start)(void *);              /* used by _PR_MD_CREATE_THREAD to
+                                         * pass its 'start' argument to
+                                         * pr_root. */
 };
 
 struct _MDThreadStack {
@@ -189,7 +244,7 @@ struct _MDSemaphore {
 };
 
 struct _MDFileDesc {
-    PRInt32 osfd;    /* The osfd can come from one of three spaces:
+    PROsfd osfd;     /* The osfd can come from one of three spaces:
                       * - For stdin, stdout, and stderr, we are using
                       *   the libc file handle (0, 1, 2), which is an int.
                       * - For files and pipes, we are using Win32 HANDLE,
@@ -239,7 +294,7 @@ extern void _PR_NT_FreeSecurityDescriptorACL(
 /* --- IO stuff --- */
 
 extern PRInt32 _md_Associate(HANDLE);
-extern PRInt32 _PR_MD_CLOSE(PRInt32 osfd, PRBool socket);
+extern PRInt32 _PR_MD_CLOSE(PROsfd osfd, PRBool socket);
 
 #define _MD_OPEN                      _PR_MD_OPEN
 #define _MD_OPEN_FILE                 _PR_MD_OPEN_FILE

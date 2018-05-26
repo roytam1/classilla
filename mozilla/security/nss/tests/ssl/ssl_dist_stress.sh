@@ -1,37 +1,9 @@
-#! /bin/sh
+#! /bin/bash
 #
-# The contents of this file are subject to the Mozilla Public
-# License Version 1.1 (the "License"); you may not use this file
-# except in compliance with the License. You may obtain a copy of
-# the License at http://www.mozilla.org/MPL/
-# 
-# Software distributed under the License is distributed on an "AS
-# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
-# implied. See the License for the specific language governing
-# rights and limitations under the License.
-# 
-# The Original Code is the Netscape security libraries.
-# 
-# The Initial Developer of the Original Code is Netscape
-# Communications Corporation.  Portions created by Netscape are 
-# Copyright (C) 1994-2000 Netscape Communications Corporation.  All
-# Rights Reserved.
-# 
-# Contributor(s):
-# 
-# Alternatively, the contents of this file may be used under the
-# terms of the GNU General Public License Version 2 or later (the
-# "GPL"), in which case the provisions of the GPL are applicable 
-# instead of those above.  If you wish to allow use of your 
-# version of this file only under the terms of the GPL and not to
-# allow others to use your version of this file under the MPL,
-# indicate your decision by deleting the provisions above and
-# replace them with the notice and other provisions required by
-# the GPL.  If you do not delete the provisions above, a recipient
-# may use your version of this file under either the MPL or the
-# GPL.
-#
-#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 ########################################################################
 #
 # mozilla/security/nss/tests/ssl/ssl_dist_stress.sh
@@ -50,9 +22,6 @@
 # ---------------
 #   FIXME ... known problems, search for this string
 #   NOTE .... unexpected behavior
-#
-# FIXME _ don't know yet how long to wait until the server needs to be killed
-# especially on NT
 #
 ########################################################################
 
@@ -200,7 +169,7 @@ ssl_ds_rem_stress()
   do
       echo "strsclnt -D -p ${PORT} -d ${P_R_CLIENTDIR} -w nss -c 1 $verbose  "
       echo "         -n TestUser$CONTINUE ${HOSTADDR} #`uname -n`"
-      strsclnt -D -p ${PORT} -d . -w nss -c 1 $verbose  \
+      ${BINDIR}/strsclnt -D -p ${PORT} -d . -w nss -c 1 $verbose  \
                -n "TestUser$CONTINUE" ${HOSTADDR} &
                #${HOSTADDR} &
       CONTINUE=`expr $CONTINUE - 1 `
@@ -291,7 +260,7 @@ ssl_ds_dist_stress()
   echo "GET /stop HTTP/1.0\n\n" > stdin.txt #check to make sure it has /r/n
   echo "tstclnt -h $HOSTADDR -p  8443 -d ${P_R_CLIENTDIR} -n TestUser0 "
   echo "        -w nss -f < stdin.txt"
-  tstclnt -h $HOSTADDR -p  8443 -d ${P_R_CLIENTDIR} -n TestUser0 \
+  ${BINDIR}/tstclnt -h $HOSTADDR -p  8443 -d ${P_R_CLIENTDIR} -n TestUser0 \
 	  -w nss -f < stdin.txt
   
   html_msg 0 0 "${testname}"

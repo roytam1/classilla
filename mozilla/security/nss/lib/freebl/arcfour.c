@@ -1,35 +1,12 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.	Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.	If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* arcfour.c - the arc four algorithm.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#ifdef FREEBL_NO_DEPEND
+#include "stubs.h"
+#endif
 
 #include "prerr.h"
 #include "secerr.h"
@@ -39,30 +16,29 @@
 
 /* Architecture-dependent defines */
 
-#if defined(SOLARIS) || defined(HPUX) || defined(i386) || defined(IRIX)
+#if defined(SOLARIS) || defined(HPUX) || defined(NSS_X86) || \
+    defined(_WIN64)
 /* Convert the byte-stream to a word-stream */
 #define CONVERT_TO_WORDS
 #endif
 
-#if defined(AIX) || defined(OSF1)
-/* Treat array variables as longs, not bytes */
-#define USE_LONG
+#if defined(AIX) || defined(OSF1) || defined(NSS_BEVAND_ARCFOUR)
+/* Treat array variables as words, not bytes, on CPUs that take 
+ * much longer to write bytes than to write words, or when using 
+ * assembler code that required it.
+ */
+#define USE_WORD
 #endif
 
-#if defined(_WIN32_WCE)
-#undef WORD
-#define WORD ARC4WORD
-#endif
-
-#if defined(NSS_USE_HYBRID) && !defined(SOLARIS) && !defined(NSS_USE_64) 
-typedef unsigned long long WORD;
+#if (defined(IS_64))
+typedef PRUint64 WORD;
 #else
-typedef unsigned long WORD;
+typedef PRUint32 WORD;
 #endif
 #define WORDSIZE sizeof(WORD)
 
-#ifdef USE_LONG
-typedef unsigned long Stype;
+#if defined(USE_WORD)
+typedef WORD Stype;
 #else
 typedef PRUint8 Stype;
 #endif
@@ -81,9 +57,15 @@ typedef PRUint8 Stype;
  */
 struct RC4ContextStr
 {
+#if defined(NSS_ARCFOUR_IJ_B4_S) || defined(NSS_BEVAND_ARCFOUR)
+	Stype i;
+	Stype j;
 	Stype S[ARCFOUR_STATE_SIZE];
-	PRUint8 i;
-	PRUint8 j;
+#else
+	Stype S[ARCFOUR_STATE_SIZE];
+	Stype i;
+	Stype j;
+#endif
 };
 
 /*
@@ -124,28 +106,31 @@ static const Stype Kinit[256] = {
 	0xf8, 0xf9, 0xfa, 0xfb, 0xfc, 0xfd, 0xfe, 0xff
 };
 
-/*
- * Initialize a new generator.
- */
 RC4Context *
-RC4_CreateContext(const unsigned char *key, int len)
+RC4_AllocateContext(void)
 {
-	int i;
+    return PORT_ZNew(RC4Context);
+}
+
+SECStatus   
+RC4_InitContext(RC4Context *cx, const unsigned char *key, unsigned int len,
+	        const unsigned char * unused1, int unused2, 
+		unsigned int unused3, unsigned int unused4)
+{
+	unsigned int i;
 	PRUint8 j, tmp;
-	RC4Context *cx;
 	PRUint8 K[256];
 	PRUint8 *L;
+
 	/* verify the key length. */
 	PORT_Assert(len > 0 && len < ARCFOUR_STATE_SIZE);
-	if (len < 0 || len >= ARCFOUR_STATE_SIZE) {
-		PORT_SetError(SEC_ERROR_INVALID_ARGS);
-		return NULL;
+	if (len == 0 || len >= ARCFOUR_STATE_SIZE) {
+		PORT_SetError(SEC_ERROR_BAD_KEY);
+		return SECFailure;
 	}
-	/* Create space for the context. */
-	cx = (RC4Context *)PORT_ZAlloc(sizeof(RC4Context));
 	if (cx == NULL) {
-		PORT_SetError(PR_OUT_OF_MEMORY_ERROR);
-		return NULL;
+	    PORT_SetError(SEC_ERROR_INVALID_ARGS);
+	    return SECFailure;
 	}
 	/* Initialize the state using array indices. */
 	memcpy(cx->S, Kinit, sizeof cx->S);
@@ -169,7 +154,25 @@ RC4_CreateContext(const unsigned char *key, int len)
 	}
 	cx->i = 0;
 	cx->j = 0;
-	return cx;
+	return SECSuccess;
+}
+
+
+/*
+ * Initialize a new generator.
+ */
+RC4Context *
+RC4_CreateContext(const unsigned char *key, int len)
+{
+    RC4Context *cx = RC4_AllocateContext();
+    if (cx) {
+	SECStatus rv = RC4_InitContext(cx, key, len, NULL, 0, 0, 0);
+	if (rv != SECSuccess) {
+	    PORT_ZFree(cx, sizeof(*cx));
+	    cx = NULL;
+	}
+    }
+    return cx;
 }
 
 void 
@@ -179,6 +182,10 @@ RC4_DestroyContext(RC4Context *cx, PRBool freeit)
 		PORT_ZFree(cx, sizeof(*cx));
 }
 
+#if defined(NSS_BEVAND_ARCFOUR)
+extern void ARCFOUR(RC4Context *cx, WORD inputLen, 
+	const unsigned char *input, unsigned char *output);
+#else
 /*
  * Generate the next byte in the stream.
  */
@@ -192,7 +199,7 @@ RC4_DestroyContext(RC4Context *cx, PRBool freeit)
 
 #ifdef CONVERT_TO_WORDS
 /*
- * Straight RC4 op.  No optimization.
+ * Straight ARCFOUR op.  No optimization.
  */
 static SECStatus 
 rc4_no_opt(RC4Context *cx, unsigned char *output,
@@ -206,7 +213,7 @@ rc4_no_opt(RC4Context *cx, unsigned char *output,
 	unsigned int index;
 	PORT_Assert(maxOutputLen >= inputLen);
 	if (maxOutputLen < inputLen) {
-		PORT_SetError(SEC_ERROR_INVALID_ARGS);
+		PORT_SetError(SEC_ERROR_OUTPUT_LEN);
 		return SECFailure;
 	}
 	for (index=0; index < inputLen; index++) {
@@ -220,11 +227,12 @@ rc4_no_opt(RC4Context *cx, unsigned char *output,
 	cx->j = tmpj;
 	return SECSuccess;
 }
-#endif
 
-#ifndef CONVERT_TO_WORDS
+#else
+/* !CONVERT_TO_WORDS */
+
 /*
- * Byte-at-a-time RC4, unrolling the loop into 8 pieces.
+ * Byte-at-a-time ARCFOUR, unrolling the loop into 8 pieces.
  */
 static SECStatus 
 rc4_unrolled(RC4Context *cx, unsigned char *output,
@@ -238,7 +246,7 @@ rc4_unrolled(RC4Context *cx, unsigned char *output,
 	int index;
 	PORT_Assert(maxOutputLen >= inputLen);
 	if (maxOutputLen < inputLen) {
-		PORT_SetError(SEC_ERROR_INVALID_ARGS);
+		PORT_SetError(SEC_ERROR_OUTPUT_LEN);
 		return SECFailure;
 	}
 	for (index = inputLen / 8; index-- > 0; input += 8, output += 8) {
@@ -311,7 +319,7 @@ rc4_unrolled(RC4Context *cx, unsigned char *output,
 	ARCFOUR_NEXT_BYTE(); streamWord |= (WORD)cx->S[t] << (n     );
 #endif
 
-#if (defined(NSS_USE_HYBRID) && !defined(SOLARIS)) || defined(NSS_USE_64)
+#if (defined(IS_64) && !defined(__sparc)) || defined(NSS_USE_64)
 /* 64-bit wordsize */
 #ifdef IS_LITTLE_ENDIAN
 #define ARCFOUR_NEXT_WORD() \
@@ -339,32 +347,39 @@ rc4_unrolled(RC4Context *cx, unsigned char *output,
 #define LSH <<
 #endif
 
+#ifdef IS_LITTLE_ENDIAN
+#define LEFTMOST_BYTE_SHIFT 0
+#define NEXT_BYTE_SHIFT(shift) shift + 8
+#else
+#define LEFTMOST_BYTE_SHIFT 8*(WORDSIZE - 1)
+#define NEXT_BYTE_SHIFT(shift) shift - 8
+#endif
+
 #ifdef CONVERT_TO_WORDS
-/*
- * Convert input and output buffers to words before performing
- * RC4 operations.
- */
 static SECStatus 
 rc4_wordconv(RC4Context *cx, unsigned char *output,
              unsigned int *outputLen, unsigned int maxOutputLen,
              const unsigned char *input, unsigned int inputLen)
 {
-	ptrdiff_t inOffset = (ptrdiff_t)input % WORDSIZE;
-	ptrdiff_t outOffset = (ptrdiff_t)output % WORDSIZE;
-	register WORD streamWord, mask;
-	register WORD *pInWord, *pOutWord;
+	PR_STATIC_ASSERT(sizeof(PRUword) == sizeof(ptrdiff_t));
+	unsigned int inOffset = (PRUword)input % WORDSIZE;
+	unsigned int outOffset = (PRUword)output % WORDSIZE;
+	register WORD streamWord;
+	register const WORD *pInWord;
+	register WORD *pOutWord;
 	register WORD inWord, nextInWord;
 	PRUint8 t;
 	register Stype tmpSi, tmpSj;
 	register PRUint8 tmpi = cx->i;
 	register PRUint8 tmpj = cx->j;
-	unsigned int byteCount;
 	unsigned int bufShift, invBufShift;
-	int i;
+	unsigned int i;
+	const unsigned char *finalIn;
+	unsigned char *finalOut;
 
 	PORT_Assert(maxOutputLen >= inputLen);
 	if (maxOutputLen < inputLen) {
-		PORT_SetError(SEC_ERROR_INVALID_ARGS);
+		PORT_SetError(SEC_ERROR_OUTPUT_LEN);
 		return SECFailure;
 	}
 	if (inputLen < 2*WORDSIZE) {
@@ -372,8 +387,9 @@ rc4_wordconv(RC4Context *cx, unsigned char *output,
 		return rc4_no_opt(cx, output, outputLen, maxOutputLen, input, inputLen);
 	}
 	*outputLen = inputLen;
-	pInWord = (WORD *)(input - inOffset);
-	if (inOffset < outOffset) {
+	pInWord = (const WORD *)(input - inOffset);
+	pOutWord = (WORD *)(output - outOffset);
+	if (inOffset <= outOffset) {
 		bufShift = 8*(outOffset - inOffset);
 		invBufShift = 8*WORDSIZE - bufShift;
 	} else {
@@ -389,50 +405,42 @@ rc4_wordconv(RC4Context *cx, unsigned char *output,
 	/* least one partial word of input should ALWAYS be loaded.      */
 	/*****************************************************************/
 	if (outOffset) {
-		/* Generate input and stream words aligned relative to the
-		 * partial output buffer.
-		 */
-		byteCount = WORDSIZE - outOffset; 
-		pOutWord = (WORD *)(output - outOffset);
-		mask = streamWord = 0;
-#ifdef IS_LITTLE_ENDIAN
-		for (i = WORDSIZE - byteCount; i < WORDSIZE; i++) {
-#else
-		for (i = byteCount - 1; i >= 0; --i) {
-#endif
+		unsigned int byteCount = WORDSIZE - outOffset; 
+		for (i = 0; i < byteCount; i++) {
 			ARCFOUR_NEXT_BYTE();
-			streamWord |= (WORD)(cx->S[t]) << 8*i;
-			mask |= MASK1BYTE << 8*i;
-		} /* } */
-		inWord = *pInWord++;
+			output[i] = cx->S[t] ^ input[i];
+		}
+		/* Consumed byteCount bytes of input */
+		inputLen -= byteCount;
+		pInWord++;
+
+		/* move to next word of output */
+		pOutWord++;
+
 		/* If buffers are relatively misaligned, shift the bytes in inWord
 		 * to be aligned to the output buffer.
 		 */
-		nextInWord = 0;
 		if (inOffset < outOffset) {
-			/* Have more bytes than needed, shift remainder into nextInWord */
-			nextInWord = inWord LSH 8*(inOffset + byteCount);
-			inWord = inWord RSH bufShift;
-		} else if (inOffset > outOffset) {
-			/* Didn't get enough bytes from current input word, load another
-			 * word and then shift remainder into nextInWord.
+			/* The first input word (which may be partial) has more bytes
+			 * than needed.  Copy the remainder to inWord.
 			 */
-			nextInWord = *pInWord++;
-			inWord = (inWord LSH invBufShift) | 
-			         (nextInWord RSH bufShift);
-			nextInWord = nextInWord LSH invBufShift;
+			unsigned int shift = LEFTMOST_BYTE_SHIFT;
+			inWord = 0;
+			for (i = 0; i < outOffset - inOffset; i++) {
+				inWord |= (WORD)input[byteCount + i] << shift;
+				shift = NEXT_BYTE_SHIFT(shift);
+			}
+		} else if (inOffset > outOffset) {
+			/* Consumed some bytes in the second input word.  Copy the
+			 * remainder to inWord.
+			 */
+			inWord = *pInWord++;
+			inWord = inWord LSH invBufShift;
+		} else {
+			inWord = 0;
 		}
-		/* Store output of first partial word */
-		*pOutWord = (*pOutWord & ~mask) | ((inWord ^ streamWord) & mask);
-		/* Consumed byteCount bytes of input */
-		inputLen -= byteCount;
-		/* move to next word of output */
-		pOutWord++;
-		/* inWord has been consumed, but there may be bytes in nextInWord */
-		inWord = nextInWord;
 	} else {
 		/* output is word-aligned */
-		pOutWord = (WORD *)output;
 		if (inOffset) {
 			/* Input is not word-aligned.  The first word load of input 
 			 * will not produce a full word of input bytes, so one word
@@ -442,8 +450,13 @@ rc4_wordconv(RC4Context *cx, unsigned char *output,
 			 * loop must execute at least once because the input must
 			 * be at least two words.
 			 */
-			inWord = *pInWord++;
-			inWord = inWord LSH invBufShift;
+			unsigned int shift = LEFTMOST_BYTE_SHIFT;
+			inWord = 0;
+			for (i = 0; i < WORDSIZE - inOffset; i++) {
+				inWord |= (WORD)input[i] << shift;
+				shift = NEXT_BYTE_SHIFT(shift);
+			}
+			pInWord++;
 		} else {
 			/* Input is word-aligned.  The first word load of input 
 			 * will produce a full word of input bytes, so nothing
@@ -452,10 +465,6 @@ rc4_wordconv(RC4Context *cx, unsigned char *output,
 			inWord = 0;
 		}
 	}
-	/* Output buffer is aligned, inOffset is now measured relative to
-	 * outOffset (and not a word boundary).
-	 */
-	inOffset = (inOffset + WORDSIZE - outOffset) % WORDSIZE;
 	/*****************************************************************/
 	/* Step 2: main loop                                             */
 	/* At this point the output buffer is word-aligned.  Any unused  */
@@ -463,8 +472,13 @@ rc4_wordconv(RC4Context *cx, unsigned char *output,
 	/* the input buffer is unaligned relative to the output buffer,  */
 	/* shifting has to be done.                                      */
 	/*****************************************************************/
-	if (inOffset) {
-		for (; inputLen >= WORDSIZE; inputLen -= WORDSIZE) {
+	if (bufShift) {
+		/* preloadedByteCount is the number of input bytes pre-loaded
+		 * in inWord.
+		 */
+		unsigned int preloadedByteCount = bufShift/8;
+		for (; inputLen >= preloadedByteCount + WORDSIZE;
+		     inputLen -= WORDSIZE) {
 			nextInWord = *pInWord++;
 			inWord |= nextInWord RSH bufShift;
 			nextInWord = nextInWord LSH invBufShift;
@@ -478,12 +492,7 @@ rc4_wordconv(RC4Context *cx, unsigned char *output,
 			cx->j = tmpj;
 			return SECSuccess;
 		}
-		/* If the amount of remaining input is greater than the amount
-		 * bytes pulled from the current input word, need to do another
-		 * word load.  What's left in inWord will be consumed in step 3.
-		 */
-		if (inputLen > WORDSIZE - inOffset)
-			inWord |= *pInWord RSH bufShift;
+		finalIn = (const unsigned char *)pInWord - preloadedByteCount;
 	} else {
 		for (; inputLen >= WORDSIZE; inputLen -= WORDSIZE) {
 			inWord = *pInWord++;
@@ -495,35 +504,24 @@ rc4_wordconv(RC4Context *cx, unsigned char *output,
 			cx->i = tmpi;
 			cx->j = tmpj;
 			return SECSuccess;
-		} else {
-			/* A partial input word remains at the tail.  Load it.  The
-			 * relevant bytes will be consumed in step 3.
-			 */
-			inWord = *pInWord;
 		}
+		finalIn = (const unsigned char *)pInWord;
 	}
 	/*****************************************************************/
 	/* Step 3:                                                       */
-	/* A partial word of input remains, and it is already loaded     */
-	/* into nextInWord.  Shift appropriately and consume the bytes   */
-	/* used in the partial word.                                     */
+	/* Do the remaining partial word of input one byte at a time.    */
 	/*****************************************************************/
-	mask = streamWord = 0;
-#ifdef IS_LITTLE_ENDIAN
-	for (i = 0; i < inputLen; ++i) {
-#else
-	for (i = WORDSIZE - 1; i >= WORDSIZE - inputLen; --i) {
-#endif
+	finalOut = (unsigned char *)pOutWord;
+	for (i = 0; i < inputLen; i++) {
 		ARCFOUR_NEXT_BYTE();
-		streamWord |= (WORD)(cx->S[t]) << 8*i;
-		mask |= MASK1BYTE << 8*i;
-	} /* } */
-	*pOutWord = (*pOutWord & ~mask) | ((inWord ^ streamWord) & mask);
+		finalOut[i] = cx->S[t] ^ finalIn[i];
+	}
 	cx->i = tmpi;
 	cx->j = tmpj;
 	return SECSuccess;
 }
 #endif
+#endif /* NSS_BEVAND_ARCFOUR */
 
 SECStatus 
 RC4_Encrypt(RC4Context *cx, unsigned char *output,
@@ -532,10 +530,14 @@ RC4_Encrypt(RC4Context *cx, unsigned char *output,
 {
 	PORT_Assert(maxOutputLen >= inputLen);
 	if (maxOutputLen < inputLen) {
-		PORT_SetError(SEC_ERROR_INVALID_ARGS);
+		PORT_SetError(SEC_ERROR_OUTPUT_LEN);
 		return SECFailure;
 	}
-#ifdef CONVERT_TO_WORDS
+#if defined(NSS_BEVAND_ARCFOUR)
+	ARCFOUR(cx, inputLen, input, output);
+        *outputLen = inputLen;
+	return SECSuccess;
+#elif defined( CONVERT_TO_WORDS )
 	/* Convert the byte-stream to a word-stream */
 	return rc4_wordconv(cx, output, outputLen, maxOutputLen, input, inputLen);
 #else
@@ -550,11 +552,15 @@ SECStatus RC4_Decrypt(RC4Context *cx, unsigned char *output,
 {
 	PORT_Assert(maxOutputLen >= inputLen);
 	if (maxOutputLen < inputLen) {
-		PORT_SetError(SEC_ERROR_INVALID_ARGS);
+		PORT_SetError(SEC_ERROR_OUTPUT_LEN);
 		return SECFailure;
 	}
 	/* decrypt and encrypt are same operation. */
-#ifdef CONVERT_TO_WORDS
+#if defined(NSS_BEVAND_ARCFOUR)
+	ARCFOUR(cx, inputLen, input, output);
+        *outputLen = inputLen;
+	return SECSuccess;
+#elif defined( CONVERT_TO_WORDS )
 	/* Convert the byte-stream to a word-stream */
 	return rc4_wordconv(cx, output, outputLen, maxOutputLen, input, inputLen);
 #else
@@ -564,4 +570,4 @@ SECStatus RC4_Decrypt(RC4Context *cx, unsigned char *output,
 }
 
 #undef CONVERT_TO_WORDS
-#undef USE_LONG
+#undef USE_WORD

@@ -1,14 +1,16 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
  * 
  * The Original Code is the Netscape Portable Runtime (NSPR).
  * 
@@ -19,17 +21,19 @@
  * 
  * Contributor(s):
  * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK *****
  */
 
 /*
@@ -60,6 +64,7 @@ static PLArenaStats *arena_stats_list;
 
 static PRLock    *arenaLock;
 static PRCallOnceType once;
+static const PRCallOnceType pristineCallOnce;
 
 /*
 ** InitializeArenas() -- Initialize arena operations.
@@ -107,9 +112,23 @@ PR_IMPLEMENT(void) PL_InitArenaPool(
 #pragma unused (name)
 #endif
 
+    /*
+     * Look-up table of PR_BITMASK(PR_CeilingLog2(align)) values for
+     * align = 1 to 32.
+     */
+    static const PRUint8 pmasks[33] = {
+         0,                                               /*  not used */
+         0, 1, 3, 3, 7, 7, 7, 7,15,15,15,15,15,15,15,15,  /*  1 ... 16 */
+        31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31}; /* 17 ... 32 */
+
     if (align == 0)
         align = PL_ARENA_DEFAULT_ALIGN;
-    pool->mask = PR_BITMASK(PR_CeilingLog2(align));
+
+    if (align < sizeof(pmasks)/sizeof(pmasks[0]))
+        pool->mask = pmasks[align];
+    else
+        pool->mask = PR_BITMASK(PR_CeilingLog2(align));
+
     pool->first.next = NULL;
     pool->first.base = pool->first.avail = pool->first.limit =
         (PRUword)PL_ARENA_ALIGN(pool, &pool->first + 1);
@@ -180,9 +199,9 @@ PR_IMPLEMENT(void *) PL_ArenaAllocate(PLArenaPool *pool, PRUint32 nb)
         if ( PR_FAILURE == LockArena())
             return(0);
 
-        for ( a = p = arena_freelist; a != NULL ; p = a, a = a->next ) {
+        for ( a = arena_freelist, p = NULL; a != NULL ; p = a, a = a->next ) {
             if ( a->base +nb <= a->limit )  {
-                if ( p == arena_freelist )
+                if ( p == NULL )
                     arena_freelist = a->next;
                 else
                     p->next = a->next;
@@ -241,6 +260,21 @@ PR_IMPLEMENT(void *) PL_ArenaGrow(
     return newp;
 }
 
+static void ClearArenaList(PLArena *a, PRInt32 pattern)
+{
+
+    for (; a; a = a->next) {
+        PR_ASSERT(a->base <= a->avail && a->avail <= a->limit);
+        a->avail = a->base;
+	PL_CLEAR_UNUSED_PATTERN(a, pattern);
+    }
+}
+
+PR_IMPLEMENT(void) PL_ClearArenaPool(PLArenaPool *pool, PRInt32 pattern)
+{
+    ClearArenaList(pool->first.next, pattern);
+}
+
 /*
  * Free tail arenas linked after head, which may not be the true list head.
  * Reset pool->current to point to head in case it pointed at a tail arena.
@@ -255,12 +289,7 @@ static void FreeArenaList(PLArenaPool *pool, PLArena *head, PRBool reallyFree)
         return;
 
 #ifdef DEBUG
-    do {
-        PR_ASSERT(a->base <= a->avail && a->avail <= a->limit);
-        a->avail = a->base;
-        PL_CLEAR_UNUSED(a);
-    } while ((a = a->next) != 0);
-    a = *ap;
+    ClearArenaList(a, PL_FREE_PATTERN);
 #endif
 
     if (reallyFree) {
@@ -353,6 +382,7 @@ PR_IMPLEMENT(void) PL_ArenaFinish(void)
         PR_DestroyLock(arenaLock);
         arenaLock = NULL;
     }
+    once = pristineCallOnce;
 }
 
 #ifdef PL_ARENAMETER

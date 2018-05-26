@@ -1,36 +1,39 @@
 /* -*- Mode: C++; tab-width: 8; c-basic-offset: 8 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 #include "primpl.h"
 
@@ -69,6 +72,7 @@ int err;
 		/*
 		 * XXX: readdir() is not MT-safe
 		 */
+		_MD_ERRNO() = 0;
 		de = readdir(md->d);
 
 		if (!de) {
@@ -173,16 +177,18 @@ _MD_open (const char *name, PRIntn flags, PRIntn mode)
 		osflags = O_RDONLY;
 	}
 
-        if (flags & PR_APPEND)
-                osflags |= O_APPEND;
-        if (flags & PR_TRUNCATE)
-                osflags |= O_TRUNC;
-        if (flags & PR_SYNC) {
+	if (flags & PR_EXCL)
+		osflags |= O_EXCL;
+	if (flags & PR_APPEND)
+		osflags |= O_APPEND;
+	if (flags & PR_TRUNCATE)
+		osflags |= O_TRUNC;
+	if (flags & PR_SYNC) {
 /* Ummmm.  BeOS doesn't appear to
    support sync in any way shape or
    form. */
 		return PR_NOT_IMPLEMENTED_ERROR;
-        }
+	}
 
 	/*
 	** On creations we hold the 'create' lock in order to enforce
@@ -482,31 +488,38 @@ PRInt32
 _MD_access (const char *name, PRIntn how)
 {
 PRInt32 rv, err;
-int amode;
+int checkFlags;
+struct stat buf;
 
 	switch (how) {
 		case PR_ACCESS_WRITE_OK:
-			amode = W_OK;
+			checkFlags = S_IWUSR | S_IWGRP | S_IWOTH;
 			break;
+		
 		case PR_ACCESS_READ_OK:
-			amode = R_OK;
+			checkFlags = S_IRUSR | S_IRGRP | S_IROTH;
 			break;
+		
 		case PR_ACCESS_EXISTS:
-			amode = F_OK;
+			/* we don't need to examine st_mode. */
 			break;
+		
 		default:
 			PR_SetError(PR_INVALID_ARGUMENT_ERROR, 0);
-			rv = -1;
-			goto done;
+			return -1;
 	}
-	rv = access(name, amode);
+
+	rv = stat(name, &buf);
+	if (rv == 0 && how != PR_ACCESS_EXISTS && (!(buf.st_mode & checkFlags))) {
+		PR_SetError(PR_NO_ACCESS_RIGHTS_ERROR, 0);
+		return -1;
+	}
 
 	if (rv < 0) {
 		err = _MD_ERRNO();
-		_PR_MD_MAP_ACCESS_ERROR(err);
+		_PR_MD_MAP_STAT_ERROR(err);
 	}
 
-done:
 	return(rv);
 }
 
@@ -689,8 +702,7 @@ _MD_pr_poll(PRPollDesc *pds, PRIntn npds, PRIntervalTime timeout)
 	{
 		PRInt32 ticksPerSecond = PR_TicksPerSecond();
 		tv.tv_sec = remaining / ticksPerSecond;
-		tv.tv_usec = remaining - (ticksPerSecond * tv.tv_sec);
-		tv.tv_usec = (PR_USEC_PER_SEC * tv.tv_usec) / ticksPerSecond;
+		tv.tv_usec = PR_IntervalToMicroseconds( remaining % ticksPerSecond );
 		tvp = &tv;
 	}
 	

@@ -1,40 +1,9 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * PKCS7 creation.
- *
- * $Id: p7create.c,v 1.3 2001/09/20 21:37:16 relyea%netscape.com Exp $
  */
 
 #include "p7local.h"
@@ -47,9 +16,12 @@
 #include "prtime.h"
 #include "secerr.h"
 #include "secder.h"
+#include "secpkcs5.h"
+
+const int NSS_PBE_DEFAULT_ITERATION_COUNT = 2000; /* used in p12e.c too */
 
 static SECStatus
-sec_pkcs7_init_content_info (SEC_PKCS7ContentInfo *cinfo, PRArenaPool *poolp,
+sec_pkcs7_init_content_info (SEC_PKCS7ContentInfo *cinfo, PLArenaPool *poolp,
 			     SECOidTag kind, PRBool detached)
 {
     void *thing;
@@ -138,7 +110,7 @@ sec_pkcs7_create_content_info (SECOidTag kind, PRBool detached,
 			       SECKEYGetPasswordKey pwfn, void *pwfn_arg)
 {
     SEC_PKCS7ContentInfo *cinfo;
-    PRArenaPool *poolp;
+    PLArenaPool *poolp;
     SECStatus rv;
 
     poolp = PORT_NewArena (1024);	/* XXX what is right value? */
@@ -432,7 +404,7 @@ SEC_PKCS7CreateSignedData (CERTCertificate *cert,
 
 
 static SEC_PKCS7Attribute *
-sec_pkcs7_create_attribute (PRArenaPool *poolp, SECOidTag oidtag,
+sec_pkcs7_create_attribute (PLArenaPool *poolp, SECOidTag oidtag,
 			    SECItem *value, PRBool encoded)
 {
     SEC_PKCS7Attribute *attr;
@@ -617,7 +589,7 @@ SEC_PKCS7AddSigningTime (SEC_PKCS7ContentInfo *cinfo)
     if (signerinfos == NULL || signerinfos[0] == NULL)
 	return SECFailure;
 
-    rv = DER_TimeToUTCTime (&stime, PR_Now());
+    rv = DER_EncodeTimeChoice(NULL, &stime, PR_Now());
     if (rv != SECSuccess)
 	return rv;
 
@@ -983,7 +955,7 @@ SEC_PKCS7AddCertificate (SEC_PKCS7ContentInfo *cinfo, CERTCertificate *cert)
 
 static SECStatus
 sec_pkcs7_init_encrypted_content_info (SEC_PKCS7EncryptedContentInfo *enccinfo,
-				       PRArenaPool *poolp,
+				       PLArenaPool *poolp,
 				       SECOidTag kind, PRBool detached,
 				       SECOidTag encalg, int keysize)
 {
@@ -1278,27 +1250,26 @@ SEC_PKCS7CreateEncryptedData (SECOidTag algorithm, int keysize,
     enc_data = cinfo->content.encryptedData;
     algid = &(enc_data->encContentInfo.contentEncAlg);
 
-    switch (algorithm) {
-      case SEC_OID_RC2_CBC:
-      case SEC_OID_DES_EDE3_CBC:
-      case SEC_OID_DES_CBC:
+    if (!SEC_PKCS5IsAlgorithmPBEAlgTag(algorithm)) {
 	rv = SECOID_SetAlgorithmID (cinfo->poolp, algid, algorithm, NULL);
-	break;
-      default:
-	{
-	    /*
-	     * Assume password-based-encryption.  At least, try that.
-	     */
-	    SECAlgorithmID *pbe_algid;
-	    pbe_algid = PK11_CreatePBEAlgorithmID (algorithm, 1, NULL);
-	    if (pbe_algid == NULL) {
-		rv = SECFailure;
-	    } else {
-		rv = SECOID_CopyAlgorithmID (cinfo->poolp, algid, pbe_algid);
-		SECOID_DestroyAlgorithmID (pbe_algid, PR_TRUE);
-	    }
+    } else {
+        /* Assume password-based-encryption.  
+         * Note: we can't generate pkcs5v2 from this interface.
+         * PK11_CreateBPEAlgorithmID generates pkcs5v2 by accepting
+         * non-PBE oids and assuming that they are pkcs5v2 oids, but
+         * NSS_CMSEncryptedData_Create accepts non-PBE oids as regular
+         * CMS encrypted data, so we can't tell SEC_PKCS7CreateEncryptedtedData
+         * to create pkcs5v2 PBEs */
+	SECAlgorithmID *pbe_algid;
+	pbe_algid = PK11_CreatePBEAlgorithmID(algorithm,
+                                              NSS_PBE_DEFAULT_ITERATION_COUNT,
+                                              NULL);
+	if (pbe_algid == NULL) {
+	    rv = SECFailure;
+	} else {
+	    rv = SECOID_CopyAlgorithmID (cinfo->poolp, algid, pbe_algid);
+	    SECOID_DestroyAlgorithmID (pbe_algid, PR_TRUE);
 	}
-	break;
     }
 
     if (rv != SECSuccess) {

@@ -1,38 +1,11 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "secder.h"
 #include "secerr.h"
+
+#if 0
 /*
  * Generic templates for individual/simple items.
  */
@@ -92,11 +65,12 @@ DERTemplate SECUTCTimeTemplate[] = {
 	  0, NULL, sizeof(SECItem) }
 };
 
+#endif
 
 static int
-header_length(DERTemplate *dtemplate, uint32 contents_len)
+header_length(DERTemplate *dtemplate, PRUint32 contents_len)
 {
-    uint32 len;
+    PRUint32 len;
     unsigned long encode_kind, under_kind;
     PRBool explicit, optional, universal;
 
@@ -121,6 +95,7 @@ header_length(DERTemplate *dtemplate, uint32 contents_len)
 	    under_kind = dtemplate->arg;
 	}
     } else if (encode_kind & DER_INLINE) {
+	PORT_Assert (dtemplate->sub != NULL);
 	under_kind = dtemplate->sub->kind;
 	if (universal) {
 	    encode_kind = under_kind;
@@ -175,10 +150,10 @@ header_length(DERTemplate *dtemplate, uint32 contents_len)
 }
 
 
-static uint32
+static PRUint32
 contents_length(DERTemplate *dtemplate, void *src)
 {
-    uint32 len;
+    PRUint32 len;
     unsigned long encode_kind, under_kind;
     PRBool universal;
 
@@ -225,10 +200,9 @@ contents_length(DERTemplate *dtemplate, void *src)
 	return 0;
 
     if (under_kind & DER_INDEFINITE) {
-	uint32 sub_len;
-	void **indp;
+	PRUint32 sub_len;
+	void   **indp = *(void ***)src;
 
-	indp = *(void ***)src;
 	if (indp == NULL)
 	    return 0;
 
@@ -236,13 +210,11 @@ contents_length(DERTemplate *dtemplate, void *src)
 	under_kind &= ~DER_INDEFINITE;
 
 	if (under_kind == DER_SET || under_kind == DER_SEQUENCE) {
-	    DERTemplate *tmpt;
-	    void *sub_src;
-
-	    tmpt = dtemplate->sub;
+	    DERTemplate *tmpt = dtemplate->sub;
+	    PORT_Assert (tmpt != NULL);
 
 	    for (; *indp != NULL; indp++) {
-		sub_src = (void *)((char *)(*indp) + tmpt->offset);
+		void *sub_src = (void *)((char *)(*indp) + tmpt->offset);
 		sub_len = contents_length (tmpt, sub_src);
 		len += sub_len + header_length (tmpt, sub_len);
 	    }
@@ -252,8 +224,7 @@ contents_length(DERTemplate *dtemplate, void *src)
 	     * DER_INDEFINITE | DER_OCTET_STRING) is right.
 	     */
 	    for (; *indp != NULL; indp++) {
-		SECItem *item;
-		item = (SECItem *)(*indp);
+		SECItem *item = (SECItem *)(*indp);
 		sub_len = item->len;
 		if (under_kind == DER_BIT_STRING) {
 		    sub_len = (sub_len + 7) >> 3;
@@ -275,7 +246,7 @@ contents_length(DERTemplate *dtemplate, void *src)
 	{
 	    DERTemplate *tmpt;
 	    void *sub_src;
-	    uint32 sub_len;
+	    PRUint32 sub_len;
 
 	    len = 0;
 	    for (tmpt = dtemplate + 1; tmpt->kind; tmpt++) {
@@ -306,7 +277,7 @@ static unsigned char *
 der_encode(unsigned char *buf, DERTemplate *dtemplate, void *src)
 {
     int header_len;
-    uint32 contents_len;
+    PRUint32 contents_len;
     unsigned long encode_kind, under_kind;
     PRBool explicit, optional, universal;
 
@@ -388,12 +359,10 @@ der_encode(unsigned char *buf, DERTemplate *dtemplate, void *src)
 
 	under_kind &= ~DER_INDEFINITE;
 	if (under_kind == DER_SET || under_kind == DER_SEQUENCE) {
-	    DERTemplate *tmpt;
-	    void *sub_src;
-
-	    tmpt = dtemplate->sub;
+	    DERTemplate *tmpt = dtemplate->sub;
+	    PORT_Assert (tmpt != NULL);
 	    for (; *indp != NULL; indp++) {
-		sub_src = (void *)((char *)(*indp) + tmpt->offset);
+		void *sub_src = (void *)((char *)(*indp) + tmpt->offset);
 		buf = der_encode (buf, tmpt, sub_src);
 	    }
 	} else {
@@ -474,7 +443,7 @@ der_encode(unsigned char *buf, DERTemplate *dtemplate, void *src)
 
 
 SECStatus
-DER_Encode(PRArenaPool *arena, SECItem *dest, DERTemplate *dtemplate, void *src)
+DER_Encode(PLArenaPool *arena, SECItem *dest, DERTemplate *dtemplate, void *src)
 {
     unsigned int contents_len, header_len;
 

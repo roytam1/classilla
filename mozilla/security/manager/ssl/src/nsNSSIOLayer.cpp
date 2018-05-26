@@ -1311,7 +1311,7 @@ nsContinueDespiteCertError(nsNSSSocketInfo  *infoObject,
   NS_ASSERTION(peerCert, "Got nsnull cert back from nsNSSCertificate");
   switch (error) {
   case SEC_ERROR_INADEQUATE_KEY_USAGE: // Classilla issue 156
-  case SEC_ERROR_OID_UNKNOWN: // Classilla issue 218
+//  case SEC_ERROR_OID_UNKNOWN: // Classilla issue 218
   case SEC_ERROR_UNKNOWN_ISSUER:
   case SEC_ERROR_CA_CERT_INVALID:
   case SEC_ERROR_UNTRUSTED_ISSUER:
@@ -1443,7 +1443,7 @@ SECStatus nsConvertCANamesToStrings(PRArenaPool* arena, char** caNameStrings,
     SECItem* dername;
     SECStatus rv;
     int headerlen;
-    uint32 contentlen;
+    unsigned int contentlen;
     SECItem newitem;
     int n;
     char* namestring;

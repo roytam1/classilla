@@ -1,36 +1,39 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 /*
 ** File:                prlong.h
@@ -51,6 +54,7 @@ PR_BEGIN_EXTERN_C
 ** DEFINES:     LL_MaxInt
 **              LL_MinInt
 **              LL_Zero
+**              LL_MaxUint
 ** DESCRIPTION:
 **      Various interesting constants and static variable
 **      initializer
@@ -62,23 +66,35 @@ PRInt64 __pascal __loadds __export
     LL_MinInt(void);
 PRInt64 __pascal __loadds __export
     LL_Zero(void);
+PRUint64 __pascal __loadds __export
+    LL_MaxUint(void);
 #else
 NSPR_API(PRInt64) LL_MaxInt(void);
 NSPR_API(PRInt64) LL_MinInt(void);
 NSPR_API(PRInt64) LL_Zero(void);
+NSPR_API(PRUint64) LL_MaxUint(void);
 #endif
-
-#define LL_MAXINT   LL_MaxInt()
-#define LL_MININT   LL_MinInt()
-#define LL_ZERO     LL_Zero()
 
 #if defined(HAVE_LONG_LONG)
 
-#if PR_BYTES_PER_LONG == 8
+/* Keep this in sync with prtypes.h. */
+#if PR_BYTES_PER_LONG == 8 && !defined(__APPLE__)
+#define LL_MAXINT   9223372036854775807L
+#define LL_MININT   (-LL_MAXINT - 1L)
+#define LL_ZERO     0L
+#define LL_MAXUINT  18446744073709551615UL
 #define LL_INIT(hi, lo)  ((hi ## L << 32) + lo ## L)
 #elif (defined(WIN32) || defined(WIN16)) && !defined(__GNUC__)
+#define LL_MAXINT   9223372036854775807i64
+#define LL_MININT   (-LL_MAXINT - 1i64)
+#define LL_ZERO     0i64
+#define LL_MAXUINT  18446744073709551615ui64
 #define LL_INIT(hi, lo)  ((hi ## i64 << 32) + lo ## i64)
 #else
+#define LL_MAXINT   9223372036854775807LL
+#define LL_MININT   (-LL_MAXINT - 1LL)
+#define LL_ZERO     0LL
+#define LL_MAXUINT  18446744073709551615ULL
 #define LL_INIT(hi, lo)  ((hi ## LL << 32) + lo ## LL)
 #endif
 
@@ -193,10 +209,15 @@ NSPR_API(PRInt64) LL_Zero(void);
 
 #else  /* !HAVE_LONG_LONG */
 
+#define LL_MAXINT   LL_MaxInt()
+#define LL_MININT   LL_MinInt()
+#define LL_ZERO     LL_Zero()
+#define LL_MAXUINT  LL_MaxUint()
+
 #ifdef IS_LITTLE_ENDIAN
-#define LL_INIT(hi, lo) {PR_INT32(lo), PR_INT32(hi)}
+#define LL_INIT(hi, lo) {PR_UINT32(lo), PR_UINT32(hi)}
 #else
-#define LL_INIT(hi, lo) {PR_INT32(hi), PR_INT32(lo)}
+#define LL_INIT(hi, lo) {PR_UINT32(hi), PR_UINT32(lo)}
 #endif
 
 #define LL_IS_ZERO(a)        (((a).hi == 0) && ((a).lo == 0))

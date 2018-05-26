@@ -1,36 +1,39 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 #ifndef prnetdb_h___
 #define prnetdb_h___
@@ -134,10 +137,11 @@ NSPR_API(PRStatus) PR_GetHostByName(
 ***********************************************************************/
 
 
-#define PR_AI_ALL        0x08
-#define PR_AI_V4MAPPED   0x10
-#define PR_AI_ADDRCONFIG 0x20
-#define PR_AI_DEFAULT    (PR_AI_V4MAPPED | PR_AI_ADDRCONFIG)
+#define PR_AI_ALL         0x08
+#define PR_AI_V4MAPPED    0x10
+#define PR_AI_ADDRCONFIG  0x20
+#define PR_AI_NOCANONNAME 0x8000
+#define PR_AI_DEFAULT     (PR_AI_V4MAPPED | PR_AI_ADDRCONFIG)
 
 NSPR_API(PRStatus) PR_GetIPNodeByName(
     const char *hostname,
@@ -384,6 +388,91 @@ NSPR_API(PRStatus) PR_GetProtoByName(
 ***********************************************************************/
 NSPR_API(PRStatus) PR_GetProtoByNumber(
     PRInt32 protocolnumber, char* buffer, PRInt32 bufsize, PRProtoEnt* result);
+
+/***********************************************************************
+** FUNCTION:
+** DESCRIPTION: PR_GetAddrInfoByName()
+**  Look up a host by name. Equivalent to getaddrinfo(host, NULL, ...) of
+**  RFC 3493.
+**
+** INPUTS:
+**  char *hostname      Character string defining the host name of interest
+**  PRUint16 af         May be PR_AF_UNSPEC or PR_AF_INET.
+**  PRIntn flags        May be either PR_AI_ADDRCONFIG or
+**                      PR_AI_ADDRCONFIG | PR_AI_NOCANONNAME. Include
+**                      PR_AI_NOCANONNAME to suppress the determination of
+**                      the canonical name corresponding to hostname.
+** RETURN:
+**  PRAddrInfo*         Handle to a data structure containing the results
+**                      of the host lookup. Use PR_EnumerateAddrInfo to
+**                      inspect the PRNetAddr values stored in this object.
+**                      When no longer needed, this handle must be destroyed
+**                      with a call to PR_FreeAddrInfo.  If a lookup error
+**                      occurs, then NULL will be returned.
+***********************************************************************/
+typedef struct PRAddrInfo PRAddrInfo;
+
+NSPR_API(PRAddrInfo*) PR_GetAddrInfoByName(
+    const char *hostname, PRUint16 af, PRIntn flags);
+
+/***********************************************************************
+** FUNCTION:
+** DESCRIPTION: PR_FreeAddrInfo()
+**  Destroy the PRAddrInfo handle allocated by PR_GetAddrInfoByName().
+**
+** INPUTS:
+**  PRAddrInfo *addrInfo
+**                      The handle resulting from a successful call to
+**                      PR_GetAddrInfoByName().
+** RETURN:
+**  void
+***********************************************************************/
+NSPR_API(void) PR_FreeAddrInfo(PRAddrInfo *addrInfo);
+
+/***********************************************************************
+** FUNCTION:
+** DESCRIPTION: PR_EnumerateAddrInfo()
+**  A stateless enumerator over a PRAddrInfo handle acquired from
+**  PR_GetAddrInfoByName() to inspect the possible network addresses.
+**
+** INPUTS:
+**  void *enumPtr       Index pointer of the enumeration. The enumeration
+**                      starts and ends with a value of NULL.
+**  const PRAddrInfo *addrInfo
+**                      The PRAddrInfo handle returned by a successful
+**                      call to PR_GetAddrInfoByName().
+**  PRUint16 port       The port number to be assigned as part of the
+**                      PRNetAddr.
+** OUTPUTS:
+**  PRNetAddr *result   A pointer to an address structure that will be
+**                      filled in by the call to the enumeration if the
+**                      result of the call is not NULL.
+** RETURN:
+**  void*               The value that should be used for the next call
+**                      of the enumerator ('enumPtr'). The enumeration
+**                      is ended if this value is NULL.
+***********************************************************************/
+NSPR_API(void *) PR_EnumerateAddrInfo(
+    void *enumPtr, const PRAddrInfo *addrInfo, PRUint16 port, PRNetAddr *result);
+
+/***********************************************************************
+** FUNCTION:
+** DESCRIPTION: PR_GetCanonNameFromAddrInfo()
+**  Extracts the canonical name of the hostname passed to
+**  PR_GetAddrInfoByName().
+**
+** INPUTS:
+**  const PRAddrInfo *addrInfo 
+**                      The PRAddrInfo handle returned by a successful
+**                      call to PR_GetAddrInfoByName().
+** RETURN:
+**  const char *        A const pointer to the canonical hostname stored
+**                      in the given PRAddrInfo handle. This pointer is
+**                      invalidated once the PRAddrInfo handle is destroyed
+**                      by a call to PR_FreeAddrInfo().
+***********************************************************************/
+NSPR_API(const char *) PR_GetCanonNameFromAddrInfo(
+    const PRAddrInfo *addrInfo);
 
 /***********************************************************************
 ** FUNCTIONS: PR_ntohs, PR_ntohl, PR_ntohll, PR_htons, PR_htonl, PR_htonll

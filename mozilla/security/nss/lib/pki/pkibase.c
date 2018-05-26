@@ -1,39 +1,6 @@
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
-
-#ifdef DEBUG
-static const char CVS_ID[] = "@(#) $RCSfile: pkibase.c,v $ $Revision: 1.17.2.1 $ $Date: 2003/01/09 06:06:17 $ $Name:  $";
-#endif /* DEBUG */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef DEV_H
 #include "dev.h"
@@ -43,18 +10,83 @@ static const char CVS_ID[] = "@(#) $RCSfile: pkibase.c,v $ $Revision: 1.17.2.1 $
 #include "pkim.h"
 #endif /* PKIM_H */
 
-#ifdef NSS_3_4_CODE
 #include "pki3hack.h"
-#endif
 
 extern const NSSError NSS_ERROR_NOT_FOUND;
+
+NSS_IMPLEMENT void
+nssPKIObject_Lock(nssPKIObject * object)
+{
+    switch (object->lockType) {
+    case nssPKIMonitor:
+        PZ_EnterMonitor(object->sync.mlock);
+        break;
+    case nssPKILock:
+        PZ_Lock(object->sync.lock);
+        break;
+    default:
+        PORT_Assert(0);
+    }
+}
+
+NSS_IMPLEMENT void
+nssPKIObject_Unlock(nssPKIObject * object)
+{
+    switch (object->lockType) {
+    case nssPKIMonitor:
+        PZ_ExitMonitor(object->sync.mlock);
+        break;
+    case nssPKILock:
+        PZ_Unlock(object->sync.lock);
+        break;
+    default:
+        PORT_Assert(0);
+    }
+}
+
+NSS_IMPLEMENT PRStatus
+nssPKIObject_NewLock(nssPKIObject * object, nssPKILockType lockType)
+{
+    object->lockType = lockType;
+    switch (lockType) {
+    case nssPKIMonitor:
+        object->sync.mlock = PZ_NewMonitor(nssILockSSL);
+        return (object->sync.mlock ? PR_SUCCESS : PR_FAILURE);
+    case nssPKILock:
+        object->sync.lock = PZ_NewLock(nssILockSSL);
+        return (object->sync.lock ? PR_SUCCESS : PR_FAILURE);
+    default:
+        PORT_Assert(0);
+        return PR_FAILURE;
+    }
+}
+
+NSS_IMPLEMENT void
+nssPKIObject_DestroyLock(nssPKIObject * object)
+{
+    switch (object->lockType) {
+    case nssPKIMonitor:
+        PZ_DestroyMonitor(object->sync.mlock);
+        object->sync.mlock = NULL;
+        break;
+    case nssPKILock:
+        PZ_DestroyLock(object->sync.lock);
+        object->sync.lock = NULL;
+        break;
+    default:
+        PORT_Assert(0);
+    }
+}
+
+
 
 NSS_IMPLEMENT nssPKIObject *
 nssPKIObject_Create (
   NSSArena *arenaOpt,
   nssCryptokiObject *instanceOpt,
   NSSTrustDomain *td,
-  NSSCryptoContext *cc
+  NSSCryptoContext *cc,
+  nssPKILockType lockType
 )
 {
     NSSArena *arena;
@@ -76,8 +108,7 @@ nssPKIObject_Create (
     object->arena = arena;
     object->trustDomain = td; /* XXX */
     object->cryptoContext = cc;
-    object->lock = PZ_NewLock(nssILockOther);
-    if (!object->lock) {
+    if (PR_SUCCESS != nssPKIObject_NewLock(object, lockType)) {
 	goto loser;
     }
     if (instanceOpt) {
@@ -85,7 +116,7 @@ nssPKIObject_Create (
 	    goto loser;
 	}
     }
-    PR_AtomicIncrement(&object->refCount);
+    PR_ATOMIC_INCREMENT(&object->refCount);
     if (mark) {
 	nssArena_Unmark(arena, mark);
     }
@@ -106,12 +137,11 @@ nssPKIObject_Destroy (
 {
     PRUint32 i;
     PR_ASSERT(object->refCount > 0);
-    PR_AtomicDecrement(&object->refCount);
-    if (object->refCount == 0) {
+    if (PR_ATOMIC_DECREMENT(&object->refCount) == 0) {
 	for (i=0; i<object->numInstances; i++) {
 	    nssCryptokiObject_Destroy(object->instances[i]);
 	}
-	PZ_DestroyLock(object->lock);
+	nssPKIObject_DestroyLock(object);
 	nssArena_Destroy(object->arena);
 	return PR_TRUE;
     }
@@ -123,7 +153,7 @@ nssPKIObject_AddRef (
   nssPKIObject *object
 )
 {
-    PR_AtomicIncrement(&object->refCount);
+    PR_ATOMIC_INCREMENT(&object->refCount);
     return object;
 }
 
@@ -133,48 +163,45 @@ nssPKIObject_AddInstance (
   nssCryptokiObject *instance
 )
 {
-    PZ_Lock(object->lock);
+    nssCryptokiObject **newInstances = NULL;
+
+    nssPKIObject_Lock(object);
     if (object->numInstances == 0) {
-	object->instances = nss_ZNEWARRAY(object->arena,
-	                                  nssCryptokiObject *,
-	                                  object->numInstances + 1);
+	newInstances = nss_ZNEWARRAY(object->arena,
+				     nssCryptokiObject *,
+				     object->numInstances + 1);
     } else {
+	PRBool found = PR_FALSE;
 	PRUint32 i;
 	for (i=0; i<object->numInstances; i++) {
 	    if (nssCryptokiObject_Equal(object->instances[i], instance)) {
-		PZ_Unlock(object->lock);
-		if (instance->label) {
-		    if (!object->instances[i]->label ||
-		        !nssUTF8_Equal(instance->label,
-		                       object->instances[i]->label, NULL))
-		    {
-			/* Either the old instance did not have a label,
-			 * or the label has changed.
-			 */
-			nss_ZFreeIf(object->instances[i]->label);
-			object->instances[i]->label = instance->label;
-			instance->label = NULL;
-		    }
-		} else if (object->instances[i]->label) {
-		    /* The old label was removed */
-		    nss_ZFreeIf(object->instances[i]->label);
-		    object->instances[i]->label = NULL;
-		}
-		nssCryptokiObject_Destroy(instance);
-		return PR_SUCCESS;
+		found = PR_TRUE;
+		break;
 	    }
 	}
-	object->instances = nss_ZREALLOCARRAY(object->instances,
-	                                      nssCryptokiObject *,
-	                                      object->numInstances + 1);
+	if (found) {
+	    /* The new instance is identical to one in the array, except
+	     * perhaps that the label may be different.  So replace 
+	     * the label in the array instance with the label from the 
+	     * new instance, and discard the new instance.
+	     */
+	    nss_ZFreeIf(object->instances[i]->label);
+	    object->instances[i]->label = instance->label;
+	    nssPKIObject_Unlock(object);
+	    instance->label = NULL;
+	    nssCryptokiObject_Destroy(instance);
+	    return PR_SUCCESS;
+	}
+	newInstances = nss_ZREALLOCARRAY(object->instances,
+					 nssCryptokiObject *,
+					 object->numInstances + 1);
     }
-    if (!object->instances) {
-	PZ_Unlock(object->lock);
-	return PR_FAILURE;
+    if (newInstances) {
+	object->instances = newInstances;
+	newInstances[object->numInstances++] = instance;
     }
-    object->instances[object->numInstances++] = instance;
-    PZ_Unlock(object->lock);
-    return PR_SUCCESS;
+    nssPKIObject_Unlock(object);
+    return (newInstances ? PR_SUCCESS : PR_FAILURE);
 }
 
 NSS_IMPLEMENT PRBool
@@ -185,14 +212,14 @@ nssPKIObject_HasInstance (
 {
     PRUint32 i;
     PRBool hasIt = PR_FALSE;;
-    PZ_Lock(object->lock);
+    nssPKIObject_Lock(object);
     for (i=0; i<object->numInstances; i++) {
 	if (nssCryptokiObject_Equal(object->instances[i], instance)) {
 	    hasIt = PR_TRUE;
 	    break;
 	}
     }
-    PZ_Unlock(object->lock);
+    nssPKIObject_Unlock(object);
     return hasIt;
 }
 
@@ -204,9 +231,9 @@ nssPKIObject_RemoveInstanceForToken (
 {
     PRUint32 i;
     nssCryptokiObject *instanceToRemove = NULL;
-    PZ_Lock(object->lock);
+    nssPKIObject_Lock(object);
     if (object->numInstances == 0) {
-	PZ_Unlock(object->lock);
+	nssPKIObject_Unlock(object);
 	return PR_SUCCESS;
     }
     for (i=0; i<object->numInstances; i++) {
@@ -218,18 +245,17 @@ nssPKIObject_RemoveInstanceForToken (
 	}
     }
     if (--object->numInstances > 0) {
-	object->instances = nss_ZREALLOCARRAY(object->instances,
+	nssCryptokiObject **instances = nss_ZREALLOCARRAY(object->instances,
 	                                      nssCryptokiObject *,
 	                                      object->numInstances);
-	if (!object->instances) {
-	    PZ_Unlock(object->lock);
-	    return PR_FAILURE;
+	if (instances) {
+	    object->instances = instances;
 	}
     } else {
 	nss_ZFreeIf(object->instances);
     }
     nssCryptokiObject_Destroy(instanceToRemove);
-    PZ_Unlock(object->lock);
+    nssPKIObject_Unlock(object);
     return PR_SUCCESS;
 }
 
@@ -245,33 +271,11 @@ nssPKIObject_DeleteStoredObject (
 {
     PRUint32 i, numNotDestroyed;
     PRStatus status = PR_SUCCESS;
-    NSSTrustDomain *td = object->trustDomain;
-    NSSCallback *pwcb = uhh ?  /* is this optional? */
-                        uhh : 
-                        nssTrustDomain_GetDefaultCallback(td, NULL);
     numNotDestroyed = 0;
-    PZ_Lock(object->lock);
+    nssPKIObject_Lock(object);
     for (i=0; i<object->numInstances; i++) {
 	nssCryptokiObject *instance = object->instances[i];
-#ifndef NSS_3_4_CODE
-	NSSSlot *slot = nssToken_GetSlot(instance->token);
-	/* If both the operation and the slot are friendly, login is
-	 * not required.  If either or both are not friendly, it is
-	 * required.
-	 */
-	if (!(isFriendly && nssSlot_IsFriendly(slot))) {
-	    status = nssSlot_Login(slot, pwcb);
-	    nssSlot_Destroy(slot);
-	    if (status == PR_SUCCESS) {
-		/* XXX this should be fixed to understand read-only tokens,
-		 * for now, to handle the builtins, just make the attempt.
-		 */
-		status = nssToken_DeleteStoredObject(instance);
-	    }
-	}
-#else
 	status = nssToken_DeleteStoredObject(instance);
-#endif
 	object->instances[i] = NULL;
 	if (status == PR_SUCCESS) {
 	    nssCryptokiObject_Destroy(instance);
@@ -285,7 +289,7 @@ nssPKIObject_DeleteStoredObject (
     } else {
 	object->numInstances = numNotDestroyed;
     }
-    PZ_Unlock(object->lock);
+    nssPKIObject_Unlock(object);
     return status;
 }
 
@@ -296,7 +300,7 @@ nssPKIObject_GetTokens (
 )
 {
     NSSToken **tokens = NULL;
-    PZ_Lock(object->lock);
+    nssPKIObject_Lock(object);
     if (object->numInstances > 0) {
 	tokens = nss_ZNEWARRAY(NULL, NSSToken *, object->numInstances + 1);
 	if (tokens) {
@@ -306,7 +310,7 @@ nssPKIObject_GetTokens (
 	    }
 	}
     }
-    PZ_Unlock(object->lock);
+    nssPKIObject_Unlock(object);
     if (statusOpt) *statusOpt = PR_SUCCESS; /* until more logic here */
     return tokens;
 }
@@ -319,21 +323,20 @@ nssPKIObject_GetNicknameForToken (
 {
     PRUint32 i;
     NSSUTF8 *nickname = NULL;
-    PZ_Lock(object->lock);
+    nssPKIObject_Lock(object);
     for (i=0; i<object->numInstances; i++) {
 	if ((!tokenOpt && object->instances[i]->label) ||
 	    (object->instances[i]->token == tokenOpt)) 
 	{
-            /* XXX should be copy? safe as long as caller has reference */
-	    nickname = object->instances[i]->label; 
+            /* Must copy, see bug 745548 */
+	    nickname = nssUTF8_Duplicate(object->instances[i]->label, NULL);
 	    break;
 	}
     }
-    PZ_Unlock(object->lock);
+    nssPKIObject_Unlock(object);
     return nickname;
 }
 
-#ifdef NSS_3_4_CODE
 NSS_IMPLEMENT nssCryptokiObject **
 nssPKIObject_GetInstances (
   nssPKIObject *object
@@ -344,7 +347,7 @@ nssPKIObject_GetInstances (
     if (object->numInstances == 0) {
 	return (nssCryptokiObject **)NULL;
     }
-    PZ_Lock(object->lock);
+    nssPKIObject_Lock(object);
     instances = nss_ZNEWARRAY(NULL, nssCryptokiObject *, 
                               object->numInstances + 1);
     if (instances) {
@@ -352,10 +355,9 @@ nssPKIObject_GetInstances (
 	    instances[i] = nssCryptokiObject_Clone(object->instances[i]);
 	}
     }
-    PZ_Unlock(object->lock);
+    nssPKIObject_Unlock(object);
     return instances;
 }
-#endif
 
 NSS_IMPLEMENT void
 nssCertificateArray_Destroy (
@@ -365,7 +367,6 @@ nssCertificateArray_Destroy (
     if (certs) {
 	NSSCertificate **certp;
 	for (certp = certs; *certp; certp++) {
-#ifdef NSS_3_4_CODE
 	    if ((*certp)->decoding) {
 		CERTCertificate *cc = STAN_GetCERTCertificate(*certp);
 		if (cc) {
@@ -373,7 +374,6 @@ nssCertificateArray_Destroy (
 		}
 		continue;
 	    }
-#endif
 	    nssCertificate_Destroy(*certp);
 	}
 	nss_ZFreeIf(certs);
@@ -425,14 +425,17 @@ NSS_IMPLEMENT NSSCertificate *
 nssCertificateArray_FindBestCertificate (
   NSSCertificate **certs, 
   NSSTime *timeOpt,
-  NSSUsage *usage,
+  const NSSUsage *usage,
   NSSPolicies *policiesOpt
 )
 {
     NSSCertificate *bestCert = NULL;
+    nssDecodedCert *bestdc = NULL;
     NSSTime *time, sTime;
-    PRBool haveUsageMatch = PR_FALSE;
+    PRBool bestCertMatches = PR_FALSE;
     PRBool thisCertMatches;
+    PRBool bestCertIsValidAtTime = PR_FALSE;
+    PRBool bestCertIsTrusted = PR_FALSE;
 
     if (timeOpt) {
 	time = timeOpt;
@@ -444,7 +447,7 @@ nssCertificateArray_FindBestCertificate (
 	return (NSSCertificate *)NULL;
     }
     for (; *certs; certs++) {
-	nssDecodedCert *dc, *bestdc;
+	nssDecodedCert *dc;
 	NSSCertificate *c = *certs;
 	dc = nssCertificate_GetDecoding(c);
 	if (!dc) continue;
@@ -454,29 +457,31 @@ nssCertificateArray_FindBestCertificate (
 	     * the usage matched 
 	     */
 	    bestCert = nssCertificate_AddRef(c);
-	    haveUsageMatch = thisCertMatches;
+	    bestCertMatches = thisCertMatches;
+	    bestdc = dc;
 	    continue;
 	} else {
-	    if (haveUsageMatch && !thisCertMatches) {
+	    if (bestCertMatches && !thisCertMatches) {
 		/* if already have a cert for this usage, and if this cert 
 		 * doesn't have the correct usage, continue
 		 */
 		continue;
-	    } else if (!haveUsageMatch && thisCertMatches) {
+	    } else if (!bestCertMatches && thisCertMatches) {
 		/* this one does match usage, replace the other */
 		nssCertificate_Destroy(bestCert);
 		bestCert = nssCertificate_AddRef(c);
-		haveUsageMatch = PR_TRUE;
+		bestCertMatches = thisCertMatches;
+		bestdc = dc;
 		continue;
 	    }
 	    /* this cert match as well as any cert we've found so far, 
 	     * defer to time/policies 
 	     * */
 	}
-	bestdc = nssCertificate_GetDecoding(bestCert);
 	/* time */
-	if (bestdc->isValidAtTime(bestdc, time)) {
+	if (bestCertIsValidAtTime || bestdc->isValidAtTime(bestdc, time)) {
 	    /* The current best cert is valid at time */
+	    bestCertIsValidAtTime = PR_TRUE;
 	    if (!dc->isValidAtTime(dc, time)) {
 		/* If the new cert isn't valid at time, it's not better */
 		continue;
@@ -487,14 +492,36 @@ nssCertificateArray_FindBestCertificate (
 		/* If the new cert is valid at time, it's better */
 		nssCertificate_Destroy(bestCert);
 		bestCert = nssCertificate_AddRef(c);
+		bestdc = dc;
+		bestCertIsValidAtTime = PR_TRUE;
+		continue;
 	    }
 	}
-	/* either they are both valid at time, or neither valid; 
-	 * take the newer one
+	/* Either they are both valid at time, or neither valid.
+	 * If only one is trusted for this usage, take it.
 	 */
+	if (bestCertIsTrusted || bestdc->isTrustedForUsage(bestdc, usage)) {
+	    bestCertIsTrusted = PR_TRUE;
+	    if (!dc->isTrustedForUsage(dc, usage)) {
+	        continue;
+	    }
+	} else {
+	    /* The current best cert is not trusted */
+	    if (dc->isTrustedForUsage(dc, usage)) {
+		/* If the new cert is trusted, it's better */
+		nssCertificate_Destroy(bestCert);
+		bestCert = nssCertificate_AddRef(c);
+		bestdc = dc;
+		bestCertIsTrusted = PR_TRUE;
+	        continue;
+	    }
+	}
+	/* Otherwise, take the newer one. */
 	if (!bestdc->isNewerThan(bestdc, dc)) {
 	    nssCertificate_Destroy(bestCert);
 	    bestCert = nssCertificate_AddRef(c);
+	    bestdc = dc;
+	    continue;
 	}
 	/* policies */
 	/* XXX later -- defer to policies */
@@ -592,12 +619,14 @@ struct nssPKIObjectCollectionStr
   PRStatus       (* getUIDFromInstance)(nssCryptokiObject *co, NSSItem *uid, 
                                         NSSArena *arena);
   nssPKIObject * (*       createObject)(nssPKIObject *o);
+  nssPKILockType lockType; /* type of lock to use for new proto-objects */
 };
 
 static nssPKIObjectCollection *
 nssPKIObjectCollection_Create (
   NSSTrustDomain *td,
-  NSSCryptoContext *ccOpt
+  NSSCryptoContext *ccOpt,
+  nssPKILockType lockType
 )
 {
     NSSArena *arena;
@@ -614,6 +643,7 @@ nssPKIObjectCollection_Create (
     rvCollection->arena = arena;
     rvCollection->td = td; /* XXX */
     rvCollection->cc = ccOpt;
+    rvCollection->lockType = lockType;
     return rvCollection;
 loser:
     nssArena_Destroy(arena);
@@ -760,7 +790,7 @@ add_object_instance (
      */
     node = find_object_in_collection(collection, uid);
     if (node) {
-	/* This is a object with multiple instances */
+	/* This is an object with multiple instances */
 	status = nssPKIObject_AddInstance(node->object, instance);
     } else {
 	/* This is a completely new object.  Create a node for it. */
@@ -769,7 +799,8 @@ add_object_instance (
 	    goto loser;
 	}
 	node->object = nssPKIObject_Create(NULL, instance, 
-	                                   collection->td, collection->cc);
+	                                   collection->td, collection->cc,
+                                           collection->lockType);
 	if (!node->object) {
 	    goto loser;
 	}
@@ -804,26 +835,22 @@ nssPKIObjectCollection_AddInstances (
     PRBool foundIt;
     pkiObjectCollectionNode *node;
     if (instances) {
-	for (; *instances; instances++, i++) {
-	    if (numInstances > 0 && i == numInstances) {
-		break;
+	while ((!numInstances || i < numInstances) && *instances) {
+	    if (status == PR_SUCCESS) {
+		node = add_object_instance(collection, *instances, &foundIt);
+		if (node == NULL) {
+		    /* add_object_instance freed the current instance */
+		    /* free the remaining instances */
+		    status = PR_FAILURE;
+		}
+	    } else {
+		nssCryptokiObject_Destroy(*instances);
 	    }
-	    node = add_object_instance(collection, *instances, &foundIt);
-	    if (node == NULL) {
-		goto loser;
-	    }
+	    instances++;
+	    i++;
 	}
     }
     return status;
-loser:
-    /* free the remaining instances */
-    for (; *instances; instances++, i++) {
-	if (numInstances > 0 && i == numInstances) {
-	    break;
-	}
-	nssCryptokiObject_Destroy(*instances);
-    }
-    return PR_FAILURE;
 }
 
 static void
@@ -934,9 +961,7 @@ nssPKIObjectCollection_AddInstanceAsObject (
 	    return PR_FAILURE;
 	}
 	node->haveObject = PR_TRUE;
-    }
-#ifdef NSS_3_4_CODE
-    else if (!foundIt) {
+    } else if (!foundIt) {
 	/* The instance was added to a pre-existing node.  This
 	 * function is *only* being used for certificates, and having
 	 * multiple instances of certs in 3.X requires updating the
@@ -947,7 +972,6 @@ nssPKIObjectCollection_AddInstanceAsObject (
 	 */
 	STAN_ForceCERTCertificateUpdate((NSSCertificate *)node->object);
     }
-#endif
     return PR_SUCCESS;
 }
 
@@ -959,7 +983,6 @@ static void
 cert_destroyObject(nssPKIObject *o)
 {
     NSSCertificate *c = (NSSCertificate *)o;
-#ifdef NSS_3_4_CODE
     if (c->decoding) {
 	CERTCertificate *cc = STAN_GetCERTCertificate(c);
 	if (cc) {
@@ -967,7 +990,6 @@ cert_destroyObject(nssPKIObject *o)
 	    return;
 	} /* else destroy it as NSSCertificate below */
     }
-#endif
     nssCertificate_Destroy(c);
 }
 
@@ -975,7 +997,6 @@ static PRStatus
 cert_getUIDFromObject(nssPKIObject *o, NSSItem *uid)
 {
     NSSCertificate *c = (NSSCertificate *)o;
-#ifdef NSS_3_4_CODE
     /* The builtins are still returning decoded serial numbers.  Until
      * this compatibility issue is resolved, use the full DER of the
      * cert to uniquely identify it.
@@ -987,13 +1008,6 @@ cert_getUIDFromObject(nssPKIObject *o, NSSItem *uid)
     if (derCert != NULL) {
 	uid[0] = *derCert;
     }
-#else
-    NSSDER *issuer, *serial;
-    issuer = nssCertificate_GetIssuer(c);
-    serial = nssCertificate_GetSerialNumber(c);
-    uid[0] = *issuer;
-    uid[1] = *serial;
-#endif /* NSS_3_4_CODE */
     return PR_SUCCESS;
 }
 
@@ -1001,7 +1015,6 @@ static PRStatus
 cert_getUIDFromInstance(nssCryptokiObject *instance, NSSItem *uid, 
                         NSSArena *arena)
 {
-#ifdef NSS_3_4_CODE
     /* The builtins are still returning decoded serial numbers.  Until
      * this compatibility issue is resolved, use the full DER of the
      * cert to uniquely identify it.
@@ -1015,20 +1028,7 @@ cert_getUIDFromInstance(nssCryptokiObject *instance, NSSItem *uid,
                                                 &uid[0], /* encoding */
                                                 NULL,  /* issuer   */
                                                 NULL,  /* serial   */
-                                                NULL,  /* subject  */
-                                                NULL); /* email    */
-#else
-    return nssCryptokiCertificate_GetAttributes(instance,
-                                                NULL,  /* XXX sessionOpt */
-                                                arena, /* arena    */
-                                                NULL,  /* type     */
-                                                NULL,  /* id       */
-                                                NULL,  /* encoding */
-                                                &uid[0], /* issuer */
-                                                &uid[1], /* serial */
-                                                NULL,  /* subject  */
-                                                NULL); /* email    */
-#endif /* NSS_3_4_CODE */
+                                                NULL);  /* subject  */
 }
 
 static nssPKIObject *
@@ -1036,7 +1036,6 @@ cert_createObject(nssPKIObject *o)
 {
     NSSCertificate *cert;
     cert = nssCertificate_Create(o);
-#ifdef NSS_3_4_CODE
 /*    if (STAN_GetCERTCertificate(cert) == NULL) {
 	nssCertificate_Destroy(cert);
 	return (nssPKIObject *)NULL;
@@ -1049,7 +1048,6 @@ cert_createObject(nssPKIObject *o)
 	NSSTrustDomain *td = o->trustDomain;
 	nssTrustDomain_AddCertsToCache(td, &cert, 1);
     }
-#endif
     return (nssPKIObject *)cert;
 }
 
@@ -1061,7 +1059,7 @@ nssCertificateCollection_Create (
 {
     PRStatus status;
     nssPKIObjectCollection *collection;
-    collection = nssPKIObjectCollection_Create(td, NULL);
+    collection = nssPKIObjectCollection_Create(td, NULL, nssPKIMonitor);
     collection->objectType = pkiObjectType_Certificate;
     collection->destroyObject = cert_destroyObject;
     collection->getUIDFromObject = cert_getUIDFromObject;
@@ -1131,6 +1129,10 @@ crl_getUIDFromObject(nssPKIObject *o, NSSItem *uid)
     NSSCRL *crl = (NSSCRL *)o;
     NSSDER *encoding;
     encoding = nssCRL_GetEncoding(crl);
+    if (!encoding) {
+        nss_SetError(NSS_ERROR_INVALID_ARGUMENT);
+        return PR_FALSE;
+    }
     uid[0] = *encoding;
     uid[1].data = NULL; uid[1].size = 0;
     return PR_SUCCESS;
@@ -1164,7 +1166,7 @@ nssCRLCollection_Create (
 {
     PRStatus status;
     nssPKIObjectCollection *collection;
-    collection = nssPKIObjectCollection_Create(td, NULL);
+    collection = nssPKIObjectCollection_Create(td, NULL, nssPKILock);
     collection->objectType = pkiObjectType_CRL;
     collection->destroyObject = crl_destroyObject;
     collection->getUIDFromObject = crl_getUIDFromObject;
@@ -1217,210 +1219,6 @@ nssPKIObjectCollection_GetCRLs (
     return rvOpt;
 }
 
-#ifdef PURE_STAN_BUILD
-/*
- * PrivateKey collections
- */
-
-static void
-privkey_destroyObject(nssPKIObject *o)
-{
-    NSSPrivateKey *pvk = (NSSPrivateKey *)o;
-    nssPrivateKey_Destroy(pvk);
-}
-
-static PRStatus
-privkey_getUIDFromObject(nssPKIObject *o, NSSItem *uid)
-{
-    NSSPrivateKey *pvk = (NSSPrivateKey *)o;
-    NSSItem *id;
-    id = nssPrivateKey_GetID(pvk);
-    uid[0] = *id;
-    return PR_SUCCESS;
-}
-
-static PRStatus
-privkey_getUIDFromInstance(nssCryptokiObject *instance, NSSItem *uid, 
-                           NSSArena *arena)
-{
-    return nssCryptokiPrivateKey_GetAttributes(instance,
-                                               NULL,  /* XXX sessionOpt */
-                                               arena,
-                                               NULL, /* type */
-                                               &uid[0]);
-}
-
-static nssPKIObject *
-privkey_createObject(nssPKIObject *o)
-{
-    NSSPrivateKey *pvk;
-    pvk = nssPrivateKey_Create(o);
-    return (nssPKIObject *)pvk;
-}
-
-NSS_IMPLEMENT nssPKIObjectCollection *
-nssPrivateKeyCollection_Create (
-  NSSTrustDomain *td,
-  NSSPrivateKey **pvkOpt
-)
-{
-    PRStatus status;
-    nssPKIObjectCollection *collection;
-    collection = nssPKIObjectCollection_Create(td, NULL);
-    collection->objectType = pkiObjectType_PrivateKey;
-    collection->destroyObject = privkey_destroyObject;
-    collection->getUIDFromObject = privkey_getUIDFromObject;
-    collection->getUIDFromInstance = privkey_getUIDFromInstance;
-    collection->createObject = privkey_createObject;
-    if (pvkOpt) {
-	for (; *pvkOpt; pvkOpt++) {
-	    nssPKIObject *o = (nssPKIObject *)(*pvkOpt);
-	    status = nssPKIObjectCollection_AddObject(collection, o);
-	}
-    }
-    return collection;
-}
-
-NSS_IMPLEMENT NSSPrivateKey **
-nssPKIObjectCollection_GetPrivateKeys (
-  nssPKIObjectCollection *collection,
-  NSSPrivateKey **rvOpt,
-  PRUint32 maximumOpt,
-  NSSArena *arenaOpt
-)
-{
-    PRStatus status;
-    PRUint32 rvSize;
-    PRBool allocated = PR_FALSE;
-    if (collection->size == 0) {
-	return (NSSPrivateKey **)NULL;
-    }
-    if (maximumOpt == 0) {
-	rvSize = collection->size;
-    } else {
-	rvSize = PR_MIN(collection->size, maximumOpt);
-    }
-    if (!rvOpt) {
-	rvOpt = nss_ZNEWARRAY(arenaOpt, NSSPrivateKey *, rvSize + 1);
-	if (!rvOpt) {
-	    return (NSSPrivateKey **)NULL;
-	}
-	allocated = PR_TRUE;
-    }
-    status = nssPKIObjectCollection_GetObjects(collection, 
-                                               (nssPKIObject **)rvOpt, 
-                                               rvSize);
-    if (status != PR_SUCCESS) {
-	if (allocated) {
-	    nss_ZFreeIf(rvOpt);
-	}
-	return (NSSPrivateKey **)NULL;
-    }
-    return rvOpt;
-}
-
-/*
- * PublicKey collections
- */
-
-static void
-pubkey_destroyObject(nssPKIObject *o)
-{
-    NSSPublicKey *pubk = (NSSPublicKey *)o;
-    nssPublicKey_Destroy(pubk);
-}
-
-static PRStatus
-pubkey_getUIDFromObject(nssPKIObject *o, NSSItem *uid)
-{
-    NSSPublicKey *pubk = (NSSPublicKey *)o;
-    NSSItem *id;
-    id = nssPublicKey_GetID(pubk);
-    uid[0] = *id;
-    return PR_SUCCESS;
-}
-
-static PRStatus
-pubkey_getUIDFromInstance(nssCryptokiObject *instance, NSSItem *uid, 
-                          NSSArena *arena)
-{
-    return nssCryptokiPublicKey_GetAttributes(instance,
-                                              NULL,  /* XXX sessionOpt */
-                                              arena,
-                                              NULL, /* type */
-                                              &uid[0]);
-}
-
-static nssPKIObject *
-pubkey_createObject(nssPKIObject *o)
-{
-    NSSPublicKey *pubk;
-    pubk = nssPublicKey_Create(o);
-    return (nssPKIObject *)pubk;
-}
-
-NSS_IMPLEMENT nssPKIObjectCollection *
-nssPublicKeyCollection_Create (
-  NSSTrustDomain *td,
-  NSSPublicKey **pubkOpt
-)
-{
-    PRStatus status;
-    nssPKIObjectCollection *collection;
-    collection = nssPKIObjectCollection_Create(td, NULL);
-    collection->objectType = pkiObjectType_PublicKey;
-    collection->destroyObject = pubkey_destroyObject;
-    collection->getUIDFromObject = pubkey_getUIDFromObject;
-    collection->getUIDFromInstance = pubkey_getUIDFromInstance;
-    collection->createObject = pubkey_createObject;
-    if (pubkOpt) {
-	for (; *pubkOpt; pubkOpt++) {
-	    nssPKIObject *o = (nssPKIObject *)(*pubkOpt);
-	    status = nssPKIObjectCollection_AddObject(collection, o);
-	}
-    }
-    return collection;
-}
-
-NSS_IMPLEMENT NSSPublicKey **
-nssPKIObjectCollection_GetPublicKeys (
-  nssPKIObjectCollection *collection,
-  NSSPublicKey **rvOpt,
-  PRUint32 maximumOpt,
-  NSSArena *arenaOpt
-)
-{
-    PRStatus status;
-    PRUint32 rvSize;
-    PRBool allocated = PR_FALSE;
-    if (collection->size == 0) {
-	return (NSSPublicKey **)NULL;
-    }
-    if (maximumOpt == 0) {
-	rvSize = collection->size;
-    } else {
-	rvSize = PR_MIN(collection->size, maximumOpt);
-    }
-    if (!rvOpt) {
-	rvOpt = nss_ZNEWARRAY(arenaOpt, NSSPublicKey *, rvSize + 1);
-	if (!rvOpt) {
-	    return (NSSPublicKey **)NULL;
-	}
-	allocated = PR_TRUE;
-    }
-    status = nssPKIObjectCollection_GetObjects(collection, 
-                                               (nssPKIObject **)rvOpt, 
-                                               rvSize);
-    if (status != PR_SUCCESS) {
-	if (allocated) {
-	    nss_ZFreeIf(rvOpt);
-	}
-	return (NSSPublicKey **)NULL;
-    }
-    return rvOpt;
-}
-#endif /* PURE_STAN_BUILD */
-
 /* how bad would it be to have a static now sitting around, updated whenever
  * this was called?  would avoid repeated allocs...
  */
@@ -1440,7 +1238,9 @@ NSSTime_SetPRTime (
 {
     NSSTime *rvTime;
     rvTime = (timeOpt) ? timeOpt : nss_ZNEW(NULL, NSSTime);
-    rvTime->prTime = prTime;
+    if (rvTime) {
+        rvTime->prTime = prTime;
+    }
     return rvTime;
 }
 

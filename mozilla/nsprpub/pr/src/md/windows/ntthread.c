@@ -1,41 +1,42 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 #include "primpl.h"
 #include <process.h>  /* for _beginthreadex() */
-
-extern void _PR_Win32InitTimeZone(void);  /* defined in ntmisc.c */
 
 /* --- globals ------------------------------------------------ */
 PRLock                       *_pr_schedLock = NULL;
@@ -113,7 +114,6 @@ _PR_MD_EARLY_INIT()
     _MD_NEW_LOCK( &_nt_idleLock );
     _nt_idleCount = 0;
     PR_INIT_CLIST(&_nt_idleList);
-    _PR_Win32InitTimeZone();
 
 #if 0
     /* Make the clock tick at least once per millisecond */
@@ -191,6 +191,14 @@ _PR_MD_INIT_THREAD(PRThread *thread)
     return PR_SUCCESS;
 }
 
+static unsigned __stdcall
+pr_root(void *arg)
+{
+    PRThread *thread = (PRThread *)arg;
+    thread->md.start(thread);
+    return 0;
+}
+
 PRStatus 
 _PR_MD_CREATE_THREAD(PRThread *thread, 
                   void (*start)(void *), 
@@ -200,23 +208,14 @@ _PR_MD_CREATE_THREAD(PRThread *thread,
                   PRUint32 stackSize)
 {
 
-#if 0
-    thread->md.handle = CreateThread(
-                    NULL,                             /* security attrib */
-                    thread->stack->stackSize,         /* stack size      */
-                    (LPTHREAD_START_ROUTINE)start,    /* startup routine */
-                    (void *)thread,                   /* thread param    */
-                    CREATE_SUSPENDED,                 /* create flags    */
-                    &(thread->id) );                  /* thread id       */
-#else
+    thread->md.start = start;
     thread->md.handle = (HANDLE) _beginthreadex(
                     NULL,
                     thread->stack->stackSize,
-                    (unsigned (__stdcall *)(void *))start,
+                    pr_root,
                     (void *)thread,
                     CREATE_SUSPENDED,
                     &(thread->id));
-#endif
     if(!thread->md.handle) {
         PRErrorCode prerror;
         thread->md.fiber_last_error = GetLastError();

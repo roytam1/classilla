@@ -1,36 +1,39 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 #include "primpl.h"
 
@@ -218,8 +221,66 @@ int thread_resume(PRThread *thr_id) {
 ** stub functions to occupy the slots that used to be occupied
 ** by PR_ResumeSet, PR_ResumeTest, and PR_SuspendAllSuspended
 ** in the symbol vector so that LIBNSPR4 is backward compatible.
+**
+** The Java plugin was also using PR_CreateThread which we didn't
+** realise and hadn't "nailed down". So we now need to nail it down
+** to its Mozilla 1.1 position and have to insert 51 additional stubs
+** in order to achive this (stubs 4-54).
+**
+** Over time some of these stubs will get reused by new symbols.
+**   - Stub54 is replaced by LL_MaxUint
 */
 
 void PR_VMS_Stub1(void) { }
 void PR_VMS_Stub2(void) { }
 void PR_VMS_Stub3(void) { }
+void PR_VMS_Stub4(void) { }
+void PR_VMS_Stub5(void) { }
+void PR_VMS_Stub6(void) { }
+void PR_VMS_Stub7(void) { }
+void PR_VMS_Stub8(void) { }
+void PR_VMS_Stub9(void) { }
+void PR_VMS_Stub10(void) { }
+void PR_VMS_Stub11(void) { }
+void PR_VMS_Stub12(void) { }
+void PR_VMS_Stub13(void) { }
+void PR_VMS_Stub14(void) { }
+void PR_VMS_Stub15(void) { }
+void PR_VMS_Stub16(void) { }
+void PR_VMS_Stub17(void) { }
+void PR_VMS_Stub18(void) { }
+void PR_VMS_Stub19(void) { }
+void PR_VMS_Stub20(void) { }
+void PR_VMS_Stub21(void) { }
+void PR_VMS_Stub22(void) { }
+void PR_VMS_Stub23(void) { }
+void PR_VMS_Stub24(void) { }
+void PR_VMS_Stub25(void) { }
+void PR_VMS_Stub26(void) { }
+void PR_VMS_Stub27(void) { }
+void PR_VMS_Stub28(void) { }
+void PR_VMS_Stub29(void) { }
+void PR_VMS_Stub30(void) { }
+void PR_VMS_Stub31(void) { }
+void PR_VMS_Stub32(void) { }
+void PR_VMS_Stub33(void) { }
+void PR_VMS_Stub34(void) { }
+void PR_VMS_Stub35(void) { }
+void PR_VMS_Stub36(void) { }
+void PR_VMS_Stub37(void) { }
+void PR_VMS_Stub38(void) { }
+void PR_VMS_Stub39(void) { }
+void PR_VMS_Stub40(void) { }
+void PR_VMS_Stub41(void) { }
+void PR_VMS_Stub42(void) { }
+void PR_VMS_Stub43(void) { }
+void PR_VMS_Stub44(void) { }
+void PR_VMS_Stub45(void) { }
+void PR_VMS_Stub46(void) { }
+void PR_VMS_Stub47(void) { }
+void PR_VMS_Stub48(void) { }
+void PR_VMS_Stub49(void) { }
+void PR_VMS_Stub50(void) { }
+void PR_VMS_Stub51(void) { }
+void PR_VMS_Stub52(void) { }
+void PR_VMS_Stub53(void) { }

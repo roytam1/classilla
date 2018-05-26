@@ -1,40 +1,9 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * CMS envelopedData methods.
- *
- * $Id: cmsenvdata.c,v 1.7 2002/01/25 19:08:18 relyea%netscape.com Exp $
  */
 
 #include "cmslocal.h"
@@ -267,6 +236,7 @@ NSS_CMSEnvelopedData_Encode_BeforeData(NSSCMSEnvelopedData *envd)
     NSSCMSContentInfo *cinfo;
     PK11SymKey *bulkkey;
     SECAlgorithmID *algid;
+    SECStatus rv;
 
     cinfo = &(envd->contentInfo);
 
@@ -278,12 +248,16 @@ NSS_CMSEnvelopedData_Encode_BeforeData(NSSCMSEnvelopedData *envd)
     if (algid == NULL)
 	return SECFailure;
 
+    rv = NSS_CMSContentInfo_Private_Init(cinfo);
+    if (rv != SECSuccess) {
+	return SECFailure;
+    }
     /* this may modify algid (with IVs generated in a token).
      * it is essential that algid is a pointer to the contentEncAlg data, not a
      * pointer to a copy! */
-    cinfo->ciphcx = NSS_CMSCipherContext_StartEncrypt(envd->cmsg->poolp, bulkkey, algid);
+    cinfo->privateInfo->ciphcx = NSS_CMSCipherContext_StartEncrypt(envd->cmsg->poolp, bulkkey, algid);
     PK11_FreeSymKey(bulkkey);
-    if (cinfo->ciphcx == NULL)
+    if (cinfo->privateInfo->ciphcx == NULL)
 	return SECFailure;
 
     return SECSuccess;
@@ -295,9 +269,9 @@ NSS_CMSEnvelopedData_Encode_BeforeData(NSSCMSEnvelopedData *envd)
 SECStatus
 NSS_CMSEnvelopedData_Encode_AfterData(NSSCMSEnvelopedData *envd)
 {
-    if (envd->contentInfo.ciphcx) {
-	NSS_CMSCipherContext_Destroy(envd->contentInfo.ciphcx);
-	envd->contentInfo.ciphcx = NULL;
+    if (envd->contentInfo.privateInfo && envd->contentInfo.privateInfo->ciphcx) {
+	NSS_CMSCipherContext_Destroy(envd->contentInfo.privateInfo->ciphcx);
+	envd->contentInfo.privateInfo->ciphcx = NULL;
     }
 
     /* nothing else to do after data */
@@ -360,7 +334,11 @@ NSS_CMSEnvelopedData_Decode_BeforeData(NSSCMSEnvelopedData *envd)
 
     cinfo = &(envd->contentInfo);
     bulkalgtag = NSS_CMSContentInfo_GetContentEncAlgTag(cinfo);
-    bulkkey = NSS_CMSRecipientInfo_UnwrapBulkKey(ri,recipient->subIndex,
+    if (bulkalgtag == SEC_OID_UNKNOWN) {
+	PORT_SetError(SEC_ERROR_INVALID_ALGORITHM);
+    } else 
+	bulkkey = 
+	    NSS_CMSRecipientInfo_UnwrapBulkKey(ri,recipient->subIndex,
 						    recipient->cert,
 						    recipient->privkey,
 						    bulkalgtag);
@@ -373,20 +351,15 @@ NSS_CMSEnvelopedData_Decode_BeforeData(NSSCMSEnvelopedData *envd)
 
     bulkalg = NSS_CMSContentInfo_GetContentEncAlg(cinfo);
 
-    cinfo->ciphcx = NSS_CMSCipherContext_StartDecrypt(bulkkey, bulkalg);
-    if (cinfo->ciphcx == NULL)
+    rv = NSS_CMSContentInfo_Private_Init(cinfo);
+    if (rv != SECSuccess) {
+	goto loser;
+    }
+    rv = SECFailure;
+    cinfo->privateInfo->ciphcx = NSS_CMSCipherContext_StartDecrypt(bulkkey, bulkalg);
+    if (cinfo->privateInfo->ciphcx == NULL)
 	goto loser;		/* error has been set by NSS_CMSCipherContext_StartDecrypt */
 
-    /* 
-     * HACK ALERT!!
-     * For PKCS5 Encryption Algorithms, the bulkkey is actually a different
-     * structure.  Therefore, we need to set the bulkkey to the actual key 
-     * prior to freeing it.
-     */
-    if (SEC_PKCS5IsAlgorithmPBEAlg(bulkalg)) {
-	SEC_PKCS5KeyAndPassword *keyPwd = (SEC_PKCS5KeyAndPassword *)bulkkey;
-	bulkkey = keyPwd->key;
-    }
 
     rv = SECSuccess;
 
@@ -404,9 +377,9 @@ loser:
 SECStatus
 NSS_CMSEnvelopedData_Decode_AfterData(NSSCMSEnvelopedData *envd)
 {
-    if (envd->contentInfo.ciphcx) {
-	NSS_CMSCipherContext_Destroy(envd->contentInfo.ciphcx);
-	envd->contentInfo.ciphcx = NULL;
+    if (envd && envd->contentInfo.privateInfo && envd->contentInfo.privateInfo->ciphcx) {
+	NSS_CMSCipherContext_Destroy(envd->contentInfo.privateInfo->ciphcx);
+	envd->contentInfo.privateInfo->ciphcx = NULL;
     }
 
     return SECSuccess;

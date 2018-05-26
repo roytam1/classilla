@@ -1,38 +1,8 @@
 /* -*- Mode: C; tab-width: 8 -*-*/
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "nssrenam.h"
 #include "cmmf.h"
 #include "cmmfi.h"
 #include "secitem.h"
@@ -43,12 +13,15 @@ cmmf_DestroyPKIStatusInfo (CMMFPKIStatusInfo *info, PRBool freeit)
 {
     if (info->status.data != NULL) {
         PORT_Free(info->status.data);
+        info->status.data = NULL;
     }
     if (info->statusString.data != NULL) {
         PORT_Free(info->statusString.data);
+        info->statusString.data = NULL;
     }
     if (info->failInfo.data != NULL) {
         PORT_Free(info->failInfo.data);
+        info->failInfo.data = NULL;
     }
     if (freeit) {
         PORT_Free(info);
@@ -76,23 +49,34 @@ CMMF_DestroyCertResponse(CMMFCertResponse *inCertResp)
 SECStatus
 CMMF_DestroyCertRepContent(CMMFCertRepContent *inCertRepContent)
 {
-    CMMFCertifiedKeyPair *certKeyPair;
-    int i;
-
     PORT_Assert(inCertRepContent != NULL);
-    if (inCertRepContent != NULL && inCertRepContent->poolp != NULL) {
-        if (inCertRepContent->response != NULL) {
-            for (i=0; inCertRepContent->response[i] != NULL; i++) {
-                certKeyPair = inCertRepContent->response[i]->certifiedKeyPair;
+    if (inCertRepContent != NULL) {
+        CMMFCertResponse   **pResponse = inCertRepContent->response;
+        if (pResponse != NULL) {
+            for (; *pResponse != NULL; pResponse++) {
+	        CMMFCertifiedKeyPair *certKeyPair = (*pResponse)->certifiedKeyPair;
+		/* XXX Why not call CMMF_DestroyCertifiedKeyPair or
+		** XXX cmmf_DestroyCertOrEncCert ?  
+		*/
                 if (certKeyPair != NULL                    &&
                     certKeyPair->certOrEncCert.choice == cmmfCertificate &&
                     certKeyPair->certOrEncCert.cert.certificate != NULL) {
                     CERT_DestroyCertificate
                                  (certKeyPair->certOrEncCert.cert.certificate);
+		    certKeyPair->certOrEncCert.cert.certificate = NULL;
                 }
             }
         }
-        PORT_FreeArena(inCertRepContent->poolp, PR_TRUE);
+	if (inCertRepContent->caPubs) {
+	    CERTCertificate     **caPubs = inCertRepContent->caPubs;
+	    for (; *caPubs; ++caPubs) {
+		CERT_DestroyCertificate(*caPubs);
+		*caPubs = NULL;
+	    }
+	}
+	if (inCertRepContent->poolp != NULL) {
+	    PORT_FreeArena(inCertRepContent->poolp, PR_TRUE);
+	}
     }
     return SECSuccess;
 }
@@ -111,11 +95,11 @@ SECStatus
 crmf_create_prtime(SECItem *src, PRTime **dest)
 {
    *dest = PORT_ZNew(PRTime);
-    return DER_UTCTimeToTime(*dest, src);
+    return DER_DecodeTimeChoice(*dest, src);
 }
 
 CRMFCertExtension*
-crmf_copy_cert_extension(PRArenaPool *poolp, CRMFCertExtension *inExtension)
+crmf_copy_cert_extension(PLArenaPool *poolp, CRMFCertExtension *inExtension)
 {
     PRBool             isCritical;
     SECOidTag          id;
@@ -213,10 +197,12 @@ cmmf_DestroyCertOrEncCert(CMMFCertOrEncCert *certOrEncCert, PRBool freeit)
     switch (certOrEncCert->choice) {
     case cmmfCertificate:
         CERT_DestroyCertificate(certOrEncCert->cert.certificate);
+	certOrEncCert->cert.certificate = NULL;
 	break;
     case cmmfEncryptedCert:
         crmf_destroy_encrypted_value(certOrEncCert->cert.encryptedCert,
 				     PR_TRUE);
+        certOrEncCert->cert.encryptedCert = NULL;
 	break;
     default:
         break;
@@ -228,7 +214,7 @@ cmmf_DestroyCertOrEncCert(CMMFCertOrEncCert *certOrEncCert, PRBool freeit)
 }
 
 SECStatus
-cmmf_copy_secitem (PRArenaPool *poolp, SECItem *dest, SECItem *src)
+cmmf_copy_secitem (PLArenaPool *poolp, SECItem *dest, SECItem *src)
 {
     SECStatus rv;
 
@@ -248,19 +234,19 @@ CMMF_DestroyCertifiedKeyPair(CMMFCertifiedKeyPair *inCertKeyPair)
     PORT_Assert(inCertKeyPair != NULL);
     if (inCertKeyPair != NULL) {
         cmmf_DestroyCertOrEncCert(&inCertKeyPair->certOrEncCert, PR_FALSE);
+        if (inCertKeyPair->privateKey) {
+            crmf_destroy_encrypted_value(inCertKeyPair->privateKey, PR_TRUE);
+        }
+        if (inCertKeyPair->derPublicationInfo.data) {
+            PORT_Free(inCertKeyPair->derPublicationInfo.data);
+        }
+        PORT_Free(inCertKeyPair);
     }
-    if (inCertKeyPair->privateKey) {
-        crmf_destroy_encrypted_value(inCertKeyPair->privateKey, PR_TRUE);
-    }
-    if (inCertKeyPair->derPublicationInfo.data) {
-        PORT_Free(inCertKeyPair->derPublicationInfo.data);
-    }
-    PORT_Free(inCertKeyPair);
     return SECSuccess;
 }
 
 SECStatus
-cmmf_CopyCertResponse(PRArenaPool      *poolp, 
+cmmf_CopyCertResponse(PLArenaPool      *poolp,
 		      CMMFCertResponse *dest,
 		      CMMFCertResponse *src)
 {
@@ -277,23 +263,28 @@ cmmf_CopyCertResponse(PRArenaPool      *poolp,
         return rv;
     }
     if (src->certifiedKeyPair != NULL) {
-        dest->certifiedKeyPair = (poolp == NULL) ?
-                                  PORT_ZNew(CMMFCertifiedKeyPair) :
-	                          PORT_ArenaZNew(poolp, CMMFCertifiedKeyPair);
-	if (dest->certifiedKeyPair == NULL) {
+	CMMFCertifiedKeyPair *destKeyPair;
+
+	destKeyPair = (poolp == NULL) ? PORT_ZNew(CMMFCertifiedKeyPair) :
+	                        PORT_ArenaZNew(poolp, CMMFCertifiedKeyPair);
+	if (!destKeyPair) {
 	    return SECFailure;
 	}
-        rv = cmmf_CopyCertifiedKeyPair(poolp, dest->certifiedKeyPair,
+	rv = cmmf_CopyCertifiedKeyPair(poolp, destKeyPair,
 				       src->certifiedKeyPair);
 	if (rv != SECSuccess) {
+	    if (!poolp) {
+	        CMMF_DestroyCertifiedKeyPair(destKeyPair);
+	    }
 	    return rv;
 	}
+	dest->certifiedKeyPair = destKeyPair;
     }
     return SECSuccess;
 }
 
 static SECStatus
-cmmf_CopyCertOrEncCert(PRArenaPool *poolp, CMMFCertOrEncCert *dest,
+cmmf_CopyCertOrEncCert(PLArenaPool *poolp, CMMFCertOrEncCert *dest,
 		       CMMFCertOrEncCert *src)
 {
     SECStatus           rv = SECSuccess;
@@ -306,16 +297,19 @@ cmmf_CopyCertOrEncCert(PRArenaPool *poolp, CMMFCertOrEncCert *dest,
         dest->cert.certificate = CERT_DupCertificate(src->cert.certificate);
 	break;
     case cmmfEncryptedCert:
-        dest->cert.encryptedCert = encVal = (poolp == NULL) ?
-	                             PORT_ZNew(CRMFEncryptedValue) :
-				     PORT_ArenaZNew(poolp, CRMFEncryptedValue);
+ 	encVal = (poolp == NULL) ? PORT_ZNew(CRMFEncryptedValue) :
+	                           PORT_ArenaZNew(poolp, CRMFEncryptedValue);
 	if (encVal == NULL) {
 	    return SECFailure;
 	}
         rv = crmf_copy_encryptedvalue(poolp, src->cert.encryptedCert, encVal);
 	if (rv != SECSuccess) {
+	    if (!poolp) {
+	        crmf_destroy_encrypted_value(encVal, PR_TRUE);
+	    }
 	    return rv;
 	}
+	dest->cert.encryptedCert = encVal;        
 	break;
     default:
         rv = SECFailure;
@@ -324,7 +318,7 @@ cmmf_CopyCertOrEncCert(PRArenaPool *poolp, CMMFCertOrEncCert *dest,
 }
 
 SECStatus
-cmmf_CopyCertifiedKeyPair(PRArenaPool *poolp, CMMFCertifiedKeyPair *dest,
+cmmf_CopyCertifiedKeyPair(PLArenaPool *poolp, CMMFCertifiedKeyPair *dest,
 			  CMMFCertifiedKeyPair *src)
 {
     SECStatus rv;
@@ -336,19 +330,22 @@ cmmf_CopyCertifiedKeyPair(PRArenaPool *poolp, CMMFCertifiedKeyPair *dest,
     }
 
     if (src->privateKey != NULL) {
-        CRMFEncryptedValue *encVal;
+	CRMFEncryptedValue *encVal;
 
-	encVal = dest->privateKey = (poolp == NULL) ?
-	                             PORT_ZNew(CRMFEncryptedValue) :
-                                     PORT_ArenaZNew(poolp, CRMFEncryptedValue);
+	encVal = (poolp == NULL) ? PORT_ZNew(CRMFEncryptedValue) :
+	                           PORT_ArenaZNew(poolp, CRMFEncryptedValue);
 	if (encVal == NULL) {
 	    return SECFailure;
 	}
-        rv = crmf_copy_encryptedvalue(poolp, src->privateKey, 
-				      dest->privateKey);
+	rv = crmf_copy_encryptedvalue(poolp, src->privateKey, 
+				      encVal);
 	if (rv != SECSuccess) {
+	    if (!poolp) {
+	        crmf_destroy_encrypted_value(encVal, PR_TRUE);
+	    }
 	    return rv;
 	}
+	dest->privateKey = encVal;
     }
     rv = cmmf_copy_secitem(poolp, &dest->derPublicationInfo, 
 			   &src->derPublicationInfo);
@@ -356,7 +353,7 @@ cmmf_CopyCertifiedKeyPair(PRArenaPool *poolp, CMMFCertifiedKeyPair *dest,
 }
 
 SECStatus
-cmmf_CopyPKIStatusInfo(PRArenaPool *poolp, CMMFPKIStatusInfo *dest,
+cmmf_CopyPKIStatusInfo(PLArenaPool *poolp, CMMFPKIStatusInfo *dest,
 		       CMMFPKIStatusInfo *src)
 {
     SECStatus rv;
@@ -388,7 +385,7 @@ cmmf_CertOrEncCertGetCertificate(CMMFCertOrEncCert *certOrEncCert,
 
 SECStatus 
 cmmf_PKIStatusInfoSetStatus(CMMFPKIStatusInfo    *statusInfo,
-			    PRArenaPool          *poolp,
+			    PLArenaPool          *poolp,
 			    CMMFPKIStatus         inStatus)
 {
     SECItem *dummy;

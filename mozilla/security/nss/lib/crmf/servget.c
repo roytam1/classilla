@@ -1,36 +1,7 @@
 /* -*- Mode: C; tab-width: 8 -*-*/
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
 #include "cmmf.h"
@@ -373,7 +344,7 @@ CRMF_POPOSigningKeyGetSignature(CRMFPOPOSigningKey *inSignKey)
 }
 
 static SECStatus 
-crmf_copy_poposigningkey(PRArenaPool        *poolp, 
+crmf_copy_poposigningkey(PLArenaPool        *poolp,
 			 CRMFPOPOSigningKey *inPopoSignKey,
 			 CRMFPOPOSigningKey *destPopoSignKey)
 {
@@ -406,14 +377,14 @@ crmf_copy_poposigningkey(PRArenaPool        *poolp,
     }
     return SECSuccess;
  loser:
-    if (destPopoSignKey && poolp == NULL) {
+    if (poolp == NULL) {
         CRMF_DestroyPOPOSigningKey(destPopoSignKey);
     }
     return SECFailure;
 }
 
 static SECStatus
-crmf_copy_popoprivkey(PRArenaPool     *poolp,
+crmf_copy_popoprivkey(PLArenaPool     *poolp,
 		      CRMFPOPOPrivKey *srcPrivKey,
 		      CRMFPOPOPrivKey *destPrivKey)
 {
@@ -437,17 +408,14 @@ crmf_copy_popoprivkey(PRArenaPool     *poolp,
         rv = SECFailure;
     }
 
-    if (rv != SECSuccess) {
-        if (destPrivKey && poolp == NULL) {
-	    CRMF_DestroyPOPOPrivKey(destPrivKey);
-	}
-	return SECFailure;
+    if (rv != SECSuccess && poolp == NULL) {
+        CRMF_DestroyPOPOPrivKey(destPrivKey);
     }
-    return SECSuccess;
+    return rv;
 }
 
 static CRMFProofOfPossession*
-crmf_copy_pop(PRArenaPool *poolp, CRMFProofOfPossession *srcPOP)
+crmf_copy_pop(PLArenaPool *poolp, CRMFProofOfPossession *srcPOP)
 {
     CRMFProofOfPossession *newPOP;
     SECStatus              rv;
@@ -500,17 +468,19 @@ static CRMFCertReqMsg*
 crmf_copy_cert_req_msg(CRMFCertReqMsg *srcReqMsg)
 {
     CRMFCertReqMsg *newReqMsg;
-    PRArenaPool    *poolp;
+    PLArenaPool    *poolp;
 
     poolp = PORT_NewArena(CRMF_DEFAULT_ARENA_SIZE);
     if (poolp == NULL) {
         return NULL;
     }
     newReqMsg = PORT_ArenaZNew(poolp, CRMFCertReqMsg);
-    newReqMsg->poolp = poolp;
     if (newReqMsg == NULL) {
-        goto loser;
+        PORT_FreeArena(poolp, PR_TRUE);
+        return NULL;
     }
+
+    newReqMsg->poolp = poolp;
     newReqMsg->certReq = crmf_copy_cert_request(poolp, srcReqMsg->certReq);
     if (newReqMsg->certReq == NULL) {
         goto loser;
@@ -566,7 +536,7 @@ CRMF_CertReqMessagesGetNumMessages(CRMFCertReqMessages *inCertReqMsgs)
 CRMFCertRequest*
 CRMF_CertReqMsgGetCertRequest(CRMFCertReqMsg *inCertReqMsg)
 {
-    PRArenaPool     *poolp      = NULL;
+    PLArenaPool     *poolp      = NULL;
     CRMFCertRequest *newCertReq = NULL;
 
     PORT_Assert(inCertReqMsg != NULL);
@@ -658,7 +628,7 @@ CRMF_CertReqMsgGetPOPOSigningKey(CRMFCertReqMsg      *inCertReqMsg,
 static SECStatus
 crmf_copy_name(CERTName *destName, CERTName *srcName)
 {
-  PRArenaPool *poolp = NULL;
+  PLArenaPool *poolp = NULL;
   SECStatus rv;
 
   if (destName->arena != NULL) {

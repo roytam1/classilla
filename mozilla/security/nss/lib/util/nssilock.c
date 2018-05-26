@@ -1,35 +1,6 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * nssilock.c - NSS lock instrumentation wrapper functions
@@ -122,7 +93,7 @@ static void Vtrace(
     struct pzTrace_s *tp;
 
 RetryTrace:
-    idx = PR_AtomicIncrement( &traceIndex );
+    idx = PR_ATOMIC_INCREMENT( &traceIndex );
     while( NUM_TT_ENTRIES <= idx || op == FlushTT ) {
         if( NUM_TT_ENTRIES == idx  || op == FlushTT )  {
             int writeSize = idx * sizeof(struct pzTrace_s);
@@ -218,13 +189,15 @@ extern PZLock * pz_NewLock(
 
     lock = PR_NEWZAP( PZLock );
     if ( NULL != lock )  {
+        lock->ltype = ltype;
         lock->lock = PR_NewLock();
         if ( NULL == lock->lock )  {
             PR_DELETE( lock );
-            lock = NULL;
+            PORT_SetError(SEC_ERROR_NO_MEMORY);
         }
+    } else {
+            PORT_SetError(SEC_ERROR_NO_MEMORY);
     }
-    lock->ltype = ltype;
 
     Vtrace( NewLock, ltype, 0, 0, lock, line, file );
     return(lock);
@@ -292,14 +265,18 @@ extern PZCondVar *
     PZCondVar *cvar;
 
     cvar = PR_NEWZAP( PZCondVar );
-    if ( NULL == cvar ) return(NULL);
-   
-    cvar->ltype = lock->ltype; 
-    cvar->cvar = PR_NewCondVar( lock->lock );
-    if ( NULL == cvar->cvar )  {
-        PR_DELETE( cvar );
+    if ( NULL == cvar ) {
+        PORT_SetError(SEC_ERROR_NO_MEMORY);
+    } else {
+        cvar->ltype = lock->ltype; 
+        cvar->cvar = PR_NewCondVar( lock->lock );
+        if ( NULL == cvar->cvar )  {
+            PR_DELETE( cvar );
+            PORT_SetError(SEC_ERROR_NO_MEMORY);
+        }
+
     }
-    Vtrace( NewCondVar, cvar->ltype, 0, 0, cvar, line, file );
+    Vtrace( NewCondVar, lock->ltype, 0, 0, cvar, line, file );
     return( cvar );
 } /* --- end  pz_NewCondVar() --- */
 
@@ -385,15 +362,17 @@ extern PZMonitor *
 
     mon = PR_NEWZAP( PZMonitor );
     if ( NULL != mon )  {
+        mon->ltype = ltype;
         mon->mon = PR_NewMonitor();
         if ( NULL == mon->mon )  {
             PR_DELETE( mon );
-            return NULL;
+            PORT_SetError(SEC_ERROR_NO_MEMORY);
         }
+    } else {
+        PORT_SetError(SEC_ERROR_NO_MEMORY);
     }
-    mon->ltype = ltype;
 
-    Vtrace( NewMonitor, mon->ltype, 0, 0, mon, line, file );
+    Vtrace( NewMonitor, ltype, 0, 0, mon, line, file );
     return(mon);
 } /* --- end  pz_NewMonitor() --- */
 

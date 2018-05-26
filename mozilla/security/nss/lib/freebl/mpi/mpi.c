@@ -3,44 +3,20 @@
  *
  *  Arbitrary precision integer arithmetic library
  *
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- *
- * The Original Code is the MPI Arbitrary Precision Integer Arithmetic
- * library.
- *
- * The Initial Developer of the Original Code is Michael J. Fromberger.
- * Portions created by Michael J. Fromberger are 
- * Copyright (C) 1998, 1999, 2000 Michael J. Fromberger. 
- * All Rights Reserved.
- *
- * Contributor(s):
- *	Netscape Communications Corporation 
- *
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable
- * instead of those above.  If you wish to allow use of your
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the GPL.
- *
- *  $Id: mpi.c,v 1.39 2002/09/07 02:59:04 jpierre%netscape.com Exp $
- */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "mpi-priv.h"
 #if defined(OSF1)
 #include <c_asm.h>
+#endif
+
+#if defined(__arm__) && \
+    ((defined(__thumb__) && !defined(__thumb2__)) || defined(__ARM_ARCH_3__))
+/* 16-bit thumb or ARM v3 doesn't work inlined assember version */
+#undef MP_ASSEMBLY_MULTIPLY
+#undef MP_ASSEMBLY_SQUARE
 #endif
 
 #if MP_LOGTAB
@@ -202,7 +178,6 @@ mp_err mp_copy(const mp_int *from, mp_int *to)
   if(from == to)
     return MP_OKAY;
 
-  ++mp_copies;
   { /* copy */
     mp_digit   *tmp;
 
@@ -840,6 +815,27 @@ mp_err   mp_mul(const mp_int *a, const mp_int *b, mp_int * c)
   if((res = s_mp_pad(c, USED(a) + USED(b))) != MP_OKAY)
     goto CLEANUP;
 
+#ifdef NSS_USE_COMBA
+  if ((MP_USED(a) == MP_USED(b)) && IS_POWER_OF_2(MP_USED(b))) {
+      if (MP_USED(a) == 4) {
+          s_mp_mul_comba_4(a, b, c);
+          goto CLEANUP;
+      }
+      if (MP_USED(a) == 8) {
+          s_mp_mul_comba_8(a, b, c);
+          goto CLEANUP;
+      }
+      if (MP_USED(a) == 16) {
+          s_mp_mul_comba_16(a, b, c);
+          goto CLEANUP;
+      }
+      if (MP_USED(a) == 32) {
+          s_mp_mul_comba_32(a, b, c);
+          goto CLEANUP;
+      } 
+  }
+#endif
+
   pb = MP_DIGITS(b);
   s_mpv_mul_d(MP_DIGITS(a), MP_USED(a), *pb++, MP_DIGITS(c));
 
@@ -910,6 +906,27 @@ mp_err   mp_sqr(const mp_int *a, mp_int *sqr)
   MP_USED(sqr) = ix;
   MP_DIGIT(sqr, 0) = 0;
 
+#ifdef NSS_USE_COMBA
+  if (IS_POWER_OF_2(MP_USED(a))) {
+      if (MP_USED(a) == 4) {
+          s_mp_sqr_comba_4(a, sqr);
+          goto CLEANUP;
+      }
+      if (MP_USED(a) == 8) {
+          s_mp_sqr_comba_8(a, sqr);
+          goto CLEANUP;
+      }
+      if (MP_USED(a) == 16) {
+          s_mp_sqr_comba_16(a, sqr);
+          goto CLEANUP;
+      }
+      if (MP_USED(a) == 32) {
+          s_mp_sqr_comba_32(a, sqr);
+          goto CLEANUP;
+      } 
+  }
+#endif
+
   pa = MP_DIGITS(a);
   count = MP_USED(a) - 1;
   if (count > 0) {
@@ -957,10 +974,13 @@ mp_err mp_div(const mp_int *a, const mp_int *b, mp_int *q, mp_int *r)
   mp_int   *pQ, *pR;
   mp_int   qtmp, rtmp, btmp;
   int      cmp;
-  mp_sign  signA = MP_SIGN(a);
-  mp_sign  signB = MP_SIGN(b);
+  mp_sign  signA;
+  mp_sign  signB;
 
   ARGCHK(a != NULL && b != NULL, MP_BADARG);
+  
+  signA = MP_SIGN(a);
+  signB = MP_SIGN(b);
 
   if(mp_cmp_z(b) == MP_EQ)
     return MP_RANGE;
@@ -2768,7 +2788,7 @@ mp_err   s_mp_pad(mp_int *mp, mp_size min)
       if ((res = s_mp_grow(mp, min)) != MP_OKAY)
 	return res;
     } else {
-/*    s_mp_setz(DIGITS(mp) + USED(mp), min - USED(mp)); */
+      s_mp_setz(DIGITS(mp) + USED(mp), min - USED(mp));
     }
 
     /* Increase precision; should already be 0-filled */
@@ -2815,6 +2835,7 @@ void s_mp_copy(const mp_digit *sp, mp_digit *dp, mp_size count)
 #else
   memcpy(dp, sp, count * sizeof(mp_digit));
 #endif
+  ++mp_copies;
 
 } /* end s_mp_copy() */
 #endif
@@ -2890,8 +2911,6 @@ void     s_mp_exch(mp_int *a, mp_int *b)
    Shift mp leftward by p digits, growing if needed, and zero-filling
    the in-shifted digits at the right end.  This is a convenient
    alternative to multiplication by powers of the radix
-   The value of USED(mp) must already have been set to the value for
-   the shifted result.
  */   
 
 mp_err   s_mp_lshd(mp_int *mp, mp_size p)
@@ -4161,6 +4180,7 @@ mp_err   s_mp_div(mp_int *rem, 	/* i: dividend, o: remainder */
   if(mp_cmp_z(div) == 0)
     return MP_RANGE;
 
+  DIGITS(&t) = 0;
   /* Shortcut if divisor is power of two */
   if((ix = s_mp_ispow2(div)) >= 0) {
     MP_CHECKOK( mp_copy(rem, quot) );
@@ -4170,7 +4190,6 @@ mp_err   s_mp_div(mp_int *rem, 	/* i: dividend, o: remainder */
     return MP_OKAY;
   }
 
-  DIGITS(&t) = 0;
   MP_SIGN(rem) = ZPOS;
   MP_SIGN(div) = ZPOS;
 
@@ -4698,7 +4717,7 @@ mp_to_unsigned_octets(const mp_int *mp, unsigned char *str, mp_size maxlen)
   ARGCHK(mp != NULL && str != NULL && !SIGN(mp), MP_BADARG);
 
   bytes = mp_unsigned_octet_size(mp);
-  ARGCHK(bytes <= maxlen, MP_BADARG);
+  ARGCHK(bytes >= 0 && bytes <= maxlen, MP_BADARG);
 
   /* Iterate over each digit... */
   for(ix = USED(mp) - 1; ix >= 0; ix--) {
@@ -4713,6 +4732,8 @@ mp_to_unsigned_octets(const mp_int *mp, unsigned char *str, mp_size maxlen)
       str[pos++] = x;
     }
   }
+  if (!pos)
+    str[pos++] = 0;
   return pos;
 } /* end mp_to_unsigned_octets() */
 /* }}} */
@@ -4728,7 +4749,7 @@ mp_to_signed_octets(const mp_int *mp, unsigned char *str, mp_size maxlen)
   ARGCHK(mp != NULL && str != NULL && !SIGN(mp), MP_BADARG);
 
   bytes = mp_unsigned_octet_size(mp);
-  ARGCHK(bytes <= maxlen, MP_BADARG);
+  ARGCHK(bytes >= 0 && bytes <= maxlen, MP_BADARG);
 
   /* Iterate over each digit... */
   for(ix = USED(mp) - 1; ix >= 0; ix--) {
@@ -4751,6 +4772,8 @@ mp_to_signed_octets(const mp_int *mp, unsigned char *str, mp_size maxlen)
       str[pos++] = x;
     }
   }
+  if (!pos)
+    str[pos++] = 0;
   return pos;
 } /* end mp_to_signed_octets() */
 /* }}} */
@@ -4766,7 +4789,7 @@ mp_to_fixlen_octets(const mp_int *mp, unsigned char *str, mp_size length)
   ARGCHK(mp != NULL && str != NULL && !SIGN(mp), MP_BADARG);
 
   bytes = mp_unsigned_octet_size(mp);
-  ARGCHK(bytes <= length, MP_BADARG);
+  ARGCHK(bytes >= 0 && bytes <= length, MP_BADARG);
 
   /* place any needed leading zeros */
   for (;length > bytes; --length) {
@@ -4786,6 +4809,8 @@ mp_to_fixlen_octets(const mp_int *mp, unsigned char *str, mp_size length)
       str[pos++] = x;
     }
   }
+  if (!pos)
+    str[pos++] = 0;
   return MP_OKAY;
 } /* end mp_to_fixlen_octets() */
 /* }}} */

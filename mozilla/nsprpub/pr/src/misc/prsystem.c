@@ -1,40 +1,44 @@
-/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 #include "primpl.h"
 #include "prsystem.h"
 #include "prprf.h"
+#include "prlong.h"
 
 #if defined(BEOS)
 #include <kernel/OS.h>
@@ -42,6 +46,7 @@
 
 #if defined(OS2)
 #define INCL_DOS
+#define INCL_DOSMISC
 #include <os2.h>
 /* define the required constant if it is not already defined in the headers */
 #ifndef QSV_NUMPROCESSORS
@@ -57,13 +62,42 @@
 #include <sys/sysctl.h>
 #endif
 
+#if defined(DARWIN)
+#include <mach/mach_init.h>
+#include <mach/mach_host.h>
+#endif
+
 #if defined(HPUX)
 #include <sys/mpctl.h>
+#include <sys/pstat.h>
 #endif
 
 #if defined(XP_UNIX)
 #include <unistd.h>
 #include <sys/utsname.h>
+#endif
+
+#if defined(AIX)
+#include <cf.h>
+#include <sys/cfgodm.h>
+#endif
+
+#if defined(WIN32)
+/* This struct is not present in VC6 headers, so declare it here */
+typedef struct {
+    DWORD dwLength;
+    DWORD dwMemoryLoad;
+    DWORDLONG ullTotalPhys;
+    DWORDLONG ullAvailPhys;
+    DWORDLONG ullToalPageFile;
+    DWORDLONG ullAvailPageFile;
+    DWORDLONG ullTotalVirtual;
+    DWORDLONG ullAvailVirtual;
+    DWORDLONG ullAvailExtendedVirtual;
+} PR_MEMORYSTATUSEX;
+
+/* Typedef for dynamic lookup of GlobalMemoryStatusEx(). */
+typedef BOOL (WINAPI *GlobalMemoryStatusExFn)(PR_MEMORYSTATUSEX *);
 #endif
 
 PR_IMPLEMENT(char) PR_GetDirectorySeparator(void)
@@ -100,8 +134,12 @@ PR_IMPLEMENT(PRStatus) PR_GetSystemInfo(PRSysInfo cmd, char *buf, PRUint32 bufle
     switch(cmd)
     {
       case PR_SI_HOSTNAME:
+      case PR_SI_HOSTNAME_UNTRUNCATED:
         if (PR_FAILURE == _PR_MD_GETHOSTNAME(buf, (PRUintn)buflen))
             return PR_FAILURE;
+
+        if (cmd == PR_SI_HOSTNAME_UNTRUNCATED)
+            break;
         /*
          * On some platforms a system does not have a hostname and
          * its IP address is returned instead.   The following code
@@ -221,6 +259,8 @@ PR_IMPLEMENT(PRInt32) PR_GetNumberOfProcessors( void )
     }
 #elif defined(IRIX)
     numCpus = sysconf( _SC_NPROC_ONLN );
+#elif defined(RISCOS) || defined(SYMBIAN)
+    numCpus = 1;
 #elif defined(XP_UNIX)
     numCpus = sysconf( _SC_NPROCESSORS_ONLN );
 #else
@@ -228,3 +268,134 @@ PR_IMPLEMENT(PRInt32) PR_GetNumberOfProcessors( void )
 #endif
     return(numCpus);
 } /* end PR_GetNumberOfProcessors() */
+
+#ifdef DARWIN
+
+/*
+ * Manually define the host_basic_info structure in Mac OS X 10.4 or later
+ * so that we can compile against Mac OS X 10.2 and 10.3 SDKs.
+ */
+
+#pragma pack(4)
+
+struct host_basic_info_new {
+    integer_t max_cpus;
+    integer_t avail_cpus;
+    natural_t memory_size;
+    cpu_type_t cpu_type;
+    cpu_subtype_t cpu_subtype;
+    /*cpu_threadtype_t*/ integer_t cpu_threadtype;
+    integer_t physical_cpu;
+    integer_t physical_cpu_max;
+    integer_t logical_cpu;
+    integer_t logical_cpu_max;
+    uint64_t max_mem;
+};
+
+#pragma pack()
+
+#define HOST_BASIC_INFO_NEW_COUNT ((mach_msg_type_number_t) \
+    (sizeof(struct host_basic_info_new)/sizeof(integer_t)))
+
+#endif /* DARWIN */
+
+/*
+** PR_GetPhysicalMemorySize()
+** 
+** Implementation notes:
+**   Every platform does it a bit different.
+**     bytes is the returned value.
+**   for each platform's "if defined" section
+**     declare your local variable
+**     do your thing, assign to bytes.
+** 
+*/
+PR_IMPLEMENT(PRUint64) PR_GetPhysicalMemorySize(void)
+{
+    PRUint64 bytes = 0;
+
+#if defined(LINUX) || defined(SOLARIS)
+
+    long pageSize = sysconf(_SC_PAGESIZE);
+    long pageCount = sysconf(_SC_PHYS_PAGES);
+    bytes = (PRUint64) pageSize * pageCount;
+
+#elif defined(HPUX)
+
+    struct pst_static info;
+    int result = pstat_getstatic(&info, sizeof(info), 1, 0);
+    if (result == 1)
+        bytes = (PRUint64) info.physical_memory * info.page_size;
+
+#elif defined(DARWIN)
+
+    struct host_basic_info_new hInfo;
+    mach_msg_type_number_t count = HOST_BASIC_INFO_NEW_COUNT;
+
+    int result = host_info(mach_host_self(),
+                           HOST_BASIC_INFO,
+                           (host_info_t) &hInfo,
+                           &count);
+    if (result == KERN_SUCCESS) {
+        if (count >= HOST_BASIC_INFO_NEW_COUNT) {
+            bytes = hInfo.max_mem;
+        } else {
+            bytes = hInfo.memory_size;
+        }
+    }
+
+#elif defined(WIN32)
+
+    /* Try to use the newer GlobalMemoryStatusEx API for Windows 2000+. */
+    GlobalMemoryStatusExFn globalMemory = (GlobalMemoryStatusExFn) NULL;
+    HMODULE module = GetModuleHandle("kernel32.dll");
+
+    if (module) {
+        globalMemory = (GlobalMemoryStatusExFn)GetProcAddress(module, "GlobalMemoryStatusEx");
+
+        if (globalMemory) {
+            PR_MEMORYSTATUSEX memStat;
+            memStat.dwLength = sizeof(memStat);
+
+            if (globalMemory(&memStat))
+                bytes = memStat.ullTotalPhys;
+        }
+    }
+
+    if (!bytes) {
+        /* Fall back to the older API. */
+        MEMORYSTATUS memStat;
+        memset(&memStat, 0, sizeof(memStat));
+        GlobalMemoryStatus(&memStat);
+        bytes = memStat.dwTotalPhys;
+    }
+
+#elif defined(OS2)
+
+    ULONG ulPhysMem;
+    DosQuerySysInfo(QSV_TOTPHYSMEM,
+                    QSV_TOTPHYSMEM,
+                    &ulPhysMem,
+                    sizeof(ulPhysMem));
+    bytes = ulPhysMem;
+
+#elif defined(AIX)
+
+    if (odm_initialize() == 0) {
+        int how_many;
+        struct CuAt *obj = getattr("sys0", "realmem", 0, &how_many);
+        if (obj != NULL) {
+            bytes = (PRUint64) atoi(obj->value) * 1024;
+            free(obj);
+        }
+        odm_terminate();
+    }
+
+#else
+
+    PR_SetError(PR_NOT_IMPLEMENTED_ERROR, 0);
+
+#endif
+
+    return bytes;
+} /* end PR_GetPhysicalMemorySize() */

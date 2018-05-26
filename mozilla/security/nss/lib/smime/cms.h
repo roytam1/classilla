@@ -1,40 +1,9 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Interfaces of the CMS implementation.
- *
- * $Id: cms.h,v 1.14.4.1 2002/12/17 05:35:05 wtc%netscape.com Exp $
  */
 
 #ifndef _CMS_H_
@@ -65,7 +34,7 @@ SEC_BEGIN_PROTOS
  * "decrypt_key_cb", "decrypt_key_cb_arg" - callback function for getting bulk key for encryptedData
  */
 extern NSSCMSDecoderContext *
-NSS_CMSDecoder_Start(PRArenaPool *poolp,
+NSS_CMSDecoder_Start(PLArenaPool *poolp,
 		      NSSCMSContentCallback cb, void *cb_arg,
 		      PK11PasswordFunc pwfn, void *pwfn_arg,
 		      NSSCMSGetDecryptKeyCallback decrypt_key_cb, void *decrypt_key_cb_arg);
@@ -300,6 +269,14 @@ extern SECStatus
 NSS_CMSContentInfo_SetContent_EncryptedData(NSSCMSMessage *cmsg, NSSCMSContentInfo *cinfo, NSSCMSEncryptedData *encd);
 
 /*
+ * turn off streaming for this content type.
+ * This could fail with SEC_ERROR_NO_MEMORY in memory constrained conditions.
+ */
+extern SECStatus
+NSS_CMSContentInfo_SetDontStream(NSSCMSContentInfo *cinfo, PRBool dontStream);
+
+
+/*
  * NSS_CMSContentInfo_GetContent - get pointer to inner content
  *
  * needs to be casted...
@@ -406,13 +383,6 @@ NSS_CMSAlgArray_GetIndexByAlgTag(SECAlgorithmID **algorithmArray, SECOidTag algt
 
 extern const SECHashObject *
 NSS_CMSUtil_GetHashObjByAlgID(SECAlgorithmID *algid);
-
-/*
- * XXX I would *really* like to not have to do this, but the current
- * signing interface gives me little choice.
- */
-extern SECOidTag
-NSS_CMSUtil_MakeSignatureAlgorithm(SECOidTag hashalg, SECOidTag encalg);
 
 extern const SEC_ASN1Template *
 NSS_CMSUtil_GetTemplateByTypeTag(SECOidTag type);
@@ -563,9 +533,6 @@ extern SECStatus
 NSS_CMSSignedData_AddSignerInfo(NSSCMSSignedData *sigd,
 				NSSCMSSignerInfo *signerinfo);
 
-extern SECItem *
-NSS_CMSSignedData_GetDigestByAlgTag(NSSCMSSignedData *sigd, SECOidTag algtag);
-
 extern SECStatus
 NSS_CMSSignedData_SetDigests(NSSCMSSignedData *sigd,
 				SECAlgorithmID **digestalgs,
@@ -577,7 +544,7 @@ NSS_CMSSignedData_SetDigestValue(NSSCMSSignedData *sigd,
 				SECItem *digestdata);
 
 extern SECStatus
-NSS_CMSSignedData_AddDigest(PRArenaPool *poolp,
+NSS_CMSSignedData_AddDigest(PLArenaPool *poolp,
 				NSSCMSSignedData *sigd,
 				SECOidTag digestalgtag,
 				SECItem *digest);
@@ -673,7 +640,7 @@ NSS_CMSSignerInfo_GetSigningCertificate(NSSCMSSignerInfo *signerinfo, CERTCertDB
  *
  * sinfo - signerInfo data for this signer
  *
- * Returns a pointer to allocated memory, which must be freed.
+ * Returns a pointer to allocated memory, which must be freed with PORT_Free.
  * A return value of NULL is an error.
  */
 extern char *
@@ -741,7 +708,7 @@ NSS_CMSSignerInfo_AddSMIMEEncKeyPrefs(NSSCMSSignerInfo *signerinfo, CERTCertific
 
 /*
  * NSS_CMSSignerInfo_AddMSSMIMEEncKeyPrefs - add a SMIMEEncryptionKeyPreferences attribute to the
- * authenticated (i.e. signed) attributes of "signerinfo", using the OID prefered by Microsoft.
+ * authenticated (i.e. signed) attributes of "signerinfo", using the OID preferred by Microsoft.
  *
  * This is expected to be included in outgoing signed messages for email (S/MIME),
  * if compatibility with Microsoft mail clients is wanted.
@@ -868,8 +835,34 @@ extern NSSCMSRecipientInfo *
 NSS_CMSRecipientInfo_CreateWithSubjKeyIDFromCert(NSSCMSMessage *cmsg, 
                                                  CERTCertificate *cert);
 
+/*
+ * NSS_CMSRecipientInfo_CreateNew - create a blank recipientinfo for 
+ * applications which want to encode their own CMS structures and
+ * key exchange types.
+ */
+extern NSSCMSRecipientInfo *
+NSS_CMSRecipientInfo_CreateNew(void* pwfn_arg);
+
+/*
+ * NSS_CMSRecipientInfo_CreateFromDER - create a recipientinfo  from partially
+ * decoded DER data for applications which want to encode their own CMS 
+ * structures and key exchange types.
+ */
+extern NSSCMSRecipientInfo *
+NSS_CMSRecipientInfo_CreateFromDER(SECItem* input, void* pwfn_arg);
+
 extern void
 NSS_CMSRecipientInfo_Destroy(NSSCMSRecipientInfo *ri);
+
+/*
+ * NSS_CMSRecipientInfo_GetCertAndKey - retrieve the cert and key from the
+ * recipientInfo struct. If retcert or retkey are NULL, the cert or 
+ * key (respectively) would not be returned). This function is a no-op if both 
+ * retcert and retkey are NULL. Caller inherits ownership of the cert and key
+ * he requested (and is responsible to free them).
+ */
+SECStatus NSS_CMSRecipientInfo_GetCertAndKey(NSSCMSRecipientInfo *ri,
+   CERTCertificate** retcert, SECKEYPrivateKey** retkey);
 
 extern int
 NSS_CMSRecipientInfo_GetVersion(NSSCMSRecipientInfo *ri);
@@ -877,6 +870,12 @@ NSS_CMSRecipientInfo_GetVersion(NSSCMSRecipientInfo *ri);
 extern SECItem *
 NSS_CMSRecipientInfo_GetEncryptedKey(NSSCMSRecipientInfo *ri, int subIndex);
 
+/*
+ * NSS_CMSRecipientInfo_Encode - encode an NSS_CMSRecipientInfo as ASN.1
+ */
+SECStatus NSS_CMSRecipientInfo_Encode(PLArenaPool* poolp,
+                                      const NSSCMSRecipientInfo *src,
+                                      SECItem* returned);
 
 extern SECOidTag
 NSS_CMSRecipientInfo_GetKeyEncryptionAlgorithmTag(NSSCMSRecipientInfo *ri);
@@ -1102,6 +1101,51 @@ extern SECStatus
 NSS_CMSDEREncode(NSSCMSMessage *cmsg, SECItem *input, SECItem *derOut, 
                  PLArenaPool *arena);
 
+
+/************************************************************************
+ * 
+ ************************************************************************/
+
+/*
+ *  define new S/MIME content type entries
+ *
+ *  S/MIME uses the builtin PKCS7 oid types for encoding and decoding the
+ *  various S/MIME content. Some applications have their own content type
+ *  which is different from the standard content type defined by S/MIME.
+ *
+ *  This function allows you to register new content types. There are basically
+ *  Two different types of content, Wrappping content, and Data.
+ *
+ *  For data types, All the functions below can be zero or NULL excext 
+ *  type and is isData, which should be your oid tag and PR_FALSE respectively
+ *
+ *  For wrapping types, everything must be provided, or you will get encoder
+ *  failures.
+ *
+ *  If NSS doesn't already define the OID that you need, you can register 
+ *  your own with SECOID_AddEntry.
+ * 
+ *  Once you have defined your new content type, you can pass your new content
+ *  type to NSS_CMSContentInfo_SetContent().
+ * 
+ *  If you are using a wrapping type you can pass your own data structure in 
+ *  the ptr field, but it must contain and embedded NSSCMSGenericWrappingData 
+ *  structure as the first element. The size you pass to 
+ *  NSS_CMSType_RegisterContentType is the total size of your self defined 
+ *  data structure. NSS_CMSContentInfo_GetContent will return that data 
+ *  structure from the content info. Your ASN1Template will be evaluated 
+ *  against that data structure.
+ */
+SECStatus NSS_CMSType_RegisterContentType(SECOidTag type,
+                          SEC_ASN1Template *asn1Template, size_t size,
+                          NSSCMSGenericWrapperDataDestroy  destroy,
+                          NSSCMSGenericWrapperDataCallback decode_before,
+                          NSSCMSGenericWrapperDataCallback decode_after,
+                          NSSCMSGenericWrapperDataCallback decode_end,
+                          NSSCMSGenericWrapperDataCallback encode_start,
+                          NSSCMSGenericWrapperDataCallback encode_before,
+                          NSSCMSGenericWrapperDataCallback encode_after,
+                          PRBool isData);
 
 /************************************************************************/
 SEC_END_PROTOS

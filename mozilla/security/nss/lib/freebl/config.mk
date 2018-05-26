@@ -1,69 +1,23 @@
-#
-# The contents of this file are subject to the Mozilla Public
-# License Version 1.1 (the "License"); you may not use this file
-# except in compliance with the License. You may obtain a copy of
-# the License at http://www.mozilla.org/MPL/
-# 
-# Software distributed under the License is distributed on an "AS
-# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
-# implied. See the License for the specific language governing
-# rights and limitations under the License.
-# 
-# The Original Code is the Netscape security libraries.
-# 
-# The Initial Developer of the Original Code is Netscape
-# Communications Corporation.  Portions created by Netscape are 
-# Copyright (C) 1994-2000 Netscape Communications Corporation.  All
-# Rights Reserved.
-# 
-# Contributor(s):
-# 
-# Alternatively, the contents of this file may be used under the
-# terms of the GNU General Public License Version 2 or later (the
-# "GPL"), in which case the provisions of the GPL are applicable 
-# instead of those above.  If you wish to allow use of your 
-# version of this file only under the terms of the GPL and not to
-# allow others to use your version of this file under the MPL,
-# indicate your decision by deleting the provisions above and
-# replace them with the notice and other provisions required by
-# the GPL.  If you do not delete the provisions above, a recipient
-# may use your version of this file under either the MPL or the
-# GPL.
-#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 # only do this in the outermost freebl build.
-ifndef FREEBL_RECURSIVE_BUILD
-# we only do this stuff for some of the 32-bit builds, no 64-bit builds
-ifndef USE_64
+ifndef FREEBL_CHILD_BUILD
 
-ifeq ($(OS_TARGET), HP-UX)
-  ifneq ($(OS_TEST), ia64)
-    FREEBL_EXTENDED_BUILD = 1
-  endif
-endif
-
-ifeq ($(OS_TARGET),SunOS)
-  ifeq ($(CPU_ARCH),sparc)
-    FREEBL_EXTENDED_BUILD = 1
-  endif
-endif
-
-ifdef FREEBL_EXTENDED_BUILD
 # We're going to change this build so that it builds libfreebl.a with
 # just loader.c.  Then we have to build this directory twice again to 
 # build the two DSOs.
 # To build libfreebl.a with just loader.c, we must now override many
 # of the make variables setup by the prior inclusion of CORECONF's config.mk
 
-CSRCS		= loader.c sysrand.c
+CSRCS		= loader.c 
 SIMPLE_OBJS 	= $(CSRCS:.c=$(OBJ_SUFFIX))
 OBJS 		= $(addprefix $(OBJDIR)/$(PROG_PREFIX), $(SIMPLE_OBJS))
 ALL_TRASH :=    $(TARGETS) $(OBJS) $(OBJDIR) LOGS TAGS $(GARBAGE) \
                 $(NOSUCHFILE) so_locations 
-endif
 
-#end of 32-bit only stuff.
-endif
+# this is not a recursive child make.  We make a static lib. (archive)
 
 # Override the values defined in coreconf's ruleset.mk.
 #
@@ -79,25 +33,65 @@ endif
   PROGRAM        =
 
 else
-# This is a recursive build.  
 
-TARGETS	     = $(SHARED_LIBRARY)
+# This is a recursive child make. We build the shared lib.
+
+TARGETS      = $(SHARED_LIBRARY)
 LIBRARY      =
+IMPORT_LIBRARY =
 PROGRAM      =
 
-#ifeq ($(OS_TARGET), HP-UX)
-  EXTRA_LIBS        += \
-	$(DIST)/lib/libsecutil.$(LIB_SUFFIX) \
-	$(NULL)
+ifeq ($(OS_TARGET), SunOS)
+OS_LIBS += -lkstat
+endif
 
-# $(PROGRAM) has NO explicit dependencies on $(EXTRA_SHARED_LIBS)
-# $(EXTRA_SHARED_LIBS) come before $(OS_LIBS), except on AIX.
-  EXTRA_SHARED_LIBS += \
-	-L$(DIST)/lib/ \
-	-lplc4 \
-	-lplds4 \
+ifeq (,$(filter-out WIN%,$(OS_TARGET)))
+
+# don't want the 32 in the shared library name
+SHARED_LIBRARY = $(OBJDIR)/$(DLL_PREFIX)$(LIBRARY_NAME)$(LIBRARY_VERSION).$(DLL_SUFFIX)
+
+RES     = $(OBJDIR)/$(LIBRARY_NAME).res
+RESNAME = freebl.rc
+
+ifdef NS_USE_GCC
+OS_LIBS += -lshell32
+else
+OS_LIBS += shell32.lib
+endif
+
+ifdef NS_USE_GCC
+EXTRA_SHARED_LIBS += \
+	-L$(DIST)/lib \
+	-L$(NSSUTIL_LIB_DIR) \
+	-lnssutil3 \
+	-L$(NSPR_LIB_DIR) \
 	-lnspr4 \
-	-lc
-#endif
+	$(NULL)
+else # ! NS_USE_GCC
+EXTRA_SHARED_LIBS += \
+	$(DIST)/lib/nssutil3.lib \
+	$(NSPR_LIB_DIR)/$(NSPR31_LIB_PREFIX)nspr4.lib \
+	$(NULL)
+endif # NS_USE_GCC
+
+else
+
+ifeq ($(FREEBL_NO_DEPEND),1)
+#drop pthreads as well
+OS_PTHREAD=
+else
+EXTRA_SHARED_LIBS += \
+	-L$(DIST)/lib \
+	-L$(NSSUTIL_LIB_DIR) \
+	-lnssutil3 \
+	-L$(NSPR_LIB_DIR) \
+	-lnspr4 \
+	$(NULL)
+endif
+endif
+
+ifeq ($(OS_ARCH), Darwin)
+EXTRA_SHARED_LIBS += -dylib_file @executable_path/libplc4.dylib:$(DIST)/lib/libplc4.dylib -dylib_file @executable_path/libplds4.dylib:$(DIST)/lib/libplds4.dylib
+endif
 
 endif

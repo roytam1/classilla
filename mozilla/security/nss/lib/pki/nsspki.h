@@ -1,42 +1,9 @@
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef NSSPKI_H
 #define NSSPKI_H
-
-#ifdef DEBUG
-static const char NSSPKI_CVS_ID[] = "@(#) $RCSfile: nsspki.h,v $ $Revision: 1.7 $ $Date: 2001/12/14 17:32:19 $ $Name:  $";
-#endif /* DEBUG */
 
 /*
  * nsspki.h
@@ -51,10 +18,6 @@ static const char NSSPKI_CVS_ID[] = "@(#) $RCSfile: nsspki.h,v $ $Revision: 1.7 
 #ifndef NSSPKIT_H
 #include "nsspkit.h"
 #endif /* NSSPKIT_H */
-
-#ifndef NSSPKI1_H
-#include "nsspki1.h"
-#endif /* NSSPKI1_H */
 
 #ifndef BASE_H
 #include "base.h"
@@ -247,7 +210,9 @@ NSSCertificate_BuildChain
   NSSCertificate **rvOpt,
   PRUint32 rvLimit, /* zero for no limit */
   NSSArena *arenaOpt,
-  PRStatus *statusOpt
+  PRStatus *statusOpt,
+  NSSTrustDomain *td,
+  NSSCryptoContext *cc 
 );
 
 /*
@@ -1704,7 +1669,7 @@ NSS_EXTERN NSSCertificate *
 NSSTrustDomain_FindBestCertificateByNickname
 (
   NSSTrustDomain *td,
-  NSSUTF8 *name,
+  const NSSUTF8 *name,
   NSSTime *timeOpt, /* NULL for "now" */
   NSSUsage *usage,
   NSSPolicies *policiesOpt /* NULL for none */
@@ -2230,15 +2195,24 @@ NSSCryptoContext_GetTrustDomain
 /* Importing things */
 
 /*
- * NSSCryptoContext_ImportCertificate
+ * NSSCryptoContext_FindOrImportCertificate
  *
- * If there's not a "distinguished certificate" for this context, this
- * sets the specified one to be it.
+ * If the certificate store already contains this DER cert, return the 
+ * address of the matching NSSCertificate that is already in the store,
+ * and bump its reference count.
+ *
+ * If this DER cert is NOT already in the store, then add the new
+ * NSSCertificate to the store and bump its reference count, 
+ * then return its address. 
+ *
+ * if this DER cert is not in the store and cannot be added to it, 
+ * return NULL;
+ *
+ * Record the associated crypto context in the certificate.
  */
 
-NSS_EXTERN PRStatus
-NSSCryptoContext_ImportCertificate
-(
+NSS_EXTERN NSSCertificate *
+NSSCryptoContext_FindOrImportCertificate (
   NSSCryptoContext *cc,
   NSSCertificate *c
 );
@@ -2291,7 +2265,7 @@ NSS_EXTERN NSSCertificate *
 NSSCryptoContext_FindBestCertificateByNickname
 (
   NSSCryptoContext *cc,
-  NSSUTF8 *name,
+  const NSSUTF8 *name,
   NSSTime *timeOpt, /* NULL for "now" */
   NSSUsage *usage,
   NSSPolicies *policiesOpt /* NULL for none */

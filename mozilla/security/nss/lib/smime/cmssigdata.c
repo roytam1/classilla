@@ -1,40 +1,9 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * CMS signedData methods.
- *
- * $Id: cmssigdata.c,v 1.15.30.2 2003/02/25 01:22:48 wtc%netscape.com Exp $
  */
 
 #include "cmslocal.h"
@@ -53,6 +22,11 @@ NSS_CMSSignedData_Create(NSSCMSMessage *cmsg)
     void *mark;
     NSSCMSSignedData *sigd;
     PLArenaPool *poolp;
+
+    if (!cmsg) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return NULL;
+    }
 
     poolp = cmsg->poolp;
 
@@ -78,7 +52,7 @@ loser:
 void
 NSS_CMSSignedData_Destroy(NSSCMSSignedData *sigd)
 {
-    CERTCertificate **certs, *cert;
+    CERTCertificate **certs, **tempCerts, *cert;
     CERTCertificateList **certlists, *certlist;
     NSSCMSSignerInfo **signerinfos, *si;
 
@@ -86,11 +60,17 @@ NSS_CMSSignedData_Destroy(NSSCMSSignedData *sigd)
 	return;
 
     certs = sigd->certs;
+    tempCerts = sigd->tempCerts;
     certlists = sigd->certLists;
     signerinfos = sigd->signerInfos;
 
     if (certs != NULL) {
 	while ((cert = *certs++) != NULL)
+	    CERT_DestroyCertificate (cert);
+    }
+
+    if (tempCerts != NULL) {
+	while ((cert = *tempCerts++) != NULL)
 	    CERT_DestroyCertificate (cert);
     }
 
@@ -131,6 +111,11 @@ NSS_CMSSignedData_Encode_BeforeStart(NSSCMSSignedData *sigd)
     PRBool haveDigests = PR_FALSE;
     int n, i;
     PLArenaPool *poolp;
+
+    if (!sigd) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return SECFailure;
+    }
 
     poolp = sigd->cmsg->poolp;
 
@@ -198,10 +183,22 @@ loser:
 SECStatus
 NSS_CMSSignedData_Encode_BeforeData(NSSCMSSignedData *sigd)
 {
+    SECStatus rv;
+    if (!sigd) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return SECFailure;
+    }
+    rv = NSS_CMSContentInfo_Private_Init(&sigd->contentInfo);
+    if (rv != SECSuccess) {
+	return SECFailure;
+    }
     /* set up the digests */
-    if (sigd->digestAlgorithms != NULL) {
-	sigd->contentInfo.digcx = NSS_CMSDigestContext_StartMultiple(sigd->digestAlgorithms);
-	if (sigd->contentInfo.digcx == NULL)
+    if (sigd->digests && sigd->digests[0]) {
+	sigd->contentInfo.privateInfo->digcx = NULL; /* don't attempt to make new ones. */
+    } else if (sigd->digestAlgorithms != NULL) {
+	sigd->contentInfo.privateInfo->digcx =
+	        NSS_CMSDigestContext_StartMultiple(sigd->digestAlgorithms);
+	if (sigd->contentInfo.privateInfo->digcx == NULL)
 	    return SECFailure;
     }
     return SECSuccess;
@@ -232,15 +229,22 @@ NSS_CMSSignedData_Encode_AfterData(NSSCMSSignedData *sigd)
     CERTCertificateList *certlist;
     extern const SEC_ASN1Template NSSCMSSignerInfoTemplate[];
 
+    if (!sigd) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return SECFailure;
+    }
+
     poolp = sigd->cmsg->poolp;
     cinfo = &(sigd->contentInfo);
 
     /* did we have digest calculation going on? */
-    if (cinfo->digcx) {
-	rv = NSS_CMSDigestContext_FinishMultiple(cinfo->digcx, poolp, &(sigd->digests));
+    if (cinfo->privateInfo && cinfo->privateInfo->digcx) {
+	rv = NSS_CMSDigestContext_FinishMultiple(cinfo->privateInfo->digcx, poolp,
+	                                         &(sigd->digests));
+	/* error has been set by NSS_CMSDigestContext_FinishMultiple */
+	cinfo->privateInfo->digcx = NULL;
 	if (rv != SECSuccess)
-	    goto loser;		/* error has been set by NSS_CMSDigestContext_FinishMultiple */
-	cinfo->digcx = NULL;
+	    goto loser;		
     }
 
     signerinfos = sigd->signerInfos;
@@ -359,30 +363,66 @@ loser:
 SECStatus
 NSS_CMSSignedData_Decode_BeforeData(NSSCMSSignedData *sigd)
 {
+    SECStatus rv;
+    if (!sigd) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return SECFailure;
+    }
+    rv = NSS_CMSContentInfo_Private_Init(&sigd->contentInfo);
+    if (rv != SECSuccess) {
+	return SECFailure;
+    }
+    /* handle issue with Windows 2003 servers and kerberos */
+    if (sigd->digestAlgorithms != NULL) {
+	int i;
+	for (i=0; sigd->digestAlgorithms[i] != NULL; i++) {
+	    SECAlgorithmID *algid = sigd->digestAlgorithms[i];
+	    SECOidTag senttag= SECOID_FindOIDTag(&algid->algorithm);
+	    SECOidTag maptag = NSS_CMSUtil_MapSignAlgs(senttag);
+
+	    if (maptag != senttag) {
+		SECOidData *hashoid = SECOID_FindOIDByTag(maptag);
+		rv = SECITEM_CopyItem(sigd->cmsg->poolp, &algid->algorithm 
+							,&hashoid->oid);
+		if (rv != SECSuccess) {
+		    return rv;
+		}
+	    }
+	}
+    }
+
     /* set up the digests */
     if (sigd->digestAlgorithms != NULL && sigd->digests == NULL) {
 	/* if digests are already there, do nothing */
-	sigd->contentInfo.digcx = NSS_CMSDigestContext_StartMultiple(sigd->digestAlgorithms);
-	if (sigd->contentInfo.digcx == NULL)
+	sigd->contentInfo.privateInfo->digcx = NSS_CMSDigestContext_StartMultiple(sigd->digestAlgorithms);
+	if (sigd->contentInfo.privateInfo->digcx == NULL)
 	    return SECFailure;
     }
     return SECSuccess;
 }
 
 /*
- * NSS_CMSSignedData_Decode_AfterData - do all the necessary things to a SignedData
- *     after all the encapsulated data was passed through the decoder.
+ * NSS_CMSSignedData_Decode_AfterData - do all the necessary things to a 
+ *   SignedData after all the encapsulated data was passed through the decoder.
  */
 SECStatus
 NSS_CMSSignedData_Decode_AfterData(NSSCMSSignedData *sigd)
 {
-    /* did we have digest calculation going on? */
-    if (sigd->contentInfo.digcx) {
-	if (NSS_CMSDigestContext_FinishMultiple(sigd->contentInfo.digcx, sigd->cmsg->poolp, &(sigd->digests)) != SECSuccess)
-	    return SECFailure;	/* error has been set by NSS_CMSDigestContext_FinishMultiple */
-	sigd->contentInfo.digcx = NULL;
+    SECStatus rv = SECSuccess;
+
+    if (!sigd) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return SECFailure;
     }
-    return SECSuccess;
+
+    /* did we have digest calculation going on? */
+    if (sigd->contentInfo.privateInfo && sigd->contentInfo.privateInfo->digcx) {
+	rv = NSS_CMSDigestContext_FinishMultiple(sigd->contentInfo.privateInfo->digcx,
+				       sigd->cmsg->poolp, &(sigd->digests));
+	/* error set by NSS_CMSDigestContext_FinishMultiple */
+	sigd->contentInfo.privateInfo->digcx = NULL;
+    }
+    return rv;
 }
 
 /*
@@ -392,8 +432,13 @@ NSS_CMSSignedData_Decode_AfterData(NSSCMSSignedData *sigd)
 SECStatus
 NSS_CMSSignedData_Decode_AfterEnd(NSSCMSSignedData *sigd)
 {
-    NSSCMSSignerInfo **signerinfos;
+    NSSCMSSignerInfo **signerinfos = NULL;
     int i;
+
+    if (!sigd) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return SECFailure;
+    }
 
     /* set cmsg for all the signerinfos */
     signerinfos = sigd->signerInfos;
@@ -413,18 +458,30 @@ NSS_CMSSignedData_Decode_AfterEnd(NSSCMSSignedData *sigd)
 NSSCMSSignerInfo **
 NSS_CMSSignedData_GetSignerInfos(NSSCMSSignedData *sigd)
 {
+    if (!sigd) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return NULL;
+    }
     return sigd->signerInfos;
 }
 
 int
 NSS_CMSSignedData_SignerInfoCount(NSSCMSSignedData *sigd)
 {
+    if (!sigd) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return 0;
+    }
     return NSS_CMSArray_Count((void **)sigd->signerInfos);
 }
 
 NSSCMSSignerInfo *
 NSS_CMSSignedData_GetSignerInfo(NSSCMSSignedData *sigd, int i)
 {
+    if (!sigd) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return NULL;
+    }
     return sigd->signerInfos[i];
 }
 
@@ -434,6 +491,10 @@ NSS_CMSSignedData_GetSignerInfo(NSSCMSSignedData *sigd, int i)
 SECAlgorithmID **
 NSS_CMSSignedData_GetDigestAlgs(NSSCMSSignedData *sigd)
 {
+    if (!sigd) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return NULL;
+    }
     return sigd->digestAlgorithms;
 }
 
@@ -443,6 +504,10 @@ NSS_CMSSignedData_GetDigestAlgs(NSSCMSSignedData *sigd)
 NSSCMSContentInfo *
 NSS_CMSSignedData_GetContentInfo(NSSCMSSignedData *sigd)
 {
+    if (!sigd) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return NULL;
+    }
     return &(sigd->contentInfo);
 }
 
@@ -452,6 +517,10 @@ NSS_CMSSignedData_GetContentInfo(NSSCMSSignedData *sigd)
 SECItem **
 NSS_CMSSignedData_GetCertificateList(NSSCMSSignedData *sigd)
 {
+    if (!sigd) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return NULL;
+    }
     return sigd->rawCerts;
 }
 
@@ -468,6 +537,11 @@ NSS_CMSSignedData_ImportCerts(NSSCMSSignedData *sigd, CERTCertDBHandle *certdb,
     int i;
     PRTime now;
 
+    if (!sigd) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return SECFailure;
+    }
+
     certcount = NSS_CMSArray_Count((void **)sigd->rawCerts);
 
     /* get the certs in the temp DB */
@@ -475,6 +549,13 @@ NSS_CMSSignedData_ImportCerts(NSSCMSSignedData *sigd, CERTCertDBHandle *certdb,
 			 &certArray, PR_FALSE, PR_FALSE, NULL);
     if (rv != SECSuccess) {
 	goto loser;
+    }
+
+    /* save the certs so they don't get destroyed */
+    for (i=0; i < certcount; i++) {
+	CERTCertificate *cert = certArray[i];
+	if (cert)
+            NSS_CMSSignedData_AddTempCertificate(sigd, cert);
     }
 
     if (!keepcerts) {
@@ -488,8 +569,11 @@ NSS_CMSSignedData_ImportCerts(NSSCMSSignedData *sigd, CERTCertDBHandle *certdb,
 	goto loser;
     }
     for (i=0; i < certcount; i++) {
-	CERTCertificate *cert = CERT_DupCertificate(certArray[i]);
-	CERT_AddCertToListTail(certList,cert);
+	CERTCertificate *cert = certArray[i];
+	if (cert)
+	    cert = CERT_DupCertificate(cert);
+	if (cert)
+	    CERT_AddCertToListTail(certList,cert);
     }
 
     /* filter out the certs we don't want */
@@ -506,14 +590,10 @@ NSS_CMSSignedData_ImportCerts(NSSCMSSignedData *sigd, CERTCertDBHandle *certdb,
 						node= CERT_LIST_NEXT(node)) {
 	CERTCertificateList *certChain;
 
-/* this hack causes us to continue to import untrusted certs
-   as long as bug 209166 / 209182 is not fixed by other means */
-#if 0
 	if (CERT_VerifyCert(certdb, node->cert, 
 		PR_TRUE, certusage, now, NULL, NULL) != SECSuccess) {
 	    continue;
 	}
-#endif
 
 	certChain = CERT_CertChainFromCert(node->cert, certusage, PR_FALSE);
 	if (!certChain) {
@@ -585,22 +665,34 @@ NSS_CMSSignedData_VerifySignerInfo(NSSCMSSignedData *sigd, int i,
     NSSCMSContentInfo *cinfo;
     SECOidData *algiddata;
     SECItem *contentType, *digest;
+    SECOidTag oidTag;
+    SECStatus rv;
+
+    if (!sigd) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return SECFailure;
+    }
 
     cinfo = &(sigd->contentInfo);
 
     signerinfo = sigd->signerInfos[i];
 
     /* verify certificate */
-    if (NSS_CMSSignerInfo_VerifyCertificate(signerinfo, certdb, certusage) != SECSuccess)
-	return SECFailure;		/* error is set by NSS_CMSSignerInfo_VerifyCertificate */
+    rv = NSS_CMSSignerInfo_VerifyCertificate(signerinfo, certdb, certusage);
+    if (rv != SECSuccess)
+	return rv; /* error is set */
 
     /* find digest and contentType for signerinfo */
     algiddata = NSS_CMSSignerInfo_GetDigestAlg(signerinfo);
-    digest = NSS_CMSSignedData_GetDigestByAlgTag(sigd, algiddata->offset);
+    oidTag = algiddata ? algiddata->offset : SEC_OID_UNKNOWN;
+    digest = NSS_CMSSignedData_GetDigestValue(sigd, oidTag);
+    /* NULL digest is acceptable. */
     contentType = NSS_CMSContentInfo_GetContentTypeOID(cinfo);
+    /* NULL contentType is acceptable. */
 
     /* now verify signature */
-    return NSS_CMSSignerInfo_Verify(signerinfo, digest, contentType);
+    rv = NSS_CMSSignerInfo_Verify(signerinfo, digest, contentType);
+    return rv;
 }
 
 /*
@@ -648,6 +740,10 @@ NSS_CMSSignedData_VerifyCertsOnly(NSSCMSSignedData *sigd,
 PRBool
 NSS_CMSSignedData_HasDigests(NSSCMSSignedData *sigd)
 {
+    if (!sigd) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return PR_FALSE;
+    }
     return (sigd->digests != NULL);
 }
 
@@ -656,10 +752,10 @@ NSS_CMSSignedData_AddCertList(NSSCMSSignedData *sigd, CERTCertificateList *certl
 {
     SECStatus rv;
 
-    PORT_Assert(certlist != NULL);
-
-    if (certlist == NULL)
-	return SECFailure;
+    if (!sigd || !certlist) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return SECFailure;
+    }
 
     /* XXX memory?? a certlist has an arena of its own and is not refcounted!?!? */
     rv = NSS_CMSArray_Add(sigd->cmsg->poolp, (void ***)&(sigd->certLists), (void *)certlist);
@@ -679,6 +775,11 @@ NSS_CMSSignedData_AddCertChain(NSSCMSSignedData *sigd, CERTCertificate *cert)
 
     usage = certUsageEmailSigner;
 
+    if (!sigd || !cert) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return SECFailure;
+    }
+
     /* do not include root */
     certlist = CERT_CertChainFromCert(cert, usage, PR_FALSE);
     if (certlist == NULL)
@@ -689,16 +790,32 @@ NSS_CMSSignedData_AddCertChain(NSSCMSSignedData *sigd, CERTCertificate *cert)
     return rv;
 }
 
+extern SECStatus
+NSS_CMSSignedData_AddTempCertificate(NSSCMSSignedData *sigd, CERTCertificate *cert)
+{
+    CERTCertificate *c;
+    SECStatus rv;
+
+    if (!sigd || !cert) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return SECFailure;
+    }
+
+    c = CERT_DupCertificate(cert);
+    rv = NSS_CMSArray_Add(sigd->cmsg->poolp, (void ***)&(sigd->tempCerts), (void *)c);
+    return rv;
+}
+
 SECStatus
 NSS_CMSSignedData_AddCertificate(NSSCMSSignedData *sigd, CERTCertificate *cert)
 {
     CERTCertificate *c;
     SECStatus rv;
 
-    PORT_Assert(cert != NULL);
-
-    if (cert == NULL)
-	return SECFailure;
+    if (!sigd || !cert) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return SECFailure;
+    }
 
     c = CERT_DupCertificate(cert);
     rv = NSS_CMSArray_Add(sigd->cmsg->poolp, (void ***)&(sigd->certs), (void *)c);
@@ -708,6 +825,10 @@ NSS_CMSSignedData_AddCertificate(NSSCMSSignedData *sigd, CERTCertificate *cert)
 PRBool
 NSS_CMSSignedData_ContainsCertsOrCrls(NSSCMSSignedData *sigd)
 {
+    if (!sigd) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return PR_FALSE;
+    }
     if (sigd->rawCerts != NULL && sigd->rawCerts[0] != NULL)
 	return PR_TRUE;
     else if (sigd->crls != NULL && sigd->crls[0] != NULL)
@@ -724,6 +845,11 @@ NSS_CMSSignedData_AddSignerInfo(NSSCMSSignedData *sigd,
     SECStatus rv;
     SECOidTag digestalgtag;
     PLArenaPool *poolp;
+
+    if (!sigd || !signerinfo) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return SECFailure;
+    }
 
     poolp = sigd->cmsg->poolp;
 
@@ -757,15 +883,6 @@ loser:
     return SECFailure;
 }
 
-SECItem *
-NSS_CMSSignedData_GetDigestByAlgTag(NSSCMSSignedData *sigd, SECOidTag algtag)
-{
-    int idx;
-
-    idx = NSS_CMSAlgArray_GetIndexByAlgTag(sigd->digestAlgorithms, algtag);
-    return sigd->digests[idx];
-}
-
 /*
  * NSS_CMSSignedData_SetDigests - set a signedData's digests member
  *
@@ -778,6 +895,11 @@ NSS_CMSSignedData_SetDigests(NSSCMSSignedData *sigd,
 				SECItem **digests)
 {
     int cnt, i, idx;
+
+    if (!sigd || !digestalgs || !digests) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return SECFailure;
+    }
 
     if (sigd->digestAlgorithms == NULL) {
 	PORT_SetError(SEC_ERROR_INVALID_ARGS);
@@ -806,6 +928,13 @@ NSS_CMSSignedData_SetDigests(NSSCMSSignedData *sigd,
 	    PORT_SetError(SEC_ERROR_DIGEST_NOT_FOUND);
 	    return SECFailure;
 	}
+	if (!digests[idx]) {
+	    /* We have no digest for this algorithm, probably because it is 
+	    ** unrecognized or unsupported.  We'll ignore this here.  If this 
+	    ** digest is needed later, an error will be be generated then.
+	    */
+	    continue;
+	}
 
 	/* found it - now set it */
 	if ((sigd->digests[i] = SECITEM_AllocItem(sigd->cmsg->poolp, NULL, 0)) == NULL ||
@@ -827,6 +956,11 @@ NSS_CMSSignedData_SetDigestValue(NSSCMSSignedData *sigd,
     PLArenaPool *poolp;
     void *mark;
     int n, cnt;
+
+    if (!sigd) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return SECFailure;
+    }
 
     poolp = sigd->cmsg->poolp;
 
@@ -873,13 +1007,18 @@ loser:
 }
 
 SECStatus
-NSS_CMSSignedData_AddDigest(PRArenaPool *poolp,
+NSS_CMSSignedData_AddDigest(PLArenaPool *poolp,
 				NSSCMSSignedData *sigd,
 				SECOidTag digestalgtag,
 				SECItem *digest)
 {
     SECAlgorithmID *digestalg;
     void *mark;
+
+    if (!sigd || !poolp) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return SECFailure;
+    }
 
     mark = PORT_ArenaMark(poolp);
 
@@ -905,13 +1044,21 @@ loser:
     return SECFailure;
 }
 
+/* XXX This function doesn't set the error code on failure. */
 SECItem *
 NSS_CMSSignedData_GetDigestValue(NSSCMSSignedData *sigd, SECOidTag digestalgtag)
 {
     int n;
 
-    if (sigd->digestAlgorithms == NULL)
+    if (!sigd) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return NULL;
+    }
+
+    if (sigd->digestAlgorithms == NULL || sigd->digests == NULL) {
+        PORT_SetError(SEC_ERROR_DIGEST_NOT_FOUND);
 	return NULL;
+    }
 
     n = NSS_CMSAlgArray_GetIndexByAlgTag(sigd->digestAlgorithms, digestalgtag);
 
@@ -941,6 +1088,11 @@ NSS_CMSSignedData_CreateCertsOnly(NSSCMSMessage *cmsg, CERTCertificate *cert, PR
     void *mark;
     PLArenaPool *poolp;
     SECStatus rv;
+
+    if (!cmsg || !cert) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return NULL;
+    }
 
     poolp = cmsg->poolp;
     mark = PORT_ArenaMark(poolp);

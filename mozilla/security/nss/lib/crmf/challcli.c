@@ -1,47 +1,19 @@
 /* -*- Mode: C; tab-width: 8 -*-*/
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "cmmf.h"
 #include "cmmfi.h"
 #include "secitem.h"
 #include "pk11func.h"
 #include "secder.h"
+#include "sechash.h"
 
 CMMFPOPODecKeyChallContent*
 CMMF_CreatePOPODecKeyChallContentFromDER(const char *buf, long len)
 {
-    PRArenaPool                *poolp;
+    PLArenaPool                *poolp;
     CMMFPOPODecKeyChallContent *challContent;
     SECStatus                   rv;
 
@@ -118,50 +90,39 @@ CMMF_POPODecKeyChallContDecryptChallenge(CMMFPOPODecKeyChallContent *inChalCont,
 {
     CMMFChallenge  *challenge;
     SECItem        *decryptedRand=NULL;
-    SECStatus       rv = SECFailure;
-    PK11SlotInfo   *slot;
-    PK11SymKey     *symKey = NULL;
-    CMMFRand        randStr;
+    PLArenaPool    *poolp  = NULL;
     SECAlgorithmID *owf;
-    unsigned char   hash[SHA1_LENGTH]; /*SHA1 is the longest, so we'll use
-					*it's length.
-					*/
-    SECItem         hashItem;
+    SECStatus       rv     = SECFailure;
     SECOidTag       tag;
+    CMMFRand        randStr;
+    SECItem         hashItem;
+    unsigned char   hash[HASH_LENGTH_MAX]; 
 
     PORT_Assert(inChalCont != NULL && inPrivKey != NULL);
     if (inChalCont == NULL || inIndex <0 || inIndex > inChalCont->numChallenges
 	|| inPrivKey == NULL){
         return SECFailure;
     }
+
+    poolp = PORT_NewArena(CRMF_DEFAULT_ARENA_SIZE);
+    if (poolp == NULL) {
+        goto loser;
+    }
+
     challenge = inChalCont->challenges[inIndex];
-    decryptedRand = PORT_ZNew(SECItem);
+    decryptedRand = SECITEM_AllocItem(poolp, NULL, challenge->challenge.len);
     if (decryptedRand == NULL) {
         goto loser;
     }
-    decryptedRand->data = 
-        PORT_NewArray(unsigned char, challenge->challenge.len);
-    if (decryptedRand->data == NULL) {
+    rv = PK11_PrivDecryptPKCS1(inPrivKey, decryptedRand->data, 
+    			&decryptedRand->len, decryptedRand->len, 
+			challenge->challenge.data, challenge->challenge.len);
+    if (rv != SECSuccess) {
         goto loser;
     }
-    slot = inPrivKey->pkcs11Slot;
-    symKey = PK11_PubUnwrapSymKey(inPrivKey, &challenge->challenge, 
-				  CKM_RSA_PKCS, CKA_VALUE, 0);
-    if (symKey == NULL) {
-      rv = SECFailure;
-      goto loser;
-    }
-    rv = PK11_ExtractKeyValue(symKey);
-    if (rv != SECSuccess) {
-      goto loser;
-    }
-    decryptedRand = PK11_GetKeyData(symKey);
-    rv = SEC_ASN1DecodeItem(NULL, &randStr, CMMFRandTemplate,
+
+    rv = SEC_ASN1DecodeItem(poolp, &randStr, CMMFRandTemplate,
 			    decryptedRand); 
-    /* The decryptedRand returned points to a member within the symKey structure,
-     * so we don't want to free it. Let the symKey destruction function deal with
-     * freeing that memory.
-     */
     if (rv != SECSuccess) {
         goto loser;
     }
@@ -175,19 +136,10 @@ CMMF_POPODecKeyChallContDecryptChallenge(CMMFPOPODecKeyChallContent *inChalCont,
     }
     /* Verify the hashes in the challenge */
     tag = SECOID_FindOIDTag(&owf->algorithm);
-    switch (tag) {
-    case SEC_OID_MD2:
-        hashItem.len = MD2_LENGTH;
-	break;
-    case SEC_OID_MD5:
-        hashItem.len = MD5_LENGTH;
-	break;
-    case SEC_OID_SHA1:
-        hashItem.len = SHA1_LENGTH;
-	break;
-    default:
-        goto loser;
-    }
+    hashItem.len = HASH_ResultLenByOidTag(tag);
+    if (!hashItem.len)
+        goto loser;	/* error code has been set */
+
     rv = PK11_HashBuf(tag, hash, randStr.integer.data, randStr.integer.len);
     if (rv != SECSuccess) {
         goto loser;
@@ -197,6 +149,7 @@ CMMF_POPODecKeyChallContDecryptChallenge(CMMFPOPODecKeyChallContent *inChalCont,
         /* The hash for the data we decrypted doesn't match the hash provided
 	 * in the challenge.  Bail out.
 	 */
+	PORT_SetError(SEC_ERROR_BAD_DATA);
         rv = SECFailure;
 	goto loser;
     }
@@ -209,6 +162,7 @@ CMMF_POPODecKeyChallContDecryptChallenge(CMMFPOPODecKeyChallContent *inChalCont,
         /* The hash for the data we decrypted doesn't match the hash provided
 	 * in the challenge.  Bail out.
 	 */
+	PORT_SetError(SEC_ERROR_BAD_DATA);
         rv = SECFailure;
 	goto loser;
     }
@@ -216,8 +170,8 @@ CMMF_POPODecKeyChallContDecryptChallenge(CMMFPOPODecKeyChallContent *inChalCont,
     rv = SECITEM_CopyItem(inChalCont->poolp, &challenge->randomNumber,
 			  &randStr.integer);
  loser:
-    if (symKey != NULL) {
-        PK11_FreeSymKey(symKey);
+    if (poolp) {
+    	PORT_FreeArena(poolp, PR_FALSE);
     }
     return rv;
 }
@@ -250,7 +204,7 @@ CMMF_EncodePOPODecKeyRespContent(long                     *inDecodedRand,
 				 CRMFEncoderOutputCallback inCallback,
 				 void                     *inArg)
 {
-    PRArenaPool *poolp;
+    PLArenaPool *poolp;
     CMMFPOPODecKeyRespContent *response;
     SECItem *currItem;
     SECStatus rv=SECFailure;
@@ -273,7 +227,10 @@ CMMF_EncodePOPODecKeyRespContent(long                     *inDecodedRand,
 	if (currItem == NULL) {
 	    goto loser;
 	}
-	SEC_ASN1EncodeInteger(poolp, currItem,inDecodedRand[i]);
+	currItem = SEC_ASN1EncodeInteger(poolp, currItem, inDecodedRand[i]);
+	if (currItem == NULL) {
+	    goto loser;
+	}
     }
     rv = cmmf_user_encode(response, inCallback, inArg,
 			  CMMFPOPODecKeyRespContentTemplate);

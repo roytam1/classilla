@@ -1,36 +1,39 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1999-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1999-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 
 #include "primpl.h"
@@ -135,44 +138,46 @@ GetHighResClock(void *buf, size_t maxbytes)
     return 0;
 }
 
-#elif (defined(LINUX) || defined(FREEBSD) || defined(NETBSD) || defined(OPENBSD))
+#elif (defined(LINUX) || defined(FREEBSD) || defined(__FreeBSD_kernel__) \
+    || defined(NETBSD) || defined(__NetBSD_kernel__) || defined(OPENBSD) \
+    || defined(SYMBIAN))
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 
-static int      fdDevRandom;
-static PRCallOnceType coOpenDevRandom;
+static int      fdDevURandom;
+static PRCallOnceType coOpenDevURandom;
 
-static PRStatus OpenDevRandom( void )
+static PRStatus OpenDevURandom( void )
 {
-    fdDevRandom = open( "/dev/random", O_RDONLY );
-    return((-1 == fdDevRandom)? PR_FAILURE : PR_SUCCESS );
-} /* end OpenDevRandom() */
+    fdDevURandom = open( "/dev/urandom", O_RDONLY );
+    return((-1 == fdDevURandom)? PR_FAILURE : PR_SUCCESS );
+} /* end OpenDevURandom() */
 
-static size_t GetDevRandom( void *buf, size_t size )
+static size_t GetDevURandom( void *buf, size_t size )
 {
     int bytesIn;
     int rc;
 
-    rc = PR_CallOnce( &coOpenDevRandom, OpenDevRandom );
+    rc = PR_CallOnce( &coOpenDevURandom, OpenDevURandom );
     if ( PR_FAILURE == rc ) {
         _PR_MD_MAP_OPEN_ERROR( errno );
         return(0);
     }
 
-    bytesIn = read( fdDevRandom, buf, size );
+    bytesIn = read( fdDevURandom, buf, size );
     if ( -1 == bytesIn ) {
         _PR_MD_MAP_READ_ERROR( errno );
         return(0);
     }
 
     return( bytesIn );
-} /* end GetDevRandom() */
+} /* end GetDevURandom() */
 
 static size_t
 GetHighResClock(void *buf, size_t maxbytes)
 {             
-    return(GetDevRandom( buf, maxbytes ));
+    return(GetDevURandom( buf, maxbytes ));
 }
 
 #elif defined(NCR)
@@ -295,7 +300,7 @@ GetHighResClock(void *buf, size_t maxbytes)
     return 0;
 }
 #elif defined(SCO) || defined(UNIXWARE) || defined(BSDI) || defined(NTO) \
-    || defined(QNX) || defined(DARWIN)
+    || defined(QNX) || defined(DARWIN) || defined(RISCOS)
 #include <sys/times.h>
 
 static size_t

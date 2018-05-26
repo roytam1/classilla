@@ -1,40 +1,9 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Support for various policy related extensions
- *
- * $Id: polcyxtn.c,v 1.3 2002/08/31 00:37:29 jpierre%netscape.com Exp $
  */
 
 #include "seccomon.h"
@@ -46,26 +15,39 @@
 #include "secerr.h"
 #include "nspr.h"
 
-const SEC_ASN1Template CERT_NoticeReferenceTemplate[] = {
-    { SEC_ASN1_SEQUENCE,
-	  0, NULL, sizeof(CERTNoticeReference) },
-/* NOTE: this should be a choice */
-    { SEC_ASN1_IA5_STRING,
-	  offsetof(CERTNoticeReference, organization) },
-    { SEC_ASN1_SEQUENCE_OF,
-	  offsetof(CERTNoticeReference, noticeNumbers),
-	  SEC_IntegerTemplate }, 
+SEC_ASN1_MKSUB(SEC_IntegerTemplate)
+SEC_ASN1_MKSUB(SEC_ObjectIDTemplate)
+
+const SEC_ASN1Template CERT_DisplayTextTypeTemplate[] = {
+    { SEC_ASN1_CHOICE, offsetof(SECItem, type), 0, sizeof(SECItem) },
+    { SEC_ASN1_IA5_STRING, 0, 0, siAsciiString},
+    { SEC_ASN1_VISIBLE_STRING , 0, 0, siVisibleString},
+    { SEC_ASN1_BMP_STRING  , 0, 0, siBMPString },
+    { SEC_ASN1_UTF8_STRING , 0, 0, siUTF8String },
     { 0 }
 };
 
-/* this template can not be encoded because of the option inline */
+const SEC_ASN1Template CERT_NoticeReferenceTemplate[] = {
+    { SEC_ASN1_SEQUENCE,
+	  0, NULL, sizeof(CERTNoticeReference) },
+    { SEC_ASN1_INLINE,
+	  offsetof(CERTNoticeReference, organization),
+           CERT_DisplayTextTypeTemplate, 0 },
+    { SEC_ASN1_SEQUENCE_OF | SEC_ASN1_XTRN,
+           offsetof(CERTNoticeReference, noticeNumbers),
+           SEC_ASN1_SUB(SEC_IntegerTemplate) }, 
+    { 0 }
+};
+
 const SEC_ASN1Template CERT_UserNoticeTemplate[] = {
     { SEC_ASN1_SEQUENCE,
 	  0, NULL, sizeof(CERTUserNotice) },
-    { SEC_ASN1_OPTIONAL | SEC_ASN1_SEQUENCE | SEC_ASN1_CONSTRUCTED,
-	  offsetof(CERTUserNotice, derNoticeReference) }, 
-    { SEC_ASN1_OPTIONAL | SEC_ASN1_ANY,
-	  offsetof(CERTUserNotice, displayText) }, 
+    { SEC_ASN1_INLINE | SEC_ASN1_OPTIONAL,
+	  offsetof(CERTUserNotice, noticeReference),
+           CERT_NoticeReferenceTemplate, 0 },
+    { SEC_ASN1_INLINE | SEC_ASN1_OPTIONAL,
+	  offsetof(CERTUserNotice, displayText),
+           CERT_DisplayTextTypeTemplate, 0 }, 
     { 0 }
 };
 
@@ -84,7 +66,7 @@ const SEC_ASN1Template CERT_PolicyInfoTemplate[] = {
 	  0, NULL, sizeof(CERTPolicyInfo) },
     { SEC_ASN1_OBJECT_ID,
 	  offsetof(CERTPolicyInfo, policyID) },
-    { SEC_ASN1_SEQUENCE_OF,
+    { SEC_ASN1_SEQUENCE_OF | SEC_ASN1_OPTIONAL,
 	  offsetof(CERTPolicyInfo, policyQualifiers),
 	  CERT_PolicyQualifierTemplate },
     { 0 }
@@ -94,6 +76,39 @@ const SEC_ASN1Template CERT_CertificatePoliciesTemplate[] = {
     { SEC_ASN1_SEQUENCE_OF,
 	  offsetof(CERTCertificatePolicies, policyInfos),
 	  CERT_PolicyInfoTemplate, sizeof(CERTCertificatePolicies)  }
+};
+
+const SEC_ASN1Template CERT_PolicyMapTemplate[] = {
+    { SEC_ASN1_SEQUENCE,
+	  0, NULL, sizeof(CERTPolicyMap) },
+    { SEC_ASN1_OBJECT_ID,
+	  offsetof(CERTPolicyMap, issuerDomainPolicy) },
+    { SEC_ASN1_OBJECT_ID,
+	  offsetof(CERTPolicyMap, subjectDomainPolicy) },
+    { 0 }
+};
+
+const SEC_ASN1Template CERT_PolicyMappingsTemplate[] = {
+    { SEC_ASN1_SEQUENCE_OF,
+	  offsetof(CERTCertificatePolicyMappings, policyMaps),
+	  CERT_PolicyMapTemplate, sizeof(CERTPolicyMap)  }
+};
+
+const SEC_ASN1Template CERT_PolicyConstraintsTemplate[] = {
+    { SEC_ASN1_SEQUENCE, 0, NULL, sizeof(CERTCertificatePolicyConstraints) },
+    { SEC_ASN1_OPTIONAL | SEC_ASN1_CONTEXT_SPECIFIC | SEC_ASN1_XTRN | 0,
+	  offsetof(CERTCertificatePolicyConstraints, explicitPolicySkipCerts),
+	  SEC_ASN1_SUB(SEC_IntegerTemplate) },
+    { SEC_ASN1_OPTIONAL | SEC_ASN1_CONTEXT_SPECIFIC | SEC_ASN1_XTRN | 1,
+	  offsetof(CERTCertificatePolicyConstraints, inhibitMappingSkipCerts),
+	  SEC_ASN1_SUB(SEC_IntegerTemplate) },
+    { 0 }
+};
+
+const SEC_ASN1Template CERT_InhibitAnyTemplate[] = {
+    { SEC_ASN1_INTEGER,
+	  offsetof(CERTCertificateInhibitAny, inhibitAnySkipCerts),
+	  NULL, sizeof(CERTCertificateInhibitAny)  }
 };
 
 static void
@@ -131,9 +146,9 @@ breakLines(char *string)
 }
 
 CERTCertificatePolicies *
-CERT_DecodeCertificatePoliciesExtension(SECItem *extnValue)
+CERT_DecodeCertificatePoliciesExtension(const SECItem *extnValue)
 {
-    PRArenaPool *arena = NULL;
+    PLArenaPool *arena = NULL;
     SECStatus rv;
     CERTCertificatePolicies *policies;
     CERTPolicyInfo **policyInfos, *policyInfo;
@@ -147,7 +162,7 @@ CERT_DecodeCertificatePoliciesExtension(SECItem *extnValue)
 	goto loser;
     }
 
-    /* allocate the certifiate policies structure */
+    /* allocate the certificate policies structure */
     policies = (CERTCertificatePolicies *)
 	PORT_ArenaZAlloc(arena, sizeof(CERTCertificatePolicies));
     
@@ -178,7 +193,7 @@ CERT_DecodeCertificatePoliciesExtension(SECItem *extnValue)
 	policyInfo = *policyInfos;
 	policyInfo->oid = SECOID_FindOIDTag(&policyInfo->policyID);
 	policyQualifiers = policyInfo->policyQualifiers;
-	while ( *policyQualifiers != NULL ) {
+	while ( policyQualifiers != NULL && *policyQualifiers != NULL ) {
 	    policyQualifier = *policyQualifiers;
 	    policyQualifier->oid =
 		SECOID_FindOIDTag(&policyQualifier->qualifierID);
@@ -206,11 +221,156 @@ CERT_DestroyCertificatePoliciesExtension(CERTCertificatePolicies *policies)
     return;
 }
 
+CERTCertificatePolicyMappings *
+CERT_DecodePolicyMappingsExtension(SECItem *extnValue)
+{
+    PLArenaPool *arena = NULL;
+    SECStatus rv;
+    CERTCertificatePolicyMappings *mappings;
+    SECItem newExtnValue;
+    
+    /* make a new arena */
+    arena = PORT_NewArena(DER_DEFAULT_CHUNKSIZE);
+    if ( !arena ) {
+        goto loser;
+    }
+
+    /* allocate the policy mappings structure */
+    mappings = (CERTCertificatePolicyMappings *)
+        PORT_ArenaZAlloc(arena, sizeof(CERTCertificatePolicyMappings));
+    if ( mappings == NULL ) {
+        goto loser;
+    }
+    mappings->arena = arena;
+
+    /* copy the DER into the arena, since Quick DER returns data that points
+       into the DER input, which may get freed by the caller */
+    rv = SECITEM_CopyItem(arena, &newExtnValue, extnValue);
+    if ( rv != SECSuccess ) {
+        goto loser;
+    }
+
+    /* decode the policy mappings */
+    rv = SEC_QuickDERDecodeItem
+        (arena, mappings, CERT_PolicyMappingsTemplate, &newExtnValue);
+    if ( rv != SECSuccess ) {
+        goto loser;
+    }
+
+    return(mappings);
+    
+loser:
+    if ( arena != NULL ) {
+        PORT_FreeArena(arena, PR_FALSE);
+    }
+    
+    return(NULL);
+}
+
+SECStatus
+CERT_DestroyPolicyMappingsExtension(CERTCertificatePolicyMappings *mappings)
+{
+    if ( mappings != NULL ) {
+        PORT_FreeArena(mappings->arena, PR_FALSE);
+    }
+    return SECSuccess;
+}
+
+SECStatus
+CERT_DecodePolicyConstraintsExtension
+                             (CERTCertificatePolicyConstraints *decodedValue,
+                              const SECItem *encodedValue)
+{
+    CERTCertificatePolicyConstraints decodeContext;
+    PLArenaPool *arena = NULL;
+    SECStatus rv = SECSuccess;
+
+    /* initialize so we can tell when an optional component is omitted */
+    PORT_Memset(&decodeContext, 0, sizeof(decodeContext));
+
+    /* make a new arena */
+    arena = PORT_NewArena(SEC_ASN1_DEFAULT_ARENA_SIZE);
+    if (!arena) {
+        return SECFailure;
+    }
+
+    do {
+        /* decode the policy constraints */
+        rv = SEC_QuickDERDecodeItem(arena,
+                &decodeContext, CERT_PolicyConstraintsTemplate, encodedValue);
+
+        if ( rv != SECSuccess ) {
+            break;
+        }
+
+        if (decodeContext.explicitPolicySkipCerts.len == 0) {
+            *(PRInt32 *)decodedValue->explicitPolicySkipCerts.data = -1;
+        } else {
+            *(PRInt32 *)decodedValue->explicitPolicySkipCerts.data =
+                    DER_GetInteger(&decodeContext.explicitPolicySkipCerts);
+        }
+
+        if (decodeContext.inhibitMappingSkipCerts.len == 0) {
+            *(PRInt32 *)decodedValue->inhibitMappingSkipCerts.data = -1;
+        } else {
+            *(PRInt32 *)decodedValue->inhibitMappingSkipCerts.data =
+                    DER_GetInteger(&decodeContext.inhibitMappingSkipCerts);
+        }
+
+        if ((*(PRInt32 *)decodedValue->explicitPolicySkipCerts.data ==
+                PR_INT32_MIN) ||
+            (*(PRInt32 *)decodedValue->explicitPolicySkipCerts.data ==
+                PR_INT32_MAX) ||
+            (*(PRInt32 *)decodedValue->inhibitMappingSkipCerts.data ==
+                PR_INT32_MIN) ||
+            (*(PRInt32 *)decodedValue->inhibitMappingSkipCerts.data ==
+                PR_INT32_MAX)) {
+            rv = SECFailure;
+        }
+    
+    } while (0);
+
+    PORT_FreeArena(arena, PR_FALSE);
+    return(rv);
+}
+
+SECStatus CERT_DecodeInhibitAnyExtension
+        (CERTCertificateInhibitAny *decodedValue, SECItem *encodedValue)
+{
+    CERTCertificateInhibitAny decodeContext;
+    PLArenaPool *arena = NULL;
+    SECStatus rv = SECSuccess;
+
+    /* make a new arena */
+    arena = PORT_NewArena(SEC_ASN1_DEFAULT_ARENA_SIZE);
+    if ( !arena ) {
+        return SECFailure;
+    }
+
+    do {
+
+        /* decode the policy mappings */
+        decodeContext.inhibitAnySkipCerts.type = siUnsignedInteger;
+        rv = SEC_QuickDERDecodeItem(arena,
+                &decodeContext, CERT_InhibitAnyTemplate, encodedValue);
+
+        if ( rv != SECSuccess ) {
+            break;
+        }
+
+        *(PRInt32 *)decodedValue->inhibitAnySkipCerts.data =
+                DER_GetInteger(&decodeContext.inhibitAnySkipCerts);
+
+    } while (0);
+
+    PORT_FreeArena(arena, PR_FALSE);
+    return(rv);
+}
 
 CERTUserNotice *
 CERT_DecodeUserNotice(SECItem *noticeItem)
 {
-    PRArenaPool *arena = NULL;
+    PLArenaPool *arena = NULL;
     SECStatus rv;
     CERTUserNotice *userNotice;
     SECItem newNoticeItem;
@@ -248,30 +408,12 @@ CERT_DecodeUserNotice(SECItem *noticeItem)
     }
 
     if (userNotice->derNoticeReference.data != NULL) {
-	/* sigh, the asn1 parser stripped the sequence encoding, re add it
-	 * before we decode.
-	 */
-	SECItem tmpbuf;
-	int	newBytes;
 
-	newBytes = SEC_ASN1LengthLength(userNotice->derNoticeReference.len)+1;
-	tmpbuf.len = newBytes + userNotice->derNoticeReference.len;
-	tmpbuf.data = PORT_ArenaZAlloc(arena, tmpbuf.len);
-	if (tmpbuf.data == NULL) {
-	    goto loser;
-	}
-	tmpbuf.data[0] = SEC_ASN1_SEQUENCE | SEC_ASN1_CONSTRUCTED;
-	SEC_ASN1EncodeLength(&tmpbuf.data[1],userNotice->derNoticeReference.len);
-	PORT_Memcpy(&tmpbuf.data[newBytes],userNotice->derNoticeReference.data,
-				userNotice->derNoticeReference.len);
-
-	/* OK, no decode it */
-    	rv = SEC_QuickDERDecodeItem(arena, &userNotice->noticeReference, 
-	    CERT_NoticeReferenceTemplate, &tmpbuf);
-
-	PORT_Free(tmpbuf.data); tmpbuf.data = NULL;
-    	if ( rv != SECSuccess ) {
-	    goto loser;
+        rv = SEC_QuickDERDecodeItem(arena, &userNotice->noticeReference,
+                                    CERT_NoticeReferenceTemplate,
+                                    &userNotice->derNoticeReference);
+        if (rv == SECFailure) {
+            goto loser;
     	}
     }
 
@@ -416,7 +558,7 @@ CERT_GetCertCommentString(CERTCertificate *cert)
 	if ( (*policyInfos)->oid == SEC_OID_VERISIGN_USER_NOTICES ) {
 	    policyQualifiers = (*policyInfos)->policyQualifiers;
 	    /* search through the policy qualifiers looking for user notice */
-	    while ( *policyQualifiers != NULL ) {
+	    while ( policyQualifiers != NULL && *policyQualifiers != NULL ) {
 		qualifier = *policyQualifiers;
 		if ( qualifier->oid == SEC_OID_PKIX_USER_NOTICE_QUALIFIER ) {
 		    retstring =
@@ -454,15 +596,15 @@ nopolicy:
 
 
 const SEC_ASN1Template CERT_OidSeqTemplate[] = {
-    { SEC_ASN1_SEQUENCE_OF,
+    { SEC_ASN1_SEQUENCE_OF | SEC_ASN1_XTRN,
 	  offsetof(CERTOidSequence, oids),
-	  SEC_ObjectIDTemplate }
+	  SEC_ASN1_SUB(SEC_ObjectIDTemplate) }
 };
 
 CERTOidSequence *
-CERT_DecodeOidSequence(SECItem *seqItem)
+CERT_DecodeOidSequence(const SECItem *seqItem)
 {
-    PRArenaPool *arena = NULL;
+    PLArenaPool *arena = NULL;
     SECStatus rv;
     CERTOidSequence *oidSeq;
     SECItem newSeqItem;
@@ -501,6 +643,9 @@ CERT_DecodeOidSequence(SECItem *seqItem)
     return(oidSeq);
     
 loser:
+    if (arena) {
+        PORT_FreeArena(arena, PR_FALSE);
+    }
     return(NULL);
 }
 
@@ -562,4 +707,123 @@ done:
 	PORT_Free(extItem.data);
     }
     return(ret);
+}
+
+
+SECStatus
+CERT_EncodePolicyConstraintsExtension(PLArenaPool *arena,
+                                      CERTCertificatePolicyConstraints *constr,
+                                      SECItem *dest)
+{
+    SECStatus rv = SECSuccess;
+
+    PORT_Assert(constr != NULL && dest != NULL);
+    if (constr == NULL || dest == NULL) {
+	return SECFailure;
+    }
+
+    if (SEC_ASN1EncodeItem (arena, dest, constr,
+                            CERT_PolicyConstraintsTemplate) == NULL) {
+	rv = SECFailure;
+    }
+    return(rv);
+}
+
+SECStatus
+CERT_EncodePolicyMappingExtension(PLArenaPool *arena,
+                                  CERTCertificatePolicyMappings *mapping,
+                                  SECItem *dest)
+{
+    SECStatus rv = SECSuccess;
+
+    PORT_Assert(mapping != NULL && dest != NULL);
+    if (mapping == NULL || dest == NULL) {
+	return SECFailure;
+    }
+
+    if (SEC_ASN1EncodeItem (arena, dest, mapping,
+                            CERT_PolicyMappingsTemplate) == NULL) {
+	rv = SECFailure;
+    }
+    return(rv);
+}
+
+
+
+SECStatus
+CERT_EncodeCertPoliciesExtension(PLArenaPool *arena,
+                                 CERTPolicyInfo **info,
+                                 SECItem *dest)
+{
+    SECStatus rv = SECSuccess;
+
+    PORT_Assert(info != NULL && dest != NULL);
+    if (info == NULL || dest == NULL) {
+	return SECFailure;
+    }
+
+    if (SEC_ASN1EncodeItem (arena, dest, info,
+                            CERT_CertificatePoliciesTemplate) == NULL) {
+	rv = SECFailure;
+    }
+    return(rv);
+}
+
+SECStatus
+CERT_EncodeUserNotice(PLArenaPool *arena,
+                      CERTUserNotice *notice,
+                      SECItem *dest)
+{
+    SECStatus rv = SECSuccess;
+
+    PORT_Assert(notice != NULL && dest != NULL);
+    if (notice == NULL || dest == NULL) {
+	return SECFailure;
+    }
+
+    if (SEC_ASN1EncodeItem(arena, dest,
+                           notice, CERT_UserNoticeTemplate) == NULL) {
+	rv = SECFailure;
+    }
+
+    return(rv);
+}
+
+SECStatus
+CERT_EncodeNoticeReference(PLArenaPool *arena,
+                           CERTNoticeReference *reference,
+                           SECItem *dest)
+{
+    SECStatus rv = SECSuccess;
+    
+    PORT_Assert(reference != NULL && dest != NULL);
+    if (reference == NULL || dest == NULL) {
+	return SECFailure;
+    }
+
+    if (SEC_ASN1EncodeItem (arena, dest, reference,
+                            CERT_NoticeReferenceTemplate) == NULL) {
+	rv = SECFailure;
+    }
+
+    return(rv);
+}
+
+SECStatus
+CERT_EncodeInhibitAnyExtension(PLArenaPool *arena,
+                               CERTCertificateInhibitAny *certInhibitAny,
+                               SECItem *dest)
+{
+    SECStatus rv = SECSuccess;
+
+    PORT_Assert(certInhibitAny != NULL && dest != NULL);
+    if (certInhibitAny == NULL || dest == NULL) {
+	return SECFailure;
+    }
+
+    if (SEC_ASN1EncodeItem (arena, dest, certInhibitAny,
+                            CERT_InhibitAnyTemplate) == NULL) {
+	rv = SECFailure;
+    }
+    return(rv);
 }

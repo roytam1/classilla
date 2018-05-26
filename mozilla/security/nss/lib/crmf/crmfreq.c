@@ -1,36 +1,7 @@
 /* -*- Mode: C; tab-width: 8 -*-*/
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "crmf.h"
 #include "crmfi.h"
@@ -48,7 +19,7 @@ const unsigned char hexFalse = 0x00;
 
 
 SECStatus
-crmf_encode_integer(PRArenaPool *poolp, SECItem *dest, long value) 
+crmf_encode_integer(PLArenaPool *poolp, SECItem *dest, long value)
 {
     SECItem *dummy;
 
@@ -60,8 +31,22 @@ crmf_encode_integer(PRArenaPool *poolp, SECItem *dest, long value)
     return SECSuccess;
 }
 
+SECStatus
+crmf_encode_unsigned_integer(PLArenaPool *poolp, SECItem *dest,
+                             unsigned long value) 
+{
+    SECItem *dummy;
+
+    dummy = SEC_ASN1EncodeUnsignedInteger(poolp, dest, value);
+    PORT_Assert (dummy == dest);
+    if (dummy != dest) {
+        return SECFailure;
+    }
+    return SECSuccess;
+}
+
 static SECStatus
-crmf_copy_secitem (PRArenaPool *poolp, SECItem *dest, SECItem *src)
+crmf_copy_secitem (PLArenaPool *poolp, SECItem *dest, SECItem *src)
 {
     return  SECITEM_CopyItem (poolp, dest, src); 
 }
@@ -101,8 +86,9 @@ CRMF_DoesRequestHaveField (CRMFCertRequest       *inCertReq,
 }
 
 CRMFCertRequest *
-CRMF_CreateCertRequest (long inRequestID) {
-    PRArenaPool     *poolp;
+CRMF_CreateCertRequest (PRUint32 inRequestID)
+{
+    PLArenaPool     *poolp;
     CRMFCertRequest *certReq;
     SECStatus        rv;
     
@@ -119,7 +105,8 @@ CRMF_CreateCertRequest (long inRequestID) {
     certReq->poolp = poolp;
     certReq->requestID = inRequestID;
     
-    rv = crmf_encode_integer(poolp, &(certReq->certReqId), inRequestID);
+    rv = crmf_encode_unsigned_integer(poolp, &(certReq->certReqId), 
+                                      inRequestID);
     if (rv != SECSuccess) {
         goto loser;
     }
@@ -155,28 +142,31 @@ CRMF_DestroyCertRequest(CRMFCertRequest *inCertReq)
 }
 
 static SECStatus
-crmf_template_add_version(PRArenaPool *poolp, SECItem *dest, long version)
+crmf_template_add_version(PLArenaPool *poolp, SECItem *dest, long version)
 {
     return (crmf_encode_integer(poolp, dest, version));
 }
 
 static SECStatus
-crmf_template_add_serialnumber(PRArenaPool *poolp, SECItem *dest, long serial)
+crmf_template_add_serialnumber(PLArenaPool *poolp, SECItem *dest, long serial)
 {
     return (crmf_encode_integer(poolp, dest, serial));
 }
 
 SECStatus
-crmf_template_copy_secalg (PRArenaPool *poolp, SECAlgorithmID **dest, 
+crmf_template_copy_secalg (PLArenaPool *poolp, SECAlgorithmID **dest,
 			   SECAlgorithmID* src)
 {
     SECStatus         rv;
     void             *mark = NULL;
     SECAlgorithmID   *mySecAlg;
 
-    if (poolp != NULL) {
-        mark = PORT_ArenaMark(poolp);
+    if (!poolp) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return SECFailure;
     }
+
+    mark = PORT_ArenaMark(poolp);
     *dest = mySecAlg = PORT_ArenaZNew(poolp, SECAlgorithmID);
     if (mySecAlg == NULL) {
         goto loser;
@@ -199,7 +189,7 @@ crmf_template_copy_secalg (PRArenaPool *poolp, SECAlgorithmID **dest,
 }
 
 SECStatus
-crmf_copy_cert_name(PRArenaPool *poolp, CERTName **dest, 
+crmf_copy_cert_name(PLArenaPool *poolp, CERTName **dest,
 		    CERTName *src)
 {
     CERTName *newName;
@@ -225,7 +215,7 @@ crmf_copy_cert_name(PRArenaPool *poolp, CERTName **dest,
 }
 
 static SECStatus
-crmf_template_add_issuer (PRArenaPool *poolp, CERTName **dest, 
+crmf_template_add_issuer (PLArenaPool *poolp, CERTName **dest,
 			  CERTName* issuerName)
 {
     return crmf_copy_cert_name(poolp, dest, issuerName);
@@ -233,23 +223,7 @@ crmf_template_add_issuer (PRArenaPool *poolp, CERTName **dest,
 
 
 static SECStatus
-crmf_encode_utctime(PRArenaPool *poolp, SECItem *destTime, PRTime time)
-{
-    SECItem   tmpItem;
-    SECStatus rv;
-
-
-    rv = DER_TimeToUTCTime (&tmpItem, time);
-    if (rv != SECSuccess) {
-        return rv;
-    }
-    rv = SECITEM_CopyItem(poolp, destTime, &tmpItem);
-    PORT_Free(tmpItem.data);
-    return rv;
-}
-
-static SECStatus
-crmf_template_add_validity (PRArenaPool *poolp, CRMFOptionalValidity **dest,
+crmf_template_add_validity (PLArenaPool *poolp, CRMFOptionalValidity **dest,
 			    CRMFValidityCreationInfo *info)
 {
     SECStatus             rv;
@@ -267,14 +241,14 @@ crmf_template_add_validity (PRArenaPool *poolp, CRMFOptionalValidity **dest,
     }
 
     if (info->notBefore) {
-        rv = crmf_encode_utctime (poolp, &myValidity->notBefore, 
+        rv = DER_EncodeTimeChoice (poolp, &myValidity->notBefore, 
 				  *info->notBefore);
 	if (rv != SECSuccess) {
 	    goto loser;
 	}
     }
     if (info->notAfter) {
-        rv = crmf_encode_utctime (poolp, &myValidity->notAfter,
+        rv = DER_EncodeTimeChoice (poolp, &myValidity->notAfter,
 				  *info->notAfter);
 	if (rv != SECSuccess) {
 	    goto loser;
@@ -289,14 +263,14 @@ crmf_template_add_validity (PRArenaPool *poolp, CRMFOptionalValidity **dest,
 }
 
 static SECStatus
-crmf_template_add_subject (PRArenaPool *poolp, CERTName **dest,
+crmf_template_add_subject (PLArenaPool *poolp, CERTName **dest,
 			   CERTName *subject)
 {
     return crmf_copy_cert_name(poolp, dest, subject);
 }
 
 SECStatus
-crmf_template_add_public_key(PRArenaPool *poolp, 
+crmf_template_add_public_key(PLArenaPool *poolp,
 			     CERTSubjectPublicKeyInfo **dest,
 			     CERTSubjectPublicKeyInfo  *pubKey)
 {
@@ -323,29 +297,28 @@ crmf_template_add_public_key(PRArenaPool *poolp,
 }
 
 static SECStatus
-crmf_copy_bitstring (PRArenaPool *poolp, SECItem *dest, SECItem *src)
+crmf_copy_bitstring (PLArenaPool *poolp, SECItem *dest, const SECItem *src)
 {
     SECStatus rv;
-    int origLenBits, numBytesToCopy;
+    SECItem  byteSrc;
     
-    origLenBits = src->len;
-    numBytesToCopy = CRMF_BITS_TO_BYTES(origLenBits);
-    rv = crmf_copy_secitem(poolp, dest, src);
-    src->len = origLenBits;
-    dest->len = origLenBits;
+    byteSrc = *src;
+    byteSrc.len = CRMF_BITS_TO_BYTES(byteSrc.len);
+    rv = crmf_copy_secitem(poolp, dest, &byteSrc);
+    dest->len = src->len;
     return rv;
 }
 
 static SECStatus
-crmf_template_add_issuer_uid(PRArenaPool *poolp, SECItem *dest,
-			     SECItem *issuerUID)
+crmf_template_add_issuer_uid(PLArenaPool *poolp, SECItem *dest,
+			     const SECItem *issuerUID)
 {
     return crmf_copy_bitstring (poolp, dest, issuerUID);
 }
 
 static SECStatus
-crmf_template_add_subject_uid(PRArenaPool *poolp, SECItem *dest, 
-			      SECItem *subjectUID)
+crmf_template_add_subject_uid(PLArenaPool *poolp, SECItem *dest,
+			      const SECItem *subjectUID)
 {
     return crmf_copy_bitstring (poolp, dest, subjectUID);
 }
@@ -368,7 +341,7 @@ crmf_zeroize_new_extensions (CRMFCertExtension **extensions,
  * structure that owns this template.
  */
 static SECStatus
-crmf_template_add_extensions(PRArenaPool *poolp, CRMFCertTemplate *inTemplate,
+crmf_template_add_extensions(PLArenaPool *poolp, CRMFCertTemplate *inTemplate,
 			     CRMFCertExtCreationInfo *extensions)
 {
     void               *mark;
@@ -431,7 +404,7 @@ CRMF_CertRequestSetTemplateField(CRMFCertRequest       *inCertReq,
 				 void                  *data)
 {
     CRMFCertTemplate *certTemplate;
-    PRArenaPool      *poolp;
+    PLArenaPool      *poolp;
     SECStatus         rv = SECFailure;
     void             *mark;
     
@@ -511,7 +484,7 @@ CRMF_CertReqMsgSetCertRequest (CRMFCertReqMsg  *inCertReqMsg,
 CRMFCertReqMsg*
 CRMF_CreateCertReqMsg(void)
 {
-    PRArenaPool    *poolp;
+    PLArenaPool    *poolp;
     CRMFCertReqMsg *reqMsg;
 
     poolp = PORT_NewArena(CRMF_DEFAULT_ARENA_SIZE);
@@ -549,7 +522,7 @@ CRMF_DestroyCertReqMsg(CRMFCertReqMsg *inCertReqMsg)
 }
 
 CRMFCertExtension*
-crmf_create_cert_extension(PRArenaPool *poolp, 
+crmf_create_cert_extension(PLArenaPool *poolp,
 			   SECOidTag    id,
 			   PRBool       isCritical,
 			   SECItem     *data)
@@ -605,7 +578,7 @@ CRMF_CreateCertExtension(SECOidTag id,
     return crmf_create_cert_extension(NULL, id, isCritical, data);
 }
 
-SECStatus
+static SECStatus
 crmf_destroy_cert_extension(CRMFCertExtension *inExtension, PRBool freeit)
 {
     if (inExtension != NULL) {

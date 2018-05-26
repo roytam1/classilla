@@ -1,35 +1,6 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Support routines for CMS implementation, none of which are exported.
@@ -38,8 +9,6 @@
  * of smime code, first try to add a CMS interface which will do it for
  * you.  If that has a problem, then just move out what you need, changing
  * its name as appropriate!
- *
- * $Id: cmslocal.h,v 1.2.186.1 2002/12/17 05:35:05 wtc%netscape.com Exp $
  */
 
 #ifndef _CMSLOCAL_H_
@@ -51,8 +20,24 @@
 
 extern const SEC_ASN1Template NSSCMSContentInfoTemplate[];
 
+struct NSSCMSContentInfoPrivateStr {
+    NSSCMSCipherContext *ciphcx;
+    NSSCMSDigestContext *digcx;
+    PRBool  dontStream;
+};
+
 /************************************************************************/
 SEC_BEGIN_PROTOS
+
+/*
+ * private content Info stuff
+ */
+
+/* initialize the private content info field. If this returns
+ * SECSuccess, the cinfo->private field is safe to dereference.
+ */
+SECStatus NSS_CMSContentInfo_Private_Init(NSSCMSContentInfo *cinfo);
+
 
 /***********************************************************************
  * cmscipher.c - en/decryption routines
@@ -71,7 +56,7 @@ NSS_CMSCipherContext_StartDecrypt(PK11SymKey *key, SECAlgorithmID *algid);
  * identifier (which may include an iv) appropriately.
  */
 extern NSSCMSCipherContext *
-NSS_CMSCipherContext_StartEncrypt(PRArenaPool *poolp, PK11SymKey *key, SECAlgorithmID *algid);
+NSS_CMSCipherContext_StartEncrypt(PLArenaPool *poolp, PK11SymKey *key, SECAlgorithmID *algid);
 
 extern void
 NSS_CMSCipherContext_Destroy(NSSCMSCipherContext *cc);
@@ -181,14 +166,6 @@ extern PK11SymKey *
 NSS_CMSUtil_DecryptSymKey_RSA(SECKEYPrivateKey *privkey, SECItem *encKey, SECOidTag bulkalgtag);
 
 extern SECStatus
-NSS_CMSUtil_EncryptSymKey_MISSI(PLArenaPool *poolp, CERTCertificate *cert, PK11SymKey *key,
-			SECOidTag symalgtag, SECItem *encKey, SECItem **pparams, void *pwfn_arg);
-
-extern PK11SymKey *
-NSS_CMSUtil_DecryptSymKey_MISSI(SECKEYPrivateKey *privkey, SECItem *encKey,
-			SECAlgorithmID *keyEncAlg, SECOidTag bulkalgtag, void *pwfn_arg);
-
-extern SECStatus
 NSS_CMSUtil_EncryptSymKey_ESDH(PLArenaPool *poolp, CERTCertificate *cert, PK11SymKey *key,
 			SECItem *encKey, SECItem **ukm, SECAlgorithmID *keyEncAlg,
 			SECItem *originatorPubKey);
@@ -211,13 +188,13 @@ extern NSSCMSRecipientEncryptedKey *NSS_CMSRecipientEncryptedKey_Create(PLArenaP
  * NSS_CMSArray_Alloc - allocate an array in an arena
  */
 extern void **
-NSS_CMSArray_Alloc(PRArenaPool *poolp, int n);
+NSS_CMSArray_Alloc(PLArenaPool *poolp, int n);
 
 /*
  * NSS_CMSArray_Add - add an element to the end of an array
  */
 extern SECStatus
-NSS_CMSArray_Add(PRArenaPool *poolp, void ***array, void *obj);
+NSS_CMSArray_Add(PLArenaPool *poolp, void ***array, void *obj);
 
 /*
  * NSS_CMSArray_IsEmpty - check if array is empty
@@ -254,7 +231,7 @@ NSS_CMSArray_Sort(void **primary, int (*compare)(void *,void *), void **secondar
  * with NSS_CMSAttribute_AddValue.
  */
 extern NSSCMSAttribute *
-NSS_CMSAttribute_Create(PRArenaPool *poolp, SECOidTag oidtag, SECItem *value, PRBool encoded);
+NSS_CMSAttribute_Create(PLArenaPool *poolp, SECOidTag oidtag, SECItem *value, PRBool encoded);
 
 /*
  * NSS_CMSAttribute_AddValue - add another value to an attribute
@@ -294,7 +271,7 @@ NSS_CMSAttribute_CompareValue(NSSCMSAttribute *attr, SECItem *av);
  * do the reordering.)
  */
 extern SECItem *
-NSS_CMSAttributeArray_Encode(PRArenaPool *poolp, NSSCMSAttribute ***attrs, SECItem *dest);
+NSS_CMSAttributeArray_Encode(PLArenaPool *poolp, NSSCMSAttribute ***attrs, SECItem *dest);
 
 /*
  * NSS_CMSAttributeArray_Reorder - sort attribute array by attribute's DER encoding
@@ -330,7 +307,47 @@ NSS_CMSAttributeArray_AddAttr(PLArenaPool *poolp, NSSCMSAttribute ***attrs, NSSC
 extern SECStatus
 NSS_CMSAttributeArray_SetAttr(PLArenaPool *poolp, NSSCMSAttribute ***attrs, SECOidTag type, SECItem *value, PRBool encoded);
 
+/*
+ * NSS_CMSSignedData_AddTempCertificate - add temporary certificate references.
+ * They may be needed for signature verification on the data, for example.
+ */
+extern SECStatus
+NSS_CMSSignedData_AddTempCertificate(NSSCMSSignedData *sigd, CERTCertificate *cert);
+
+/*
+ * local function to handle compatibility issues
+ * by mapping a signature algorithm back to a digest.
+ */
+SECOidTag NSS_CMSUtil_MapSignAlgs(SECOidTag signAlg);
+
+
 /************************************************************************/
+
+/*
+ * local functions to handle user defined S/MIME content types
+ */
+
+
+PRBool NSS_CMSType_IsWrapper(SECOidTag type);
+PRBool NSS_CMSType_IsData(SECOidTag type);
+size_t NSS_CMSType_GetContentSize(SECOidTag type);
+const SEC_ASN1Template * NSS_CMSType_GetTemplate(SECOidTag type);
+
+void NSS_CMSGenericWrapperData_Destroy(SECOidTag type,
+					NSSCMSGenericWrapperData *gd);
+SECStatus NSS_CMSGenericWrapperData_Decode_BeforeData(SECOidTag type, 
+					NSSCMSGenericWrapperData *gd);
+SECStatus NSS_CMSGenericWrapperData_Decode_AfterData(SECOidTag type, 
+					NSSCMSGenericWrapperData *gd);
+SECStatus NSS_CMSGenericWrapperData_Decode_AfterEnd(SECOidTag type, 
+					NSSCMSGenericWrapperData *gd);
+SECStatus NSS_CMSGenericWrapperData_Encode_BeforeStart(SECOidTag type, 
+					NSSCMSGenericWrapperData *gd);
+SECStatus NSS_CMSGenericWrapperData_Encode_BeforeData(SECOidTag type, 
+					NSSCMSGenericWrapperData *gd);
+SECStatus NSS_CMSGenericWrapperData_Encode_AfterData(SECOidTag type, 
+					NSSCMSGenericWrapperData *gd);
+
 SEC_END_PROTOS
 
 #endif /* _CMSLOCAL_H_ */

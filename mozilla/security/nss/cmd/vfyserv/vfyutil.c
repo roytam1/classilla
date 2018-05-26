@@ -1,41 +1,16 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "vfyserv.h"
 #include "secerr.h"
 #include "sslerr.h"
 #include "nspr.h"
 #include "secutil.h"
+
+
+extern PRBool dumpChain;
+extern void dumpCertChain(CERTCertificate *, SECCertUsage);
 
 /* Declare SSL cipher suites. */
 
@@ -50,14 +25,14 @@ int ssl2CipherSuites[] = {
 };
 
 int ssl3CipherSuites[] = {
-    SSL_FORTEZZA_DMS_WITH_FORTEZZA_CBC_SHA,	/* a */
-    SSL_FORTEZZA_DMS_WITH_RC4_128_SHA,		/* b */
+    -1, /* SSL_FORTEZZA_DMS_WITH_FORTEZZA_CBC_SHA* a */
+    -1, /* SSL_FORTEZZA_DMS_WITH_RC4_128_SHA,	 * b */
     SSL_RSA_WITH_RC4_128_MD5,			/* c */
     SSL_RSA_WITH_3DES_EDE_CBC_SHA,		/* d */
     SSL_RSA_WITH_DES_CBC_SHA,			/* e */
     SSL_RSA_EXPORT_WITH_RC4_40_MD5,		/* f */
     SSL_RSA_EXPORT_WITH_RC2_CBC_40_MD5,		/* g */
-    SSL_FORTEZZA_DMS_WITH_NULL_SHA,		/* h */
+    -1, /* SSL_FORTEZZA_DMS_WITH_NULL_SHA,	 * h */
     SSL_RSA_WITH_NULL_MD5,			/* i */
     SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA,		/* j */
     SSL_RSA_FIPS_WITH_DES_CBC_SHA,		/* k */
@@ -115,7 +90,7 @@ myAuthCertificate(void *arg, PRFileDesc *socket,
                   PRBool checksig, PRBool isServer) 
 {
 
-    SECCertUsage        certUsage;
+    SECCertificateUsage certUsage;
     CERTCertificate *   cert;
     void *              pinArg;
     char *              hostName;
@@ -128,22 +103,27 @@ myAuthCertificate(void *arg, PRFileDesc *socket,
 
     /* Define how the cert is being used based upon the isServer flag. */
 
-    certUsage = isServer ? certUsageSSLClient : certUsageSSLServer;
+    certUsage = isServer ? certificateUsageSSLClient : certificateUsageSSLServer;
 
     cert = SSL_PeerCertificate(socket);
 	
     pinArg = SSL_RevealPinArg(socket);
+    
+    if (dumpChain == PR_TRUE) {
+        dumpCertChain(cert, certUsage);
+    }
 
-    secStatus = CERT_VerifyCertNow((CERTCertDBHandle *)arg,
+    secStatus = CERT_VerifyCertificateNow((CERTCertDBHandle *)arg,
 				   cert,
 				   checksig,
 				   certUsage,
-				   pinArg);
+				   pinArg,
+                                   NULL);
 
     /* If this is a server, we're finished. */
     if (isServer || secStatus != SECSuccess) {
-	printCertProblems(stderr, (CERTCertDBHandle *)arg, cert, 
-			  checksig, certUsage, pinArg);
+	SECU_printCertProblems(stderr, (CERTCertDBHandle *)arg, cert, 
+			  checksig, certUsage, pinArg, PR_FALSE);
 	CERT_DestroyCertificate(cert);
 	return secStatus;
     }
@@ -287,10 +267,10 @@ myGetClientAuthData(void *arg,
 			break;
 		    }
 		    secStatus = SECFailure;
-		    break;
 		}
-		CERT_FreeNicknames(names);
+		CERT_DestroyCertificate(cert);
 	    } /* for loop */
+	    CERT_FreeNicknames(names);
 	}
     }
 
@@ -302,7 +282,7 @@ myGetClientAuthData(void *arg,
     return secStatus;
 }
 
-/* Function: SECStatus myHandshakeCallback()
+/* Function: void myHandshakeCallback()
  *
  * Purpose: Called by SSL to inform application that the handshake is
  * complete. This function is mostly used on the server side of an SSL
@@ -325,11 +305,10 @@ myGetClientAuthData(void *arg,
  * Note: This function is not implemented in this sample, as we are using
  * blocking sockets.
  */
-SECStatus 
+void
 myHandshakeCallback(PRFileDesc *socket, void *arg) 
 {
     fprintf(stderr,"Handshake Complete: SERVER CONFIGURED CORRECTLY\n");
-    return SECSuccess;
 }
 
 
@@ -381,7 +360,8 @@ exitErr(char *function)
 {
     errWarn(function);
     /* Exit gracefully. */
-    NSS_Shutdown();
+    /* ignoring return value of NSS_Shutdown as code exits with 1 anyway*/
+    (void) NSS_Shutdown();
     PR_Cleanup();
     exit(1);
 }
@@ -611,103 +591,43 @@ lockedVars_AddToCount(lockedVars * lv, int addend)
     return rv;
 }
 
-static char *
-bestCertName(CERTCertificate *cert) {
-    if (cert->nickname) {
-	return cert->nickname;
-    }
-    if (cert->emailAddr) {
-	return cert->emailAddr;
-    }
-    return cert->subjectName;
-}
+
+/*
+ * Dump cert chain in to cert.* files. This function is will
+ * create collisions while dumping cert chains if called from
+ * multiple treads. But it should not be a problem since we
+ * consider vfyserv to be single threaded(see bug 353477).
+ */
 
 void
-printCertProblems(FILE *outfile, CERTCertDBHandle *handle, 
-	CERTCertificate *cert, PRBool checksig, 
-	SECCertUsage certUsage, void *pinArg)
+dumpCertChain(CERTCertificate *cert, SECCertUsage usage)
 {
-    CERTVerifyLog      log;
-    CERTVerifyLogNode *node   = NULL;
-    unsigned int       depth  = (unsigned int)-1;
-    unsigned int       flags  = 0;
-    char *             errstr = NULL;
-    PRErrorCode	       err    = PORT_GetError();
+    CERTCertificateList *certList;
+    int count = 0;
 
-    log.arena = PORT_NewArena(512);
-    log.head = log.tail = NULL;
-    log.count = 0;
-    CERT_VerifyCert(handle, cert, checksig, certUsage,
-	            PR_Now(), pinArg, &log);
-
-    if (log.count > 0) {
-	fprintf(outfile,"PROBLEM WITH THE CERT CHAIN:\n");
-	for (node = log.head; node; node = node->next) {
-	    if (depth != node->depth) {
-		depth = node->depth;
-		fprintf(outfile,"CERT %d. %s %s:\n", depth,
-				 bestCertName(node->cert), 
-			  	 depth ? "[Certificate Authority]": "");
-	    }
-	    fprintf(outfile,"  ERROR %d: %s\n", node->error,
-						SECU_Strerror(node->error));
-	    errstr = NULL;
-	    switch (node->error) {
-	    case SEC_ERROR_INADEQUATE_KEY_USAGE:
-		flags = (unsigned int)node->arg;
-		switch (flags) {
-		case KU_DIGITAL_SIGNATURE:
-		    errstr = "Cert cannot sign.";
-		    break;
-		case KU_KEY_ENCIPHERMENT:
-		    errstr = "Cert cannot encrypt.";
-		    break;
-		case KU_KEY_CERT_SIGN:
-		    errstr = "Cert cannot sign other certs.";
-		    break;
-		default:
-		    errstr = "[unknown usage].";
-		    break;
-		}
-	    case SEC_ERROR_INADEQUATE_CERT_TYPE:
-		flags = (unsigned int)node->arg;
-		switch (flags) {
-		case NS_CERT_TYPE_SSL_CLIENT:
-		case NS_CERT_TYPE_SSL_SERVER:
-		    errstr = "Cert cannot be used for SSL.";
-		    break;
-		case NS_CERT_TYPE_SSL_CA:
-		    errstr = "Cert cannot be used as an SSL CA.";
-		    break;
-		case NS_CERT_TYPE_EMAIL:
-		    errstr = "Cert cannot be used for SMIME.";
-		    break;
-		case NS_CERT_TYPE_EMAIL_CA:
-		    errstr = "Cert cannot be used as an SMIME CA.";
-		    break;
-		case NS_CERT_TYPE_OBJECT_SIGNING:
-		    errstr = "Cert cannot be used for object signing.";
-		    break;
-		case NS_CERT_TYPE_OBJECT_SIGNING_CA:
-		    errstr = "Cert cannot be used as an object signing CA.";
-		    break;
-		default:
-		    errstr = "[unknown usage].";
-		    break;
-		}
-	    case SEC_ERROR_UNKNOWN_ISSUER:
-	    case SEC_ERROR_UNTRUSTED_ISSUER:
-	    case SEC_ERROR_EXPIRED_ISSUER_CERTIFICATE:
-		errstr = node->cert->issuerName;
-		break;
-	    default:
-		break;
-	    }
-	    if (errstr) {
-		fprintf(stderr,"    %s\n",errstr);
-	    }
-	    CERT_DestroyCertificate(node->cert);
-	}    
+    certList = CERT_CertChainFromCert(cert, usage, PR_TRUE);
+    if (certList == NULL) {
+        errWarn("CERT_CertChainFromCert");
+        return;
     }
-    PR_SetError(err, 0); /* restore original error code */
+
+    for(count = 0; count < (unsigned int)certList->len; count++) {
+        char certFileName[16];
+        PRFileDesc *cfd;
+
+        PR_snprintf(certFileName, sizeof certFileName, "cert.%03d",
+                    count);
+        cfd = PR_Open(certFileName, PR_WRONLY|PR_CREATE_FILE|PR_TRUNCATE, 
+                      0664);
+        if (!cfd) {
+            PR_fprintf(PR_STDOUT,
+                       "Error: couldn't save cert der in file '%s'\n",
+                       certFileName);
+        } else {
+            PR_Write(cfd,  certList->certs[count].data,  certList->certs[count].len);
+            PR_Close(cfd);
+            PR_fprintf(PR_STDOUT, "Cert file %s was created.\n", certFileName);
+        }
+    }
+    CERT_DestroyCertificateList(certList);
 }

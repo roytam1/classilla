@@ -1,47 +1,24 @@
 /*
- * sha512.c - implementation of SHA256, SHA384 and SHA512
+ * sha512.c - implementation of SHA224, SHA256, SHA384 and SHA512
  *
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 2002 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- *
- * $Id: sha512.c,v 1.4 2002/11/20 05:25:58 nelsonb%netscape.com Exp $
- */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#ifdef FREEBL_NO_DEPEND
+#include "stubs.h"
+#endif
+
 #include "prcpucfg.h"
-#if defined(_X86_) || defined(SHA_NO_LONG_LONG)
+#if defined(NSS_X86) || defined(SHA_NO_LONG_LONG)
 #define NOUNROLL512 1
 #undef HAVE_LONG_LONG
 #endif
 #include "prtypes.h"	/* for PRUintXX */
+#include "prlong.h"
 #include "secport.h"	/* for PORT_XXX */
 #include "blapi.h"
+#include "sha256.h"	/* for struct SHA256ContextStr */
 
 /* ============= Common constants and defines ======================= */
 
@@ -53,6 +30,7 @@
 #define SHL(x,n) (x << n)
 #define Ch(x,y,z)  ((x & y) ^ (~x & z))
 #define Maj(x,y,z) ((x & y) ^ (x & z) ^ (y & z))
+#define SHA_MIN(a,b) (a < b ? a : b)
 
 /* Padding used with all flavors of SHA */
 static const PRUint8 pad[240] = { 
@@ -61,7 +39,7 @@ static const PRUint8 pad[240] = {
    /* compiler will fill the rest in with zeros */
 };
 
-/* ============= SHA256 implemenmtation ================================== */
+/* ============= SHA256 implementation ================================== */
 
 /* SHA-256 constants, K256. */
 static const PRUint32 K256[64] = {
@@ -89,18 +67,14 @@ static const PRUint32 H256[8] = {
     0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
 };
 
-struct SHA256ContextStr {
-    union {
-	PRUint32 w[64];	    /* message schedule, input buffer, plus 48 words */
-	PRUint8  b[256];
-    } u;
-    PRUint32 h[8];		/* 8 state variables */
-    PRUint32 sizeHi,sizeLo;	/* 64-bit count of hashed bytes. */
-};
-
-#if defined(_MSC_VER) && defined(_X86_)
+#if (_MSC_VER >= 1300)
+#include <stdlib.h>
+#pragma intrinsic(_byteswap_ulong)
+#define SHA_HTONL(x) _byteswap_ulong(x)
+#define BYTESWAP4(x)  x = SHA_HTONL(x)
+#elif defined(_MSC_VER) && defined(NSS_X86_OR_X64)
 #ifndef FORCEINLINE
-#if (MSC_VER >= 1200)
+#if (_MSC_VER >= 1200)
 #define FORCEINLINE __forceinline
 #else
 #define FORCEINLINE __inline
@@ -120,23 +94,43 @@ swap4b(PRUint32 dwd)
 #define SHA_HTONL(x) swap4b(x)
 #define BYTESWAP4(x)  x = SHA_HTONL(x)
 
-#elif defined(LINUX) && defined(_X86_)
-#undef  __OPTIMIZE__
-#define __OPTIMIZE__ 1
-#undef  __pentium__
-#define __pentium__ 1
-#include <byteswap.h>
-#define SHA_HTONL(x) bswap_32(x)
+#elif defined(__GNUC__) && defined(NSS_X86_OR_X64)
+static __inline__ PRUint32 swap4b(PRUint32 value)
+{
+    __asm__("bswap %0" : "+r" (value));
+    return (value);
+}
+#define SHA_HTONL(x) swap4b(x)
 #define BYTESWAP4(x)  x = SHA_HTONL(x)
 
-#else /* neither windows nor Linux PC */
+#elif defined(__GNUC__) && (defined(__thumb2__) || \
+      (!defined(__thumb__) && \
+      (defined(__ARM_ARCH_6__) || \
+       defined(__ARM_ARCH_6J__) || \
+       defined(__ARM_ARCH_6K__) || \
+       defined(__ARM_ARCH_6Z__) || \
+       defined(__ARM_ARCH_6ZK__) || \
+       defined(__ARM_ARCH_6T2__) || \
+       defined(__ARM_ARCH_7__) || \
+       defined(__ARM_ARCH_7A__) || \
+       defined(__ARM_ARCH_7R__))))
+static __inline__ PRUint32 swap4b(PRUint32 value)
+{
+    PRUint32 ret;
+    __asm__("rev %0, %1" : "=r" (ret) : "r"(value));
+    return ret;
+}
+#define SHA_HTONL(x) swap4b(x)
+#define BYTESWAP4(x)  x = SHA_HTONL(x)
+
+#else
 #define SWAP4MASK  0x00FF00FF
 #define SHA_HTONL(x) (t1 = (x), t1 = (t1 << 16) | (t1 >> 16), \
                       ((t1 & SWAP4MASK) << 8) | ((t1 >> 8) & SWAP4MASK))
 #define BYTESWAP4(x)  x = SHA_HTONL(x)
 #endif
 
-#if defined(_MSC_VER) && defined(_X86_)
+#if defined(_MSC_VER)
 #pragma intrinsic (_lrotr, _lrotl) 
 #define ROTR32(x,n) _lrotr(x,n)
 #define ROTL32(x,n) _lrotl(x,n)
@@ -161,8 +155,9 @@ SHA256_NewContext(void)
 void 
 SHA256_DestroyContext(SHA256Context *ctx, PRBool freeit)
 {
+    memset(ctx, 0, sizeof *ctx);
     if (freeit) {
-        PORT_ZFree(ctx, sizeof *ctx);
+        PORT_Free(ctx);
     }
 }
 
@@ -466,9 +461,38 @@ SHA256_End(SHA256Context *ctx, unsigned char *digest,
 	*digestLen = padLen;
 }
 
+void
+SHA256_EndRaw(SHA256Context *ctx, unsigned char *digest,
+	      unsigned int *digestLen, unsigned int maxDigestLen)
+{
+    PRUint32 h[8];
+    unsigned int len;
+#ifdef SWAP4MASK
+    PRUint32 t1;
+#endif
+
+    memcpy(h, ctx->h, sizeof(h));
+
+#if defined(IS_LITTLE_ENDIAN)
+    BYTESWAP4(h[0]);
+    BYTESWAP4(h[1]);
+    BYTESWAP4(h[2]);
+    BYTESWAP4(h[3]);
+    BYTESWAP4(h[4]);
+    BYTESWAP4(h[5]);
+    BYTESWAP4(h[6]);
+    BYTESWAP4(h[7]);
+#endif
+
+    len = PR_MIN(SHA256_LENGTH, maxDigestLen);
+    memcpy(digest, h, len);
+    if (digestLen)
+	*digestLen = len;
+}
+
 SECStatus 
 SHA256_HashBuf(unsigned char *dest, const unsigned char *src, 
-               uint32 src_length)
+               PRUint32 src_length)
 {
     SHA256Context ctx;
     unsigned int outLen;
@@ -476,6 +500,7 @@ SHA256_HashBuf(unsigned char *dest, const unsigned char *src,
     SHA256_Begin(&ctx);
     SHA256_Update(&ctx, src, src_length);
     SHA256_End(&ctx, dest, &outLen, SHA256_LENGTH);
+    memset(&ctx, 0, sizeof ctx);
 
     return SECSuccess;
 }
@@ -512,13 +537,120 @@ SHA256_Resurrect(unsigned char *space, void *arg)
     return ctx;
 }
 
+void SHA256_Clone(SHA256Context *dest, SHA256Context *src) 
+{
+    memcpy(dest, src, sizeof *dest);
+}
+
+/* ============= SHA224 implementation ================================== */
+
+/* SHA-224 initial hash values */
+static const PRUint32 H224[8] = {
+    0xc1059ed8, 0x367cd507, 0x3070dd17, 0xf70e5939, 
+    0xffc00b31, 0x68581511, 0x64f98fa7, 0xbefa4fa4
+};
+
+SHA224Context *
+SHA224_NewContext(void)
+{
+    return SHA256_NewContext();
+}
+
+void
+SHA224_DestroyContext(SHA224Context *ctx, PRBool freeit)
+{
+    SHA256_DestroyContext(ctx, freeit);
+}
+
+void
+SHA224_Begin(SHA224Context *ctx)
+{
+    memset(ctx, 0, sizeof *ctx);
+    memcpy(H, H224, sizeof H224);
+}
+
+void
+SHA224_Update(SHA224Context *ctx, const unsigned char *input,
+		    unsigned int inputLen)
+{
+    SHA256_Update(ctx, input, inputLen);
+}
+
+void
+SHA224_End(SHA256Context *ctx, unsigned char *digest,
+           unsigned int *digestLen, unsigned int maxDigestLen)
+{
+    unsigned int maxLen = SHA_MIN(maxDigestLen, SHA224_LENGTH);
+    SHA256_End(ctx, digest, digestLen, maxLen);
+}
+
+void
+SHA224_EndRaw(SHA256Context *ctx, unsigned char *digest,
+	      unsigned int *digestLen, unsigned int maxDigestLen)
+{
+    unsigned int maxLen = SHA_MIN(maxDigestLen, SHA224_LENGTH);
+    SHA256_EndRaw(ctx, digest, digestLen, maxLen);
+}
+
+SECStatus 
+SHA224_HashBuf(unsigned char *dest, const unsigned char *src,
+               PRUint32 src_length)
+{
+    SHA256Context ctx;
+    unsigned int outLen;
+
+    SHA224_Begin(&ctx);
+    SHA256_Update(&ctx, src, src_length);
+    SHA256_End(&ctx, dest, &outLen, SHA224_LENGTH);
+    memset(&ctx, 0, sizeof ctx);
+
+    return SECSuccess;
+}
+
+SECStatus
+SHA224_Hash(unsigned char *dest, const char *src)
+{
+    return SHA224_HashBuf(dest, (const unsigned char *)src, PORT_Strlen(src));
+}
+
+void SHA224_TraceState(SHA224Context *ctx) { }
+
+unsigned int
+SHA224_FlattenSize(SHA224Context *ctx)
+{
+    return SHA256_FlattenSize(ctx);
+}
+
+SECStatus
+SHA224_Flatten(SHA224Context *ctx, unsigned char *space)
+{
+    return SHA256_Flatten(ctx, space);
+}
+
+SHA224Context *
+SHA224_Resurrect(unsigned char *space, void *arg)
+{
+    return SHA256_Resurrect(space, arg);
+}
+
+void SHA224_Clone(SHA224Context *dest, SHA224Context *src) 
+{
+    SHA256_Clone(dest, src);
+}
+
 
 /* ======= SHA512 and SHA384 common constants and defines ================= */
 
 /* common #defines for SHA512 and SHA384 */
 #if defined(HAVE_LONG_LONG)
+#if defined(_MSC_VER)
+#pragma intrinsic(_rotr64,_rotl64)
+#define ROTR64(x,n) _rotr64(x,n)
+#define ROTL64(x,n) _rotl64(x,n)
+#else
 #define ROTR64(x,n) ((x >> n) | (x << (64 - n)))
 #define ROTL64(x,n) ((x << n) | (x >> (64 - n)))
+#endif
 
 #define S0(x) (ROTR64(x,28) ^ ROTR64(x,34) ^ ROTR64(x,39))
 #define S1(x) (ROTR64(x,14) ^ ROTR64(x,18) ^ ROTR64(x,41))
@@ -533,12 +665,26 @@ SHA256_Resurrect(unsigned char *space, void *arg)
 #define ULLC(hi,lo) 0x ## hi ## lo ## ULL
 #endif
 
+#if defined(_MSC_VER)
+#pragma intrinsic(_byteswap_uint64)
+#define SHA_HTONLL(x) _byteswap_uint64(x)
+
+#elif defined(__GNUC__) && (defined(__x86_64__) || defined(__x86_64))
+static __inline__ PRUint64 swap8b(PRUint64 value)
+{
+    __asm__("bswapq %0" : "+r" (value));
+    return (value);
+}
+#define SHA_HTONLL(x) swap8b(x)
+
+#else
 #define SHA_MASK16 ULLC(0000FFFF,0000FFFF)
 #define SHA_MASK8  ULLC(00FF00FF,00FF00FF)
 #define SHA_HTONLL(x) (t1 = x, \
   t1 = ((t1 & SHA_MASK8 ) <<  8) | ((t1 >>  8) & SHA_MASK8 ), \
   t1 = ((t1 & SHA_MASK16) << 16) | ((t1 >> 16) & SHA_MASK16), \
   (t1 >> 32) | (t1 << 32))
+#endif
 #define BYTESWAP8(x)  x = SHA_HTONLL(x)
 
 #else /* no long long */
@@ -557,6 +703,48 @@ SHA256_Resurrect(unsigned char *space, void *arg)
 
 /* SHA-384 and SHA-512 constants, K512. */
 static const PRUint64 K512[80] = {
+#if PR_BYTES_PER_LONG == 8
+     0x428a2f98d728ae22UL ,  0x7137449123ef65cdUL , 
+     0xb5c0fbcfec4d3b2fUL ,  0xe9b5dba58189dbbcUL ,
+     0x3956c25bf348b538UL ,  0x59f111f1b605d019UL , 
+     0x923f82a4af194f9bUL ,  0xab1c5ed5da6d8118UL ,
+     0xd807aa98a3030242UL ,  0x12835b0145706fbeUL , 
+     0x243185be4ee4b28cUL ,  0x550c7dc3d5ffb4e2UL ,
+     0x72be5d74f27b896fUL ,  0x80deb1fe3b1696b1UL , 
+     0x9bdc06a725c71235UL ,  0xc19bf174cf692694UL ,
+     0xe49b69c19ef14ad2UL ,  0xefbe4786384f25e3UL , 
+     0x0fc19dc68b8cd5b5UL ,  0x240ca1cc77ac9c65UL ,
+     0x2de92c6f592b0275UL ,  0x4a7484aa6ea6e483UL , 
+     0x5cb0a9dcbd41fbd4UL ,  0x76f988da831153b5UL ,
+     0x983e5152ee66dfabUL ,  0xa831c66d2db43210UL , 
+     0xb00327c898fb213fUL ,  0xbf597fc7beef0ee4UL ,
+     0xc6e00bf33da88fc2UL ,  0xd5a79147930aa725UL , 
+     0x06ca6351e003826fUL ,  0x142929670a0e6e70UL ,
+     0x27b70a8546d22ffcUL ,  0x2e1b21385c26c926UL , 
+     0x4d2c6dfc5ac42aedUL ,  0x53380d139d95b3dfUL ,
+     0x650a73548baf63deUL ,  0x766a0abb3c77b2a8UL , 
+     0x81c2c92e47edaee6UL ,  0x92722c851482353bUL ,
+     0xa2bfe8a14cf10364UL ,  0xa81a664bbc423001UL , 
+     0xc24b8b70d0f89791UL ,  0xc76c51a30654be30UL ,
+     0xd192e819d6ef5218UL ,  0xd69906245565a910UL , 
+     0xf40e35855771202aUL ,  0x106aa07032bbd1b8UL ,
+     0x19a4c116b8d2d0c8UL ,  0x1e376c085141ab53UL , 
+     0x2748774cdf8eeb99UL ,  0x34b0bcb5e19b48a8UL ,
+     0x391c0cb3c5c95a63UL ,  0x4ed8aa4ae3418acbUL , 
+     0x5b9cca4f7763e373UL ,  0x682e6ff3d6b2b8a3UL ,
+     0x748f82ee5defb2fcUL ,  0x78a5636f43172f60UL , 
+     0x84c87814a1f0ab72UL ,  0x8cc702081a6439ecUL ,
+     0x90befffa23631e28UL ,  0xa4506cebde82bde9UL , 
+     0xbef9a3f7b2c67915UL ,  0xc67178f2e372532bUL ,
+     0xca273eceea26619cUL ,  0xd186b8c721c0c207UL , 
+     0xeada7dd6cde0eb1eUL ,  0xf57d4f7fee6ed178UL ,
+     0x06f067aa72176fbaUL ,  0x0a637dc5a2c898a6UL , 
+     0x113f9804bef90daeUL ,  0x1b710b35131c471bUL ,
+     0x28db77f523047d84UL ,  0x32caab7b40c72493UL , 
+     0x3c9ebe0a15c9bebcUL ,  0x431d67c49c100d4cUL ,
+     0x4cc5d4becb3e42b6UL ,  0x597f299cfc657e2aUL , 
+     0x5fcb6fab3ad6faecUL ,  0x6c44198c4a475817UL 
+#else
     ULLC(428a2f98,d728ae22), ULLC(71374491,23ef65cd), 
     ULLC(b5c0fbcf,ec4d3b2f), ULLC(e9b5dba5,8189dbbc),
     ULLC(3956c25b,f348b538), ULLC(59f111f1,b605d019), 
@@ -597,6 +785,7 @@ static const PRUint64 K512[80] = {
     ULLC(3c9ebe0a,15c9bebc), ULLC(431d67c4,9c100d4c),
     ULLC(4cc5d4be,cb3e42b6), ULLC(597f299c,fc657e2a), 
     ULLC(5fcb6fab,3ad6faec), ULLC(6c44198c,4a475817)
+#endif
 };
 
 struct SHA512ContextStr {
@@ -613,10 +802,17 @@ struct SHA512ContextStr {
 
 /* SHA-512 initial hash values */
 static const PRUint64 H512[8] = {
+#if PR_BYTES_PER_LONG == 8
+     0x6a09e667f3bcc908UL ,  0xbb67ae8584caa73bUL , 
+     0x3c6ef372fe94f82bUL ,  0xa54ff53a5f1d36f1UL , 
+     0x510e527fade682d1UL ,  0x9b05688c2b3e6c1fUL , 
+     0x1f83d9abfb41bd6bUL ,  0x5be0cd19137e2179UL 
+#else
     ULLC(6a09e667,f3bcc908), ULLC(bb67ae85,84caa73b), 
     ULLC(3c6ef372,fe94f82b), ULLC(a54ff53a,5f1d36f1), 
     ULLC(510e527f,ade682d1), ULLC(9b05688c,2b3e6c1f), 
     ULLC(1f83d9ab,fb41bd6b), ULLC(5be0cd19,137e2179)
+#endif
 };
 
 
@@ -630,8 +826,9 @@ SHA512_NewContext(void)
 void 
 SHA512_DestroyContext(SHA512Context *ctx, PRBool freeit)
 {
+    memset(ctx, 0, sizeof *ctx);
     if (freeit) {
-        PORT_ZFree(ctx, sizeof *ctx);
+        PORT_Free(ctx);
     }
 }
 
@@ -1026,16 +1223,14 @@ SHA512_End(SHA512Context *ctx, unsigned char *digest,
 {
 #if defined(HAVE_LONG_LONG)
     unsigned int inBuf  = (unsigned int)ctx->sizeLo & 0x7f;
-    unsigned int padLen = (inBuf < 112) ? (112 - inBuf) : (112 + 128 - inBuf);
-    PRUint64 lo, t1;
-    lo = (ctx->sizeLo << 3);
+    PRUint64 t1;
 #else
     unsigned int inBuf  = (unsigned int)ctx->sizeLo.lo & 0x7f;
-    unsigned int padLen = (inBuf < 112) ? (112 - inBuf) : (112 + 128 - inBuf);
-    PRUint64 lo = ctx->sizeLo;
     PRUint32 t1;
-    lo.lo <<= 3;
 #endif
+    unsigned int padLen = (inBuf < 112) ? (112 - inBuf) : (112 + 128 - inBuf);
+    PRUint64 lo;
+    LL_SHL(lo, ctx->sizeLo, 3);
 
     SHA512_Update(ctx, pad, padLen);
 
@@ -1069,9 +1264,39 @@ SHA512_End(SHA512Context *ctx, unsigned char *digest,
 	*digestLen = padLen;
 }
 
+void
+SHA512_EndRaw(SHA512Context *ctx, unsigned char *digest,
+              unsigned int *digestLen, unsigned int maxDigestLen)
+{
+#if defined(HAVE_LONG_LONG)
+    PRUint64 t1;
+#else
+    PRUint32 t1;
+#endif
+    PRUint64 h[8];
+    unsigned int len;
+
+    memcpy(h, ctx->h, sizeof(h));
+
+#if defined(IS_LITTLE_ENDIAN)
+    BYTESWAP8(h[0]);
+    BYTESWAP8(h[1]);
+    BYTESWAP8(h[2]);
+    BYTESWAP8(h[3]);
+    BYTESWAP8(h[4]);
+    BYTESWAP8(h[5]);
+    BYTESWAP8(h[6]);
+    BYTESWAP8(h[7]);
+#endif
+    len = PR_MIN(SHA512_LENGTH, maxDigestLen);
+    memcpy(digest, h, len);
+    if (digestLen)
+	*digestLen = len;
+}
+
 SECStatus 
 SHA512_HashBuf(unsigned char *dest, const unsigned char *src, 
-               uint32 src_length)
+               PRUint32 src_length)
 {
     SHA512Context ctx;
     unsigned int outLen;
@@ -1079,6 +1304,7 @@ SHA512_HashBuf(unsigned char *dest, const unsigned char *src,
     SHA512_Begin(&ctx);
     SHA512_Update(&ctx, src, src_length);
     SHA512_End(&ctx, dest, &outLen, SHA512_LENGTH);
+    memset(&ctx, 0, sizeof ctx);
 
     return SECSuccess;
 }
@@ -1115,6 +1341,11 @@ SHA512_Resurrect(unsigned char *space, void *arg)
     return ctx;
 }
 
+void SHA512_Clone(SHA512Context *dest, SHA512Context *src) 
+{
+    memcpy(dest, src, sizeof *dest);
+}
+
 /* ======================================================================= */
 /* SHA384 uses a SHA512Context as the real context. 
 ** The only differences between SHA384 an SHA512 are:
@@ -1124,10 +1355,17 @@ SHA512_Resurrect(unsigned char *space, void *arg)
 
 /* SHA-384 initial hash values */
 static const PRUint64 H384[8] = {
+#if PR_BYTES_PER_LONG == 8
+     0xcbbb9d5dc1059ed8UL ,  0x629a292a367cd507UL , 
+     0x9159015a3070dd17UL ,  0x152fecd8f70e5939UL , 
+     0x67332667ffc00b31UL ,  0x8eb44a8768581511UL , 
+     0xdb0c2e0d64f98fa7UL ,  0x47b5481dbefa4fa4UL 
+#else
     ULLC(cbbb9d5d,c1059ed8), ULLC(629a292a,367cd507), 
     ULLC(9159015a,3070dd17), ULLC(152fecd8,f70e5939), 
     ULLC(67332667,ffc00b31), ULLC(8eb44a87,68581511), 
     ULLC(db0c2e0d,64f98fa7), ULLC(47b5481d,befa4fa4)
+#endif
 };
 
 SHA384Context *
@@ -1160,14 +1398,21 @@ void
 SHA384_End(SHA384Context *ctx, unsigned char *digest,
 		 unsigned int *digestLen, unsigned int maxDigestLen)
 {
-#define SHA_MIN(a,b) (a < b ? a : b)
     unsigned int maxLen = SHA_MIN(maxDigestLen, SHA384_LENGTH);
     SHA512_End(ctx, digest, digestLen, maxLen);
 }
 
+void
+SHA384_EndRaw(SHA384Context *ctx, unsigned char *digest,
+	      unsigned int *digestLen, unsigned int maxDigestLen)
+{
+    unsigned int maxLen = SHA_MIN(maxDigestLen, SHA384_LENGTH);
+    SHA512_EndRaw(ctx, digest, digestLen, maxLen);
+}
+
 SECStatus 
 SHA384_HashBuf(unsigned char *dest, const unsigned char *src,
-			  uint32 src_length)
+	       PRUint32 src_length)
 {
     SHA512Context ctx;
     unsigned int outLen;
@@ -1175,6 +1420,7 @@ SHA384_HashBuf(unsigned char *dest, const unsigned char *src,
     SHA384_Begin(&ctx);
     SHA512_Update(&ctx, src, src_length);
     SHA512_End(&ctx, dest, &outLen, SHA384_LENGTH);
+    memset(&ctx, 0, sizeof ctx);
 
     return SECSuccess;
 }
@@ -1203,6 +1449,11 @@ SHA384Context *
 SHA384_Resurrect(unsigned char *space, void *arg)
 {
     return SHA512_Resurrect(space, arg);
+}
+
+void SHA384_Clone(SHA384Context *dest, SHA384Context *src) 
+{
+    memcpy(dest, src, sizeof *dest);
 }
 
 /* ======================================================================= */
@@ -1238,6 +1489,38 @@ void test256(void)
 
     printf("SHA256, input = %s\n", abcdbc);
     SHA256_Hash(outBuf, abcdbc);
+    dumpHash32(outBuf, sizeof outBuf);
+}
+
+void test224(void)
+{
+    SHA224Context ctx;
+    unsigned char a1000times[1000];
+    unsigned int outLen;
+    unsigned char outBuf[SHA224_LENGTH];
+    int i;
+
+    /* Test Vector 1 */
+    printf("SHA224, input = %s\n", abc);
+    SHA224_Hash(outBuf, abc);
+    dumpHash32(outBuf, sizeof outBuf);
+
+    /* Test Vector 2 */
+    printf("SHA224, input = %s\n", abcdbc);
+    SHA224_Hash(outBuf, abcdbc);
+    dumpHash32(outBuf, sizeof outBuf);
+
+    /* Test Vector 3 */
+
+    /* to hash one million 'a's perform 1000
+     * sha224 updates on a buffer with 1000 'a's 
+     */
+    memset(a1000times, 'a', 1000);
+    printf("SHA224, input = %s\n", "a one million times");
+    SHA224_Begin(&ctx);
+    for (i = 0; i < 1000; i++)
+        SHA224_Update(&ctx, a1000times, 1000);
+    SHA224_End(&ctx, outBuf, &outLen, SHA224_LENGTH);
     dumpHash32(outBuf, sizeof outBuf);
 }
 
@@ -1296,9 +1579,10 @@ int main (int argc, char *argv[], char *envp[])
     	i = atoi(argv[1]);
     }
     if (i < 2) {
+	test224();
 	test256();
-	test512();
 	test384();
+	test512();
     } else {
     	while (i-- > 0) {
 	    time512();

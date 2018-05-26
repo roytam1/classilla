@@ -1,34 +1,7 @@
 ;+#
-;+# The contents of this file are subject to the Mozilla Public
-;+# License Version 1.1 (the "License"); you may not use this file
-;+# except in compliance with the License. You may obtain a copy of
-;+# the License at http://www.mozilla.org/MPL/
-;+#
-;+# Software distributed under the License is distributed on an "AS
-;+# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
-;+# implied. See the License for the specific language governing
-;+# rights and limitations under the License.
-;+#
-;+# The Original Code is the Netscape security libraries.
-;+#
-;+# The Initial Developer of the Original Code is Netscape
-;+# Communications Corporation.  Portions created by Netscape are
-;+# Copyright (C) 2000 Netscape Communications Corporation.  All
-;+# Rights Reserved.
-;+#
-;+# Contributor(s):
-;+#
-;+# Alternatively, the contents of this file may be used under the
-;+# terms of the GNU General Public License Version 2 or later (the
-;+# "GPL"), in which case the provisions of the GPL are applicable
-;+# instead of those above.  If you wish to allow use of your
-;+# version of this file only under the terms of the GPL and not to
-;+# allow others to use your version of this file under the MPL,
-;+# indicate your decision by deleting the provisions above and
-;+# replace them with the notice and other provisions required by
-;+# the GPL.  If you do not delete the provisions above, a recipient
-;+# may use your version of this file under either the MPL or the
-;+# GPL.
+;+# This Source Code Form is subject to the terms of the Mozilla Public
+;+# License, v. 2.0. If a copy of the MPL was not distributed with this
+;+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 ;+#
 ;+# OK, this file is meant to support SUN, LINUX, AIX and WINDOWS
 ;+#   1. For all unix platforms, the string ";-"  means "remove this line"
@@ -227,6 +200,76 @@ NSS_CMSRecipientInfo_CreateWithSubjKeyIDFromCert;
 ;+    global:
 NSS_CMSRecipientInfo_WrapBulkKey;
 NSS_CMSRecipientInfo_UnwrapBulkKey;
+;+    local:
+;+       *;
+;+};
+;+NSS_3.8 {   # NSS 3.8 release
+;+    global:
+NSS_CMSRecipientInfo_CreateNew;
+NSS_CMSRecipientInfo_CreateFromDER;
+NSS_CMSRecipientInfo_Encode;
+NSS_CMSRecipientInfo_GetCertAndKey;
+SEC_PKCS12DecoderSetTargetTokenCAs;
+;+    local:
+;+       *;
+;+};
+;+NSS_3.9 {   # NSS 3.9 release
+;+    global:
+SEC_PKCS7DecoderAbort;
+SEC_PKCS7EncoderAbort;
+;+    local:
+;+       *;
+;+};
+;+NSS_3.9.3 {   # NSS 3.9.3 release
+;+    global:
+CERT_ConvertAndDecodeCertificate;
+SEC_PKCS7EncodeItem;
+;+    local:
+;+       *;
+;+};
+;+NSS_3.10 {   # NSS 3.10 release
+;+    global:
+SEC_PKCS12DecoderIterateInit;
+SEC_PKCS12DecoderIterateNext;
+SEC_PKCS12DecryptionAllowed;
+;+    local:
+;+       *;
+;+};
+;+NSS_3.12.2 {   # NSS 3.12.2 release
+;+    global:
+SEC_PKCS12AddCertOrChainAndKey;
+;+    local:
+;+       *;
+;+};
+;+NSS_3.12.10 {   # NSS 3.12.10 release
+;+    global:
+NSS_CMSType_RegisterContentType;
+NSS_CMSContentInfo_SetDontStream;
+NSS_SMIMEUtil_CreateMSSMIMEEncKeyPrefs;
+;+#
+;+# Data objects
+;+#
+;+# Don't export these DATA symbols on Windows because they don't work right.
+;+# Use the SEC_ASN1_GET / SEC_ASN1_SUB / SEC_ASN1_XTRN macros to access them.
+;+#
+;+# See nssutil for other examples.
+;+#
+;;NSSCMSGenericWrapperDataTemplate DATA ;
+;;NSS_PointerToCMSGenericWrapperDataTemplate DATA ;
+NSS_Get_NSSCMSGenericWrapperDataTemplate;
+NSS_Get_NSS_PointerToCMSGenericWrapperDataTemplate;
+;+    local:
+;+       *;
+;+};
+;+NSS_3.13 {    # NSS 3.13 release
+;+    global:
+NSSSMIME_GetVersion;
+;+    local:
+;+       *;
+;+};
+;+NSS_3.15 {    # NSS 3.15 release
+;+    global:
+SEC_PKCS7VerifyDetachedSignatureAtTime;
 ;+    local:
 ;+       *;
 ;+};

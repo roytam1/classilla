@@ -173,6 +173,7 @@ NSS_LIBS	= \
 	$(DIST)/lib/$(LIB_PREFIX)smime3.$(LIB_SUFFIX) \
 	$(DIST)/lib/$(LIB_PREFIX)ssl3.$(LIB_SUFFIX) \
 	$(DIST)/lib/$(LIB_PREFIX)nss3.$(LIB_SUFFIX) \
+	$(DIST)/lib/$(LIB_PREFIX)nssutil3.$(LIB_SUFFIX) \
 	$(DIST)/lib/$(LIB_PREFIX)softokn3.$(LIB_SUFFIX) \
 	$(NULL)
 else
@@ -182,6 +183,7 @@ NSS_LIBS	= \
 	-lsmime3 \
 	-lssl3 \
 	-lnss3 \
+	-lnssutil3 \
 	-lsoftokn3 \
 	$(NULL)
 endif
@@ -191,6 +193,7 @@ NSS_DEP_LIBS	= \
 	$(DIST)/lib/$(LIB_PREFIX)smime3$(DLL_SUFFIX) \
 	$(DIST)/lib/$(LIB_PREFIX)ssl3$(DLL_SUFFIX) \
 	$(DIST)/lib/$(LIB_PREFIX)nss3$(DLL_SUFFIX) \
+	$(DIST)/lib/$(LIB_PREFIX)nssutil3$(DLL_SUFFIX) \
 	$(DIST)/lib/$(LIB_PREFIX)softokn3$(DLL_SUFFIX) \
 	$(NULL)
 

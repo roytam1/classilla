@@ -1,35 +1,6 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef SSLSAMPLE_H
 #define SSLSAMPLE_H
@@ -52,7 +23,6 @@
 #include "ssl.h"
 #include "certt.h"
 #include "nss.h"
-#include "secrng.h"
 #include "secder.h"
 #include "key.h"
 #include "sslproto.h"
@@ -89,7 +59,7 @@ SECStatus myAuthCertificate(void *arg, PRFileDesc *socket,
 
 SECStatus myBadCertHandler(void *arg, PRFileDesc *socket);
 
-SECStatus myHandshakeCallback(PRFileDesc *socket, void *arg);
+void myHandshakeCallback(PRFileDesc *socket, void *arg);
 
 SECStatus myGetClientAuthData(void *arg, PRFileDesc *socket,
                               struct CERTDistNamesStr *caNames,
@@ -108,10 +78,6 @@ void errWarn(char *function);
 void exitErr(char *function);
 
 void printSecurityInfo(FILE *outfile, PRFileDesc *fd);
-
-void printCertProblems(FILE *outfile, CERTCertDBHandle *handle, 
-	CERTCertificate *cert, PRBool checksig, 
-	SECCertUsage certUsage, void *pinArg);
 
 /* Some simple thread management routines. */
 

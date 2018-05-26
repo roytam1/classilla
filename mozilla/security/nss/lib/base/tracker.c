@@ -1,39 +1,6 @@
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
-
-#ifdef DEBUG
-static const char CVS_ID[] = "@(#) $RCSfile: tracker.c,v $ $Revision: 1.4 $ $Date: 2001/12/06 21:25:32 $ $Name:  $";
-#endif /* DEBUG */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * tracker.c
@@ -48,105 +15,6 @@ static const char CVS_ID[] = "@(#) $RCSfile: tracker.c,v $ $Revision: 1.4 $ $Dat
 #endif /* BASE_H */
 
 #ifdef DEBUG
-
-/*
- * call_once
- *
- * Unfortunately, NSPR's PR_CallOnce function doesn't accept a closure
- * variable.  So I have a static version here which does.  This code 
- * is based on NSPR's, and uses the NSPR function to initialize the
- * required lock.
- */
-
-/*
- * The is the "once block" that's passed to the "real" PR_CallOnce
- * function, to call the local initializer myOnceFunction once.
- */
-static PRCallOnceType myCallOnce;
-
-/*
- * This structure is used by the call_once function to make sure that
- * any "other" threads calling the call_once don't return too quickly,
- * before the initializer has finished.
- */
-static struct {
-  PZLock *ml;
-  PZCondVar *cv;
-} mod_init;
-
-/*
- * This is the initializer for the above mod_init structure.
- */
-static PRStatus
-myOnceFunction
-(
-  void
-)
-{
-  mod_init.ml = PZ_NewLock(nssILockOther);
-  if( (PZLock *)NULL == mod_init.ml ) {
-    return PR_FAILURE;
-  }
-
-  mod_init.cv = PZ_NewCondVar(mod_init.ml);
-  if( (PZCondVar *)NULL == mod_init.cv ) {
-    PZ_DestroyLock(mod_init.ml);
-    mod_init.ml = (PZLock *)NULL;
-    return PR_FAILURE;
-  }
-
-  return PR_SUCCESS;
-}
-
-/*
- * The nss call_once callback takes a closure argument.
- */
-typedef PRStatus (PR_CALLBACK *nssCallOnceFN)(void *arg);
-
-/*
- * NSS's call_once function.
- */
-static PRStatus
-call_once
-(
-  PRCallOnceType *once,
-  nssCallOnceFN func,
-  void *arg
-)
-{
-  PRStatus rv;
-
-  if( !myCallOnce.initialized ) {
-    rv = PR_CallOnce(&myCallOnce, myOnceFunction);
-    if( PR_SUCCESS != rv ) {
-      return rv;
-    }
-  }
-
-  if( !once->initialized ) {
-    if( 0 == PR_AtomicSet(&once->inProgress, 1) ) {
-      once->status = (*func)(arg);
-      PZ_Lock(mod_init.ml);
-      once->initialized = 1;
-      PZ_NotifyAllCondVar(mod_init.cv);
-      PZ_Unlock(mod_init.ml);
-    } else {
-      PZ_Lock(mod_init.ml);
-      while( !once->initialized ) {
-        PZ_WaitCondVar(mod_init.cv, PR_INTERVAL_NO_TIMEOUT);
-      }
-      PZ_Unlock(mod_init.ml);
-    }
-  }
-
-  return once->status;
-}
-
-/*
- * Now we actually get to my own "call once" payload function.
- * But wait, to create the hash, I need a hash function!
- */
-
 /*
  * identity_hash
  *
@@ -227,7 +95,7 @@ nssPointerTracker_initialize
   nssPointerTracker *tracker
 )
 {
-  PRStatus rv = call_once(&tracker->once, trackerOnceFunc, tracker);
+  PRStatus rv = PR_CallOnceWithArg(&tracker->once, trackerOnceFunc, tracker);
   if( PR_SUCCESS != rv ) {
     nss_SetError(NSS_ERROR_NO_MEMORY);
   }

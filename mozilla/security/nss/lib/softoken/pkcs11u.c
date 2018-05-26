@@ -1,46 +1,18 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /*
  * Internal PKCS #11 functions. Should only be called by pkcs11.c
  */
 #include "pkcs11.h"
 #include "pkcs11i.h"
-#include "pcertt.h"
 #include "lowkeyi.h"
-#include "pcert.h"
 #include "secasn1.h"
 #include "blapi.h"
 #include "secerr.h"
+#include "prnetdb.h" /* for PR_ntohl */
+#include "sftkdb.h"
+#include "softoken.h"
 
 /*
  * ******************** Attribute Utilities *******************************
@@ -50,29 +22,29 @@
  * create a new attribute with type, value, and length. Space is allocated
  * to hold value.
  */
-static PK11Attribute *
-pk11_NewAttribute(PK11Object *object,
-	CK_ATTRIBUTE_TYPE type, CK_VOID_PTR value, CK_ULONG len)
+static SFTKAttribute *
+sftk_NewAttribute(SFTKObject *object,
+	CK_ATTRIBUTE_TYPE type, const void *value, CK_ULONG len)
 {
-    PK11Attribute *attribute;
+    SFTKAttribute *attribute;
 
-#ifdef PKCS11_STATIC_ATTRIBUTES
-    PK11SessionObject *so = pk11_narrowToSessionObject(object);
+    SFTKSessionObject *so = sftk_narrowToSessionObject(object);
     int index;
 
     if (so == NULL)  {
 	/* allocate new attribute in a buffer */
 	PORT_Assert(0);
+	return NULL;
     }
     /* 
-     * PKCS11_STATIC_ATTRIBUTES attempts to keep down contention on Malloc and Arena locks
-     * by limiting the number of these calls on high traversed paths. this
-     * is done for attributes by 'allocating' them from a pool already allocated
-     * by the parent object.
+     * We attempt to keep down contention on Malloc and Arena locks by
+     * limiting the number of these calls on high traversed paths. This
+     * is done for attributes by 'allocating' them from a pool already
+     * allocated by the parent object.
      */
-    PK11_USE_THREADS(PZ_Lock(so->attributeLock);)
+    PZ_Lock(so->attributeLock);
     index = so->nextAttr++;
-    PK11_USE_THREADS(PZ_Unlock(so->attributeLock);)
+    PZ_Unlock(so->attributeLock);
     PORT_Assert(index < MAX_OBJS_ATTRS);
     if (index >= MAX_OBJS_ATTRS) return NULL;
 
@@ -96,129 +68,10 @@ pk11_NewAttribute(PK11Object *object,
 	attribute->attrib.pValue = NULL;
 	attribute->attrib.ulValueLen = 0;
     }
-#else
-#ifdef PKCS11_REF_COUNT_ATTRIBUTES
-    attribute = (PK11Attribute*)PORT_Alloc(sizeof(PK11Attribute));
-    attribute->freeAttr = PR_TRUE;
-#else
-    attribute = (PK11Attribute*)PORT_ArenaAlloc(object->arena,sizeof(PK11Attribute));
-    attribute->freeAttr = PR_FALSE;
-#endif /* PKCS11_REF_COUNT_ATTRIBUTES */
-    if (attribute == NULL) return NULL;
-    attribute->freeData = PR_FALSE;
-
-    if (value) {
-#ifdef PKCS11_REF_COUNT_ATTRIBUTES
-	attribute->attrib.pValue = PORT_Alloc(len);
-	attribute->freeData = PR_TRUE;
-#else
-	attribute->attrib.pValue = PORT_ArenaAlloc(object->arena,len);
-#endif /* PKCS11_REF_COUNT_ATTRIBUTES */
-	if (attribute->attrib.pValue == NULL) {
-#ifdef PKCS11_REF_COUNT_ATTRIBUTES
-	    PORT_Free(attribute);
-#endif /* PKCS11_REF_COUNT_ATTRIBUTES */
-	    return NULL;
-	}
-	PORT_Memcpy(attribute->attrib.pValue,value,len);
-	attribute->attrib.ulValueLen = len;
-    } else {
-	attribute->attrib.pValue = NULL;
-	attribute->attrib.ulValueLen = 0;
-    }
-#endif /* PKCS11_STATIC_ATTRIBUTES */
     attribute->attrib.type = type;
     attribute->handle = type;
     attribute->next = attribute->prev = NULL;
-#ifdef PKCS11_REF_COUNT_ATTRIBUTES
-    attribute->refCount = 1;
-#ifdef PKCS11_USE_THREADS
-    attribute->refLock = PZ_NewLock(nssILockRefLock);
-    if (attribute->refLock == NULL) {
-	if (attribute->attrib.pValue) PORT_Free(attribute->attrib.pValue);
-	PORT_Free(attribute);
-	return NULL;
-    }
-#else
-    attribute->refLock = NULL;
-#endif
-#endif /* PKCS11_REF_COUNT_ATTRIBUTES */
     return attribute;
-}
-
-static PK11Attribute *
-pk11_NewTokenAttribute(CK_ATTRIBUTE_TYPE type, CK_VOID_PTR value,
-						CK_ULONG len, PRBool copy)
-{
-    PK11Attribute *attribute;
-
-    attribute = (PK11Attribute*)PORT_Alloc(sizeof(PK11Attribute));
-
-    if (attribute == NULL) return NULL;
-    attribute->attrib.type = type;
-    attribute->handle = type;
-    attribute->next = attribute->prev = NULL;
-    attribute->freeAttr = PR_TRUE;
-    attribute->freeData = PR_FALSE;
-#ifdef PKCS11_REF_COUNT_ATTRIBUTES
-    attribute->refCount = 1;
-#ifdef PKCS11_USE_THREADS
-    attribute->refLock = PZ_NewLock(nssILockRefLock);
-    if (attribute->refLock == NULL) {
-	PORT_Free(attribute);
-	return NULL;
-    }
-#else
-    attribute->refLock = NULL;
-#endif
-#endif /* PKCS11_REF_COUNT_ATTRIBUTES */
-    attribute->attrib.type = type;
-    if (!copy) {
-	attribute->attrib.pValue = value;
-	attribute->attrib.ulValueLen = len;
-	return attribute;
-    }
-
-    if (value) {
-#ifdef PKCS11_STATIC_ATTRIBUTES
-        if (len <= ATTR_SPACE) {
-	    attribute->attrib.pValue = attribute->space;
-	} else {
-	    attribute->attrib.pValue = PORT_Alloc(len);
-	    attribute->freeData = PR_TRUE;
-	}
-#else
-	attribute->attrib.pValue = PORT_Alloc(len);
-	attribute->freeData = PR_TRUE;
-#endif
-	if (attribute->attrib.pValue == NULL) {
-#ifdef PKCS11_REF_COUNT_ATTRIBUTES
-	    if (attribute->refLock) {
-		PK11_USE_THREADS(PZ_DestroyLock(attribute->refLock);)
-	    }
-#endif
-	    PORT_Free(attribute);
-	    return NULL;
-	}
-	PORT_Memcpy(attribute->attrib.pValue,value,len);
-	attribute->attrib.ulValueLen = len;
-    } else {
-	attribute->attrib.pValue = NULL;
-	attribute->attrib.ulValueLen = 0;
-    }
-    return attribute;
-}
-
-static PK11Attribute *
-pk11_NewTokenAttributeSigned(CK_ATTRIBUTE_TYPE type, CK_VOID_PTR value, 
-						CK_ULONG len, PRBool copy)
-{
-    unsigned char * dval = (unsigned char *)value;
-    if (*dval == 0) {
-	dval++;
-	len--;
-    }
-    return pk11_NewTokenAttribute(type,dval,len,copy);
 }
 
 /*
@@ -226,12 +79,8 @@ pk11_NewTokenAttributeSigned(CK_ATTRIBUTE_TYPE type, CK_VOID_PTR value,
  * must be zero to call this.
  */
 static void
-pk11_DestroyAttribute(PK11Attribute *attribute)
+sftk_DestroyAttribute(SFTKAttribute *attribute)
 {
-#ifdef PKCS11_REF_COUNT_ATTRIBUTES
-    PORT_Assert(attribute->refCount == 0);
-    PK11_USE_THREADS(PZ_DestroyLock(attribute->refLock);)
-#endif
     if (attribute->freeData) {
 	if (attribute->attrib.pValue) {
 	    /* clear out the data in the attribute value... it may have been
@@ -248,892 +97,68 @@ pk11_DestroyAttribute(PK11Attribute *attribute)
  * release a reference to an attribute structure
  */
 void
-pk11_FreeAttribute(PK11Attribute *attribute)
+sftk_FreeAttribute(SFTKAttribute *attribute)
 {
-#ifdef PKCS11_REF_COUNT_ATTRIBUTES
-    PRBool destroy = PR_FALSE;
-#endif
-
     if (attribute->freeAttr) {
-	pk11_DestroyAttribute(attribute);
+	sftk_DestroyAttribute(attribute);
 	return;
     }
-
-#ifdef PKCS11_REF_COUNT_ATTRIBUTES
-    PK11_USE_THREADS(PZ_Lock(attribute->refLock);)
-    if (attribute->refCount == 1) destroy = PR_TRUE;
-    attribute->refCount--;
-    PK11_USE_THREADS(PZ_Unlock(attribute->refLock);)
-
-    if (destroy) pk11_DestroyAttribute(attribute);
-#endif
 }
 
-#ifdef PKCS11_REF_COUNT_ATTRIBUTES
-#define PK11_DEF_ATTRIBUTE(value,len) \
-   { NULL, NULL, PR_FALSE, PR_FALSE, 1, NULL, 0, { 0, value, len } }
-
-#else
-#define PK11_DEF_ATTRIBUTE(value,len) \
-   { NULL, NULL, PR_FALSE, PR_FALSE, 0, { 0, value, len } }
-#endif
-
-CK_BBOOL pk11_staticTrueValue = CK_TRUE;
-CK_BBOOL pk11_staticFalseValue = CK_FALSE;
-static const PK11Attribute pk11_StaticTrueAttr = 
-  PK11_DEF_ATTRIBUTE(&pk11_staticTrueValue,sizeof(pk11_staticTrueValue));
-static const PK11Attribute pk11_StaticFalseAttr = 
-  PK11_DEF_ATTRIBUTE(&pk11_staticFalseValue,sizeof(pk11_staticFalseValue));
-static const PK11Attribute pk11_StaticNullAttr = PK11_DEF_ATTRIBUTE(NULL,0);
-char pk11_StaticOneValue = 1;
-static const PK11Attribute pk11_StaticOneAttr = 
-  PK11_DEF_ATTRIBUTE(&pk11_StaticOneValue,sizeof(pk11_StaticOneValue));
-
-CK_CERTIFICATE_TYPE pk11_staticX509Value = CKC_X_509;
-static const PK11Attribute pk11_StaticX509Attr =
-  PK11_DEF_ATTRIBUTE(&pk11_staticX509Value, sizeof(pk11_staticX509Value));
-CK_TRUST pk11_staticTrustedValue = CKT_NSS_TRUSTED;
-CK_TRUST pk11_staticTrustedDelegatorValue = CKT_NSS_TRUSTED_DELEGATOR;
-CK_TRUST pk11_staticValidDelegatorValue = CKT_NSS_VALID_DELEGATOR;
-CK_TRUST pk11_staticUnTrustedValue = CKT_NSS_UNTRUSTED;
-CK_TRUST pk11_staticTrustUnknownValue = CKT_NSS_TRUST_UNKNOWN;
-CK_TRUST pk11_staticValidPeerValue = CKT_NSS_VALID;
-CK_TRUST pk11_staticMustVerifyValue = CKT_NSS_MUST_VERIFY;
-static const PK11Attribute pk11_StaticTrustedAttr =
-  PK11_DEF_ATTRIBUTE(&pk11_staticTrustedValue,
-				sizeof(pk11_staticTrustedValue));
-static const PK11Attribute pk11_StaticTrustedDelegatorAttr =
-  PK11_DEF_ATTRIBUTE(&pk11_staticTrustedDelegatorValue,
-				sizeof(pk11_staticTrustedDelegatorValue));
-static const PK11Attribute pk11_StaticValidDelegatorAttr =
-  PK11_DEF_ATTRIBUTE(&pk11_staticValidDelegatorValue,
-				sizeof(pk11_staticValidDelegatorValue));
-static const PK11Attribute pk11_StaticUnTrustedAttr =
-  PK11_DEF_ATTRIBUTE(&pk11_staticUnTrustedValue,
-				sizeof(pk11_staticUnTrustedValue));
-static const PK11Attribute pk11_StaticTrustUnknownAttr =
-  PK11_DEF_ATTRIBUTE(&pk11_staticTrustUnknownValue,
-				sizeof(pk11_staticTrustUnknownValue));
-static const PK11Attribute pk11_StaticValidPeerAttr =
-  PK11_DEF_ATTRIBUTE(&pk11_staticValidPeerValue,
-				sizeof(pk11_staticValidPeerValue));
-static const PK11Attribute pk11_StaticMustVerifyAttr =
-  PK11_DEF_ATTRIBUTE(&pk11_staticMustVerifyValue,
-				sizeof(pk11_staticMustVerifyValue));
-
-static certDBEntrySMime *
-pk11_getSMime(PK11TokenObject *object)
+static SFTKAttribute *    
+sftk_FindTokenAttribute(SFTKTokenObject *object,CK_ATTRIBUTE_TYPE type)
 {
-    certDBEntrySMime *entry;
+    SFTKAttribute *myattribute = NULL;
+    SFTKDBHandle *dbHandle = NULL;
+    CK_RV crv = CKR_HOST_MEMORY;
 
-    if (object->obj.objclass != CKO_NSS_SMIME) {
-	return NULL;
-    }
-    if (object->obj.objectInfo) {
-	return (certDBEntrySMime *)object->obj.objectInfo;
-    }
-
-    entry = nsslowcert_ReadDBSMimeEntry(object->obj.slot->certDB,
-						(char *)object->dbKey.data);
-    object->obj.objectInfo = (void *)entry;
-    object->obj.infoFree = (PK11Free) nsslowcert_DestroyDBEntry;
-    return entry;
-}
-
-static certDBEntryRevocation *
-pk11_getCrl(PK11TokenObject *object)
-{
-    certDBEntryRevocation *crl;
-    PRBool isKrl;
-
-    if (object->obj.objclass != CKO_NSS_CRL) {
-	return NULL;
-    }
-    if (object->obj.objectInfo) {
-	return (certDBEntryRevocation *)object->obj.objectInfo;
+    myattribute = (SFTKAttribute*)PORT_Alloc(sizeof(SFTKAttribute));
+    if (myattribute == NULL) {
+	goto loser;
     }
 
-    isKrl = (PRBool) object->obj.handle == PK11_TOKEN_KRL_HANDLE;
-    crl = nsslowcert_FindCrlByKey(object->obj.slot->certDB,
-							&object->dbKey, isKrl);
-    object->obj.objectInfo = (void *)crl;
-    object->obj.infoFree = (PK11Free) nsslowcert_DestroyDBEntry;
-    return crl;
-}
+    dbHandle = sftk_getDBForTokenObject(object->obj.slot, object->obj.handle);
 
-static NSSLOWCERTCertificate *
-pk11_getCert(PK11TokenObject *object)
-{
-    NSSLOWCERTCertificate *cert;
-    CK_OBJECT_CLASS objClass = object->obj.objclass;
+    myattribute->handle = type;
+    myattribute->attrib.type = type;
+    myattribute->attrib.pValue = myattribute->space;
+    myattribute->attrib.ulValueLen = ATTR_SPACE;
+    myattribute->next = myattribute->prev = NULL;
+    myattribute->freeAttr = PR_TRUE;
+    myattribute->freeData = PR_FALSE;
 
-    if ((objClass != CKO_CERTIFICATE) && (objClass != CKO_NSS_TRUST)) {
-	return NULL;
-    }
-    if (objClass == CKO_CERTIFICATE && object->obj.objectInfo) {
-	return (NSSLOWCERTCertificate *)object->obj.objectInfo;
-    }
-    cert = nsslowcert_FindCertByKey(object->obj.slot->certDB,&object->dbKey);
-    if (objClass == CKO_CERTIFICATE) {
-	object->obj.objectInfo = (void *)cert;
-	object->obj.infoFree = (PK11Free) nsslowcert_DestroyCertificate ;
-    }
-    return cert;
-}
+    crv = sftkdb_GetAttributeValue(dbHandle, object->obj.handle,
+		&myattribute->attrib, 1);
 
-static NSSLOWCERTTrust *
-pk11_getTrust(PK11TokenObject *object)
-{
-    NSSLOWCERTTrust *trust;
-
-    if (object->obj.objclass != CKO_NSS_TRUST) {
-	return NULL;
-    }
-    if (object->obj.objectInfo) {
-	return (NSSLOWCERTTrust *)object->obj.objectInfo;
-    }
-    trust = nsslowcert_FindTrustByKey(object->obj.slot->certDB,&object->dbKey);
-    object->obj.objectInfo = (void *)trust;
-    object->obj.infoFree = (PK11Free) nsslowcert_DestroyTrust ;
-    return trust;
-}
-
-static NSSLOWKEYPublicKey *
-pk11_GetPublicKey(PK11TokenObject *object)
-{
-    NSSLOWKEYPublicKey *pubKey;
-    NSSLOWKEYPrivateKey *privKey;
-
-    if (object->obj.objclass != CKO_PUBLIC_KEY) {
-	return NULL;
-    }
-    if (object->obj.objectInfo) {
-	return (NSSLOWKEYPublicKey *)object->obj.objectInfo;
-    }
-    privKey = nsslowkey_FindKeyByPublicKey(object->obj.slot->keyDB,
-				&object->dbKey, object->obj.slot->password);
-    if (privKey == NULL) {
-	return NULL;
-    }
-    pubKey = nsslowkey_ConvertToPublicKey(privKey);
-    nsslowkey_DestroyPrivateKey(privKey);
-    object->obj.objectInfo = (void *) pubKey;
-    object->obj.infoFree = (PK11Free) nsslowkey_DestroyPublicKey ;
-    return pubKey;
-}
-
-static NSSLOWKEYPrivateKey *
-pk11_GetPrivateKey(PK11TokenObject *object)
-{
-    NSSLOWKEYPrivateKey *privKey;
-
-    if ((object->obj.objclass != CKO_PRIVATE_KEY) && 
-			(object->obj.objclass != CKO_SECRET_KEY)) {
-	return NULL;
-    }
-    if (object->obj.objectInfo) {
-	return (NSSLOWKEYPrivateKey *)object->obj.objectInfo;
-    }
-    privKey = nsslowkey_FindKeyByPublicKey(object->obj.slot->keyDB,
-				&object->dbKey, object->obj.slot->password);
-    if (privKey == NULL) {
-	return NULL;
-    }
-    object->obj.objectInfo = (void *) privKey;
-    object->obj.infoFree = (PK11Free) nsslowkey_DestroyPrivateKey ;
-    return privKey;
-}
-
-/* pk11_GetPubItem returns data associated with the public key.
- * one only needs to free the public key. This comment is here
- * because this sematic would be non-obvious otherwise. All callers
- * should include this comment.
- */
-static SECItem *
-pk11_GetPubItem(NSSLOWKEYPublicKey *pubKey) {
-    SECItem *pubItem = NULL;
-    /* get value to compare from the cert's public key */
-    switch ( pubKey->keyType ) {
-    case NSSLOWKEYRSAKey:
-	    pubItem = &pubKey->u.rsa.modulus;
-	    break;
-    case NSSLOWKEYDSAKey:
-	    pubItem = &pubKey->u.dsa.publicValue;
-	    break;
-    case NSSLOWKEYDHKey:
-	    pubItem = &pubKey->u.dh.publicValue;
-	    break;
-    default:
-	    break;
-    }
-    return pubItem;
-}
-
-static const SEC_ASN1Template pk11_SerialTemplate[] = {
-    { SEC_ASN1_INTEGER, offsetof(NSSLOWCERTCertificate,serialNumber) },
-    { 0 }
-};
-
-static PK11Attribute *
-pk11_FindRSAPublicKeyAttribute(NSSLOWKEYPublicKey *key, CK_ATTRIBUTE_TYPE type)
-{
-    unsigned char hash[SHA1_LENGTH];
-    CK_KEY_TYPE keyType = CKK_RSA;
-
-    switch (type) {
-    case CKA_KEY_TYPE:
-	return pk11_NewTokenAttribute(type,&keyType,sizeof(keyType), PR_TRUE);
-    case CKA_ID:
-	SHA1_HashBuf(hash,key->u.rsa.modulus.data,key->u.rsa.modulus.len);
-	return pk11_NewTokenAttribute(type,hash,SHA1_LENGTH, PR_TRUE);
-    case CKA_DERIVE:
-	return (PK11Attribute *) &pk11_StaticFalseAttr;
-    case CKA_ENCRYPT:
-    case CKA_VERIFY:
-    case CKA_VERIFY_RECOVER:
-    case CKA_WRAP:
-	return (PK11Attribute *) &pk11_StaticTrueAttr;
-    case CKA_MODULUS:
-	return pk11_NewTokenAttributeSigned(type,key->u.rsa.modulus.data,
-					key->u.rsa.modulus.len, PR_FALSE);
-    case CKA_PUBLIC_EXPONENT:
-	return pk11_NewTokenAttributeSigned(type,key->u.rsa.publicExponent.data,
-				key->u.rsa.publicExponent.len, PR_FALSE);
-    default:
-	break;
-    }
-    return NULL;
-}
-
-static PK11Attribute *
-pk11_FindDSAPublicKeyAttribute(NSSLOWKEYPublicKey *key, CK_ATTRIBUTE_TYPE type)
-{
-    unsigned char hash[SHA1_LENGTH];
-    CK_KEY_TYPE keyType = CKK_DSA;
-
-    switch (type) {
-    case CKA_KEY_TYPE:
-	return pk11_NewTokenAttribute(type,&keyType,sizeof(keyType), PR_TRUE);
-    case CKA_ID:
-	SHA1_HashBuf(hash,key->u.dsa.publicValue.data,
-						key->u.dsa.publicValue.len);
-	return pk11_NewTokenAttribute(type,hash,SHA1_LENGTH, PR_TRUE);
-    case CKA_DERIVE:
-    case CKA_ENCRYPT:
-    case CKA_VERIFY_RECOVER:
-    case CKA_WRAP:
-	return (PK11Attribute *) &pk11_StaticFalseAttr;
-    case CKA_VERIFY:
-	return (PK11Attribute *) &pk11_StaticTrueAttr;
-    case CKA_VALUE:
-	return pk11_NewTokenAttributeSigned(type,key->u.dsa.publicValue.data,
-					key->u.dsa.publicValue.len, PR_FALSE);
-    case CKA_PRIME:
-	return pk11_NewTokenAttributeSigned(type,key->u.dsa.params.prime.data,
-					key->u.dsa.params.prime.len, PR_FALSE);
-    case CKA_SUBPRIME:
-	return pk11_NewTokenAttributeSigned(type,
-				key->u.dsa.params.subPrime.data,
-				key->u.dsa.params.subPrime.len, PR_FALSE);
-    case CKA_BASE:
-	return pk11_NewTokenAttributeSigned(type,key->u.dsa.params.base.data,
-					key->u.dsa.params.base.len, PR_FALSE);
-    default:
-	break;
-    }
-    return NULL;
-}
-
-static PK11Attribute *
-pk11_FindDHPublicKeyAttribute(NSSLOWKEYPublicKey *key, CK_ATTRIBUTE_TYPE type)
-{
-    unsigned char hash[SHA1_LENGTH];
-    CK_KEY_TYPE keyType = CKK_DH;
-
-    switch (type) {
-    case CKA_KEY_TYPE:
-	return pk11_NewTokenAttribute(type,&keyType,sizeof(keyType), PR_TRUE);
-    case CKA_ID:
-	SHA1_HashBuf(hash,key->u.dh.publicValue.data,key->u.dh.publicValue.len);
-	return pk11_NewTokenAttribute(type,hash,SHA1_LENGTH, PR_TRUE);
-    case CKA_DERIVE:
-	return (PK11Attribute *) &pk11_StaticTrueAttr;
-    case CKA_ENCRYPT:
-    case CKA_VERIFY:
-    case CKA_VERIFY_RECOVER:
-    case CKA_WRAP:
-	return (PK11Attribute *) &pk11_StaticFalseAttr;
-    case CKA_VALUE:
-	return pk11_NewTokenAttributeSigned(type,key->u.dh.publicValue.data,
-					key->u.dh.publicValue.len, PR_FALSE);
-    case CKA_PRIME:
-	return pk11_NewTokenAttributeSigned(type,key->u.dh.prime.data,
-					key->u.dh.prime.len, PR_FALSE);
-    case CKA_BASE:
-	return pk11_NewTokenAttributeSigned(type,key->u.dh.base.data,
-					key->u.dh.base.len, PR_FALSE);
-    default:
-	break;
-    }
-    return NULL;
-}
-
-static PK11Attribute *
-pk11_FindPublicKeyAttribute(PK11TokenObject *object, CK_ATTRIBUTE_TYPE type)
-{
-    NSSLOWKEYPublicKey *key;
-    PK11Attribute *att = NULL;
-    char *label;
-
-    switch (type) {
-    case CKA_PRIVATE:
-    case CKA_SENSITIVE:
-    case CKA_ALWAYS_SENSITIVE:
-    case CKA_NEVER_EXTRACTABLE:
-	return (PK11Attribute *) &pk11_StaticFalseAttr;
-    case CKA_MODIFIABLE:
-    case CKA_EXTRACTABLE:
-	return (PK11Attribute *) &pk11_StaticTrueAttr;
-    case CKA_LABEL:
-        label = nsslowkey_FindKeyNicknameByPublicKey(object->obj.slot->keyDB,
-				&object->dbKey, object->obj.slot->password);
-	if (label == NULL) {
-	   return (PK11Attribute *)&pk11_StaticOneAttr;
+    /* attribute is bigger than our attribute space buffer, malloc it */
+    if (crv == CKR_BUFFER_TOO_SMALL) {
+    	myattribute->attrib.pValue = NULL;
+    	crv = sftkdb_GetAttributeValue(dbHandle, object->obj.handle,
+		&myattribute->attrib, 1);
+	if (crv != CKR_OK) {
+	    goto loser;
 	}
-	att = pk11_NewTokenAttribute(type,label,PORT_Strlen(label), PR_TRUE);
-	PORT_Free(label);
-	return att;
-    default:
-	break;
-    }
-
-    key = pk11_GetPublicKey(object);
-    if (key == NULL) {
-	return NULL;
-    }
-
-    switch (key->keyType) {
-    case NSSLOWKEYRSAKey:
-	return pk11_FindRSAPublicKeyAttribute(key,type);
-    case NSSLOWKEYDSAKey:
-	return pk11_FindDSAPublicKeyAttribute(key,type);
-    case NSSLOWKEYDHKey:
-	return pk11_FindDHPublicKeyAttribute(key,type);
-    default:
-	break;
-    }
-
-    return NULL;
-}
-
-static PK11Attribute *
-pk11_FindSecretKeyAttribute(PK11TokenObject *object, CK_ATTRIBUTE_TYPE type)
-{
-    NSSLOWKEYPrivateKey *key;
-    char *label;
-    PK11Attribute *att;
-    CK_ULONG keyLen;
-
-    switch (type) {
-    case CKA_PRIVATE:
-    case CKA_SENSITIVE:
-    case CKA_ALWAYS_SENSITIVE:
-    case CKA_EXTRACTABLE:
-    case CKA_DERIVE:
-    case CKA_ENCRYPT:
-    case CKA_DECRYPT:
-    case CKA_SIGN:
-    case CKA_VERIFY:
-    case CKA_WRAP:
-    case CKA_UNWRAP:
-	return (PK11Attribute *) &pk11_StaticTrueAttr;
-    case CKA_NEVER_EXTRACTABLE:
-    case CKA_MODIFIABLE:
-	return (PK11Attribute *) &pk11_StaticFalseAttr;
-    case CKA_LABEL:
-        label = nsslowkey_FindKeyNicknameByPublicKey(object->obj.slot->keyDB,
-				&object->dbKey, object->obj.slot->password);
-	if (label == NULL) {
-	   return (PK11Attribute *)&pk11_StaticNullAttr;
+	myattribute->attrib.pValue = PORT_Alloc(myattribute->attrib.ulValueLen);
+	if (myattribute->attrib.pValue == NULL) {
+	    crv = CKR_HOST_MEMORY;
+	    goto loser;
 	}
-	att = pk11_NewTokenAttribute(type,label,PORT_Strlen(label), PR_TRUE);
-	PORT_Free(label);
-	return att;
-    case CKA_KEY_TYPE:
-    case CKA_VALUE_LEN:
-    case CKA_VALUE:
-	break;
-    default:
-	return NULL;
+	myattribute->freeData = PR_TRUE;
+    	crv = sftkdb_GetAttributeValue(dbHandle, object->obj.handle,
+		 &myattribute->attrib, 1);
+    } 
+loser:
+    if (dbHandle) {
+	sftk_freeDB(dbHandle);
     }
-
-    key = pk11_GetPrivateKey(object);
-    if (key == NULL) {
-	return NULL;
-    }
-    switch (type) {
-    case CKA_KEY_TYPE:
-	return pk11_NewTokenAttribute(type,key->u.rsa.coefficient.data,
-					key->u.rsa.coefficient.len, PR_FALSE);
-    case CKA_VALUE:
-	return pk11_NewTokenAttribute(type,key->u.rsa.privateExponent.data,
-				key->u.rsa.privateExponent.len, PR_FALSE);
-    case CKA_VALUE_LEN:
-	keyLen=key->u.rsa.privateExponent.len;
-	return pk11_NewTokenAttribute(type, &keyLen, sizeof(CK_ULONG), PR_TRUE);
-    }
-
-    return NULL;
-}
-
-static PK11Attribute *
-pk11_FindRSAPrivateKeyAttribute(NSSLOWKEYPrivateKey *key,
-							 CK_ATTRIBUTE_TYPE type)
-{
-    unsigned char hash[SHA1_LENGTH];
-    CK_KEY_TYPE keyType = CKK_RSA;
-
-    switch (type) {
-    case CKA_KEY_TYPE:
-	return pk11_NewTokenAttribute(type,&keyType,sizeof(keyType), PR_TRUE);
-    case CKA_ID:
-	SHA1_HashBuf(hash,key->u.rsa.modulus.data,key->u.rsa.modulus.len);
-	return pk11_NewTokenAttribute(type,hash,SHA1_LENGTH, PR_TRUE);
-    case CKA_DERIVE:
-	return (PK11Attribute *) &pk11_StaticFalseAttr;
-    case CKA_DECRYPT:
-    case CKA_SIGN:
-    case CKA_SIGN_RECOVER:
-    case CKA_UNWRAP:
-	return (PK11Attribute *) &pk11_StaticTrueAttr;
-    case CKA_MODULUS:
-	return pk11_NewTokenAttributeSigned(type,key->u.rsa.modulus.data,
-					key->u.rsa.modulus.len, PR_FALSE);
-    case CKA_PUBLIC_EXPONENT:
-	return pk11_NewTokenAttributeSigned(type,key->u.rsa.publicExponent.data,
-				key->u.rsa.publicExponent.len, PR_FALSE);
-    case CKA_PRIVATE_EXPONENT:
-    case CKA_PRIME_1:
-    case CKA_PRIME_2:
-    case CKA_EXPONENT_1:
-    case CKA_EXPONENT_2:
-    case CKA_COEFFICIENT:
-	return (PK11Attribute *) &pk11_StaticNullAttr;
-    default:
-	break;
-    }
-    return NULL;
-}
-
-static PK11Attribute *
-pk11_FindDSAPrivateKeyAttribute(NSSLOWKEYPrivateKey *key, 
-							CK_ATTRIBUTE_TYPE type)
-{
-    unsigned char hash[SHA1_LENGTH];
-    CK_KEY_TYPE keyType = CKK_DSA;
-
-    switch (type) {
-    case CKA_KEY_TYPE:
-	return pk11_NewTokenAttribute(type,&keyType,sizeof(keyType), PR_TRUE);
-    case CKA_ID:
-	SHA1_HashBuf(hash,key->u.dsa.publicValue.data,
-						key->u.dsa.publicValue.len);
-	return pk11_NewTokenAttribute(type,hash,SHA1_LENGTH, PR_TRUE);
-    case CKA_DERIVE:
-    case CKA_DECRYPT:
-    case CKA_SIGN_RECOVER:
-    case CKA_UNWRAP:
-	return (PK11Attribute *) &pk11_StaticFalseAttr;
-    case CKA_SIGN:
-	return (PK11Attribute *) &pk11_StaticTrueAttr;
-    case CKA_VALUE:
-	return (PK11Attribute *) &pk11_StaticNullAttr;
-    case CKA_PRIME:
-	return pk11_NewTokenAttributeSigned(type,key->u.dsa.params.prime.data,
-					key->u.dsa.params.prime.len, PR_FALSE);
-    case CKA_SUBPRIME:
-	return pk11_NewTokenAttributeSigned(type,
-				key->u.dsa.params.subPrime.data,
-				key->u.dsa.params.subPrime.len, PR_FALSE);
-    case CKA_BASE:
-	return pk11_NewTokenAttributeSigned(type,key->u.dsa.params.base.data,
-					key->u.dsa.params.base.len, PR_FALSE);
-    default:
-	break;
-    }
-    return NULL;
-}
-
-static PK11Attribute *
-pk11_FindDHPrivateKeyAttribute(NSSLOWKEYPrivateKey *key, CK_ATTRIBUTE_TYPE type)
-{
-    unsigned char hash[SHA1_LENGTH];
-    CK_KEY_TYPE keyType = CKK_DH;
-
-    switch (type) {
-    case CKA_KEY_TYPE:
-	return pk11_NewTokenAttribute(type,&keyType,sizeof(keyType), PR_TRUE);
-    case CKA_ID:
-	SHA1_HashBuf(hash,key->u.dh.publicValue.data,key->u.dh.publicValue.len);
-	return pk11_NewTokenAttribute(type,hash,SHA1_LENGTH, PR_TRUE);
-    case CKA_DERIVE:
-	return (PK11Attribute *) &pk11_StaticTrueAttr;
-    case CKA_DECRYPT:
-    case CKA_SIGN:
-    case CKA_SIGN_RECOVER:
-    case CKA_UNWRAP:
-	return (PK11Attribute *) &pk11_StaticFalseAttr;
-    case CKA_VALUE:
-	return (PK11Attribute *) &pk11_StaticNullAttr;
-    case CKA_PRIME:
-	return pk11_NewTokenAttributeSigned(type,key->u.dh.prime.data,
-					key->u.dh.prime.len, PR_FALSE);
-    case CKA_BASE:
-	return pk11_NewTokenAttributeSigned(type,key->u.dh.base.data,
-					key->u.dh.base.len, PR_FALSE);
-    default:
-	break;
-    }
-    return NULL;
-}
-
-static PK11Attribute *
-pk11_FindPrivateKeyAttribute(PK11TokenObject *object, CK_ATTRIBUTE_TYPE type)
-{
-    NSSLOWKEYPrivateKey *key;
-    char *label;
-    PK11Attribute *att;
-
-    switch (type) {
-    case CKA_PRIVATE:
-    case CKA_SENSITIVE:
-    case CKA_ALWAYS_SENSITIVE:
-    case CKA_EXTRACTABLE:
-    case CKA_MODIFIABLE:
-	return (PK11Attribute *) &pk11_StaticTrueAttr;
-    case CKA_NEVER_EXTRACTABLE:
-	return (PK11Attribute *) &pk11_StaticFalseAttr;
-    case CKA_SUBJECT:
-	   return (PK11Attribute *)&pk11_StaticNullAttr;
-    case CKA_LABEL:
-        label = nsslowkey_FindKeyNicknameByPublicKey(object->obj.slot->keyDB,
-				&object->dbKey, object->obj.slot->password);
-	if (label == NULL) {
-	   return (PK11Attribute *)&pk11_StaticNullAttr;
+    if (crv != CKR_OK) {
+	if (myattribute) {
+	    myattribute->attrib.ulValueLen = 0;
+	    sftk_FreeAttribute(myattribute);
+	    myattribute = NULL;
 	}
-	att = pk11_NewTokenAttribute(type,label,PORT_Strlen(label), PR_TRUE);
-	PORT_Free(label);
-	return att;
-    default:
-	break;
     }
-    key = pk11_GetPrivateKey(object);
-    if (key == NULL) {
-	return NULL;
-    }
-    switch (key->keyType) {
-    case NSSLOWKEYRSAKey:
-	return pk11_FindRSAPrivateKeyAttribute(key,type);
-    case NSSLOWKEYDSAKey:
-	return pk11_FindDSAPrivateKeyAttribute(key,type);
-    case NSSLOWKEYDHKey:
-	return pk11_FindDHPrivateKeyAttribute(key,type);
-    default:
-	break;
-    }
-
-    return NULL;
-}
-
-static PK11Attribute *
-pk11_FindSMIMEAttribute(PK11TokenObject *object, CK_ATTRIBUTE_TYPE type)
-{
-    certDBEntrySMime *entry;
-    switch (type) {
-    case CKA_PRIVATE:
-    case CKA_MODIFIABLE:
-	return (PK11Attribute *) &pk11_StaticFalseAttr;
-    case CKA_NSS_EMAIL:
-	return pk11_NewTokenAttribute(type,object->dbKey.data,
-						object->dbKey.len-1, PR_FALSE);
-    case CKA_NSS_SMIME_TIMESTAMP:
-    case CKA_SUBJECT:
-    case CKA_VALUE:
-	break;
-    default:
-	return NULL;
-    }
-    entry = pk11_getSMime(object);
-    if (entry == NULL) {
-	return NULL;
-    }
-    switch (type) {
-    case CKA_NSS_SMIME_TIMESTAMP:
-	return pk11_NewTokenAttribute(type,entry->optionsDate.data,
-					entry->optionsDate.len, PR_FALSE);
-    case CKA_SUBJECT:
-	return pk11_NewTokenAttribute(type,entry->subjectName.data,
-					entry->subjectName.len, PR_FALSE);
-    case CKA_VALUE:
-	return pk11_NewTokenAttribute(type,entry->smimeOptions.data,
-					entry->smimeOptions.len, PR_FALSE);
-    default:
-	break;
-    }
-    return NULL;
-}
-
-static PK11Attribute *
-pk11_FindTrustAttribute(PK11TokenObject *object, CK_ATTRIBUTE_TYPE type)
-{
-    NSSLOWCERTTrust *trust;
-    unsigned char hash[SHA1_LENGTH];
-    unsigned int trustFlags;
-
-    switch (type) {
-    case CKA_PRIVATE:
-	return (PK11Attribute *) &pk11_StaticFalseAttr;
-    case CKA_MODIFIABLE:
-	return (PK11Attribute *) &pk11_StaticTrueAttr;
-    case CKA_CERT_SHA1_HASH:
-    case CKA_CERT_MD5_HASH:
-    case CKA_TRUST_CLIENT_AUTH:
-    case CKA_TRUST_SERVER_AUTH:
-    case CKA_TRUST_EMAIL_PROTECTION:
-    case CKA_TRUST_CODE_SIGNING:
-	break;
-    default:
-	return NULL;
-    }
-    trust = pk11_getTrust(object);
-    if (trust == NULL) {
-	return NULL;
-    }
-    switch (type) {
-    case CKA_CERT_SHA1_HASH:
-	SHA1_HashBuf(hash,trust->derCert->data,trust->derCert->len);
-	return pk11_NewTokenAttribute(type, hash, SHA1_LENGTH, PR_TRUE);
-    case CKA_CERT_MD5_HASH:
-	MD5_HashBuf(hash,trust->derCert->data,trust->derCert->len);
-	return pk11_NewTokenAttribute(type, hash, MD5_LENGTH, PR_TRUE);
-    case CKA_TRUST_CLIENT_AUTH:
-	trustFlags = trust->trust->sslFlags & CERTDB_TRUSTED_CLIENT_CA ?
-		trust->trust->sslFlags | CERTDB_TRUSTED_CA : 0 ;
-	goto trust;
-    case CKA_TRUST_SERVER_AUTH:
-	trustFlags = trust->trust->sslFlags;
-	goto trust;
-    case CKA_TRUST_EMAIL_PROTECTION:
-	trustFlags = trust->trust->emailFlags;
-	goto trust;
-    case CKA_TRUST_CODE_SIGNING:
-	trustFlags = trust->trust->objectSigningFlags;
-trust:
-	if (trustFlags & CERTDB_TRUSTED_CA ) {
-	    return (PK11Attribute *)&pk11_StaticTrustedDelegatorAttr;
-	}
-	if (trustFlags & CERTDB_TRUSTED) {
-	    return (PK11Attribute *)&pk11_StaticTrustedAttr;
-	}
-	if (trustFlags & CERTDB_NOT_TRUSTED) {
-	    return (PK11Attribute *)&pk11_StaticUnTrustedAttr;
-	}
-	if (trustFlags & CERTDB_TRUSTED_UNKNOWN) {
-	    return (PK11Attribute *)&pk11_StaticTrustUnknownAttr;
-	}
-	if (trustFlags & CERTDB_VALID_CA) {
-	    return (PK11Attribute *)&pk11_StaticValidDelegatorAttr;
-	}
-	if (trustFlags & CERTDB_VALID_PEER) {
-	    return (PK11Attribute *)&pk11_StaticValidPeerAttr;
-	}
-	return (PK11Attribute *)&pk11_StaticMustVerifyAttr;
-    default:
-	break;
-    }
-
-#ifdef notdef
-    switch (type) {
-    case CKA_ISSUER:
-	cert = pk11_getCertObject(object);
-	if (cert == NULL) break;
-	attr = pk11_NewTokenAttribute(type,cert->derIssuer.data,
-						cert->derIssuer.len, PR_FALSE);
-	
-    case CKA_SERIAL_NUMBER:
-	cert = pk11_getCertObject(object);
-	if (cert == NULL) break;
-	item = SEC_ASN1EncodeItem(NULL,NULL,cert,pk11_SerialTemplate);
-	if (item == NULL) break;
-	attr = pk11_NewTokenAttribute(type, item->data, item->len, PR_TRUE);
-	SECITEM_FreeItem(item,PR_TRUE);
-    }
-    if (cert) {
-	NSSLOWCERTDestroyCertificate(cert);	
-	return attr;
-    }
-#endif
-    return NULL;
-}
-
-static PK11Attribute *
-pk11_FindCrlAttribute(PK11TokenObject *object, CK_ATTRIBUTE_TYPE type)
-{
-    certDBEntryRevocation *crl;
-
-    switch (type) {
-    case CKA_PRIVATE:
-    case CKA_MODIFIABLE:
-	return (PK11Attribute *) &pk11_StaticFalseAttr;
-    case CKA_NSS_KRL:
-	return (PK11Attribute *) ((object->obj.handle == PK11_TOKEN_KRL_HANDLE) 
-			? &pk11_StaticTrueAttr : &pk11_StaticFalseAttr);
-    case CKA_SUBJECT:
-	return pk11_NewTokenAttribute(type,object->dbKey.data,
-						object->dbKey.len, PR_FALSE);	
-    case CKA_NSS_URL:
-    case CKA_VALUE:
-	break;
-    default:
-	PORT_SetError(SEC_ERROR_INVALID_ARGS);
-    	return NULL;
-    }
-    crl =  pk11_getCrl(object);
-    if (!crl) {
-	return NULL;
-    }
-    switch (type) {
-    case CKA_NSS_URL:
-	if (crl->url == NULL) {
-	    return (PK11Attribute *) &pk11_StaticNullAttr;
-	}
-	return pk11_NewTokenAttribute(type, crl->url, 
-					PORT_Strlen(crl->url)+1, PR_TRUE);
-    case CKA_VALUE:
-	return pk11_NewTokenAttribute(type, crl->derCrl.data, 
-						crl->derCrl.len, PR_FALSE);
-    default:
-	break;
-    }
-    return NULL;
-}
-
-static PK11Attribute *
-pk11_FindCertAttribute(PK11TokenObject *object, CK_ATTRIBUTE_TYPE type)
-{
-    NSSLOWCERTCertificate *cert;
-    NSSLOWKEYPublicKey  *pubKey;
-    unsigned char hash[SHA1_LENGTH];
-    SECItem *item;
-
-    switch (type) {
-    case CKA_PRIVATE:
-	return (PK11Attribute *) &pk11_StaticFalseAttr;
-    case CKA_MODIFIABLE:
-	return (PK11Attribute *) &pk11_StaticTrueAttr;
-    case CKA_CERTIFICATE_TYPE:
-        /* hardcoding X.509 into here */
-        return (PK11Attribute *)&pk11_StaticX509Attr;
-    case CKA_VALUE:
-    case CKA_ID:
-    case CKA_LABEL:
-    case CKA_SUBJECT:
-    case CKA_ISSUER:
-    case CKA_SERIAL_NUMBER:
-    case CKA_NSS_EMAIL:
-	break;
-    default:
-	return NULL;
-    }
-    cert = pk11_getCert(object);
-    if (cert == NULL) {
-	return NULL;
-    }
-    switch (type) {
-    case CKA_VALUE:
-	return pk11_NewTokenAttribute(type,cert->derCert.data,
-						cert->derCert.len,PR_FALSE);
-    case CKA_ID:
-	if (((cert->trust->sslFlags & CERTDB_USER) == 0) &&
-		((cert->trust->emailFlags & CERTDB_USER) == 0) &&
-		((cert->trust->objectSigningFlags & CERTDB_USER) == 0)) {
-	    return (PK11Attribute *) &pk11_StaticNullAttr;
-	}
-	pubKey = nsslowcert_ExtractPublicKey(cert);
-	if (pubKey == NULL) break;
-	item = pk11_GetPubItem(pubKey);
-	if (item == NULL) {
-	    nsslowkey_DestroyPublicKey(pubKey);
-	    break;
-	}
-	SHA1_HashBuf(hash,item->data,item->len);
-	/* item is imbedded in pubKey, just free the key */
-	nsslowkey_DestroyPublicKey(pubKey);
-	return pk11_NewTokenAttribute(type, hash, SHA1_LENGTH, PR_TRUE);
-    case CKA_LABEL:
-	return cert->nickname ? pk11_NewTokenAttribute(type, cert->nickname,
-				PORT_Strlen(cert->nickname), PR_FALSE) :
-					(PK11Attribute *) &pk11_StaticNullAttr;
-    case CKA_SUBJECT:
-	return pk11_NewTokenAttribute(type,cert->derSubject.data,
-						cert->derSubject.len, PR_FALSE);
-    case CKA_ISSUER:
-	return pk11_NewTokenAttribute(type,cert->derIssuer.data,
-						cert->derIssuer.len, PR_FALSE);
-    case CKA_SERIAL_NUMBER:
-	return pk11_NewTokenAttribute(type,cert->derSN.data,
-						cert->derSN.len, PR_FALSE);
-    case CKA_NSS_EMAIL:
-	return cert->emailAddr ? pk11_NewTokenAttribute(type, cert->emailAddr,
-				PORT_Strlen(cert->emailAddr), PR_FALSE) :
-					(PK11Attribute *) &pk11_StaticNullAttr;
-    default:
-	break;
-    }
-    return NULL;
-}
-    
-static PK11Attribute *    
-pk11_FindTokenAttribute(PK11TokenObject *object,CK_ATTRIBUTE_TYPE type)
-{
-    /* handle the common ones */
-    switch (type) {
-    case CKA_CLASS:
-	return pk11_NewTokenAttribute(type,&object->obj.objclass,
-					sizeof(object->obj.objclass),PR_FALSE);
-    case CKA_TOKEN:
-	return (PK11Attribute *) &pk11_StaticTrueAttr;
-    case CKA_LABEL:
-	if (  (object->obj.objclass == CKO_CERTIFICATE) 
-	   || (object->obj.objclass == CKO_PRIVATE_KEY)
-	   || (object->obj.objclass == CKO_PUBLIC_KEY)
-	   || (object->obj.objclass == CKO_SECRET_KEY)) {
-	    break;
-	}
-	return (PK11Attribute *) &pk11_StaticNullAttr;
-    default:
-	break;
-    }
-    switch (object->obj.objclass) {
-    case CKO_CERTIFICATE:
-	return pk11_FindCertAttribute(object,type);
-    case CKO_NSS_CRL:
-	return pk11_FindCrlAttribute(object,type);
-    case CKO_NSS_TRUST:
-	return pk11_FindTrustAttribute(object,type);
-    case CKO_NSS_SMIME:
-	return pk11_FindSMIMEAttribute(object,type);
-    case CKO_PUBLIC_KEY:
-	return pk11_FindPublicKeyAttribute(object,type);
-    case CKO_PRIVATE_KEY:
-	return pk11_FindPrivateKeyAttribute(object,type);
-    case CKO_SECRET_KEY:
-	return pk11_FindSecretKeyAttribute(object,type);
-    default:
-	break;
-    }
-    PORT_Assert(0);
-    return NULL;
+    return myattribute;
 } 
 
 /*
@@ -1141,55 +166,125 @@ pk11_FindTokenAttribute(PK11TokenObject *object,CK_ATTRIBUTE_TYPE type)
  * The returned attribute is referenced and needs to be freed when 
  * it is no longer needed.
  */
-PK11Attribute *
-pk11_FindAttribute(PK11Object *object,CK_ATTRIBUTE_TYPE type)
+SFTKAttribute *
+sftk_FindAttribute(SFTKObject *object,CK_ATTRIBUTE_TYPE type)
 {
-    PK11Attribute *attribute;
-    PK11SessionObject *sessObject = pk11_narrowToSessionObject(object);
+    SFTKAttribute *attribute;
+    SFTKSessionObject *sessObject = sftk_narrowToSessionObject(object);
 
     if (sessObject == NULL) {
-	return pk11_FindTokenAttribute(pk11_narrowToTokenObject(object),type);
+	return sftk_FindTokenAttribute(sftk_narrowToTokenObject(object),type);
     }
 
-    PK11_USE_THREADS(PZ_Lock(sessObject->attributeLock);)
-    pk11queue_find(attribute,type,sessObject->head, sessObject->hashSize);
-#ifdef PKCS11_REF_COUNT_ATTRIBUTES
-    if (attribute) {
-	/* atomic increment would be nice here */
-	PK11_USE_THREADS(PZ_Lock(attribute->refLock);)
-	attribute->refCount++;
-	PK11_USE_THREADS(PZ_Unlock(attribute->refLock);)
-    }
-#endif
-    PK11_USE_THREADS(PZ_Unlock(sessObject->attributeLock);)
+    PZ_Lock(sessObject->attributeLock);
+    sftkqueue_find(attribute,type,sessObject->head, sessObject->hashSize);
+    PZ_Unlock(sessObject->attributeLock);
 
     return(attribute);
 }
 
+/*
+ * Take a buffer and it's length and return it's true size in bits;
+ */
+unsigned int
+sftk_GetLengthInBits(unsigned char *buf, unsigned int bufLen)
+{
+    unsigned int size = bufLen * 8;
+    unsigned int i;
 
+    /* Get the real length in bytes */
+    for (i=0; i < bufLen; i++) {
+	unsigned char  c = *buf++;
+	if (c != 0) {
+	    unsigned char m;
+	    for (m=0x80; m > 0 ;  m = m >> 1) {
+		if ((c & m) != 0) {
+		    break;
+		} 
+		size--;
+	    }
+	    break;
+	}
+	size-=8;
+    }
+    return size;
+}
+
+/*
+ * Constrain a big num attribute. to size and padding
+ * minLength means length of the object must be greater than equal to minLength
+ * maxLength means length of the object must be less than equal to maxLength
+ * minMultiple means that object length mod minMultiple must equal 0.
+ * all input sizes are in bits.
+ * if any constraint is '0' that constraint is not checked.
+ */
+CK_RV
+sftk_ConstrainAttribute(SFTKObject *object, CK_ATTRIBUTE_TYPE type, 
+			int minLength, int maxLength, int minMultiple)
+{
+    SFTKAttribute *attribute;
+    int size;
+    unsigned char *ptr;
+
+    attribute = sftk_FindAttribute(object, type);
+    if (!attribute) {
+	return CKR_TEMPLATE_INCOMPLETE;
+    }
+    ptr = (unsigned char *) attribute->attrib.pValue;
+    if (ptr == NULL) {
+	sftk_FreeAttribute(attribute);
+	return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+    size = sftk_GetLengthInBits(ptr, attribute->attrib.ulValueLen);
+    sftk_FreeAttribute(attribute);
+
+    if ((minLength != 0) && (size <  minLength)) {
+	return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+    if ((maxLength != 0) && (size >  maxLength)) {
+	return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+    if ((minMultiple != 0) && ((size % minMultiple) != 0)) {
+	return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+    return CKR_OK;
+}
 
 PRBool
-pk11_hasAttributeToken(PK11TokenObject *object)
+sftk_hasAttributeToken(SFTKTokenObject *object, CK_ATTRIBUTE_TYPE type)
 {
-    return PR_FALSE;
+    CK_ATTRIBUTE template;
+    CK_RV crv;
+    SFTKDBHandle *dbHandle;
+
+    dbHandle = sftk_getDBForTokenObject(object->obj.slot, object->obj.handle);
+    template.type = type;
+    template.pValue = NULL;
+    template.ulValueLen = 0;
+
+    crv = sftkdb_GetAttributeValue(dbHandle, object->obj.handle, &template, 1);
+    sftk_freeDB(dbHandle);
+
+    /* attribute is bigger than our attribute space buffer, malloc it */
+    return (crv == CKR_OK) ? PR_TRUE : PR_FALSE;
 }
 
 /*
  * return true if object has attribute
  */
 PRBool
-pk11_hasAttribute(PK11Object *object,CK_ATTRIBUTE_TYPE type)
+sftk_hasAttribute(SFTKObject *object,CK_ATTRIBUTE_TYPE type)
 {
-    PK11Attribute *attribute;
-    PK11SessionObject *sessObject = pk11_narrowToSessionObject(object);
+    SFTKAttribute *attribute;
+    SFTKSessionObject *sessObject = sftk_narrowToSessionObject(object);
 
     if (sessObject == NULL) {
-	return pk11_hasAttributeToken(pk11_narrowToTokenObject(object));
+	return sftk_hasAttributeToken(sftk_narrowToTokenObject(object), type);
     }
 
-    PK11_USE_THREADS(PZ_Lock(sessObject->attributeLock);)
-    pk11queue_find(attribute,type,sessObject->head, sessObject->hashSize);
-    PK11_USE_THREADS(PZ_Unlock(sessObject->attributeLock);)
+    PZ_Lock(sessObject->attributeLock);
+    sftkqueue_find(attribute,type,sessObject->head, sessObject->hashSize);
+    PZ_Unlock(sessObject->attributeLock);
 
     return (PRBool)(attribute != NULL);
 }
@@ -1198,15 +293,15 @@ pk11_hasAttribute(PK11Object *object,CK_ATTRIBUTE_TYPE type)
  * add an attribute to an object
  */
 static void
-pk11_AddAttribute(PK11Object *object,PK11Attribute *attribute)
+sftk_AddAttribute(SFTKObject *object,SFTKAttribute *attribute)
 {
-    PK11SessionObject *sessObject = pk11_narrowToSessionObject(object);
+    SFTKSessionObject *sessObject = sftk_narrowToSessionObject(object);
 
     if (sessObject == NULL) return;
-    PK11_USE_THREADS(PZ_Lock(sessObject->attributeLock);)
-    pk11queue_add(attribute,attribute->handle,
+    PZ_Lock(sessObject->attributeLock);
+    sftkqueue_add(attribute,attribute->handle,
 				sessObject->head, sessObject->hashSize);
-    PK11_USE_THREADS(PZ_Unlock(sessObject->attributeLock);)
+    PZ_Unlock(sessObject->attributeLock);
 }
 
 /* 
@@ -1214,24 +309,124 @@ pk11_AddAttribute(PK11Object *object,PK11Attribute *attribute)
  * the specified arena.
  */
 CK_RV
-pk11_Attribute2SSecItem(PLArenaPool *arena,SECItem *item,PK11Object *object,
+sftk_Attribute2SSecItem(PLArenaPool *arena,SECItem *item,SFTKObject *object,
                                       CK_ATTRIBUTE_TYPE type)
 {
-    PK11Attribute *attribute;
+    SFTKAttribute *attribute;
 
     item->data = NULL;
 
-    attribute = pk11_FindAttribute(object, type);
+    attribute = sftk_FindAttribute(object, type);
     if (attribute == NULL) return CKR_TEMPLATE_INCOMPLETE;
 
     (void)SECITEM_AllocItem(arena, item, attribute->attrib.ulValueLen);
     if (item->data == NULL) {
-	pk11_FreeAttribute(attribute);
+	sftk_FreeAttribute(attribute);
 	return CKR_HOST_MEMORY;
     }
     PORT_Memcpy(item->data, attribute->attrib.pValue, item->len);
-    pk11_FreeAttribute(attribute);
+    sftk_FreeAttribute(attribute);
     return CKR_OK;
+}
+
+/* 
+ * fetch multiple attributes into  SECItems. Secitem data is allocated in
+ * the specified arena.
+ */
+CK_RV
+sftk_MultipleAttribute2SecItem(PLArenaPool *arena, SFTKObject *object,
+	 SFTKItemTemplate *itemTemplate, int itemTemplateCount)
+{
+
+    CK_RV crv = CKR_OK;
+    CK_ATTRIBUTE templateSpace[SFTK_MAX_ITEM_TEMPLATE];
+    CK_ATTRIBUTE *template;
+    SFTKTokenObject *tokObject;
+    SFTKDBHandle *dbHandle = NULL;
+    int i;
+
+    tokObject = sftk_narrowToTokenObject(object);
+
+    /* session objects, just loop through the list */
+    if (tokObject == NULL) {
+	for (i=0; i < itemTemplateCount; i++) {
+	    crv = sftk_Attribute2SecItem(arena,itemTemplate[i].item, object,
+					 itemTemplate[i].type);
+	    if (crv != CKR_OK) {
+		return crv;
+	    }
+	}
+	return CKR_OK;
+    }
+
+    /* don't do any work if none is required */
+    if (itemTemplateCount == 0) {
+	return CKR_OK;
+    }
+
+    /* don't allocate the template unless we need it */
+    if (itemTemplateCount > SFTK_MAX_ITEM_TEMPLATE) {
+	template = PORT_NewArray(CK_ATTRIBUTE, itemTemplateCount);
+    } else {
+	template = templateSpace;
+    }
+
+    if (template == NULL) {
+	crv = CKR_HOST_MEMORY;
+	goto loser;
+    }
+
+    dbHandle = sftk_getDBForTokenObject(object->slot, object->handle);
+    if (dbHandle == NULL) {
+	crv = CKR_OBJECT_HANDLE_INVALID;
+	goto loser;
+    }
+
+    /* set up the PKCS #11 template */
+    for (i=0; i < itemTemplateCount; i++) {
+	template[i].type = itemTemplate[i].type;
+	template[i].pValue = NULL;
+	template[i].ulValueLen = 0;
+    }
+
+    /* fetch the attribute lengths */
+    crv = sftkdb_GetAttributeValue(dbHandle, object->handle,
+				   template, itemTemplateCount);
+    if (crv != CKR_OK) {
+	goto loser;
+    }
+
+    /* allocate space for the attributes */
+    for (i=0; i < itemTemplateCount ; i++) {
+	template[i].pValue = PORT_ArenaAlloc(arena, template[i].ulValueLen);
+	if (template[i].pValue == NULL) {
+	    crv = CKR_HOST_MEMORY;
+	    goto loser;
+	}
+    }
+
+    /* fetch the attributes */
+    crv = sftkdb_GetAttributeValue(dbHandle, object->handle,
+				   template, itemTemplateCount);
+    if (crv != CKR_OK) {
+	goto loser;
+    }
+
+    /* Fill in the items */	
+    for (i=0; i < itemTemplateCount; i++) {
+	itemTemplate[i].item->data = template[i].pValue;
+	itemTemplate[i].item->len = template[i].ulValueLen;
+    }
+
+loser:
+    if (template != templateSpace) {
+	PORT_Free(template);
+    }
+    if (dbHandle) {
+	sftk_freeDB(dbHandle);
+    }
+	     
+    return crv;
 }
 
 
@@ -1239,21 +434,20 @@ pk11_Attribute2SSecItem(PLArenaPool *arena,SECItem *item,PK11Object *object,
  * delete an attribute from an object
  */
 static void
-pk11_DeleteAttribute(PK11Object *object, PK11Attribute *attribute)
+sftk_DeleteAttribute(SFTKObject *object, SFTKAttribute *attribute)
 {
-    PK11SessionObject *sessObject = pk11_narrowToSessionObject(object);
+    SFTKSessionObject *sessObject = sftk_narrowToSessionObject(object);
 
     if (sessObject == NULL) {
 	return ;
     }
-    PK11_USE_THREADS(PZ_Lock(sessObject->attributeLock);)
-    if (pk11queue_is_queued(attribute,attribute->handle,
+    PZ_Lock(sessObject->attributeLock);
+    if (sftkqueue_is_queued(attribute,attribute->handle,
 				sessObject->head, sessObject->hashSize)) {
-	pk11queue_delete(attribute,attribute->handle,
+	sftkqueue_delete(attribute,attribute->handle,
 				sessObject->head, sessObject->hashSize);
     }
-    PK11_USE_THREADS(PZ_Unlock(sessObject->attributeLock);)
-    pk11_FreeAttribute(attribute);
+    PZ_Unlock(sessObject->attributeLock);
 }
 
 /*
@@ -1261,15 +455,15 @@ pk11_DeleteAttribute(PK11Object *object, PK11Attribute *attribute)
  * of that attribute.
  */
 PRBool
-pk11_isTrue(PK11Object *object,CK_ATTRIBUTE_TYPE type)
+sftk_isTrue(SFTKObject *object,CK_ATTRIBUTE_TYPE type)
 {
-    PK11Attribute *attribute;
+    SFTKAttribute *attribute;
     PRBool tok = PR_FALSE;
 
-    attribute=pk11_FindAttribute(object,type);
+    attribute=sftk_FindAttribute(object,type);
     if (attribute == NULL) { return PR_FALSE; }
     tok = (PRBool)(*(CK_BBOOL *)attribute->attrib.pValue);
-    pk11_FreeAttribute(attribute);
+    sftk_FreeAttribute(attribute);
 
     return tok;
 }
@@ -1280,11 +474,11 @@ pk11_isTrue(PK11Object *object,CK_ATTRIBUTE_TYPE type)
  * want to keep this info around in memory in the clear.
  */
 void
-pk11_nullAttribute(PK11Object *object,CK_ATTRIBUTE_TYPE type)
+sftk_nullAttribute(SFTKObject *object,CK_ATTRIBUTE_TYPE type)
 {
-    PK11Attribute *attribute;
+    SFTKAttribute *attribute;
 
-    attribute=pk11_FindAttribute(object,type);
+    attribute=sftk_FindAttribute(object,type);
     if (attribute == NULL) return;
 
     if (attribute->attrib.pValue != NULL) {
@@ -1296,245 +490,68 @@ pk11_nullAttribute(PK11Object *object,CK_ATTRIBUTE_TYPE type)
 	attribute->attrib.pValue = NULL;
 	attribute->attrib.ulValueLen = 0;
     }
-    pk11_FreeAttribute(attribute);
+    sftk_FreeAttribute(attribute);
 }
 
-static CK_RV
-pk11_SetCertAttribute(PK11TokenObject *to, CK_ATTRIBUTE_TYPE type, 
-						void *value, unsigned int len)
-{
-    NSSLOWCERTCertificate *cert;
-    char *nickname = NULL;
-    SECStatus rv;
-
-    /* we can't change  the EMAIL values, but let the
-     * upper layers feel better about the fact we tried to set these */
-    if (type == CKA_NSS_EMAIL) {
-	return CKR_OK;
-    }
-
-    if (to->obj.slot->certDB == NULL) {
-	return CKR_TOKEN_WRITE_PROTECTED;
-    }
-
-    if ((type != CKA_LABEL)  && (type != CKA_ID)) {
-	return CKR_ATTRIBUTE_READ_ONLY;
-    }
-
-    cert = pk11_getCert(to);
-    if (cert == NULL) {
-	return CKR_OBJECT_HANDLE_INVALID;
-    }
-
-    /* if the app is trying to set CKA_ID, it's probably because it just
-     * imported the key. Look to see if we need to set the CERTDB_USER bits.
-     */
-    if (type == CKA_ID) {
-	if (((cert->trust->sslFlags & CERTDB_USER) == 0) &&
-		((cert->trust->emailFlags & CERTDB_USER) == 0) &&
-		((cert->trust->objectSigningFlags & CERTDB_USER) == 0)) {
-	    PK11Slot *slot = to->obj.slot;
-
-	    if (slot->keyDB && nsslowkey_KeyForCertExists(slot->keyDB,cert)) {
-		NSSLOWCERTCertTrust trust = *cert->trust;
-		trust.sslFlags |= CERTDB_USER;
-		trust.emailFlags |= CERTDB_USER;
-		trust.objectSigningFlags |= CERTDB_USER;
-		nsslowcert_ChangeCertTrust(slot->certDB,cert,&trust);
-	    }
-	}
-	return CKR_OK;
-    }
-
-    /* must be CKA_LABEL */
-    if (value != NULL) {
-	nickname = PORT_ZAlloc(len+1);
-	if (nickname == NULL) {
-	    return CKR_HOST_MEMORY;
-	}
-	PORT_Memcpy(nickname,value,len);
-	nickname[len] = 0;
-    }
-    rv = nsslowcert_AddPermNickname(to->obj.slot->certDB, cert, nickname);
-    if (nickname) PORT_Free(nickname);
-    if (rv != SECSuccess) {
-	return CKR_DEVICE_ERROR;
-    }
-    return CKR_OK;
-}
 
 static CK_RV
-pk11_SetPrivateKeyAttribute(PK11TokenObject *to, CK_ATTRIBUTE_TYPE type, 
-						void *value, unsigned int len)
+sftk_forceTokenAttribute(SFTKObject *object,CK_ATTRIBUTE_TYPE type, 
+				const void *value, unsigned int len)
 {
-    NSSLOWKEYPrivateKey *privKey;
-    char *nickname = NULL;
-    SECStatus rv;
-
-    /* we can't change the ID and we don't store the subject, but let the
-     * upper layers feel better about the fact we tried to set these */
-    if ((type == CKA_ID) || (type == CKA_SUBJECT)) {
-	return CKR_OK;
-    }
-
-    if (to->obj.slot->keyDB == NULL) {
-	return CKR_TOKEN_WRITE_PROTECTED;
-    }
-    if (type != CKA_LABEL) {
-	return CKR_ATTRIBUTE_READ_ONLY;
-    }
-
-    privKey = pk11_GetPrivateKey(to);
-    if (privKey == NULL) {
-	return CKR_OBJECT_HANDLE_INVALID;
-    }
-    if (value != NULL) {
-	nickname = PORT_ZAlloc(len+1);
-	if (nickname == NULL) {
-	    return CKR_HOST_MEMORY;
-	}
-	PORT_Memcpy(nickname,value,len);
-	nickname[len] = 0;
-    }
-    rv = nsslowkey_UpdateNickname(to->obj.slot->keyDB, privKey, &to->dbKey, 
-					nickname, to->obj.slot->password);
-    if (nickname) PORT_Free(nickname);
-    if (rv != SECSuccess) {
-	return CKR_DEVICE_ERROR;
-    }
-    return CKR_OK;
-}
-
-static CK_RV
-pk11_SetTrustAttribute(PK11TokenObject *to, CK_ATTRIBUTE_TYPE type, 
-						void *value, unsigned int len)
-{
-    unsigned int flags;
-    CK_TRUST  trust;
-    NSSLOWCERTCertificate *cert;
-    NSSLOWCERTCertTrust dbTrust;
-    SECStatus rv;
-
-    if (to->obj.slot->certDB == NULL) {
-	return CKR_TOKEN_WRITE_PROTECTED;
-    }
-    if (len != sizeof (CK_TRUST)) {
-	return CKR_ATTRIBUTE_VALUE_INVALID;
-    }
-    trust = *(CK_TRUST *)value;
-    flags = pk11_MapTrust(trust, (PRBool) (type == CKA_TRUST_SERVER_AUTH));
-
-    cert = pk11_getCert(to);
-    if (cert == NULL) {
-	return CKR_OBJECT_HANDLE_INVALID;
-    }
-    dbTrust = *cert->trust;
-
-    switch (type) {
-    case CKA_TRUST_EMAIL_PROTECTION:
-	dbTrust.emailFlags = flags |
-		(cert->trust->emailFlags & CERTDB_PRESERVE_TRUST_BITS);
-	break;
-    case CKA_TRUST_CODE_SIGNING:
-	dbTrust.objectSigningFlags = flags |
-		(cert->trust->objectSigningFlags & CERTDB_PRESERVE_TRUST_BITS);
-	break;
-    case CKA_TRUST_CLIENT_AUTH:
-	dbTrust.sslFlags = flags | (cert->trust->sslFlags & 
-				(CERTDB_PRESERVE_TRUST_BITS|CERTDB_TRUSTED_CA));
-	break;
-    case CKA_TRUST_SERVER_AUTH:
-	dbTrust.sslFlags = flags | (cert->trust->sslFlags & 
-			(CERTDB_PRESERVE_TRUST_BITS|CERTDB_TRUSTED_CLIENT_CA));
-	break;
-    default:
-	return CKR_ATTRIBUTE_READ_ONLY;
-    }
-
-    rv = nsslowcert_ChangeCertTrust(to->obj.slot->certDB,cert,&dbTrust);
-    if (rv != SECSuccess) {
-	return CKR_DEVICE_ERROR;
-    }
-    return CKR_OK;
-}
-
-static CK_RV
-pk11_forceTokenAttribute(PK11Object *object,CK_ATTRIBUTE_TYPE type, 
-						void *value, unsigned int len)
-{
-    PK11Attribute *attribute;
-    PK11TokenObject *to = pk11_narrowToTokenObject(object);
-    CK_RV crv = CKR_ATTRIBUTE_READ_ONLY;
+    CK_ATTRIBUTE attribute;
+    SFTKDBHandle *dbHandle = NULL;
+    SFTKTokenObject *to = sftk_narrowToTokenObject(object);
+    CK_RV crv;
 
     PORT_Assert(to);
     if (to == NULL) {
 	return CKR_DEVICE_ERROR;
     }
 
-    /* if we are just setting it to the value we already have,
-     * allow it to happen. Let label setting go through so
-     * we have the opportunity to repair any database corruption. */
-    attribute=pk11_FindAttribute(object,type);
-    if ((type != CKA_LABEL) && (attribute->attrib.ulValueLen == len) &&
-	PORT_Memcmp(attribute->attrib.pValue,value,len) == 0) {
-	pk11_FreeAttribute(attribute);
-	return CKR_OK;
-    }
+    dbHandle = sftk_getDBForTokenObject(object->slot, object->handle);
 
-    switch (object->objclass) {
-    case CKO_CERTIFICATE:
-	/* change NICKNAME, EMAIL,  */
-	crv = pk11_SetCertAttribute(to,type,value,len);
-	break;
-    case CKO_NSS_CRL:
-	/* change URL */
-	break;
-    case CKO_NSS_TRUST:
-	crv = pk11_SetTrustAttribute(to,type,value,len);
-	break;
-    case CKO_PRIVATE_KEY:
-    case CKO_SECRET_KEY:
-	crv = pk11_SetPrivateKeyAttribute(to,type,value,len);
-	break;
-    }
-    pk11_FreeAttribute(attribute);
+    attribute.type = type;
+    attribute.pValue = (void *)value;
+    attribute.ulValueLen = len;
+
+    crv = sftkdb_SetAttributeValue(dbHandle, object, &attribute, 1);
+    sftk_freeDB(dbHandle);
     return crv;
 }
 	
 /*
- * force an attribute to a spaecif value.
+ * force an attribute to a specifc value.
  */
 CK_RV
-pk11_forceAttribute(PK11Object *object,CK_ATTRIBUTE_TYPE type, void *value,
-						unsigned int len)
+sftk_forceAttribute(SFTKObject *object,CK_ATTRIBUTE_TYPE type, 
+				const void *value, unsigned int len)
 {
-    PK11Attribute *attribute;
+    SFTKAttribute *attribute;
     void *att_val = NULL;
     PRBool freeData = PR_FALSE;
 
-    if (pk11_isToken(object->handle)) {
-	return pk11_forceTokenAttribute(object,type,value,len);
+    PORT_Assert(object);
+    PORT_Assert(object->refCount);
+    PORT_Assert(object->slot);
+    if (!object ||
+        !object->refCount ||
+        !object->slot) {
+        return CKR_DEVICE_ERROR;
     }
-    attribute=pk11_FindAttribute(object,type);
-    if (attribute == NULL) return pk11_AddAttributeType(object,type,value,len);
+    if (sftk_isToken(object->handle)) {
+	return sftk_forceTokenAttribute(object,type,value,len);
+    }
+    attribute=sftk_FindAttribute(object,type);
+    if (attribute == NULL) return sftk_AddAttributeType(object,type,value,len);
 
 
     if (value) {
-#ifdef PKCS11_STATIC_ATTRIBUTES
         if (len <= ATTR_SPACE) {
 	    att_val = attribute->space;
 	} else {
 	    att_val = PORT_Alloc(len);
 	    freeData = PR_TRUE;
 	}
-#else
-#ifdef PKCS11_REF_COUNT_ATTRIBUTES
-	att_val = PORT_Alloc(len);
-	freeData = PR_TRUE;
-#else
-	att_val = PORT_ArenaAlloc(object->arena,len);
-#endif /* PKCS11_REF_COUNT_ATTRIBUTES */
-#endif /* PKCS11_STATIC_ATTRIBUTES */
 	if (att_val == NULL) {
 	    return CKR_HOST_MEMORY;
 	}
@@ -1561,7 +578,7 @@ pk11_forceAttribute(PK11Object *object,CK_ATTRIBUTE_TYPE type, void *value,
 	attribute->attrib.ulValueLen = len;
 	attribute->freeData = freeData;
     }
-    pk11_FreeAttribute(attribute);
+    sftk_FreeAttribute(attribute);
     return CKR_OK;
 }
 
@@ -1570,18 +587,18 @@ pk11_forceAttribute(PK11Object *object,CK_ATTRIBUTE_TYPE type, void *value,
  * is allocated and needs to be freed with PORT_Free() When complete.
  */
 char *
-pk11_getString(PK11Object *object,CK_ATTRIBUTE_TYPE type)
+sftk_getString(SFTKObject *object,CK_ATTRIBUTE_TYPE type)
 {
-    PK11Attribute *attribute;
+    SFTKAttribute *attribute;
     char *label = NULL;
 
-    attribute=pk11_FindAttribute(object,type);
+    attribute=sftk_FindAttribute(object,type);
     if (attribute == NULL) return NULL;
 
     if (attribute->attrib.pValue != NULL) {
 	label = (char *) PORT_Alloc(attribute->attrib.ulValueLen+1);
 	if (label == NULL) {
-    	    pk11_FreeAttribute(attribute);
+    	    sftk_FreeAttribute(attribute);
 	    return NULL;
 	}
 
@@ -1589,27 +606,27 @@ pk11_getString(PK11Object *object,CK_ATTRIBUTE_TYPE type)
 						attribute->attrib.ulValueLen);
 	label[attribute->attrib.ulValueLen] = 0;
     }
-    pk11_FreeAttribute(attribute);
+    sftk_FreeAttribute(attribute);
     return label;
 }
 
 /*
  * decode when a particular attribute may be modified
- * 	PK11_NEVER: This attribute must be set at object creation time and
+ * 	SFTK_NEVER: This attribute must be set at object creation time and
  *  can never be modified.
- *	PK11_ONCOPY: This attribute may be modified only when you copy the
+ *	SFTK_ONCOPY: This attribute may be modified only when you copy the
  *  object.
- *	PK11_SENSITIVE: The CKA_SENSITIVE attribute can only be changed from
+ *	SFTK_SENSITIVE: The CKA_SENSITIVE attribute can only be changed from
  *  CK_FALSE to CK_TRUE.
- *	PK11_ALWAYS: This attribute can always be modified.
+ *	SFTK_ALWAYS: This attribute can always be modified.
  * Some attributes vary their modification type based on the class of the 
  *   object.
  */
-PK11ModifyType
-pk11_modifyType(CK_ATTRIBUTE_TYPE type, CK_OBJECT_CLASS inClass)
+SFTKModifyType
+sftk_modifyType(CK_ATTRIBUTE_TYPE type, CK_OBJECT_CLASS inClass)
 {
     /* if we don't know about it, user user defined, always allow modify */
-    PK11ModifyType mtype = PK11_ALWAYS; 
+    SFTKModifyType mtype = SFTK_ALWAYS; 
 
     switch(type) {
     /* NEVER */
@@ -1631,21 +648,21 @@ pk11_modifyType(CK_ATTRIBUTE_TYPE type, CK_OBJECT_CLASS inClass)
     case CKA_VALUE_LEN:
     case CKA_ALWAYS_SENSITIVE:
     case CKA_NEVER_EXTRACTABLE:
-    case CKA_NSS_DB:
-	mtype = PK11_NEVER;
+    case CKA_NETSCAPE_DB:
+	mtype = SFTK_NEVER;
 	break;
 
     /* ONCOPY */
     case CKA_TOKEN:
     case CKA_PRIVATE:
     case CKA_MODIFIABLE:
-	mtype = PK11_ONCOPY;
+	mtype = SFTK_ONCOPY;
 	break;
 
     /* SENSITIVE */
     case CKA_SENSITIVE:
     case CKA_EXTRACTABLE:
-	mtype = PK11_SENSITIVE;
+	mtype = SFTK_SENSITIVE;
 	break;
 
     /* ALWAYS */
@@ -1664,16 +681,16 @@ pk11_modifyType(CK_ATTRIBUTE_TYPE type, CK_OBJECT_CLASS inClass)
     case CKA_VERIFY_RECOVER:
     case CKA_WRAP:
     case CKA_UNWRAP:
-	mtype = PK11_ALWAYS;
+	mtype = SFTK_ALWAYS;
 	break;
 
     /* DEPENDS ON CLASS */
     case CKA_VALUE:
-	mtype = (inClass == CKO_DATA) ? PK11_ALWAYS : PK11_NEVER;
+	mtype = (inClass == CKO_DATA) ? SFTK_ALWAYS : SFTK_NEVER;
 	break;
 
     case CKA_SUBJECT:
-	mtype = (inClass == CKO_CERTIFICATE) ? PK11_NEVER : PK11_ALWAYS;
+	mtype = (inClass == CKO_CERTIFICATE) ? SFTK_NEVER : SFTK_ALWAYS;
 	break;
     default:
 	break;
@@ -1684,7 +701,7 @@ pk11_modifyType(CK_ATTRIBUTE_TYPE type, CK_OBJECT_CLASS inClass)
 /* decode if a particular attribute is sensitive (cannot be read
  * back to the user of if the object is set to SENSITIVE) */
 PRBool
-pk11_isSensitive(CK_ATTRIBUTE_TYPE type, CK_OBJECT_CLASS inClass)
+sftk_isSensitive(CK_ATTRIBUTE_TYPE type, CK_OBJECT_CLASS inClass)
 {
     switch(type) {
     /* ALWAYS */
@@ -1712,13 +729,13 @@ pk11_isSensitive(CK_ATTRIBUTE_TYPE type, CK_OBJECT_CLASS inClass)
  * arena.
  */
 CK_RV
-pk11_Attribute2SecItem(PLArenaPool *arena,SECItem *item,PK11Object *object,
+sftk_Attribute2SecItem(PLArenaPool *arena,SECItem *item,SFTKObject *object,
 					CK_ATTRIBUTE_TYPE type)
 {
     int len;
-    PK11Attribute *attribute;
+    SFTKAttribute *attribute;
 
-    attribute = pk11_FindAttribute(object, type);
+    attribute = sftk_FindAttribute(object, type);
     if (attribute == NULL) return CKR_TEMPLATE_INCOMPLETE;
     len = attribute->attrib.ulValueLen;
 
@@ -1728,33 +745,51 @@ pk11_Attribute2SecItem(PLArenaPool *arena,SECItem *item,PK11Object *object,
     	item->data = (unsigned char *) PORT_Alloc(len);
     }
     if (item->data == NULL) {
-	pk11_FreeAttribute(attribute);
+	sftk_FreeAttribute(attribute);
 	return CKR_HOST_MEMORY;
     }
     item->len = len;
     PORT_Memcpy(item->data,attribute->attrib.pValue, len);
-    pk11_FreeAttribute(attribute);
+    sftk_FreeAttribute(attribute);
+    return CKR_OK;
+}
+
+CK_RV
+sftk_GetULongAttribute(SFTKObject *object, CK_ATTRIBUTE_TYPE type,
+							 CK_ULONG *longData)
+{
+    SFTKAttribute *attribute;
+
+    attribute = sftk_FindAttribute(object, type);
+    if (attribute == NULL) return CKR_TEMPLATE_INCOMPLETE;
+
+    if (attribute->attrib.ulValueLen != sizeof(CK_ULONG)) {
+	return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+
+    *longData = *(CK_ULONG *)attribute->attrib.pValue;
+    sftk_FreeAttribute(attribute);
     return CKR_OK;
 }
 
 void
-pk11_DeleteAttributeType(PK11Object *object,CK_ATTRIBUTE_TYPE type)
+sftk_DeleteAttributeType(SFTKObject *object,CK_ATTRIBUTE_TYPE type)
 {
-    PK11Attribute *attribute;
-    attribute = pk11_FindAttribute(object, type);
+    SFTKAttribute *attribute;
+    attribute = sftk_FindAttribute(object, type);
     if (attribute == NULL) return ;
-    pk11_DeleteAttribute(object,attribute);
-    pk11_FreeAttribute(attribute);
+    sftk_DeleteAttribute(object,attribute);
+    sftk_FreeAttribute(attribute);
 }
 
 CK_RV
-pk11_AddAttributeType(PK11Object *object,CK_ATTRIBUTE_TYPE type,void *valPtr,
-							CK_ULONG length)
+sftk_AddAttributeType(SFTKObject *object,CK_ATTRIBUTE_TYPE type,
+				const void *valPtr, CK_ULONG length)
 {
-    PK11Attribute *attribute;
-    attribute = pk11_NewAttribute(object,type,valPtr,length);
+    SFTKAttribute *attribute;
+    attribute = sftk_NewAttribute(object,type,valPtr,length);
     if (attribute == NULL) { return CKR_HOST_MEMORY; }
-    pk11_AddAttribute(object,attribute);
+    sftk_AddAttribute(object,attribute);
     return CKR_OK;
 }
 
@@ -1762,42 +797,11 @@ pk11_AddAttributeType(PK11Object *object,CK_ATTRIBUTE_TYPE type,void *valPtr,
  * ******************** Object Utilities *******************************
  */
 
-static SECStatus
-pk11_deleteTokenKeyByHandle(PK11Slot *slot, CK_OBJECT_HANDLE handle)
-{
-   SECItem *item;
-   PRBool rem;
-
-   item = (SECItem *)PL_HashTableLookup(slot->tokenHashTable, (void *)handle);
-   rem = PL_HashTableRemove(slot->tokenHashTable,(void *)handle) ;
-   if (rem && item) {
-	SECITEM_FreeItem(item,PR_TRUE);
-   }
-   return rem ? SECSuccess : SECFailure;
-}
-
-static SECStatus
-pk11_addTokenKeyByHandle(PK11Slot *slot, CK_OBJECT_HANDLE handle, SECItem *key)
-{
-    PLHashEntry *entry;
-    SECItem *item;
-
-    item = SECITEM_DupItem(key);
-    if (item == NULL) {
-	return SECFailure;
-    }
-    entry = PL_HashTableAdd(slot->tokenHashTable,(void *)handle,item);
-    if (entry == NULL) {
-	SECITEM_FreeItem(item,PR_TRUE);
-	return SECFailure;
-    }
-    return SECSuccess;
-}
-
+/* must be called holding sftk_tokenKeyLock(slot) */
 static SECItem *
-pk11_lookupTokenKeyByHandle(PK11Slot *slot, CK_OBJECT_HANDLE handle)
+sftk_lookupTokenKeyByHandle(SFTKSlot *slot, CK_OBJECT_HANDLE handle)
 {
-    return (SECItem *)PL_HashTableLookup(slot->tokenHashTable, (void *)handle);
+    return (SECItem *)PL_HashTableLookup(slot->tokObjHashTable, (void *)handle);
 }
 
 /*
@@ -1806,58 +810,73 @@ pk11_lookupTokenKeyByHandle(PK11Slot *slot, CK_OBJECT_HANDLE handle)
  * a new lock. We use separate functions for this just in case I'm wrong.
  */
 static void
-pk11_tokenKeyLock(PK11Slot *slot) {
-    PK11_USE_THREADS(PZ_Lock(slot->objectLock);)
+sftk_tokenKeyLock(SFTKSlot *slot) {
+    SKIP_AFTER_FORK(PZ_Lock(slot->objectLock));
 }
 
 static void
-pk11_tokenKeyUnlock(PK11Slot *slot) {
-    PK11_USE_THREADS(PZ_Unlock(slot->objectLock);)
+sftk_tokenKeyUnlock(SFTKSlot *slot) {
+    SKIP_AFTER_FORK(PZ_Unlock(slot->objectLock));
+}
+
+static PRIntn
+sftk_freeHashItem(PLHashEntry* entry, PRIntn index, void *arg)
+{
+    SECItem *item = (SECItem *)entry->value;
+
+    SECITEM_FreeItem(item, PR_TRUE);
+    return HT_ENUMERATE_NEXT;
+}
+
+CK_RV
+SFTK_ClearTokenKeyHashTable(SFTKSlot *slot)
+{
+    sftk_tokenKeyLock(slot);
+    PORT_Assert(!slot->present);
+    PL_HashTableEnumerateEntries(slot->tokObjHashTable, sftk_freeHashItem, NULL);
+    sftk_tokenKeyUnlock(slot);
+    return CKR_OK;
 }
 
 
 /* allocation hooks that allow us to recycle old object structures */
-static PK11ObjectFreeList sessionObjectList = { NULL, NULL, 0 };
-static PK11ObjectFreeList tokenObjectList = { NULL, NULL, 0 };
+static SFTKObjectFreeList sessionObjectList = { NULL, NULL, 0 };
+static SFTKObjectFreeList tokenObjectList = { NULL, NULL, 0 };
 
-PK11Object *
-pk11_GetObjectFromList(PRBool *hasLocks, PRBool optimizeSpace, 
-     PK11ObjectFreeList *list, unsigned int hashSize, PRBool isSessionObject)
+SFTKObject *
+sftk_GetObjectFromList(PRBool *hasLocks, PRBool optimizeSpace, 
+     SFTKObjectFreeList *list, unsigned int hashSize, PRBool isSessionObject)
 {
-    PK11Object *object;
+    SFTKObject *object;
     int size = 0;
 
     if (!optimizeSpace) {
-	if (list->lock == NULL) {
-	    list->lock = PZ_NewLock(nssILockObject);
-	}
-
-	PK11_USE_THREADS(PZ_Lock(list->lock));
+	PZ_Lock(list->lock);
 	object = list->head;
 	if (object) {
 	    list->head = object->next;
 	    list->count--;
 	}    	
-	PK11_USE_THREADS(PZ_Unlock(list->lock));
+	PZ_Unlock(list->lock);
 	if (object) {
 	    object->next = object->prev = NULL;
             *hasLocks = PR_TRUE;
 	    return object;
 	}
     }
-    size = isSessionObject ? sizeof(PK11SessionObject) 
-		+ hashSize *sizeof(PK11Attribute *) : sizeof(PK11TokenObject);
+    size = isSessionObject ? sizeof(SFTKSessionObject) 
+		+ hashSize *sizeof(SFTKAttribute *) : sizeof(SFTKTokenObject);
 
-    object  = (PK11Object*)PORT_ZAlloc(size);
-    if (isSessionObject) {
-	((PK11SessionObject *)object)->hashSize = hashSize;
+    object  = (SFTKObject*)PORT_ZAlloc(size);
+    if (isSessionObject && object) {
+	((SFTKSessionObject *)object)->hashSize = hashSize;
     }
     *hasLocks = PR_FALSE;
     return object;
 }
 
 static void
-pk11_PutObjectToList(PK11Object *object, PK11ObjectFreeList *list,
+sftk_PutObjectToList(SFTKObject *object, SFTKObjectFreeList *list,
 						PRBool isSessionObject) {
 
     /* the code below is equivalent to :
@@ -1865,77 +884,87 @@ pk11_PutObjectToList(PK11Object *object, PK11ObjectFreeList *list,
      * just faster.
      */
     PRBool optimizeSpace = isSessionObject && 
-				((PK11SessionObject *)object)->optimizeSpace; 
-    if (!optimizeSpace && (list->count < MAX_OBJECT_LIST_SIZE)) {
-	if (list->lock == NULL) {
-	    list->lock = PZ_NewLock(nssILockObject);
-	}
-	PK11_USE_THREADS(PZ_Lock(list->lock));
+				((SFTKSessionObject *)object)->optimizeSpace; 
+    if (object->refLock && !optimizeSpace 
+	               && (list->count < MAX_OBJECT_LIST_SIZE)) {
+	PZ_Lock(list->lock);
 	object->next = list->head;
 	list->head = object;
 	list->count++;
-	PK11_USE_THREADS(PZ_Unlock(list->lock));
+	PZ_Unlock(list->lock);
 	return;
     }
     if (isSessionObject) {
-	PK11SessionObject *so = (PK11SessionObject *)object;
-	PK11_USE_THREADS(PZ_DestroyLock(so->attributeLock);)
+	SFTKSessionObject *so = (SFTKSessionObject *)object;
+	PZ_DestroyLock(so->attributeLock);
 	so->attributeLock = NULL;
     }
-    PK11_USE_THREADS(PZ_DestroyLock(object->refLock);)
-    object->refLock = NULL;
+    if (object->refLock) {
+	PZ_DestroyLock(object->refLock);
+	object->refLock = NULL;
+    }
     PORT_Free(object);
 }
 
-static PK11Object *
-pk11_freeObjectData(PK11Object *object) {
-   PK11Object *next = object->next;
+static SFTKObject *
+sftk_freeObjectData(SFTKObject *object) {
+   SFTKObject *next = object->next;
 
    PORT_Free(object);
    return next;
 }
+
+static void
+sftk_InitFreeList(SFTKObjectFreeList *list)
+{
+    list->lock = PZ_NewLock(nssILockObject);
+}
+
+void sftk_InitFreeLists(void)
+{
+    sftk_InitFreeList(&sessionObjectList);
+    sftk_InitFreeList(&tokenObjectList);
+}
    
 static void
-pk11_CleanupFreeList(PK11ObjectFreeList *list, PRBool isSessionList)
+sftk_CleanupFreeList(SFTKObjectFreeList *list, PRBool isSessionList)
 {
-    PK11Object *object;
+    SFTKObject *object;
 
     if (!list->lock) {
 	return;
     }
-    PK11_USE_THREADS(PZ_Lock(list->lock));
+    SKIP_AFTER_FORK(PZ_Lock(list->lock));
     for (object= list->head; object != NULL; 
-					object = pk11_freeObjectData(object)) {
-#ifdef PKCS11_USE_THREADS
+					object = sftk_freeObjectData(object)) {
 	PZ_DestroyLock(object->refLock);
 	if (isSessionList) {
-	    PZ_DestroyLock(((PK11SessionObject *)object)->attributeLock);
+	    PZ_DestroyLock(((SFTKSessionObject *)object)->attributeLock);
 	}
-#endif
     }
     list->count = 0;
     list->head = NULL;
-    PK11_USE_THREADS(PZ_Unlock(list->lock));
-    PK11_USE_THREADS(PZ_DestroyLock(list->lock));
+    SKIP_AFTER_FORK(PZ_Unlock(list->lock));
+    SKIP_AFTER_FORK(PZ_DestroyLock(list->lock));
     list->lock = NULL;
 }
 
 void
-pk11_CleanupFreeLists(void)
+sftk_CleanupFreeLists(void)
 {
-    pk11_CleanupFreeList(&sessionObjectList, PR_TRUE);
-    pk11_CleanupFreeList(&tokenObjectList, PR_FALSE);
+    sftk_CleanupFreeList(&sessionObjectList, PR_TRUE);
+    sftk_CleanupFreeList(&tokenObjectList, PR_FALSE);
 }
 
 
 /*
  * Create a new object
  */
-PK11Object *
-pk11_NewObject(PK11Slot *slot)
+SFTKObject *
+sftk_NewObject(SFTKSlot *slot)
 {
-    PK11Object *object;
-    PK11SessionObject *sessObject;
+    SFTKObject *object;
+    SFTKSessionObject *sessObject;
     PRBool hasLocks = PR_FALSE;
     unsigned int i;
     unsigned int hashSize = 0;
@@ -1943,72 +972,41 @@ pk11_NewObject(PK11Slot *slot)
     hashSize = (slot->optimizeSpace) ? SPACE_ATTRIBUTE_HASH_SIZE :
 				TIME_ATTRIBUTE_HASH_SIZE;
 
-#ifdef PKCS11_STATIC_ATTRIBUTES
-    object = pk11_GetObjectFromList(&hasLocks, slot->optimizeSpace,
+    object = sftk_GetObjectFromList(&hasLocks, slot->optimizeSpace,
 				&sessionObjectList,  hashSize, PR_TRUE);
     if (object == NULL) {
 	return NULL;
     }
-    sessObject = (PK11SessionObject *)object;
+    sessObject = (SFTKSessionObject *)object;
     sessObject->nextAttr = 0;
 
     for (i=0; i < MAX_OBJS_ATTRS; i++) {
 	sessObject->attrList[i].attrib.pValue = NULL;
 	sessObject->attrList[i].freeData = PR_FALSE;
     }
-#else
-    PRArenaPool *arena;
-
-    arena = PORT_NewArena(2048);
-    if (arena == NULL) return NULL;
-
-    object = (PK11Object*)PORT_ArenaAlloc(arena,sizeof(PK11SessionObject)
-		+hashSize * sizeof(PK11Attribute *));
-    if (object == NULL) {
-	PORT_FreeArena(arena,PR_FALSE);
-	return NULL;
-    }
-    object->arena = arena;
-
-    sessObject = (PK11SessionObject *)object;
-    sessObject->hashSize = hashSize;
-#endif
     sessObject->optimizeSpace = slot->optimizeSpace;
 
     object->handle = 0;
     object->next = object->prev = NULL;
     object->slot = slot;
-    object->objclass = 0xffff;
+    
     object->refCount = 1;
     sessObject->sessionList.next = NULL;
     sessObject->sessionList.prev = NULL;
     sessObject->sessionList.parent = object;
     sessObject->session = NULL;
     sessObject->wasDerived = PR_FALSE;
-#ifdef PKCS11_USE_THREADS
     if (!hasLocks) object->refLock = PZ_NewLock(nssILockRefLock);
     if (object->refLock == NULL) {
-#ifdef PKCS11_STATIC_ATTRIBUTES
 	PORT_Free(object);
-#else
-	PORT_FreeArena(arena,PR_FALSE);
-#endif
 	return NULL;
     }
     if (!hasLocks) sessObject->attributeLock = PZ_NewLock(nssILockAttribute);
     if (sessObject->attributeLock == NULL) {
-	PK11_USE_THREADS(PZ_DestroyLock(object->refLock);)
-#ifdef PKCS11_STATIC_ATTRIBUTES
+	PZ_DestroyLock(object->refLock);
 	PORT_Free(object);
-#else
-	PORT_FreeArena(arena,PR_FALSE);
-#endif
 	return NULL;
     }
-#else
-    sessObject->attributeLock = NULL;
-    object->refLock = NULL;
-#endif
     for (i=0; i < sessObject->hashSize; i++) {
 	sessObject->head[i] = NULL;
     }
@@ -2018,11 +1016,10 @@ pk11_NewObject(PK11Slot *slot)
 }
 
 static CK_RV
-pk11_DestroySessionObjectData(PK11SessionObject *so)
+sftk_DestroySessionObjectData(SFTKSessionObject *so)
 {
 	int i;
 
-#ifdef PKCS11_STATIC_ATTRIBUTES
 	for (i=0; i < MAX_OBJS_ATTRS; i++) {
 	    unsigned char *value = so->attrList[i].attrib.pValue;
 	    if (value) {
@@ -2034,24 +1031,7 @@ pk11_DestroySessionObjectData(PK11SessionObject *so)
 		so->attrList[i].freeData = PR_FALSE;
 	    }
 	}
-#endif
-
-#ifdef PKCS11_REF_COUNT_ATTRIBUTES
-	/* clean out the attributes */
-	/* since no one is referencing us, it's safe to walk the chain
-	 * without a lock */
-	for (i=0; i < so->hashSize; i++) {
-	    PK11Attribute *ap,*next;
-	    for (ap = so->head[i]; ap != NULL; ap = next) {
-		next = ap->next;
-		/* paranoia */
-		ap->next = ap->prev = NULL;
-		pk11_FreeAttribute(ap);
-	    }
-	    so->head[i] = NULL;
-	}
-#endif
-/*	PK11_USE_THREADS(PZ_DestroyLock(so->attributeLock));*/
+/*	PZ_DestroyLock(so->attributeLock);*/
 	return CKR_OK;
 }
 
@@ -2060,11 +1040,11 @@ pk11_DestroySessionObjectData(PK11SessionObject *so)
  * be 'zero'.
  */
 static CK_RV
-pk11_DestroyObject(PK11Object *object)
+sftk_DestroyObject(SFTKObject *object)
 {
     CK_RV crv = CKR_OK;
-    PK11SessionObject *so = pk11_narrowToSessionObject(object);
-    PK11TokenObject *to = pk11_narrowToTokenObject(object);
+    SFTKSessionObject *so = sftk_narrowToSessionObject(object);
+    SFTKTokenObject *to = sftk_narrowToTokenObject(object);
 
     PORT_Assert(object->refCount == 0);
 
@@ -2076,57 +1056,45 @@ pk11_DestroyObject(PK11Object *object)
 	}
     } 
     if (so) {
-	pk11_DestroySessionObjectData(so);
+	sftk_DestroySessionObjectData(so);
     }
     if (object->objectInfo) {
 	(*object->infoFree)(object->objectInfo);
 	object->objectInfo = NULL;
 	object->infoFree = NULL;
     }
-#ifdef PKCS11_STATIC_ATTRIBUTES
     if (so) {
-	pk11_PutObjectToList(object,&sessionObjectList,PR_TRUE);
+	sftk_PutObjectToList(object,&sessionObjectList,PR_TRUE);
     } else {
-	pk11_PutObjectToList(object,&tokenObjectList,PR_FALSE);
+	sftk_PutObjectToList(object,&tokenObjectList,PR_FALSE);
     }
-#else
-    if (object->refLock) {
-        PK11_USE_THREADS(PZ_DestroyLock(object->refLock);)
-    }
-    arena = object->arena;
-    PORT_FreeArena(arena,PR_FALSE);
-#endif
     return crv;
 }
 
 void
-pk11_ReferenceObject(PK11Object *object)
+sftk_ReferenceObject(SFTKObject *object)
 {
-    PK11_USE_THREADS(PZ_Lock(object->refLock);)
+    PZ_Lock(object->refLock);
     object->refCount++;
-    PK11_USE_THREADS(PZ_Unlock(object->refLock);)
+    PZ_Unlock(object->refLock);
 }
 
-static PK11Object *
-pk11_ObjectFromHandleOnSlot(CK_OBJECT_HANDLE handle, PK11Slot *slot)
+static SFTKObject *
+sftk_ObjectFromHandleOnSlot(CK_OBJECT_HANDLE handle, SFTKSlot *slot)
 {
-    PK11Object **head;
-    PZLock *lock;
-    PK11Object *object;
+    SFTKObject *object;
+    PRUint32 index = sftk_hash(handle, slot->sessObjHashSize);
 
-    if (pk11_isToken(handle)) {
-	return pk11_NewTokenObject(slot, NULL, handle);
+    if (sftk_isToken(handle)) {
+	return sftk_NewTokenObject(slot, NULL, handle);
     }
 
-    head = slot->tokObjects;
-    lock = slot->objectLock;
-
-    PK11_USE_THREADS(PZ_Lock(lock);)
-    pk11queue_find(object,handle,head,slot->tokObjHashSize);
+    PZ_Lock(slot->objectLock);
+    sftkqueue_find2(object, handle, index, slot->sessObjHashTable);
     if (object) {
-	pk11_ReferenceObject(object);
+	sftk_ReferenceObject(object);
     }
-    PK11_USE_THREADS(PZ_Unlock(lock);)
+    PZ_Unlock(slot->objectLock);
 
     return(object);
 }
@@ -2135,37 +1103,37 @@ pk11_ObjectFromHandleOnSlot(CK_OBJECT_HANDLE handle, PK11Slot *slot)
  * sense in terms of a given session.  make a reference to that object
  * structure returned.
  */
-PK11Object *
-pk11_ObjectFromHandle(CK_OBJECT_HANDLE handle, PK11Session *session)
+SFTKObject *
+sftk_ObjectFromHandle(CK_OBJECT_HANDLE handle, SFTKSession *session)
 {
-    PK11Slot *slot = pk11_SlotFromSession(session);
+    SFTKSlot *slot = sftk_SlotFromSession(session);
 
-    return pk11_ObjectFromHandleOnSlot(handle,slot);
+    return sftk_ObjectFromHandleOnSlot(handle,slot);
 }
 
 
 /*
  * release a reference to an object handle
  */
-PK11FreeStatus
-pk11_FreeObject(PK11Object *object)
+SFTKFreeStatus
+sftk_FreeObject(SFTKObject *object)
 {
     PRBool destroy = PR_FALSE;
     CK_RV crv;
 
-    PK11_USE_THREADS(PZ_Lock(object->refLock);)
+    PZ_Lock(object->refLock);
     if (object->refCount == 1) destroy = PR_TRUE;
     object->refCount--;
-    PK11_USE_THREADS(PZ_Unlock(object->refLock);)
+    PZ_Unlock(object->refLock);
 
     if (destroy) {
-	crv = pk11_DestroyObject(object);
+	crv = sftk_DestroyObject(object);
 	if (crv != CKR_OK) {
-	   return PK11_DestroyFailure;
+	   return SFTK_DestroyFailure;
 	} 
-	return PK11_Destroyed;
+	return SFTK_Destroyed;
     }
-    return PK11_Busy;
+    return SFTK_Busy;
 }
  
 /*
@@ -2173,108 +1141,397 @@ pk11_FreeObject(PK11Object *object)
  * adopt the object.
  */
 void
-pk11_AddSlotObject(PK11Slot *slot, PK11Object *object)
+sftk_AddSlotObject(SFTKSlot *slot, SFTKObject *object)
 {
-    PK11_USE_THREADS(PZ_Lock(slot->objectLock);)
-    pk11queue_add(object,object->handle,slot->tokObjects,slot->tokObjHashSize);
-    PK11_USE_THREADS(PZ_Unlock(slot->objectLock);)
+    PRUint32 index = sftk_hash(object->handle, slot->sessObjHashSize);
+    sftkqueue_init_element(object);
+    PZ_Lock(slot->objectLock);
+    sftkqueue_add2(object, object->handle, index, slot->sessObjHashTable);
+    PZ_Unlock(slot->objectLock);
 }
 
 void
-pk11_AddObject(PK11Session *session, PK11Object *object)
+sftk_AddObject(SFTKSession *session, SFTKObject *object)
 {
-    PK11Slot *slot = pk11_SlotFromSession(session);
-    PK11SessionObject *so = pk11_narrowToSessionObject(object);
+    SFTKSlot *slot = sftk_SlotFromSession(session);
+    SFTKSessionObject *so = sftk_narrowToSessionObject(object);
 
     if (so) {
-	PK11_USE_THREADS(PZ_Lock(session->objectLock);)
-	pk11queue_add(&so->sessionList,0,session->objects,0);
+	PZ_Lock(session->objectLock);
+	sftkqueue_add(&so->sessionList,0,session->objects,0);
 	so->session = session;
-	PK11_USE_THREADS(PZ_Unlock(session->objectLock);)
+	PZ_Unlock(session->objectLock);
     }
-    pk11_AddSlotObject(slot,object);
-    pk11_ReferenceObject(object);
+    sftk_AddSlotObject(slot,object);
+    sftk_ReferenceObject(object);
 } 
 
 /*
- * add an object to a slot andsession queue
+ * delete an object from a slot and session queue
  */
 CK_RV
-pk11_DeleteObject(PK11Session *session, PK11Object *object)
+sftk_DeleteObject(SFTKSession *session, SFTKObject *object)
 {
-    PK11Slot *slot = pk11_SlotFromSession(session);
-    PK11SessionObject *so = pk11_narrowToSessionObject(object);
-    PK11TokenObject *to = pk11_narrowToTokenObject(object);
+    SFTKSlot *slot = sftk_SlotFromSession(session);
+    SFTKSessionObject *so = sftk_narrowToSessionObject(object);
+    SFTKTokenObject *to = sftk_narrowToTokenObject(object);
     CK_RV crv = CKR_OK;
-    SECStatus rv;
-    NSSLOWCERTCertificate *cert;
-    NSSLOWCERTCertTrust tmptrust;
-    PRBool isKrl;
+    PRUint32 index = sftk_hash(object->handle, slot->sessObjHashSize);
 
-  /* Handle Token case */
+    /* Handle Token case */
     if (so && so->session) {
-	PK11Session *session = so->session;
-	PK11_USE_THREADS(PZ_Lock(session->objectLock);)
-	pk11queue_delete(&so->sessionList,0,session->objects,0);
-	PK11_USE_THREADS(PZ_Unlock(session->objectLock);)
-	PK11_USE_THREADS(PZ_Lock(slot->objectLock);)
-	pk11queue_delete(object,object->handle,slot->tokObjects,
-						slot->tokObjHashSize);
-	PK11_USE_THREADS(PZ_Unlock(slot->objectLock);)
-	pk11_FreeObject(object); /* reduce it's reference count */
+	SFTKSession *session = so->session;
+	PZ_Lock(session->objectLock);
+	sftkqueue_delete(&so->sessionList,0,session->objects,0);
+	PZ_Unlock(session->objectLock);
+	PZ_Lock(slot->objectLock);
+	sftkqueue_delete2(object, object->handle, index, slot->sessObjHashTable);
+	PZ_Unlock(slot->objectLock);
+	sftkqueue_clear_deleted_element(object);
+	sftk_FreeObject(object); /* free the reference owned by the queue */
     } else {
+	SFTKDBHandle *handle = sftk_getDBForTokenObject(slot, object->handle);
+
 	PORT_Assert(to);
-	/* remove the objects from the real data base */
-	switch (object->handle & PK11_TOKEN_TYPE_MASK) {
-	case PK11_TOKEN_TYPE_PRIV:
-	case PK11_TOKEN_TYPE_KEY:
-	    /* KEYID is the public KEY for DSA and DH, and the MODULUS for
-	     *  RSA */
-	    PORT_Assert(slot->keyDB);
-	    rv = nsslowkey_DeleteKey(slot->keyDB, &to->dbKey);
-	    if (rv != SECSuccess) crv= CKR_DEVICE_ERROR;
-	    break;
-	case PK11_TOKEN_TYPE_PUB:
-	    break; /* public keys only exist at the behest of the priv key */
-	case PK11_TOKEN_TYPE_CERT:
-	    cert = nsslowcert_FindCertByKey(slot->certDB,&to->dbKey);
-	    if (cert == NULL) {
-		crv = CKR_DEVICE_ERROR;
-		break;
-	    }
-	    rv = nsslowcert_DeletePermCertificate(cert);
-	    if (rv != SECSuccess) crv = CKR_DEVICE_ERROR;
-	    nsslowcert_DestroyCertificate(cert);
-	    break;
-	case PK11_TOKEN_TYPE_CRL:
-	    isKrl = (PRBool) (object->handle == PK11_TOKEN_KRL_HANDLE);
-	    rv = nsslowcert_DeletePermCRL(slot->certDB,&to->dbKey,isKrl);
-	    if (rv == SECFailure) crv = CKR_DEVICE_ERROR;
-	    break;
-	case PK11_TOKEN_TYPE_TRUST:
-	    cert = nsslowcert_FindCertByKey(slot->certDB,&to->dbKey);
-	    if (cert == NULL) {
-		crv = CKR_DEVICE_ERROR;
-		break;
-	    }
-	    tmptrust = *cert->trust;
-	    tmptrust.sslFlags &= CERTDB_PRESERVE_TRUST_BITS;
-	    tmptrust.emailFlags &= CERTDB_PRESERVE_TRUST_BITS;
-	    tmptrust.objectSigningFlags &= CERTDB_PRESERVE_TRUST_BITS;
-	    tmptrust.sslFlags |= CERTDB_TRUSTED_UNKNOWN;
-	    tmptrust.emailFlags |= CERTDB_TRUSTED_UNKNOWN;
-	    tmptrust.objectSigningFlags |= CERTDB_TRUSTED_UNKNOWN;
-	    rv = nsslowcert_ChangeCertTrust(slot->certDB,cert,&tmptrust);
-	    if (rv != SECSuccess) crv = CKR_DEVICE_ERROR;
-	    nsslowcert_DestroyCertificate(cert);
-	    break;
-	default:
-	    break;
-	}
-	pk11_tokenKeyLock(object->slot);
-	pk11_deleteTokenKeyByHandle(object->slot,object->handle);
-	pk11_tokenKeyUnlock(object->slot);
+	crv = sftkdb_DestroyObject(handle, object->handle);
+	sftk_freeDB(handle);
     } 
+    return crv;
+}
+
+/*
+ * Token objects don't explicitly store their attributes, so we need to know
+ * what attributes make up a particular token object before we can copy it.
+ * below are the tables by object type.
+ */
+static const CK_ATTRIBUTE_TYPE commonAttrs[] = {
+    CKA_CLASS, CKA_TOKEN, CKA_PRIVATE, CKA_LABEL, CKA_MODIFIABLE
+};
+static const CK_ULONG commonAttrsCount = 
+			sizeof(commonAttrs)/sizeof(commonAttrs[0]);
+
+static const CK_ATTRIBUTE_TYPE commonKeyAttrs[] = {
+    CKA_ID, CKA_START_DATE, CKA_END_DATE, CKA_DERIVE, CKA_LOCAL, CKA_KEY_TYPE
+};
+static const CK_ULONG commonKeyAttrsCount = 
+			sizeof(commonKeyAttrs)/sizeof(commonKeyAttrs[0]);
+
+static const CK_ATTRIBUTE_TYPE secretKeyAttrs[] = {
+    CKA_SENSITIVE, CKA_EXTRACTABLE, CKA_ENCRYPT, CKA_DECRYPT, CKA_SIGN,
+    CKA_VERIFY, CKA_WRAP, CKA_UNWRAP, CKA_VALUE
+};
+static const CK_ULONG secretKeyAttrsCount = 
+			sizeof(secretKeyAttrs)/sizeof(secretKeyAttrs[0]);
+
+static const CK_ATTRIBUTE_TYPE commonPubKeyAttrs[] = {
+    CKA_ENCRYPT, CKA_VERIFY, CKA_VERIFY_RECOVER, CKA_WRAP, CKA_SUBJECT
+};
+static const CK_ULONG commonPubKeyAttrsCount = 
+			sizeof(commonPubKeyAttrs)/sizeof(commonPubKeyAttrs[0]);
+
+static const CK_ATTRIBUTE_TYPE rsaPubKeyAttrs[] = {
+    CKA_MODULUS, CKA_PUBLIC_EXPONENT
+};
+static const CK_ULONG rsaPubKeyAttrsCount = 
+			sizeof(rsaPubKeyAttrs)/sizeof(rsaPubKeyAttrs[0]);
+
+static const CK_ATTRIBUTE_TYPE dsaPubKeyAttrs[] = {
+    CKA_SUBPRIME, CKA_PRIME, CKA_BASE, CKA_VALUE
+};
+static const CK_ULONG dsaPubKeyAttrsCount = 
+			sizeof(dsaPubKeyAttrs)/sizeof(dsaPubKeyAttrs[0]);
+
+static const CK_ATTRIBUTE_TYPE dhPubKeyAttrs[] = {
+    CKA_PRIME, CKA_BASE, CKA_VALUE
+};
+static const CK_ULONG dhPubKeyAttrsCount = 
+			sizeof(dhPubKeyAttrs)/sizeof(dhPubKeyAttrs[0]);
+#ifdef NSS_ENABLE_ECC
+static const CK_ATTRIBUTE_TYPE ecPubKeyAttrs[] = {
+    CKA_EC_PARAMS, CKA_EC_POINT
+};
+static const CK_ULONG ecPubKeyAttrsCount = 
+			sizeof(ecPubKeyAttrs)/sizeof(ecPubKeyAttrs[0]);
+#endif
+
+static const CK_ATTRIBUTE_TYPE commonPrivKeyAttrs[] = {
+    CKA_DECRYPT, CKA_SIGN, CKA_SIGN_RECOVER, CKA_UNWRAP, CKA_SUBJECT,
+    CKA_SENSITIVE, CKA_EXTRACTABLE, CKA_NETSCAPE_DB
+};
+static const CK_ULONG commonPrivKeyAttrsCount = 
+		sizeof(commonPrivKeyAttrs)/sizeof(commonPrivKeyAttrs[0]);
+
+static const CK_ATTRIBUTE_TYPE rsaPrivKeyAttrs[] = {
+    CKA_MODULUS, CKA_PUBLIC_EXPONENT, CKA_PRIVATE_EXPONENT, 
+    CKA_PRIME_1, CKA_PRIME_2, CKA_EXPONENT_1, CKA_EXPONENT_2, CKA_COEFFICIENT
+};
+static const CK_ULONG rsaPrivKeyAttrsCount = 
+			sizeof(rsaPrivKeyAttrs)/sizeof(rsaPrivKeyAttrs[0]);
+
+static const CK_ATTRIBUTE_TYPE dsaPrivKeyAttrs[] = {
+    CKA_SUBPRIME, CKA_PRIME, CKA_BASE, CKA_VALUE
+};
+static const CK_ULONG dsaPrivKeyAttrsCount = 
+			sizeof(dsaPrivKeyAttrs)/sizeof(dsaPrivKeyAttrs[0]);
+
+static const CK_ATTRIBUTE_TYPE dhPrivKeyAttrs[] = {
+    CKA_PRIME, CKA_BASE, CKA_VALUE
+};
+static const CK_ULONG dhPrivKeyAttrsCount = 
+			sizeof(dhPrivKeyAttrs)/sizeof(dhPrivKeyAttrs[0]);
+#ifdef NSS_ENABLE_ECC
+static const CK_ATTRIBUTE_TYPE ecPrivKeyAttrs[] = {
+    CKA_EC_PARAMS, CKA_VALUE
+};
+static const CK_ULONG ecPrivKeyAttrsCount = 
+			sizeof(ecPrivKeyAttrs)/sizeof(ecPrivKeyAttrs[0]);
+#endif
+
+static const CK_ATTRIBUTE_TYPE certAttrs[] = {
+    CKA_CERTIFICATE_TYPE, CKA_VALUE, CKA_SUBJECT, CKA_ISSUER, CKA_SERIAL_NUMBER
+};
+static const CK_ULONG certAttrsCount = 
+		sizeof(certAttrs)/sizeof(certAttrs[0]);
+
+static const CK_ATTRIBUTE_TYPE trustAttrs[] = {
+    CKA_ISSUER, CKA_SERIAL_NUMBER, CKA_CERT_SHA1_HASH, CKA_CERT_MD5_HASH,
+    CKA_TRUST_SERVER_AUTH, CKA_TRUST_CLIENT_AUTH, CKA_TRUST_EMAIL_PROTECTION,
+    CKA_TRUST_CODE_SIGNING, CKA_TRUST_STEP_UP_APPROVED
+};
+static const CK_ULONG trustAttrsCount = 
+		sizeof(trustAttrs)/sizeof(trustAttrs[0]);
+
+static const CK_ATTRIBUTE_TYPE smimeAttrs[] = {
+    CKA_SUBJECT, CKA_NETSCAPE_EMAIL, CKA_NETSCAPE_SMIME_TIMESTAMP, CKA_VALUE
+};
+static const CK_ULONG smimeAttrsCount = 
+		sizeof(smimeAttrs)/sizeof(smimeAttrs[0]);
+
+static const CK_ATTRIBUTE_TYPE crlAttrs[] = {
+    CKA_SUBJECT, CKA_VALUE, CKA_NETSCAPE_URL, CKA_NETSCAPE_KRL
+};
+static const CK_ULONG crlAttrsCount = 
+		sizeof(crlAttrs)/sizeof(crlAttrs[0]);
+
+/* copy an object based on it's table */
+CK_RV
+stfk_CopyTokenAttributes(SFTKObject *destObject,SFTKTokenObject *src_to,
+	const CK_ATTRIBUTE_TYPE *attrArray, CK_ULONG attrCount)
+{
+    SFTKAttribute *attribute;
+    SFTKAttribute *newAttribute;
+    CK_RV crv = CKR_OK;
+    unsigned int i;
+
+    for (i=0; i < attrCount; i++) {
+	if (!sftk_hasAttribute(destObject,attrArray[i])) {
+	    attribute =sftk_FindAttribute(&src_to->obj, attrArray[i]);
+	    if (!attribute) {
+		continue; /* return CKR_ATTRIBUTE_VALUE_INVALID; */
+	    }
+	    /* we need to copy the attribute since each attribute
+	     * only has one set of link list pointers */
+	    newAttribute = sftk_NewAttribute( destObject,
+				sftk_attr_expand(&attribute->attrib));
+	    sftk_FreeAttribute(attribute); /* free the old attribute */
+	    if (!newAttribute) {
+		return CKR_HOST_MEMORY;
+	    }
+	    sftk_AddAttribute(destObject,newAttribute);
+	}
+    }
+    return crv;
+}
+
+CK_RV
+stfk_CopyTokenPrivateKey(SFTKObject *destObject,SFTKTokenObject *src_to)
+{
+    CK_RV crv;
+    CK_KEY_TYPE key_type;
+    SFTKAttribute *attribute;
+
+    /* copy the common attributes for all keys first */
+    crv = stfk_CopyTokenAttributes(destObject, src_to, commonKeyAttrs,
+							commonKeyAttrsCount);
+    if (crv != CKR_OK) {
+	goto fail;
+    }
+    /* copy the common attributes for all private keys next */
+    crv = stfk_CopyTokenAttributes(destObject, src_to, commonPrivKeyAttrs,
+						commonPrivKeyAttrsCount);
+    if (crv != CKR_OK) {
+	goto fail;
+    }
+    attribute =sftk_FindAttribute(&src_to->obj, CKA_KEY_TYPE);
+    PORT_Assert(attribute); /* if it wasn't here, ww should have failed
+			     * copying the common attributes */
+    if (!attribute) {
+	/* OK, so CKR_ATTRIBUTE_VALUE_INVALID is the immediate error, but
+	 * the fact is, the only reason we couldn't get the attribute would
+	 * be a memory error or database error (an error in the 'device').
+	 * if we have a database error code, we could return it here */
+	crv = CKR_DEVICE_ERROR;
+	goto fail;
+    }
+    key_type = *(CK_KEY_TYPE *)attribute->attrib.pValue;
+    sftk_FreeAttribute(attribute);
+    
+    /* finally copy the attributes for various private key types */
+    switch (key_type) {
+    case CKK_RSA:
+	crv = stfk_CopyTokenAttributes(destObject, src_to, rsaPrivKeyAttrs,
+							rsaPrivKeyAttrsCount);
+	break;
+    case CKK_DSA:
+	crv = stfk_CopyTokenAttributes(destObject, src_to, dsaPrivKeyAttrs,
+							dsaPrivKeyAttrsCount);
+	break;
+    case CKK_DH:
+	crv = stfk_CopyTokenAttributes(destObject, src_to, dhPrivKeyAttrs,
+							dhPrivKeyAttrsCount);
+	break;
+#ifdef NSS_ENABLE_ECC
+    case CKK_EC:
+	crv = stfk_CopyTokenAttributes(destObject, src_to, ecPrivKeyAttrs,
+							ecPrivKeyAttrsCount);
+	break;
+#endif
+     default:
+	crv = CKR_DEVICE_ERROR; /* shouldn't happen unless we store more types
+				* of token keys into our database. */
+    }
+fail:
+    return crv;
+}
+
+CK_RV
+stfk_CopyTokenPublicKey(SFTKObject *destObject,SFTKTokenObject *src_to)
+{
+    CK_RV crv;
+    CK_KEY_TYPE key_type;
+    SFTKAttribute *attribute;
+
+    /* copy the common attributes for all keys first */
+    crv = stfk_CopyTokenAttributes(destObject, src_to, commonKeyAttrs,
+							commonKeyAttrsCount);
+    if (crv != CKR_OK) {
+	goto fail;
+    }
+
+    /* copy the common attributes for all public keys next */
+    crv = stfk_CopyTokenAttributes(destObject, src_to, commonPubKeyAttrs,
+							commonPubKeyAttrsCount);
+    if (crv != CKR_OK) {
+	goto fail;
+    }
+    attribute =sftk_FindAttribute(&src_to->obj, CKA_KEY_TYPE);
+    PORT_Assert(attribute); /* if it wasn't here, ww should have failed
+			     * copying the common attributes */
+    if (!attribute) {
+	/* OK, so CKR_ATTRIBUTE_VALUE_INVALID is the immediate error, but
+	 * the fact is, the only reason we couldn't get the attribute would
+	 * be a memory error or database error (an error in the 'device').
+	 * if we have a database error code, we could return it here */
+	crv = CKR_DEVICE_ERROR;
+	goto fail;
+    }
+    key_type = *(CK_KEY_TYPE *)attribute->attrib.pValue;
+    sftk_FreeAttribute(attribute);
+    
+    /* finally copy the attributes for various public key types */
+    switch (key_type) {
+    case CKK_RSA:
+	crv = stfk_CopyTokenAttributes(destObject, src_to, rsaPubKeyAttrs,
+							rsaPubKeyAttrsCount);
+	break;
+    case CKK_DSA:
+	crv = stfk_CopyTokenAttributes(destObject, src_to, dsaPubKeyAttrs,
+							dsaPubKeyAttrsCount);
+	break;
+    case CKK_DH:
+	crv = stfk_CopyTokenAttributes(destObject, src_to, dhPubKeyAttrs,
+							dhPubKeyAttrsCount);
+	break;
+#ifdef NSS_ENABLE_ECC
+    case CKK_EC:
+	crv = stfk_CopyTokenAttributes(destObject, src_to, ecPubKeyAttrs,
+							ecPubKeyAttrsCount);
+	break;
+#endif
+     default:
+	crv = CKR_DEVICE_ERROR; /* shouldn't happen unless we store more types
+				* of token keys into our database. */
+    }
+fail:
+    return crv;
+}
+CK_RV
+stfk_CopyTokenSecretKey(SFTKObject *destObject,SFTKTokenObject *src_to)
+{
+    CK_RV crv;
+    crv = stfk_CopyTokenAttributes(destObject, src_to, commonKeyAttrs,
+							commonKeyAttrsCount);
+    if (crv != CKR_OK) {
+	goto fail;
+    }
+    crv = stfk_CopyTokenAttributes(destObject, src_to, secretKeyAttrs,
+							secretKeyAttrsCount);
+fail:
+    return crv;
+}
+
+/*
+ * Copy a token object. We need to explicitly copy the relevant
+ * attributes since token objects don't store those attributes in
+ * the token itself.
+ */
+CK_RV
+sftk_CopyTokenObject(SFTKObject *destObject,SFTKObject *srcObject)
+{
+    SFTKTokenObject *src_to = sftk_narrowToTokenObject(srcObject);
+    CK_RV crv;
+
+    PORT_Assert(src_to);
+    if (src_to == NULL) {
+	return CKR_DEVICE_ERROR; /* internal state inconsistant */
+    }
+
+    crv = stfk_CopyTokenAttributes(destObject, src_to, commonAttrs,
+							commonAttrsCount);
+    if (crv != CKR_OK) {
+	goto fail;
+    }
+    switch (src_to->obj.objclass) {
+    case CKO_CERTIFICATE:
+	crv = stfk_CopyTokenAttributes(destObject, src_to, certAttrs,
+							certAttrsCount);
+ 	break;
+    case CKO_NETSCAPE_TRUST:
+	crv = stfk_CopyTokenAttributes(destObject, src_to, trustAttrs,
+							trustAttrsCount);
+	break;
+    case CKO_NETSCAPE_SMIME:
+	crv = stfk_CopyTokenAttributes(destObject, src_to, smimeAttrs,
+							smimeAttrsCount);
+	break;
+    case CKO_NETSCAPE_CRL:
+	crv = stfk_CopyTokenAttributes(destObject, src_to, crlAttrs,
+							crlAttrsCount);
+	break;
+    case CKO_PRIVATE_KEY:
+	crv = stfk_CopyTokenPrivateKey(destObject,src_to);
+	break;
+    case CKO_PUBLIC_KEY:
+	crv = stfk_CopyTokenPublicKey(destObject,src_to);
+	break;
+    case CKO_SECRET_KEY:
+	crv = stfk_CopyTokenSecretKey(destObject,src_to);
+	break;
+    default:
+	crv = CKR_DEVICE_ERROR; /* shouldn't happen unless we store more types
+				* of token keys into our database. */
+    }
+fail:
     return crv;
 }
 
@@ -2284,37 +1541,38 @@ pk11_DeleteObject(PK11Session *session, PK11Object *object)
  * grabs the attribute locks for the src object for a *long* time.
  */
 CK_RV
-pk11_CopyObject(PK11Object *destObject,PK11Object *srcObject)
+sftk_CopyObject(SFTKObject *destObject,SFTKObject *srcObject)
 {
-    PK11Attribute *attribute;
-    PK11SessionObject *src_so = pk11_narrowToSessionObject(srcObject);
+    SFTKAttribute *attribute;
+    SFTKSessionObject *src_so = sftk_narrowToSessionObject(srcObject);
     unsigned int i;
 
     if (src_so == NULL) {
-	return CKR_DEVICE_ERROR; /* can't copy token objects yet */
+	return sftk_CopyTokenObject(destObject,srcObject); 
     }
 
-    PK11_USE_THREADS(PZ_Lock(src_so->attributeLock);)
+    PZ_Lock(src_so->attributeLock);
     for(i=0; i < src_so->hashSize; i++) {
 	attribute = src_so->head[i];
 	do {
 	    if (attribute) {
-		if (!pk11_hasAttribute(destObject,attribute->handle)) {
+		if (!sftk_hasAttribute(destObject,attribute->handle)) {
 		    /* we need to copy the attribute since each attribute
 		     * only has one set of link list pointers */
-		    PK11Attribute *newAttribute = pk11_NewAttribute(
-			  destObject,pk11_attr_expand(&attribute->attrib));
+		    SFTKAttribute *newAttribute = sftk_NewAttribute(
+			  destObject,sftk_attr_expand(&attribute->attrib));
 		    if (newAttribute == NULL) {
-			PK11_USE_THREADS(PZ_Unlock(src_so->attributeLock);)
+			PZ_Unlock(src_so->attributeLock);
 			return CKR_HOST_MEMORY;
 		    }
-		    pk11_AddAttribute(destObject,newAttribute);
+		    sftk_AddAttribute(destObject,newAttribute);
 		}
 		attribute=attribute->next;
 	    }
 	} while (attribute != NULL);
     }
-    PK11_USE_THREADS(PZ_Unlock(src_so->attributeLock);)
+    PZ_Unlock(src_so->attributeLock);
+
     return CKR_OK;
 }
 
@@ -2324,16 +1582,16 @@ pk11_CopyObject(PK11Object *destObject,PK11Object *srcObject)
 
 /* add an object to a search list */
 CK_RV
-AddToList(PK11ObjectListElement **list,PK11Object *object)
+AddToList(SFTKObjectListElement **list,SFTKObject *object)
 {
-     PK11ObjectListElement *newElem = 
-	(PK11ObjectListElement *)PORT_Alloc(sizeof(PK11ObjectListElement));
+     SFTKObjectListElement *newElem = 
+	(SFTKObjectListElement *)PORT_Alloc(sizeof(SFTKObjectListElement));
 
      if (newElem == NULL) return CKR_HOST_MEMORY;
 
      newElem->next = *list;
      newElem->object = object;
-     pk11_ReferenceObject(object);
+     sftk_ReferenceObject(object);
 
     *list = newElem;
     return CKR_OK;
@@ -2342,23 +1600,23 @@ AddToList(PK11ObjectListElement **list,PK11Object *object)
 
 /* return true if the object matches the template */
 PRBool
-pk11_objectMatch(PK11Object *object,CK_ATTRIBUTE_PTR theTemplate,int count)
+sftk_objectMatch(SFTKObject *object,CK_ATTRIBUTE_PTR theTemplate,int count)
 {
     int i;
 
     for (i=0; i < count; i++) {
-	PK11Attribute *attribute = pk11_FindAttribute(object,theTemplate[i].type);
+	SFTKAttribute *attribute = sftk_FindAttribute(object,theTemplate[i].type);
 	if (attribute == NULL) {
 	    return PR_FALSE;
 	}
 	if (attribute->attrib.ulValueLen == theTemplate[i].ulValueLen) {
 	    if (PORT_Memcmp(attribute->attrib.pValue,theTemplate[i].pValue,
 					theTemplate[i].ulValueLen) == 0) {
-        	pk11_FreeAttribute(attribute);
+        	sftk_FreeAttribute(attribute);
 		continue;
 	    }
 	}
-        pk11_FreeAttribute(attribute);
+        sftk_FreeAttribute(attribute);
 	return PR_FALSE;
     }
     return PR_TRUE;
@@ -2368,26 +1626,26 @@ pk11_objectMatch(PK11Object *object,CK_ATTRIBUTE_PTR theTemplate,int count)
  * in the object list.
  */
 CK_RV
-pk11_searchObjectList(PK11SearchResults *search,PK11Object **head, 
+sftk_searchObjectList(SFTKSearchResults *search,SFTKObject **head, 
 	unsigned int size, PZLock *lock, CK_ATTRIBUTE_PTR theTemplate, 
 						int count, PRBool isLoggedIn)
 {
     unsigned int i;
-    PK11Object *object;
+    SFTKObject *object;
     CK_RV crv = CKR_OK;
 
     for(i=0; i < size; i++) {
         /* We need to hold the lock to copy a consistant version of
          * the linked list. */
-        PK11_USE_THREADS(PZ_Lock(lock);)
+        PZ_Lock(lock);
 	for (object = head[i]; object != NULL; object= object->next) {
-	    if (pk11_objectMatch(object,theTemplate,count)) {
+	    if (sftk_objectMatch(object,theTemplate,count)) {
 		/* don't return objects that aren't yet visible */
-		if ((!isLoggedIn) && pk11_isTrue(object,CKA_PRIVATE)) continue;
-		pk11_addHandle(search,object->handle);
+		if ((!isLoggedIn) && sftk_isTrue(object,CKA_PRIVATE)) continue;
+		sftk_addHandle(search,object->handle);
 	    }
 	}
-        PK11_USE_THREADS(PZ_Unlock(lock);)
+        PZ_Unlock(lock);
     }
     return crv;
 }
@@ -2395,30 +1653,30 @@ pk11_searchObjectList(PK11SearchResults *search,PK11Object **head,
 /*
  * free a single list element. Return the Next object in the list.
  */
-PK11ObjectListElement *
-pk11_FreeObjectListElement(PK11ObjectListElement *objectList)
+SFTKObjectListElement *
+sftk_FreeObjectListElement(SFTKObjectListElement *objectList)
 {
-    PK11ObjectListElement *ol = objectList->next;
+    SFTKObjectListElement *ol = objectList->next;
 
-    pk11_FreeObject(objectList->object);
+    sftk_FreeObject(objectList->object);
     PORT_Free(objectList);
     return ol;
 }
 
 /* free an entire object list */
 void
-pk11_FreeObjectList(PK11ObjectListElement *objectList)
+sftk_FreeObjectList(SFTKObjectListElement *objectList)
 {
-    PK11ObjectListElement *ol;
+    SFTKObjectListElement *ol;
 
-    for (ol= objectList; ol != NULL; ol = pk11_FreeObjectListElement(ol)) {}
+    for (ol= objectList; ol != NULL; ol = sftk_FreeObjectListElement(ol)) {}
 }
 
 /*
  * free a search structure
  */
 void
-pk11_FreeSearch(PK11SearchResults *search)
+sftk_FreeSearch(SFTKSearchResults *search)
 {
     if (search->handles) {
 	PORT_Free(search->handles);
@@ -2433,7 +1691,7 @@ pk11_FreeSearch(PK11SearchResults *search)
 /* update the sessions state based in it's flags and wether or not it's
  * logged in */
 void
-pk11_update_state(PK11Slot *slot,PK11Session *session)
+sftk_update_state(SFTKSlot *slot,SFTKSession *session)
 {
     if (slot->isLoggedIn) {
 	if (slot->ssoLoggedIn) {
@@ -2454,17 +1712,18 @@ pk11_update_state(PK11Slot *slot,PK11Session *session)
 
 /* update the state of all the sessions on a slot */
 void
-pk11_update_all_states(PK11Slot *slot)
+sftk_update_all_states(SFTKSlot *slot)
 {
     unsigned int i;
-    PK11Session *session;
+    SFTKSession *session;
 
     for (i=0; i < slot->sessHashSize; i++) {
-	PK11_USE_THREADS(PZ_Lock(PK11_SESSION_LOCK(slot,i));)
+	PZLock *lock = SFTK_SESSION_LOCK(slot,i);
+	PZ_Lock(lock);
 	for (session = slot->head[i]; session; session = session->next) {
-	    pk11_update_state(slot,session);
+	    sftk_update_state(slot,session);
 	}
-	PK11_USE_THREADS(PZ_Unlock(PK11_SESSION_LOCK(slot,i));)
+	PZ_Unlock(lock);
     }
 }
 
@@ -2472,7 +1731,7 @@ pk11_update_all_states(PK11Slot *slot)
  * context are cipher and digest contexts that are associated with a session
  */
 void
-pk11_FreeContext(PK11SessionContext *context)
+sftk_FreeContext(SFTKSessionContext *context)
 {
     if (context->cipherInfo) {
 	(*context->destroy)(context->cipherInfo,PR_TRUE);
@@ -2481,7 +1740,7 @@ pk11_FreeContext(PK11SessionContext *context)
 	(*context->hashdestroy)(context->hashInfo,PR_TRUE);
     }
     if (context->key) {
-	pk11_FreeObject(context->key);
+	sftk_FreeObject(context->key);
 	context->key = NULL;
     }
     PORT_Free(context);
@@ -2491,16 +1750,16 @@ pk11_FreeContext(PK11SessionContext *context)
  * create a new nession. NOTE: The session handle is not set, and the
  * session is not added to the slot's session queue.
  */
-PK11Session *
-pk11_NewSession(CK_SLOT_ID slotID, CK_NOTIFY notify, CK_VOID_PTR pApplication,
+SFTKSession *
+sftk_NewSession(CK_SLOT_ID slotID, CK_NOTIFY notify, CK_VOID_PTR pApplication,
 							     CK_FLAGS flags)
 {
-    PK11Session *session;
-    PK11Slot *slot = pk11_SlotFromID(slotID);
+    SFTKSession *session;
+    SFTKSlot *slot = sftk_SlotFromID(slotID, PR_FALSE);
 
     if (slot == NULL) return NULL;
 
-    session = (PK11Session*)PORT_Alloc(sizeof(PK11Session));
+    session = (SFTKSession*)PORT_Alloc(sizeof(SFTKSession));
     if (session == NULL) return NULL;
 
     session->next = session->prev = NULL;
@@ -2510,15 +1769,11 @@ pk11_NewSession(CK_SLOT_ID slotID, CK_NOTIFY notify, CK_VOID_PTR pApplication,
     session->sign_context = NULL;
     session->search = NULL;
     session->objectIDCount = 1;
-#ifdef PKCS11_USE_THREADS
     session->objectLock = PZ_NewLock(nssILockObject);
     if (session->objectLock == NULL) {
 	PORT_Free(session);
 	return NULL;
     }
-#else
-    session->objectLock = NULL;
-#endif
     session->objects[0] = NULL;
 
     session->slot = slot;
@@ -2527,16 +1782,16 @@ pk11_NewSession(CK_SLOT_ID slotID, CK_NOTIFY notify, CK_VOID_PTR pApplication,
     session->info.flags = flags;
     session->info.slotID = slotID;
     session->info.ulDeviceError = 0;
-    pk11_update_state(slot,session);
+    sftk_update_state(slot,session);
     return session;
 }
 
 
 /* free all the data associated with a session. */
 static void
-pk11_DestroySession(PK11Session *session)
+sftk_DestroySession(SFTKSession *session)
 {
-    PK11ObjectList *op,*next;
+    SFTKObjectList *op,*next;
     PORT_Assert(session->refCount == 0);
 
     /* clean out the attributes */
@@ -2546,20 +1801,20 @@ pk11_DestroySession(PK11Session *session)
         next = op->next;
         /* paranoia */
 	op->next = op->prev = NULL;
-	pk11_DeleteObject(session,op->parent);
+	sftk_DeleteObject(session,op->parent);
     }
-    PK11_USE_THREADS(PZ_DestroyLock(session->objectLock);)
+    PZ_DestroyLock(session->objectLock);
     if (session->enc_context) {
-	pk11_FreeContext(session->enc_context);
+	sftk_FreeContext(session->enc_context);
     }
     if (session->hash_context) {
-	pk11_FreeContext(session->hash_context);
+	sftk_FreeContext(session->hash_context);
     }
     if (session->sign_context) {
-	pk11_FreeContext(session->sign_context);
+	sftk_FreeContext(session->sign_context);
     }
     if (session->search) {
-	pk11_FreeSearch(session->search);
+	sftk_FreeSearch(session->search);
     }
     PORT_Free(session);
 }
@@ -2569,16 +1824,20 @@ pk11_DestroySession(PK11Session *session)
  * look up a session structure from a session handle
  * generate a reference to it.
  */
-PK11Session *
-pk11_SessionFromHandle(CK_SESSION_HANDLE handle)
+SFTKSession *
+sftk_SessionFromHandle(CK_SESSION_HANDLE handle)
 {
-    PK11Slot	*slot = pk11_SlotFromSessionHandle(handle);
-    PK11Session *session;
+    SFTKSlot	*slot = sftk_SlotFromSessionHandle(handle);
+    SFTKSession *session;
+    PZLock	*lock;
+    
+    if (!slot) return NULL;
+    lock = SFTK_SESSION_LOCK(slot,handle);
 
-    PK11_USE_THREADS(PZ_Lock(PK11_SESSION_LOCK(slot,handle));)
-    pk11queue_find(session,handle,slot->head,slot->sessHashSize);
+    PZ_Lock(lock);
+    sftkqueue_find(session,handle,slot->head,slot->sessHashSize);
     if (session) session->refCount++;
-    PK11_USE_THREADS(PZ_Unlock(PK11_SESSION_LOCK(slot,handle));)
+    PZ_Unlock(lock);
 
     return (session);
 }
@@ -2587,74 +1846,22 @@ pk11_SessionFromHandle(CK_SESSION_HANDLE handle)
  * release a reference to a session handle
  */
 void
-pk11_FreeSession(PK11Session *session)
+sftk_FreeSession(SFTKSession *session)
 {
     PRBool destroy = PR_FALSE;
-    PK11_USE_THREADS(PK11Slot *slot = pk11_SlotFromSession(session);)
+    SFTKSlot *slot = sftk_SlotFromSession(session);
+    PZLock *lock = SFTK_SESSION_LOCK(slot,session->handle);
 
-    PK11_USE_THREADS(PZ_Lock(PK11_SESSION_LOCK(slot,session->handle));)
+    PZ_Lock(lock);
     if (session->refCount == 1) destroy = PR_TRUE;
     session->refCount--;
-    PK11_USE_THREADS(PZ_Unlock(PK11_SESSION_LOCK(slot,session->handle));)
+    PZ_Unlock(lock);
 
-    if (destroy) pk11_DestroySession(session);
-}
-/*
- * handle Token Object stuff
- */
-static void
-pk11_XORHash(unsigned char *key, unsigned char *dbkey, int len)
-{
-   int i;
-
-   PORT_Memset(key, 0, 4);
-
-   for (i=0; i < len-4; i += 4) {
-	key[0] ^= dbkey[i];
-	key[1] ^= dbkey[i+1];
-	key[2] ^= dbkey[i+2];
-	key[3] ^= dbkey[i+3];
-   }
-}
-
-/* Make a token handle for an object and record it so we can find it again */
-CK_OBJECT_HANDLE
-pk11_mkHandle(PK11Slot *slot, SECItem *dbKey, CK_OBJECT_HANDLE class)
-{
-    unsigned char hashBuf[4];
-    CK_OBJECT_HANDLE handle;
-    SECItem *key;
-
-    handle = class;
-    /* there is only one KRL, use a fixed handle for it */
-    if (handle != PK11_TOKEN_KRL_HANDLE) {
-	pk11_XORHash(hashBuf,dbKey->data,dbKey->len);
-	handle = (hashBuf[0] << 24) | (hashBuf[1] << 16) | 
-					(hashBuf[2] << 8)  | hashBuf[3];
-	handle = PK11_TOKEN_MAGIC | class | 
-			(handle & ~(PK11_TOKEN_TYPE_MASK|PK11_TOKEN_MASK));
-	/* we have a CRL who's handle has randomly matched the reserved KRL
-	 * handle, increment it */
-	if (handle == PK11_TOKEN_KRL_HANDLE) {
-	    handle++;
-	}
-    }
-
-    pk11_tokenKeyLock(slot);
-    while ((key = pk11_lookupTokenKeyByHandle(slot,handle)) != NULL) {
-	if (SECITEM_ItemsAreEqual(key,dbKey)) {
-    	   pk11_tokenKeyUnlock(slot);
-	   return handle;
-	}
-	handle++;
-    }
-    pk11_addTokenKeyByHandle(slot,handle,dbKey);
-    pk11_tokenKeyUnlock(slot);
-    return handle;
+    if (destroy) sftk_DestroySession(session);
 }
 
 void
-pk11_addHandle(PK11SearchResults *search, CK_OBJECT_HANDLE handle)
+sftk_addHandle(SFTKSearchResults *search, CK_OBJECT_HANDLE handle)
 {
     if (search->handles == NULL) {
 	return;
@@ -2671,137 +1878,102 @@ pk11_addHandle(PK11SearchResults *search, CK_OBJECT_HANDLE handle)
     search->size++;
 }
 
-static const CK_OBJECT_HANDLE pk11_classArray[] = {
-    0, CKO_PRIVATE_KEY, CKO_PUBLIC_KEY, CKO_SECRET_KEY,
-    CKO_NSS_TRUST, CKO_NSS_CRL, CKO_NSS_SMIME,
-     CKO_CERTIFICATE };
-
-#define handleToClass(handle) \
-    pk11_classArray[((handle & PK11_TOKEN_TYPE_MASK))>>28]
-
-PK11Object *
-pk11_NewTokenObject(PK11Slot *slot, SECItem *dbKey, CK_OBJECT_HANDLE handle)
+static  CK_RV
+handleToClass(SFTKSlot *slot, CK_OBJECT_HANDLE handle, 
+	      CK_OBJECT_CLASS *objClass)
 {
-    PK11Object *object = NULL;
-    PK11TokenObject *tokObject = NULL;
-    PRBool hasLocks = PR_FALSE;
-    SECStatus rv;
+    SFTKDBHandle *dbHandle = sftk_getDBForTokenObject(slot, handle);
+    CK_ATTRIBUTE objClassTemplate;
+    CK_RV crv;
 
-#ifdef PKCS11_STATIC_ATTRIBUTES
-    object = pk11_GetObjectFromList(&hasLocks, PR_FALSE, &tokenObjectList,  0,
+    *objClass = CKO_DATA;
+    objClassTemplate.type = CKA_CLASS;
+    objClassTemplate.pValue = objClass;
+    objClassTemplate.ulValueLen = sizeof(*objClass);
+    crv = sftkdb_GetAttributeValue(dbHandle, handle, &objClassTemplate, 1);
+    sftk_freeDB(dbHandle);
+    return crv;
+}
+
+SFTKObject *
+sftk_NewTokenObject(SFTKSlot *slot, SECItem *dbKey, CK_OBJECT_HANDLE handle)
+{
+    SFTKObject *object = NULL;
+    SFTKTokenObject *tokObject = NULL;
+    PRBool hasLocks = PR_FALSE;
+    CK_RV crv;
+
+    object = sftk_GetObjectFromList(&hasLocks, PR_FALSE, &tokenObjectList,  0,
 							PR_FALSE);
     if (object == NULL) {
 	return NULL;
     }
-#else
-    PRArenaPool *arena;
+    tokObject = (SFTKTokenObject *) object;
 
-    arena = PORT_NewArena(2048);
-    if (arena == NULL) return NULL;
-
-    object = (PK11Object*)PORT_ArenaZAlloc(arena,sizeof(PK11TokenObject));
-    if (object == NULL) {
-	PORT_FreeArena(arena,PR_FALSE);
-	return NULL;
-    }
-    object->arena = arena;
-#endif
-    tokObject = (PK11TokenObject *) object;
-
-    object->objclass = handleToClass(handle);
     object->handle = handle;
+    /* every object must have a class, if we can't get it, the object
+     * doesn't exist */
+    crv = handleToClass(slot, handle, &object->objclass);
+    if (crv != CKR_OK) {
+	goto loser;
+    }
     object->slot = slot;
     object->objectInfo = NULL;
     object->infoFree = NULL;
-    if (dbKey == NULL) {
-	pk11_tokenKeyLock(slot);
-	dbKey = pk11_lookupTokenKeyByHandle(slot,handle);
-	if (dbKey == NULL) {
-    	    pk11_tokenKeyUnlock(slot);
-	    goto loser;
-	}
-	rv = SECITEM_CopyItem(NULL,&tokObject->dbKey,dbKey);
-	pk11_tokenKeyUnlock(slot);
-    } else {
-	rv = SECITEM_CopyItem(NULL,&tokObject->dbKey,dbKey);
-    }
-    if (rv != SECSuccess) {
-	goto loser;
-    }
-#ifdef PKCS11_USE_THREADS
     if (!hasLocks) {
 	object->refLock = PZ_NewLock(nssILockRefLock);
     }
     if (object->refLock == NULL) {
 	goto loser;
     }
-#endif
     object->refCount = 1;
 
     return object;
 loser:
     if (object) {
-	(void) pk11_DestroyObject(object);
+	(void) sftk_DestroyObject(object);
     }
     return NULL;
 
 }
 
-PRBool
-pk11_tokenMatch(PK11Slot *slot, SECItem *dbKey, CK_OBJECT_HANDLE class,
-					CK_ATTRIBUTE_PTR theTemplate,int count)
-{
-    PK11Object *object;
-    PRBool ret;
-
-    object = pk11_NewTokenObject(slot,dbKey,PK11_TOKEN_MASK|class);
-    if (object == NULL) {
-	return PR_FALSE;
-    }
-
-    ret = pk11_objectMatch(object,theTemplate,count);
-    pk11_FreeObject(object);
-    return ret;
-}
-
-PK11TokenObject *
-pk11_convertSessionToToken(PK11Object *obj)
+SFTKTokenObject *
+sftk_convertSessionToToken(SFTKObject *obj)
 {
     SECItem *key;
-    PK11SessionObject *so = (PK11SessionObject *)obj;
-    PK11TokenObject *to = pk11_narrowToTokenObject(obj);
+    SFTKSessionObject *so = (SFTKSessionObject *)obj;
+    SFTKTokenObject *to = sftk_narrowToTokenObject(obj);
     SECStatus rv;
 
-    pk11_DestroySessionObjectData(so);
-    PK11_USE_THREADS(PZ_DestroyLock(so->attributeLock));
+    sftk_DestroySessionObjectData(so);
+    PZ_DestroyLock(so->attributeLock);
     if (to == NULL) {
 	return NULL;
     }
-    pk11_tokenKeyLock(so->obj.slot);
-    key = pk11_lookupTokenKeyByHandle(so->obj.slot,so->obj.handle);
+    sftk_tokenKeyLock(so->obj.slot);
+    key = sftk_lookupTokenKeyByHandle(so->obj.slot,so->obj.handle);
     if (key == NULL) {
-    	pk11_tokenKeyUnlock(so->obj.slot);
+    	sftk_tokenKeyUnlock(so->obj.slot);
 	return NULL;
     }
     rv = SECITEM_CopyItem(NULL,&to->dbKey,key);
-    pk11_tokenKeyUnlock(so->obj.slot);
+    sftk_tokenKeyUnlock(so->obj.slot);
     if (rv == SECFailure) {
 	return NULL;
     }
 
     return to;
-
 }
 
-PK11SessionObject *
-pk11_narrowToSessionObject(PK11Object *obj)
+SFTKSessionObject *
+sftk_narrowToSessionObject(SFTKObject *obj)
 {
-    return !pk11_isToken(obj->handle) ? (PK11SessionObject *)obj : NULL;
+    return !sftk_isToken(obj->handle) ? (SFTKSessionObject *)obj : NULL;
 }
 
-PK11TokenObject *
-pk11_narrowToTokenObject(PK11Object *obj)
+SFTKTokenObject *
+sftk_narrowToTokenObject(SFTKObject *obj)
 {
-    return pk11_isToken(obj->handle) ? (PK11TokenObject *)obj : NULL;
+    return sftk_isToken(obj->handle) ? (SFTKTokenObject *)obj : NULL;
 }
 

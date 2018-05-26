@@ -1,35 +1,6 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /* 
  * this file maps PKCS11 Errors into SECErrors
  *  This is an information reducing process, since most errors are reflected
@@ -37,10 +8,15 @@
  *  operations). If any of these errors need more detail in the upper layers
  *  which call PK11 library functions, we can add more SEC_ERROR_XXX functions
  *  and change there mappings here.
+ *
+ *  Some PKCS11 errors are mapped to SEC_ERROR_LIBRARY_FAILURE intentionally
+ *  because they indicate that there is a bug in the library (either NSS or
+ *  the token).
  */
 #include "pkcs11t.h"
 #include "pk11func.h"
 #include "secerr.h"
+#include "prerror.h"
 
 #ifdef PK11_ERROR_USE_ARRAY 
 
@@ -69,35 +45,44 @@ PK11_MapError(CK_RV rv) {
 	MAPERROR(CKR_CANCEL, SEC_ERROR_IO)
 	MAPERROR(CKR_HOST_MEMORY, SEC_ERROR_NO_MEMORY)
 	MAPERROR(CKR_SLOT_ID_INVALID, SEC_ERROR_BAD_DATA)
+	MAPERROR(CKR_ARGUMENTS_BAD, SEC_ERROR_INVALID_ARGS)
 	MAPERROR(CKR_ATTRIBUTE_READ_ONLY, SEC_ERROR_READ_ONLY)
 	MAPERROR(CKR_ATTRIBUTE_SENSITIVE, SEC_ERROR_IO) /* XX SENSITIVE */
 	MAPERROR(CKR_ATTRIBUTE_TYPE_INVALID, SEC_ERROR_BAD_DATA)
 	MAPERROR(CKR_ATTRIBUTE_VALUE_INVALID, SEC_ERROR_BAD_DATA)
+	MAPERROR(CKR_BUFFER_TOO_SMALL, SEC_ERROR_OUTPUT_LEN)
 	MAPERROR(CKR_DATA_INVALID, SEC_ERROR_BAD_DATA)
-	MAPERROR(CKR_DATA_LEN_RANGE, SEC_ERROR_BAD_DATA)
-	MAPERROR(CKR_DEVICE_ERROR, SEC_ERROR_IO)
+	MAPERROR(CKR_DATA_LEN_RANGE, SEC_ERROR_INPUT_LEN)
+	MAPERROR(CKR_DEVICE_ERROR, SEC_ERROR_PKCS11_DEVICE_ERROR)
 	MAPERROR(CKR_DEVICE_MEMORY, SEC_ERROR_NO_MEMORY)
 	MAPERROR(CKR_DEVICE_REMOVED, SEC_ERROR_NO_TOKEN)
+	MAPERROR(CKR_DOMAIN_PARAMS_INVALID, SEC_ERROR_INVALID_KEY)
 	MAPERROR(CKR_ENCRYPTED_DATA_INVALID, SEC_ERROR_BAD_DATA)
 	MAPERROR(CKR_ENCRYPTED_DATA_LEN_RANGE, SEC_ERROR_BAD_DATA)
 	MAPERROR(CKR_FUNCTION_CANCELED, SEC_ERROR_LIBRARY_FAILURE)
+	MAPERROR(CKR_FUNCTION_FAILED, SEC_ERROR_PKCS11_FUNCTION_FAILED)
 	MAPERROR(CKR_FUNCTION_NOT_PARALLEL, SEC_ERROR_LIBRARY_FAILURE)
+	MAPERROR(CKR_FUNCTION_NOT_SUPPORTED, PR_NOT_IMPLEMENTED_ERROR)
+	MAPERROR(CKR_GENERAL_ERROR, SEC_ERROR_PKCS11_GENERAL_ERROR)
 	MAPERROR(CKR_KEY_HANDLE_INVALID, SEC_ERROR_INVALID_KEY)
 	MAPERROR(CKR_KEY_SIZE_RANGE, SEC_ERROR_INVALID_KEY)
 	MAPERROR(CKR_KEY_TYPE_INCONSISTENT, SEC_ERROR_INVALID_KEY)
-	MAPERROR(CKR_MECHANISM_INVALID, SEC_ERROR_BAD_DATA)
+	MAPERROR(CKR_MECHANISM_INVALID, SEC_ERROR_INVALID_ALGORITHM)
 	MAPERROR(CKR_MECHANISM_PARAM_INVALID, SEC_ERROR_BAD_DATA)
+	MAPERROR(CKR_NO_EVENT, SEC_ERROR_NO_EVENT)
 	MAPERROR(CKR_OBJECT_HANDLE_INVALID, SEC_ERROR_BAD_DATA)
 	MAPERROR(CKR_OPERATION_ACTIVE, SEC_ERROR_LIBRARY_FAILURE)
 	MAPERROR(CKR_OPERATION_NOT_INITIALIZED,SEC_ERROR_LIBRARY_FAILURE )
 	MAPERROR(CKR_PIN_INCORRECT, SEC_ERROR_BAD_PASSWORD)
-	MAPERROR(CKR_PIN_INVALID, SEC_ERROR_BAD_PASSWORD)
-	MAPERROR(CKR_PIN_LEN_RANGE, SEC_ERROR_BAD_PASSWORD)
+	MAPERROR(CKR_PIN_INVALID, SEC_ERROR_INVALID_PASSWORD)
+	MAPERROR(CKR_PIN_LEN_RANGE, SEC_ERROR_INVALID_PASSWORD)
+	MAPERROR(CKR_PIN_EXPIRED, SEC_ERROR_EXPIRED_PASSWORD)
+	MAPERROR(CKR_PIN_LOCKED, SEC_ERROR_LOCKED_PASSWORD)
 	MAPERROR(CKR_SESSION_CLOSED, SEC_ERROR_LIBRARY_FAILURE)
 	MAPERROR(CKR_SESSION_COUNT, SEC_ERROR_NO_MEMORY) /* XXXX? */
 	MAPERROR(CKR_SESSION_HANDLE_INVALID, SEC_ERROR_BAD_DATA)
 	MAPERROR(CKR_SESSION_PARALLEL_NOT_SUPPORTED, SEC_ERROR_LIBRARY_FAILURE)
-	MAPERROR(CKR_SESSION_READ_ONLY, SEC_ERROR_LIBRARY_FAILURE)
+	MAPERROR(CKR_SESSION_READ_ONLY, SEC_ERROR_READ_ONLY)
 	MAPERROR(CKR_SIGNATURE_INVALID, SEC_ERROR_BAD_SIGNATURE)
 	MAPERROR(CKR_SIGNATURE_LEN_RANGE, SEC_ERROR_BAD_SIGNATURE)
 	MAPERROR(CKR_TEMPLATE_INCOMPLETE, SEC_ERROR_BAD_DATA)
@@ -109,7 +94,7 @@ PK11_MapError(CK_RV rv) {
 	MAPERROR(CKR_UNWRAPPING_KEY_SIZE_RANGE, SEC_ERROR_INVALID_KEY)
 	MAPERROR(CKR_UNWRAPPING_KEY_TYPE_INCONSISTENT, SEC_ERROR_INVALID_KEY)
 	MAPERROR(CKR_USER_ALREADY_LOGGED_IN, 0)
-	MAPERROR(CKR_USER_NOT_LOGGED_IN, SEC_ERROR_LIBRARY_FAILURE) /* XXXX */
+	MAPERROR(CKR_USER_NOT_LOGGED_IN, SEC_ERROR_TOKEN_NOT_LOGGED_IN)
 	MAPERROR(CKR_USER_PIN_NOT_INITIALIZED, SEC_ERROR_NO_TOKEN)
 	MAPERROR(CKR_USER_TYPE_INVALID, SEC_ERROR_LIBRARY_FAILURE)
 	MAPERROR(CKR_WRAPPED_KEY_INVALID, SEC_ERROR_INVALID_KEY)
@@ -118,9 +103,12 @@ PK11_MapError(CK_RV rv) {
 	MAPERROR(CKR_WRAPPING_KEY_SIZE_RANGE, SEC_ERROR_INVALID_KEY)
 	MAPERROR(CKR_WRAPPING_KEY_TYPE_INCONSISTENT, SEC_ERROR_INVALID_KEY)
 	MAPERROR(CKR_VENDOR_DEFINED, SEC_ERROR_LIBRARY_FAILURE)
-
+	MAPERROR(CKR_NETSCAPE_CERTDB_FAILED, SEC_ERROR_BAD_DATABASE)
+	MAPERROR(CKR_NETSCAPE_KEYDB_FAILED, SEC_ERROR_BAD_DATABASE)
+	MAPERROR(CKR_CANT_LOCK, SEC_ERROR_INCOMPATIBLE_PKCS11)
 
 #ifdef PK11_ERROR_USE_ARRAY 
+};
 
 int
 PK11_MapError(CK_RV rv) {
@@ -131,7 +119,7 @@ PK11_MapError(CK_RV rv) {
 	    return pk11_error_map[i].sec_error;
 	}
     }
-    return SEC_ERROR_IO;
+    return SEC_ERROR_UNKNOWN_PKCS11_ERROR;
  }
 
 
@@ -140,7 +128,7 @@ PK11_MapError(CK_RV rv) {
     default:
 	break;
     }
-    return SEC_ERROR_IO;
+    return SEC_ERROR_UNKNOWN_PKCS11_ERROR;
 }
 
 

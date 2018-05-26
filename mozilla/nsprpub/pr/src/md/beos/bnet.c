@@ -1,36 +1,39 @@
 /* -*- Mode: C++; c-basic-offset: 4 -*- */
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 #include "primpl.h"
 
@@ -352,6 +355,21 @@ _MD_send (PRFileDesc *fd, const void *buf, PRInt32 amount, PRInt32 flags,
         }
     }
 
+#ifdef BONE_VERSION
+    /*
+     * optimization; if bytes sent is less than "amount" call
+     * select before returning. This is because it is likely that
+     * the next writev() call will return EWOULDBLOCK.
+     */
+    if ((!fd->secret->nonblocking) && (rv > 0) && (rv < amount)
+        && (timeout != PR_INTERVAL_NO_WAIT)) {
+        if (socket_io_wait(osfd, WRITE_FD, timeout) < 0) {
+            rv = -1;
+            goto done;
+        }
+    }
+#endif /* BONE_VERSION */
+    
     if (rv < 0) {
         _PR_MD_MAP_SEND_ERROR(err);
     }
@@ -421,6 +439,20 @@ PRInt32 _MD_writev(
     PRThread *me = _PR_MD_CURRENT_THREAD();
     PRInt32 index, amount = 0;
     PRInt32 osfd = fd->secret->md.osfd;
+    struct iovec osiov[PR_MAX_IOVECTOR_SIZE];
+
+    /* Ensured by PR_Writev */
+    PR_ASSERT(iov_size <= PR_MAX_IOVECTOR_SIZE);
+
+    /*
+     * We can't pass iov to writev because PRIOVec and struct iovec
+     * may not be binary compatible.  Make osiov a copy of iov and
+     * pass osiov to writev.
+     */
+    for (index = 0; index < iov_size; index++) {
+        osiov[index].iov_base = iov[index].iov_base;
+        osiov[index].iov_len = iov[index].iov_len;
+    }
 
     /*
      * Calculate the total number of bytes to be sent; needed for
@@ -435,7 +467,7 @@ PRInt32 _MD_writev(
         }
     }
 
-    while ((rv = writev(osfd, (const struct iovec*)iov, iov_size)) == -1) {
+    while ((rv = writev(osfd, osiov, iov_size)) == -1) {
         err = _MD_ERRNO();
         if ((err == EAGAIN) || (err == EWOULDBLOCK))    {
             if (fd->secret->nonblocking) {
@@ -450,6 +482,20 @@ PRInt32 _MD_writev(
             break;
         }
     }
+
+    /*
+     * optimization; if bytes sent is less than "amount" call
+     * select before returning. This is because it is likely that
+     * the next writev() call will return EWOULDBLOCK.
+     */
+    if ((!fd->secret->nonblocking) && (rv > 0) && (rv < amount)
+        && (timeout != PR_INTERVAL_NO_WAIT)) {
+        if (socket_io_wait(osfd, WRITE_FD, timeout) < 0) {
+            rv = -1;
+            goto done;
+        }
+    }
+
 
     if (rv < 0) {
         _PR_MD_MAP_WRITEV_ERROR(err);
@@ -743,6 +789,15 @@ _MD_getpeername (PRFileDesc *fd, PRNetAddr *addr, PRUint32 *addrlen)
 
     rv = getpeername(fd->secret->md.osfd,
                      (struct sockaddr *) addr, (_PRSockLen_t *)addrlen);
+
+#ifdef _PR_HAVE_SOCKADDR_LEN
+    if (rv == 0) {
+        /* ignore the sa_len field of struct sockaddr */
+        if (addr) {
+            addr->raw.family = ((struct sockaddr *) addr)->sa_family;
+        }
+    }
+#endif /* _PR_HAVE_SOCKADDR_LEN */
 
     if (rv < 0) {
         err = _MD_ERRNO();

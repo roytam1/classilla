@@ -1,46 +1,17 @@
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef PKINSS3HACK_H
 #define PKINSS3HACK_H
 
-#ifdef DEBUG
-static const char PKINSS3HACK_CVS_ID[] = "@(#) $RCSfile: pki3hack.h,v $ $Revision: 1.12.12.1 $ $Date: 2003/01/09 02:05:08 $ $Name:  $";
-#endif /* DEBUG */
-
 #ifndef NSSDEVT_H
 #include "nssdevt.h"
 #endif /* NSSDEVT_H */
+
+#ifndef DEVT_H
+#include "devt.h"
+#endif /* DEVT_H */
 
 #ifndef NSSPKIT_H
 #include "nsspkit.h"
@@ -67,25 +38,22 @@ NSS_EXTERN NSSCryptoContext *
 STAN_GetDefaultCryptoContext();
 
 NSS_EXTERN PRStatus
-STAN_LoadDefaultNSS3TrustDomain
-(
-  void
-);
+STAN_InitTokenForSlotInfo(NSSTrustDomain *td, PK11SlotInfo *slot);
+
+NSS_EXTERN PRStatus
+STAN_ResetTokenInterator(NSSTrustDomain *td);
+
+NSS_EXTERN PRStatus
+STAN_LoadDefaultNSS3TrustDomain(void);
 
 NSS_EXTERN PRStatus
 STAN_Shutdown();
 
 NSS_EXTERN SECStatus
-STAN_AddModuleToDefaultTrustDomain
-(
-  SECMODModule *module
-);
+STAN_AddModuleToDefaultTrustDomain(SECMODModule *module);
 
 NSS_EXTERN SECStatus
-STAN_RemoveModuleFromDefaultTrustDomain
-(
-  SECMODModule *module
-);
+STAN_RemoveModuleFromDefaultTrustDomain(SECMODModule *module);
 
 NSS_EXTERN CERTCertificate *
 STAN_ForceCERTCertificateUpdate(NSSCertificate *c);
@@ -93,11 +61,17 @@ STAN_ForceCERTCertificateUpdate(NSSCertificate *c);
 NSS_EXTERN CERTCertificate *
 STAN_GetCERTCertificate(NSSCertificate *c);
 
+NSS_EXTERN CERTCertificate *
+STAN_GetCERTCertificateOrRelease(NSSCertificate *c);
+
 NSS_EXTERN NSSCertificate *
 STAN_GetNSSCertificate(CERTCertificate *c);
 
 NSS_EXTERN CERTCertTrust * 
 nssTrust_GetCERTCertTrustForCert(NSSCertificate *c, CERTCertificate *cc);
+
+NSS_EXTERN PRStatus
+STAN_DeleteCertTrustMatchingSlot(NSSCertificate *c);
 
 NSS_EXTERN PRStatus
 STAN_ChangeCertTrust(CERTCertificate *cc, CERTCertTrust *trust);
@@ -107,7 +81,12 @@ nssPKIX509_GetIssuerAndSerialFromDER(NSSDER *der, NSSArena *arena,
                                      NSSDER *issuer, NSSDER *serial);
 
 NSS_EXTERN char *
-STAN_GetCERTCertificateName(NSSCertificate *c);
+STAN_GetCERTCertificateName(PLArenaPool *arenaOpt, NSSCertificate *c);
+
+NSS_EXTERN char *
+STAN_GetCERTCertificateNameForInstance(PLArenaPool *arenaOpt,
+                                       NSSCertificate *c,
+                                       nssCryptokiInstance *instance);
 
 /* exposing this */
 NSS_EXTERN NSSCertificate *

@@ -1,35 +1,6 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "secoid.h"
 #include "secder.h"	/* XXX remove this when remove the DERTemplate */
@@ -37,29 +8,8 @@
 #include "secitem.h"
 #include "secerr.h"
 
-/* XXX Old template; want to expunge it eventually. */
-DERTemplate SECAlgorithmIDTemplate[] = {
-    { DER_SEQUENCE,
-	  0, NULL, sizeof(SECAlgorithmID) },
-    { DER_OBJECT_ID,
-	  offsetof(SECAlgorithmID,algorithm), },
-    { DER_OPTIONAL | DER_ANY,
-	  offsetof(SECAlgorithmID,parameters), },
-    { 0, }
-};
-
-const SEC_ASN1Template SECOID_AlgorithmIDTemplate[] = {
-    { SEC_ASN1_SEQUENCE,
-	  0, NULL, sizeof(SECAlgorithmID) },
-    { SEC_ASN1_OBJECT_ID,
-	  offsetof(SECAlgorithmID,algorithm), },
-    { SEC_ASN1_OPTIONAL | SEC_ASN1_ANY,
-	  offsetof(SECAlgorithmID,parameters), },
-    { 0, }
-};
-
 SECOidTag
-SECOID_GetAlgorithmTag(SECAlgorithmID *id)
+SECOID_GetAlgorithmTag(const SECAlgorithmID *id)
 {
     if (id == NULL || id->algorithm.data == NULL)
 	return SEC_OID_UNKNOWN;
@@ -68,7 +18,7 @@ SECOID_GetAlgorithmTag(SECAlgorithmID *id)
 }
 
 SECStatus
-SECOID_SetAlgorithmID(PRArenaPool *arena, SECAlgorithmID *id, SECOidTag which,
+SECOID_SetAlgorithmID(PLArenaPool *arena, SECAlgorithmID *id, SECOidTag which,
 		      SECItem *params)
 {
     SECOidData *oiddata;
@@ -88,13 +38,19 @@ SECOID_SetAlgorithmID(PRArenaPool *arena, SECAlgorithmID *id, SECOidTag which,
       case SEC_OID_MD4:
       case SEC_OID_MD5:
       case SEC_OID_SHA1:
-      case SEC_OID_SHA256: // issue 220
+      case SEC_OID_SHA224:
+      case SEC_OID_SHA256:
+      case SEC_OID_SHA384:
+      case SEC_OID_SHA512:
       case SEC_OID_PKCS1_RSA_ENCRYPTION:
       case SEC_OID_PKCS1_MD2_WITH_RSA_ENCRYPTION:
       case SEC_OID_PKCS1_MD4_WITH_RSA_ENCRYPTION:
       case SEC_OID_PKCS1_MD5_WITH_RSA_ENCRYPTION:
       case SEC_OID_PKCS1_SHA1_WITH_RSA_ENCRYPTION:
-      case SEC_OID_PKCS1_SHA256_WITH_RSA_ENCRYPTION: // issue 220
+      case SEC_OID_PKCS1_SHA224_WITH_RSA_ENCRYPTION:
+      case SEC_OID_PKCS1_SHA256_WITH_RSA_ENCRYPTION:
+      case SEC_OID_PKCS1_SHA384_WITH_RSA_ENCRYPTION:
+      case SEC_OID_PKCS1_SHA512_WITH_RSA_ENCRYPTION:
 	add_null_param = PR_TRUE;
 	break;
       default:
@@ -113,7 +69,7 @@ SECOID_SetAlgorithmID(PRArenaPool *arena, SECAlgorithmID *id, SECOidTag which,
 	 */
 	PORT_Assert(!add_null_param || (params->len == 2
 					&& params->data[0] == SEC_ASN1_NULL
-					&& params->data[1] == 0));
+					&& params->data[1] == 0)); 
 	if (SECITEM_CopyItem(arena, &id->parameters, params)) {
 	    return SECFailure;
 	}
@@ -141,7 +97,8 @@ SECOID_SetAlgorithmID(PRArenaPool *arena, SECAlgorithmID *id, SECOidTag which,
 }
 
 SECStatus
-SECOID_CopyAlgorithmID(PRArenaPool *arena, SECAlgorithmID *to, SECAlgorithmID *from)
+SECOID_CopyAlgorithmID(PLArenaPool *arena, SECAlgorithmID *to,
+                       const SECAlgorithmID *from)
 {
     SECStatus rv;
 
@@ -169,7 +126,3 @@ SECOID_CompareAlgorithmID(SECAlgorithmID *a, SECAlgorithmID *b)
     rv = SECITEM_CompareItem(&a->parameters, &b->parameters);
     return rv;
 }
-
-/* This functions simply returns the address of the above-declared template. */
-SEC_ASN1_CHOOSER_IMPLEMENT(SECOID_AlgorithmIDTemplate)
-

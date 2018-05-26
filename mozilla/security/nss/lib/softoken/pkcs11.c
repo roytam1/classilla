@@ -1,36 +1,6 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s): 
- *	Dr Stephen Henson <stephen.henson@gemplus.com>
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /*
  * This file implements PKCS 11 on top of our existing security modules
  *
@@ -56,21 +26,56 @@
 #include "blapi.h"
 #include "secder.h"
 #include "secport.h"
-#include "pcert.h"
 #include "secrng.h"
+#include "prtypes.h"
+#include "nspr.h"
+#include "softkver.h"
+#include "secoid.h"
+#include "sftkdb.h"
+#include "utilpars.h" 
+#include "ec.h"
+#include "secasn1.h"
+#include "secerr.h"
+#include "lgglue.h"
 
-#include "keydbi.h" 
+PRBool parentForkedAfterC_Initialize;
 
- 
+#ifndef NO_FORK_CHECK
+
+PRBool sftkForkCheckDisabled;
+
+#if defined(CHECK_FORK_PTHREAD) || defined(CHECK_FORK_MIXED)
+PRBool forked = PR_FALSE;
+#endif
+
+#if defined(CHECK_FORK_GETPID) || defined(CHECK_FORK_MIXED)
+#include <unistd.h>
+pid_t myPid;
+#endif
+
+#ifdef CHECK_FORK_MIXED
+#include <sys/systeminfo.h>
+PRBool usePthread_atfork;
+#endif
+
+#endif
+
 /*
  * ******************** Static data *******************************
  */
 
 /* The next three strings must be exactly 32 characters long */
-static char *manufacturerID      = "mozilla.org                     ";
+static char *manufacturerID      = "Mozilla Foundation              ";
 static char manufacturerID_space[33];
 static char *libraryDescription  = "NSS Internal Crypto Services    ";
 static char libraryDescription_space[33];
+
+/*
+ * In FIPS mode, we disallow login attempts for 1 second after a login
+ * failure so that there are at most 60 login attempts per minute.
+ */
+static PRIntervalTime loginWaitTime;
+static PRUint32	      minSessionObjectHandle = 1U;
 
 #define __PASTE(x,y)    x##y
 
@@ -91,7 +96,7 @@ static char libraryDescription_space[33];
  
  
 /* build the crypto module table */
-static const CK_FUNCTION_LIST pk11_funcList = {
+static const CK_FUNCTION_LIST sftk_funcList = {
     { 1, 10 },
  
 #undef CK_PKCS11_FUNCTION_INFO
@@ -111,7 +116,7 @@ static const CK_FUNCTION_LIST pk11_funcList = {
 
 /* List of DES Weak Keys */ 
 typedef unsigned char desKey[8];
-static const desKey  pk11_desWeakTable[] = {
+static const desKey  sftk_desWeakTable[] = {
 #ifdef noParity
     /* weak */
     { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
@@ -165,8 +170,8 @@ static const desKey  pk11_desWeakTable[] = {
 };
 
     
-static const int pk11_desWeakTableSize = sizeof(pk11_desWeakTable)/
-						sizeof(pk11_desWeakTable[0]);
+static const int sftk_desWeakTableSize = sizeof(sftk_desWeakTable)/
+						sizeof(sftk_desWeakTable[0]);
 
 /* DES KEY Parity conversion table. Takes each byte/2 as an index, returns
  * that byte with the proper parity bit set */
@@ -208,7 +213,7 @@ static const unsigned char parityTable[256] = {
 /* Mechanisms */
 struct mechanismList {
     CK_MECHANISM_TYPE	type;
-    CK_MECHANISM_INFO	domestic;
+    CK_MECHANISM_INFO	info;
     PRBool		privkey;
 };
 
@@ -226,6 +231,10 @@ struct mechanismList {
 #define CKF_SN_VR_RE		CKF_SN_VR       | CKF_SN_RE
 #define CKF_DUZ_IT_ALL		CKF_EN_DE_WR_UN | CKF_SN_VR_RE
 
+#define CKF_EC_PNU		CKF_EC_FP | CKF_EC_NAMEDCURVE | CKF_EC_UNCOMPRESS
+
+#define CKF_EC_BPNU		CKF_EC_F_2M | CKF_EC_PNU
+
 #define CK_MAX 0xffffffff
 
 static const struct mechanismList mechanisms[] = {
@@ -236,12 +245,12 @@ static const struct mechanismList mechanisms[] = {
       * The first argument is the PKCS #11 Mechanism we support.
       * The second argument is Mechanism info structure. It includes:
       *    The minimum key size,
-      *       in bits for RSA, DSA, DH, KEA, RC2 and RC4 * algs.
-      *       in bytes for RC5, AES, and CAST*
+      *       in bits for RSA, DSA, DH, EC*, KEA, RC2 and RC4 * algs.
+      *       in bytes for RC5, AES, Camellia, and CAST*
       *       ignored for DES*, IDEA and FORTEZZA based
       *    The maximum key size,
-      *       in bits for RSA, DSA, DH, KEA, RC2 and RC4 * algs.
-      *       in bytes for RC5, AES, and CAST*
+      *       in bits for RSA, DSA, DH, EC*, KEA, RC2 and RC4 * algs.
+      *       in bytes for RC5, AES, Camellia, and CAST*
       *       ignored for DES*, IDEA and FORTEZZA based
       *     Flags
       *	      What operations are supported by this mechanism.
@@ -251,25 +260,59 @@ static const struct mechanismList mechanisms[] = {
       */
 
      /* ------------------------- RSA Operations ---------------------------*/
-     {CKM_RSA_PKCS_KEY_PAIR_GEN,{128,CK_MAX,CKF_GENERATE_KEY_PAIR},PR_TRUE},
-     {CKM_RSA_PKCS,		{128,CK_MAX,CKF_DUZ_IT_ALL},	PR_TRUE},
-#ifdef PK11_RSA9796_SUPPORTED
-     {CKM_RSA_9796,		{128,CK_MAX,CKF_DUZ_IT_ALL},	PR_TRUE}, 
+     {CKM_RSA_PKCS_KEY_PAIR_GEN,{RSA_MIN_MODULUS_BITS,CK_MAX,
+				 CKF_GENERATE_KEY_PAIR},PR_TRUE},
+     {CKM_RSA_PKCS,             {RSA_MIN_MODULUS_BITS,CK_MAX,
+				 CKF_DUZ_IT_ALL},       PR_TRUE},
+     {CKM_RSA_PKCS_PSS,         {RSA_MIN_MODULUS_BITS,CK_MAX,
+				 CKF_SN_VR},            PR_TRUE},
+#ifdef SFTK_RSA9796_SUPPORTED
+     {CKM_RSA_9796,		{RSA_MIN_MODULUS_BITS,CK_MAX,
+				 CKF_DUZ_IT_ALL},       PR_TRUE},
 #endif
-     {CKM_RSA_X_509,		{128,CK_MAX,CKF_DUZ_IT_ALL},	PR_TRUE}, 
+     {CKM_RSA_X_509,		{RSA_MIN_MODULUS_BITS,CK_MAX,
+				 CKF_DUZ_IT_ALL},       PR_TRUE},
      /* -------------- RSA Multipart Signing Operations -------------------- */
-     {CKM_MD2_RSA_PKCS,		{128,CK_MAX,CKF_SN_VR}, 	PR_TRUE},
-     {CKM_MD5_RSA_PKCS,		{128,CK_MAX,CKF_SN_VR}, 	PR_TRUE},
-     {CKM_SHA1_RSA_PKCS,	{128,CK_MAX,CKF_SN_VR}, 	PR_TRUE},
-     {CKM_SHA256_RSA_PKCS,	{256,CK_MAX,CKF_SN_VR}, 	PR_TRUE}, // issue 220
+     {CKM_MD2_RSA_PKCS,		{RSA_MIN_MODULUS_BITS,CK_MAX,
+				 CKF_SN_VR}, 	PR_TRUE},
+     {CKM_MD5_RSA_PKCS,		{RSA_MIN_MODULUS_BITS,CK_MAX,
+				 CKF_SN_VR}, 	PR_TRUE},
+     {CKM_SHA1_RSA_PKCS,	{RSA_MIN_MODULUS_BITS,CK_MAX,
+				 CKF_SN_VR}, 	PR_TRUE},
+     {CKM_SHA224_RSA_PKCS,	{RSA_MIN_MODULUS_BITS,CK_MAX,
+				 CKF_SN_VR}, 	PR_TRUE},
+     {CKM_SHA256_RSA_PKCS,	{RSA_MIN_MODULUS_BITS,CK_MAX,
+				 CKF_SN_VR}, 	PR_TRUE},
+     {CKM_SHA384_RSA_PKCS,	{RSA_MIN_MODULUS_BITS,CK_MAX,
+				 CKF_SN_VR}, 	PR_TRUE},
+     {CKM_SHA512_RSA_PKCS,	{RSA_MIN_MODULUS_BITS,CK_MAX,
+				 CKF_SN_VR}, 	PR_TRUE},
      /* ------------------------- DSA Operations --------------------------- */
-     {CKM_DSA_KEY_PAIR_GEN,	{512, 1024, CKF_GENERATE_KEY_PAIR}, PR_TRUE},
-     {CKM_DSA,			{512, 1024, CKF_SN_VR},		PR_TRUE},
-     {CKM_DSA_SHA1,		{512, 1024, CKF_SN_VR},		PR_TRUE},
+     {CKM_DSA_KEY_PAIR_GEN,	{DSA_MIN_P_BITS, DSA_MAX_P_BITS,
+				 CKF_GENERATE_KEY_PAIR}, PR_TRUE},
+     {CKM_DSA,			{DSA_MIN_P_BITS, DSA_MAX_P_BITS, 
+				 CKF_SN_VR},              PR_TRUE},
+     {CKM_DSA_PARAMETER_GEN,	{DSA_MIN_P_BITS, DSA_MAX_P_BITS, 
+				 CKF_GENERATE},           PR_TRUE},
+     {CKM_DSA_SHA1,		{DSA_MIN_P_BITS, DSA_MAX_P_BITS,
+				 CKF_SN_VR},              PR_TRUE},
      /* -------------------- Diffie Hellman Operations --------------------- */
      /* no diffie hellman yet */
-     {CKM_DH_PKCS_KEY_PAIR_GEN,	{128, 1024, CKF_GENERATE_KEY_PAIR}, PR_TRUE}, 
-     {CKM_DH_PKCS_DERIVE,	{128, 1024, CKF_DERIVE}, 	PR_TRUE}, 
+     {CKM_DH_PKCS_KEY_PAIR_GEN,	{DH_MIN_P_BITS, DH_MAX_P_BITS, 
+				 CKF_GENERATE_KEY_PAIR}, PR_TRUE}, 
+     {CKM_DH_PKCS_DERIVE,	{DH_MIN_P_BITS, DH_MAX_P_BITS,
+				 CKF_DERIVE}, 	PR_TRUE}, 
+#ifdef NSS_ENABLE_ECC
+     /* -------------------- Elliptic Curve Operations --------------------- */
+     {CKM_EC_KEY_PAIR_GEN,      {EC_MIN_KEY_BITS, EC_MAX_KEY_BITS,
+				 CKF_GENERATE_KEY_PAIR|CKF_EC_BPNU}, PR_TRUE}, 
+     {CKM_ECDH1_DERIVE,         {EC_MIN_KEY_BITS, EC_MAX_KEY_BITS,
+				 CKF_DERIVE|CKF_EC_BPNU}, PR_TRUE}, 
+     {CKM_ECDSA,                {EC_MIN_KEY_BITS, EC_MAX_KEY_BITS,
+				 CKF_SN_VR|CKF_EC_BPNU}, PR_TRUE}, 
+     {CKM_ECDSA_SHA1,           {EC_MIN_KEY_BITS, EC_MAX_KEY_BITS,
+				 CKF_SN_VR|CKF_EC_BPNU}, PR_TRUE}, 
+#endif /* NSS_ENABLE_ECC */
      /* ------------------------- RC2 Operations --------------------------- */
      {CKM_RC2_KEY_GEN,		{1, 128, CKF_GENERATE},		PR_TRUE},
      {CKM_RC2_ECB,		{1, 128, CKF_EN_DE_WR_UN},	PR_TRUE},
@@ -308,6 +351,23 @@ static const struct mechanismList mechanisms[] = {
      {CKM_AES_MAC,		{16, 32, CKF_SN_VR},		PR_TRUE},
      {CKM_AES_MAC_GENERAL,	{16, 32, CKF_SN_VR},		PR_TRUE},
      {CKM_AES_CBC_PAD,		{16, 32, CKF_EN_DE_WR_UN},	PR_TRUE},
+     {CKM_AES_CTS,		{16, 32, CKF_EN_DE},		PR_TRUE},
+     {CKM_AES_CTR,		{16, 32, CKF_EN_DE},		PR_TRUE},
+     {CKM_AES_GCM,		{16, 32, CKF_EN_DE},		PR_TRUE},
+     /* ------------------------- Camellia Operations --------------------- */
+     {CKM_CAMELLIA_KEY_GEN,	{16, 32, CKF_GENERATE},         PR_TRUE},
+     {CKM_CAMELLIA_ECB,  	{16, 32, CKF_EN_DE_WR_UN},      PR_TRUE},
+     {CKM_CAMELLIA_CBC, 	{16, 32, CKF_EN_DE_WR_UN},      PR_TRUE},
+     {CKM_CAMELLIA_MAC, 	{16, 32, CKF_SN_VR},            PR_TRUE},
+     {CKM_CAMELLIA_MAC_GENERAL,	{16, 32, CKF_SN_VR},            PR_TRUE},
+     {CKM_CAMELLIA_CBC_PAD,	{16, 32, CKF_EN_DE_WR_UN},      PR_TRUE},
+     /* ------------------------- SEED Operations --------------------------- */
+     {CKM_SEED_KEY_GEN,		{16, 16, CKF_GENERATE},		PR_TRUE},
+     {CKM_SEED_ECB,		{16, 16, CKF_EN_DE_WR_UN},	PR_TRUE},
+     {CKM_SEED_CBC,		{16, 16, CKF_EN_DE_WR_UN},	PR_TRUE},
+     {CKM_SEED_MAC,		{16, 16, CKF_SN_VR},		PR_TRUE},
+     {CKM_SEED_MAC_GENERAL,	{16, 16, CKF_SN_VR},		PR_TRUE},
+     {CKM_SEED_CBC_PAD,		{16, 16, CKF_EN_DE_WR_UN},	PR_TRUE},
      /* ------------------------- Hashing Operations ----------------------- */
      {CKM_MD2,			{0,   0, CKF_DIGEST},		PR_FALSE},
      {CKM_MD2_HMAC,		{1, 128, CKF_SN_VR},		PR_TRUE},
@@ -318,8 +378,26 @@ static const struct mechanismList mechanisms[] = {
      {CKM_SHA_1,		{0,   0, CKF_DIGEST},		PR_FALSE},
      {CKM_SHA_1_HMAC,		{1, 128, CKF_SN_VR},		PR_TRUE},
      {CKM_SHA_1_HMAC_GENERAL,	{1, 128, CKF_SN_VR},		PR_TRUE},
+     {CKM_SHA224,		{0,   0, CKF_DIGEST},		PR_FALSE},
+     {CKM_SHA224_HMAC,		{1, 128, CKF_SN_VR},		PR_TRUE},
+     {CKM_SHA224_HMAC_GENERAL,	{1, 128, CKF_SN_VR},		PR_TRUE},
      {CKM_SHA256,		{0,   0, CKF_DIGEST},		PR_FALSE},
+     {CKM_SHA256_HMAC,		{1, 128, CKF_SN_VR},		PR_TRUE},
+     {CKM_SHA256_HMAC_GENERAL,	{1, 128, CKF_SN_VR},		PR_TRUE},
+     {CKM_SHA384,		{0,   0, CKF_DIGEST},		PR_FALSE},
+     {CKM_SHA384_HMAC,		{1, 128, CKF_SN_VR},		PR_TRUE},
+     {CKM_SHA384_HMAC_GENERAL,	{1, 128, CKF_SN_VR},		PR_TRUE},
+     {CKM_SHA512,		{0,   0, CKF_DIGEST},		PR_FALSE},
+     {CKM_SHA512_HMAC,		{1, 128, CKF_SN_VR},		PR_TRUE},
+     {CKM_SHA512_HMAC_GENERAL,	{1, 128, CKF_SN_VR},		PR_TRUE},
      {CKM_TLS_PRF_GENERAL,	{0, 512, CKF_SN_VR},		PR_FALSE},
+     {CKM_NSS_TLS_PRF_GENERAL_SHA256,
+				{0, 512, CKF_SN_VR},		PR_FALSE},
+     /* ------------------------- HKDF Operations -------------------------- */
+     {CKM_NSS_HKDF_SHA1,        {1, 128, CKF_DERIVE},           PR_TRUE},
+     {CKM_NSS_HKDF_SHA256,      {1, 128, CKF_DERIVE},           PR_TRUE},
+     {CKM_NSS_HKDF_SHA384,      {1, 128, CKF_DERIVE},           PR_TRUE},
+     {CKM_NSS_HKDF_SHA512,      {1, 128, CKF_DERIVE},           PR_TRUE},
      /* ------------------------- CAST Operations --------------------------- */
 #ifdef NSS_SOFTOKEN_DOES_CAST
      /* Cast operations are not supported ( yet? ) */
@@ -344,8 +422,8 @@ static const struct mechanismList mechanisms[] = {
 #endif
 #if NSS_SOFTOKEN_DOES_RC5
      /* ------------------------- RC5 Operations --------------------------- */
-     {CKM_RC5_KEY_GEN,		{1, 32, CKF_GENERATE}, 	PR_TRUE},
-     	{CKM_RC5_ECB,		{1, 32, CKF_EN_DE_WR_UN},	PR_TRUE},
+     {CKM_RC5_KEY_GEN,		{1, 32, CKF_GENERATE},          PR_TRUE},
+     {CKM_RC5_ECB,		{1, 32, CKF_EN_DE_WR_UN},	PR_TRUE},
      {CKM_RC5_CBC,		{1, 32, CKF_EN_DE_WR_UN},	PR_TRUE},
      {CKM_RC5_MAC,		{1, 32, CKF_SN_VR},  		PR_TRUE},
      {CKM_RC5_MAC_GENERAL,	{1, 32, CKF_SN_VR},  		PR_TRUE},
@@ -377,15 +455,25 @@ static const struct mechanismList mechanisms[] = {
      {CKM_MD5_KEY_DERIVATION,		{ 0, 16, CKF_DERIVE},   PR_FALSE}, 
      {CKM_MD2_KEY_DERIVATION,		{ 0, 16, CKF_DERIVE},   PR_FALSE}, 
      {CKM_SHA1_KEY_DERIVATION,		{ 0, 20, CKF_DERIVE},   PR_FALSE}, 
+     {CKM_SHA224_KEY_DERIVATION,	{ 0, 28, CKF_DERIVE},   PR_FALSE}, 
+     {CKM_SHA256_KEY_DERIVATION,	{ 0, 32, CKF_DERIVE},   PR_FALSE}, 
+     {CKM_SHA384_KEY_DERIVATION,	{ 0, 48, CKF_DERIVE},   PR_FALSE}, 
+     {CKM_SHA512_KEY_DERIVATION,	{ 0, 64, CKF_DERIVE},   PR_FALSE}, 
      {CKM_TLS_MASTER_KEY_DERIVE,	{48, 48, CKF_DERIVE},   PR_FALSE}, 
+     {CKM_NSS_TLS_MASTER_KEY_DERIVE_SHA256,
+					{48, 48, CKF_DERIVE},	PR_FALSE},
      {CKM_TLS_MASTER_KEY_DERIVE_DH,	{8, 128, CKF_DERIVE},   PR_FALSE}, 
+     {CKM_NSS_TLS_MASTER_KEY_DERIVE_DH_SHA256,
+					{8, 128, CKF_DERIVE},	PR_FALSE},
      {CKM_TLS_KEY_AND_MAC_DERIVE,	{48, 48, CKF_DERIVE},   PR_FALSE}, 
+     {CKM_NSS_TLS_KEY_AND_MAC_DERIVE_SHA256,
+					{48, 48, CKF_DERIVE},	PR_FALSE},
      /* ---------------------- PBE Key Derivations  ------------------------ */
      {CKM_PBE_MD2_DES_CBC,		{8, 8, CKF_DERIVE},   PR_TRUE},
      {CKM_PBE_MD5_DES_CBC,		{8, 8, CKF_DERIVE},   PR_TRUE},
      /* ------------------ NETSCAPE PBE Key Derivations  ------------------- */
-     {CKM_NSS_PBE_SHA1_DES_CBC,	     { 8, 8, CKF_GENERATE}, PR_TRUE},
-     {CKM_NSS_PBE_SHA1_FAULTY_3DES_CBC, {24,24, CKF_GENERATE}, PR_TRUE},
+     {CKM_NETSCAPE_PBE_SHA1_DES_CBC,	     { 8, 8, CKF_GENERATE}, PR_TRUE},
+     {CKM_NETSCAPE_PBE_SHA1_FAULTY_3DES_CBC, {24,24, CKF_GENERATE}, PR_TRUE},
      {CKM_PBE_SHA1_DES3_EDE_CBC,	     {24,24, CKF_GENERATE}, PR_TRUE},
      {CKM_PBE_SHA1_DES2_EDE_CBC,	     {24,24, CKF_GENERATE}, PR_TRUE},
      {CKM_PBE_SHA1_RC2_40_CBC,		     {40,40, CKF_GENERATE}, PR_TRUE},
@@ -393,18 +481,54 @@ static const struct mechanismList mechanisms[] = {
      {CKM_PBE_SHA1_RC4_40,		     {40,40, CKF_GENERATE}, PR_TRUE},
      {CKM_PBE_SHA1_RC4_128,		     {128,128, CKF_GENERATE}, PR_TRUE},
      {CKM_PBA_SHA1_WITH_SHA1_HMAC,	     {20,20, CKF_GENERATE}, PR_TRUE},
-     {CKM_NSS_PBE_SHA1_HMAC_KEY_GEN,    {20,20, CKF_GENERATE}, PR_TRUE},
-     {CKM_NSS_PBE_MD5_HMAC_KEY_GEN,     {16,16, CKF_GENERATE}, PR_TRUE},
-     {CKM_NSS_PBE_MD2_HMAC_KEY_GEN,     {16,16, CKF_GENERATE}, PR_TRUE},
+     {CKM_PKCS5_PBKD2,   		     {1,256, CKF_GENERATE}, PR_TRUE},
+     {CKM_NETSCAPE_PBE_SHA1_HMAC_KEY_GEN,    {20,20, CKF_GENERATE}, PR_TRUE},
+     {CKM_NETSCAPE_PBE_MD5_HMAC_KEY_GEN,     {16,16, CKF_GENERATE}, PR_TRUE},
+     {CKM_NETSCAPE_PBE_MD2_HMAC_KEY_GEN,     {16,16, CKF_GENERATE}, PR_TRUE},
+     /* ------------------ AES Key Wrap (also encrypt)  ------------------- */
+     {CKM_NETSCAPE_AES_KEY_WRAP,	{16, 32, CKF_EN_DE_WR_UN},  PR_TRUE},
+     {CKM_NETSCAPE_AES_KEY_WRAP_PAD,	{16, 32, CKF_EN_DE_WR_UN},  PR_TRUE},
+     /* --------------------------- J-PAKE -------------------------------- */
+     {CKM_NSS_JPAKE_ROUND1_SHA1,        {0, 0, CKF_GENERATE}, PR_TRUE},
+     {CKM_NSS_JPAKE_ROUND1_SHA256,      {0, 0, CKF_GENERATE}, PR_TRUE},
+     {CKM_NSS_JPAKE_ROUND1_SHA384,      {0, 0, CKF_GENERATE}, PR_TRUE},
+     {CKM_NSS_JPAKE_ROUND1_SHA512,      {0, 0, CKF_GENERATE}, PR_TRUE},
+     {CKM_NSS_JPAKE_ROUND2_SHA1,        {0, 0, CKF_DERIVE}, PR_TRUE},
+     {CKM_NSS_JPAKE_ROUND2_SHA256,      {0, 0, CKF_DERIVE}, PR_TRUE},
+     {CKM_NSS_JPAKE_ROUND2_SHA384,      {0, 0, CKF_DERIVE}, PR_TRUE},
+     {CKM_NSS_JPAKE_ROUND2_SHA512,      {0, 0, CKF_DERIVE}, PR_TRUE},
+     {CKM_NSS_JPAKE_FINAL_SHA1,         {0, 0, CKF_DERIVE}, PR_TRUE},
+     {CKM_NSS_JPAKE_FINAL_SHA256,       {0, 0, CKF_DERIVE}, PR_TRUE},
+     {CKM_NSS_JPAKE_FINAL_SHA384,       {0, 0, CKF_DERIVE}, PR_TRUE},
+     {CKM_NSS_JPAKE_FINAL_SHA512,       {0, 0, CKF_DERIVE}, PR_TRUE},
+     /* -------------------- Constant Time TLS MACs ----------------------- */
+     {CKM_NSS_HMAC_CONSTANT_TIME,       {0, 0, CKF_DIGEST}, PR_TRUE},
+     {CKM_NSS_SSL3_MAC_CONSTANT_TIME,   {0, 0, CKF_DIGEST}, PR_TRUE}
 };
-static CK_ULONG mechanismCount = sizeof(mechanisms)/sizeof(mechanisms[0]);
+static const CK_ULONG mechanismCount = sizeof(mechanisms)/sizeof(mechanisms[0]);
+
+/* sigh global so fipstokn can read it */
+PRBool nsc_init = PR_FALSE;
+
+#if defined(CHECK_FORK_PTHREAD) || defined(CHECK_FORK_MIXED)
+
+#include <pthread.h>
+
+static void ForkedChild(void)
+{
+    if (nsc_init || nsf_init) {
+        forked = PR_TRUE;
+    }
+}
+
+#endif
 
 static char *
-pk11_setStringName(const char *inString, char *buffer, int buffer_length)
+sftk_setStringName(const char *inString, char *buffer, int buffer_length, 		PRBool nullTerminate)
 {
     int full_length, string_length;
 
-    full_length = buffer_length -1;
+    full_length = nullTerminate ? buffer_length -1 : buffer_length;
     string_length = PORT_Strlen(inString);
     /* 
      *  shorten the string, respecting utf8 encoding
@@ -444,7 +568,9 @@ pk11_setStringName(const char *inString, char *buffer, int buffer_length)
 	}
     }
     PORT_Memset(buffer,' ',full_length);
-    buffer[full_length] = 0;
+    if (nullTerminate) {
+	buffer[full_length] = 0;
+    }
     PORT_Memcpy(buffer,inString,string_length);
     return buffer;
 }
@@ -452,17 +578,18 @@ pk11_setStringName(const char *inString, char *buffer, int buffer_length)
  * Configuration utils
  */
 static CK_RV
-pk11_configure(const char *man, const char *libdes)
+sftk_configure(const char *man, const char *libdes)
 {
 
     /* make sure the internationalization was done correctly... */
     if (man) {
-	manufacturerID = pk11_setStringName(man,manufacturerID_space,
-						sizeof(manufacturerID_space));
+	manufacturerID = sftk_setStringName(man,manufacturerID_space,
+					sizeof(manufacturerID_space), PR_TRUE);
     }
     if (libdes) {
-	libraryDescription = pk11_setStringName(libdes,
-		libraryDescription_space, sizeof(libraryDescription_space));
+	libraryDescription = sftk_setStringName(libdes,
+		libraryDescription_space, sizeof(libraryDescription_space), 
+		PR_TRUE);
     }
 
     return CKR_OK;
@@ -475,23 +602,19 @@ pk11_configure(const char *man, const char *libdes)
 /*
  * see if the key DB password is enabled
  */
-PRBool
-pk11_hasNullPassword(NSSLOWKEYDBHandle *keydb,SECItem **pwitem)
+static PRBool
+sftk_hasNullPassword(SFTKSlot *slot, SFTKDBHandle *keydb)
 {
     PRBool pwenabled;
-    
+   
     pwenabled = PR_FALSE;
-    *pwitem = NULL;
-    if (nsslowkey_HasKeyDBPassword (keydb) == SECSuccess) {
-	*pwitem = nsslowkey_HashPassword("", keydb->global_salt);
-	if ( *pwitem ) {
-	    if (nsslowkey_CheckKeyDBPassword (keydb, *pwitem) == SECSuccess) {
-		pwenabled = PR_TRUE;
-	    } else {
-	    	SECITEM_ZfreeItem(*pwitem, PR_TRUE);
-		*pwitem = NULL;
-	    }
+    if (sftkdb_HasPasswordSet(keydb) == SECSuccess) {
+	PRBool tokenRemoved = PR_FALSE;
+    	SECStatus rv = sftkdb_CheckPassword(keydb, "", &tokenRemoved);
+	if (tokenRemoved) {
+	    sftk_CloseAllSessions(slot, PR_FALSE);
 	}
+	return (rv  == SECSuccess);
     }
 
     return pwenabled;
@@ -506,11 +629,11 @@ pk11_hasNullPassword(NSSLOWKEYDBHandle *keydb,SECItem **pwitem)
  * value and len
  */
 CK_RV
-pk11_defaultAttribute(PK11Object *object,CK_ATTRIBUTE_TYPE type,void *value,
-							unsigned int len)
+sftk_defaultAttribute(SFTKObject *object,CK_ATTRIBUTE_TYPE type,
+					const void *value, unsigned int len)
 {
-    if ( !pk11_hasAttribute(object, type)) {
-	return pk11_AddAttributeType(object,type,value,len);
+    if ( !sftk_hasAttribute(object, type)) {
+	return sftk_AddAttributeType(object,type,value,len);
     }
     return CKR_OK;
 }
@@ -519,19 +642,19 @@ pk11_defaultAttribute(PK11Object *object,CK_ATTRIBUTE_TYPE type,void *value,
  * check the consistancy and initialize a Data Object 
  */
 static CK_RV
-pk11_handleDataObject(PK11Session *session,PK11Object *object)
+sftk_handleDataObject(SFTKSession *session,SFTKObject *object)
 {
     CK_RV crv;
 
     /* first reject private and token data objects */
-    if (pk11_isTrue(object,CKA_PRIVATE) || pk11_isTrue(object,CKA_TOKEN)) {
+    if (sftk_isTrue(object,CKA_PRIVATE) || sftk_isTrue(object,CKA_TOKEN)) {
 	return CKR_ATTRIBUTE_VALUE_INVALID;
     }
 
     /* now just verify the required date fields */
-    crv = pk11_defaultAttribute(object,CKA_APPLICATION,NULL,0);
+    crv = sftk_defaultAttribute(object,CKA_APPLICATION,NULL,0);
     if (crv != CKR_OK) return crv;
-    crv = pk11_defaultAttribute(object,CKA_VALUE,NULL,0);
+    crv = sftk_defaultAttribute(object,CKA_VALUE,NULL,0);
     if (crv != CKR_OK) return crv;
 
     return CKR_OK;
@@ -541,27 +664,27 @@ pk11_handleDataObject(PK11Session *session,PK11Object *object)
  * check the consistancy and initialize a Certificate Object 
  */
 static CK_RV
-pk11_handleCertObject(PK11Session *session,PK11Object *object)
+sftk_handleCertObject(SFTKSession *session,SFTKObject *object)
 {
     CK_CERTIFICATE_TYPE type;
-    PK11Attribute *attribute;
+    SFTKAttribute *attribute;
     CK_RV crv;
 
     /* certificates must have a type */
-    if ( !pk11_hasAttribute(object,CKA_CERTIFICATE_TYPE) ) {
+    if ( !sftk_hasAttribute(object,CKA_CERTIFICATE_TYPE) ) {
 	return CKR_TEMPLATE_INCOMPLETE;
     }
 
     /* we can't store any certs private */
-    if (pk11_isTrue(object,CKA_PRIVATE)) {
+    if (sftk_isTrue(object,CKA_PRIVATE)) {
 	return CKR_ATTRIBUTE_VALUE_INVALID;
     }
 	
     /* We only support X.509 Certs for now */
-    attribute = pk11_FindAttribute(object,CKA_CERTIFICATE_TYPE);
+    attribute = sftk_FindAttribute(object,CKA_CERTIFICATE_TYPE);
     if (attribute == NULL) return CKR_TEMPLATE_INCOMPLETE;
     type = *(CK_CERTIFICATE_TYPE *)attribute->attrib.pValue;
-    pk11_FreeAttribute(attribute);
+    sftk_FreeAttribute(attribute);
 
     if (type != CKC_X_509) {
 	return CKR_ATTRIBUTE_VALUE_INVALID;
@@ -570,255 +693,86 @@ pk11_handleCertObject(PK11Session *session,PK11Object *object)
     /* X.509 Certificate */
 
     /* make sure we have a cert */
-    if ( !pk11_hasAttribute(object,CKA_VALUE) ) {
+    if ( !sftk_hasAttribute(object,CKA_VALUE) ) {
 	return CKR_TEMPLATE_INCOMPLETE;
     }
 
     /* in PKCS #11, Subject is a required field */
-    if ( !pk11_hasAttribute(object,CKA_SUBJECT) ) {
+    if ( !sftk_hasAttribute(object,CKA_SUBJECT) ) {
 	return CKR_TEMPLATE_INCOMPLETE;
     }
 
     /* in PKCS #11, Issuer is a required field */
-    if ( !pk11_hasAttribute(object,CKA_ISSUER) ) {
+    if ( !sftk_hasAttribute(object,CKA_ISSUER) ) {
 	return CKR_TEMPLATE_INCOMPLETE;
     }
 
     /* in PKCS #11, Serial is a required field */
-    if ( !pk11_hasAttribute(object,CKA_SERIAL_NUMBER) ) {
+    if ( !sftk_hasAttribute(object,CKA_SERIAL_NUMBER) ) {
 	return CKR_TEMPLATE_INCOMPLETE;
     }
 
     /* add it to the object */
     object->objectInfo = NULL;
-    object->infoFree = (PK11Free) NULL;
+    object->infoFree = (SFTKFree) NULL;
     
     /* now just verify the required date fields */
-    crv = pk11_defaultAttribute(object, CKA_ID, NULL, 0);
+    crv = sftk_defaultAttribute(object, CKA_ID, NULL, 0);
     if (crv != CKR_OK) { return crv; }
 
-    if (pk11_isTrue(object,CKA_TOKEN)) {
-	PK11Slot *slot = session->slot;
-	SECItem derCert;
-	NSSLOWCERTCertificate *cert;
- 	NSSLOWCERTCertTrust *trust = NULL;
- 	NSSLOWCERTCertTrust userTrust = 
-		{ CERTDB_USER, CERTDB_USER, CERTDB_USER };
- 	NSSLOWCERTCertTrust defTrust = 
-		{ CERTDB_TRUSTED_UNKNOWN, 
-			CERTDB_TRUSTED_UNKNOWN, CERTDB_TRUSTED_UNKNOWN };
-	char *label = NULL;
-	char *email = NULL;
-	SECStatus rv;
-	PRBool inDB = PR_TRUE;
+    if (sftk_isTrue(object,CKA_TOKEN)) {
+	SFTKSlot *slot = session->slot;
+	SFTKDBHandle *certHandle = sftk_getCertDB(slot);
 
-	if (slot->certDB == NULL) {
+	if (certHandle == NULL) {
 	    return CKR_TOKEN_WRITE_PROTECTED;
 	}
 
-	/* get the der cert */ 
-	attribute = pk11_FindAttribute(object,CKA_VALUE);
-	PORT_Assert(attribute);
-
-	derCert.type = 0;
-	derCert.data = (unsigned char *)attribute->attrib.pValue;
-	derCert.len = attribute->attrib.ulValueLen ;
-
-	label = pk11_getString(object,CKA_LABEL);
-
-	cert =  nsslowcert_FindCertByDERCert(slot->certDB, &derCert);
-        if (cert == NULL) {
-	    cert = nsslowcert_DecodeDERCertificate(&derCert, label);
-	    inDB = PR_FALSE;
-	}
-	if (cert == NULL) {
-	    if (label) PORT_Free(label);
-    	    pk11_FreeAttribute(attribute);
-	    return CKR_ATTRIBUTE_VALUE_INVALID;
-	}
-
-	if (slot->keyDB && nsslowkey_KeyForCertExists(slot->keyDB,cert)) {
-	    trust = &userTrust;
-	}
-	if (!inDB) {
-	    if (!trust) trust = &defTrust;
-	    rv = nsslowcert_AddPermCert(slot->certDB, cert, label, trust);
-	} else {
-	    rv = trust ? nsslowcert_ChangeCertTrust(slot->certDB,cert,trust) :
-				SECSuccess;
-	}
-
-	if (label) PORT_Free(label);
-	pk11_FreeAttribute(attribute);
-
-	if (rv != SECSuccess) {
-	    nsslowcert_DestroyCertificate(cert);
-	    return CKR_DEVICE_ERROR;
-	}
-
-	/*
-	 * Add a NULL S/MIME profile if necessary.
-	 */
-	email = pk11_getString(object,CKA_NSS_EMAIL);
-	if (email) {
-	    certDBEntrySMime *entry;
-
-	    entry = nsslowcert_ReadDBSMimeEntry(slot->certDB,email);
-	    if (!entry) {
-	    	nsslowcert_SaveSMimeProfile(slot->certDB, email, 
-						&cert->derSubject, NULL, NULL);
-	    } else {
-		 nsslowcert_DestroyDBEntry((certDBEntry *)entry);
-	    }
-	    PORT_Free(email);
-	}
-	object->handle=pk11_mkHandle(slot,&cert->certKey,PK11_TOKEN_TYPE_CERT);
-	nsslowcert_DestroyCertificate(cert);
+	crv = sftkdb_write(certHandle, object, &object->handle);
+	sftk_freeDB(certHandle);
+	return crv;
     }
 
     return CKR_OK;
 }
-
-unsigned int
-pk11_MapTrust(CK_TRUST trust, PRBool clientAuth)
-{
-    unsigned int trustCA = clientAuth ? CERTDB_TRUSTED_CLIENT_CA :
-							CERTDB_TRUSTED_CA;
-    switch (trust) {
-    case CKT_NSS_TRUSTED:
-	return CERTDB_VALID_PEER|CERTDB_TRUSTED;
-    case CKT_NSS_TRUSTED_DELEGATOR:
-	return CERTDB_VALID_CA|trustCA;
-    case CKT_NSS_UNTRUSTED:
-	return CERTDB_NOT_TRUSTED;
-    case CKT_NSS_MUST_VERIFY:
-	return 0;
-    case CKT_NSS_VALID: /* implies must verify */
-	return CERTDB_VALID_PEER;
-    case CKT_NSS_VALID_DELEGATOR: /* implies must verify */
-	return CERTDB_VALID_CA;
-    default:
-	break;
-    }
-    return CERTDB_TRUSTED_UNKNOWN;
-}
-    
 	
 /*
  * check the consistancy and initialize a Trust Object 
  */
 static CK_RV
-pk11_handleTrustObject(PK11Session *session,PK11Object *object)
+sftk_handleTrustObject(SFTKSession *session,SFTKObject *object)
 {
-    NSSLOWCERTIssuerAndSN issuerSN;
-
     /* we can't store any certs private */
-    if (pk11_isTrue(object,CKA_PRIVATE)) {
+    if (sftk_isTrue(object,CKA_PRIVATE)) {
 	return CKR_ATTRIBUTE_VALUE_INVALID;
     }
 
     /* certificates must have a type */
-    if ( !pk11_hasAttribute(object,CKA_ISSUER) ) {
+    if ( !sftk_hasAttribute(object,CKA_ISSUER) ) {
 	return CKR_TEMPLATE_INCOMPLETE;
     }
-    if ( !pk11_hasAttribute(object,CKA_SERIAL_NUMBER) ) {
+    if ( !sftk_hasAttribute(object,CKA_SERIAL_NUMBER) ) {
 	return CKR_TEMPLATE_INCOMPLETE;
     }
-    if ( !pk11_hasAttribute(object,CKA_CERT_SHA1_HASH) ) {
+    if ( !sftk_hasAttribute(object,CKA_CERT_SHA1_HASH) ) {
 	return CKR_TEMPLATE_INCOMPLETE;
     }
-    if ( !pk11_hasAttribute(object,CKA_CERT_MD5_HASH) ) {
+    if ( !sftk_hasAttribute(object,CKA_CERT_MD5_HASH) ) {
 	return CKR_TEMPLATE_INCOMPLETE;
     }
 
-    if (pk11_isTrue(object,CKA_TOKEN)) {
-	PK11Slot *slot = session->slot;
-	PK11Attribute *issuer = NULL;
-	PK11Attribute *serial = NULL;
-	NSSLOWCERTCertificate *cert = NULL;
-	PK11Attribute *trust;
-        CK_TRUST sslTrust = CKT_NSS_TRUST_UNKNOWN;
-        CK_TRUST clientTrust = CKT_NSS_TRUST_UNKNOWN;
-        CK_TRUST emailTrust = CKT_NSS_TRUST_UNKNOWN;
-        CK_TRUST signTrust = CKT_NSS_TRUST_UNKNOWN;
- 	NSSLOWCERTCertTrust dbTrust = { 0 };
-	SECStatus rv;
+    if (sftk_isTrue(object,CKA_TOKEN)) {
+	SFTKSlot *slot = session->slot;
+	SFTKDBHandle *certHandle = sftk_getCertDB(slot);
+	CK_RV crv;
 
-
-	if (slot->certDB == NULL) {
+	if (certHandle == NULL) {
 	    return CKR_TOKEN_WRITE_PROTECTED;
 	}
-	issuer = pk11_FindAttribute(object,CKA_ISSUER);
-	PORT_Assert(issuer);
-	issuerSN.derIssuer.data = (unsigned char *)issuer->attrib.pValue;
-	issuerSN.derIssuer.len = issuer->attrib.ulValueLen ;
 
-	serial = pk11_FindAttribute(object,CKA_SERIAL_NUMBER);
-	PORT_Assert(serial);
-	issuerSN.serialNumber.data = (unsigned char *)serial->attrib.pValue;
-	issuerSN.serialNumber.len = serial->attrib.ulValueLen ;
-
-	cert = nsslowcert_FindCertByIssuerAndSN(slot->certDB,&issuerSN);
-	pk11_FreeAttribute(serial);
-	pk11_FreeAttribute(issuer);
-
-	if (cert == NULL) {
-	    return CKR_ATTRIBUTE_VALUE_INVALID;
-	}
-	
-	trust = pk11_FindAttribute(object,CKA_TRUST_SERVER_AUTH);
-	if (trust) {
-	    if (trust->attrib.ulValueLen == sizeof(CK_TRUST)) {
-		PORT_Memcpy(&sslTrust,trust->attrib.pValue, sizeof(sslTrust));
-	    }
-	    pk11_FreeAttribute(trust);
-	}
-	trust = pk11_FindAttribute(object,CKA_TRUST_CLIENT_AUTH);
-	if (trust) {
-	    if (trust->attrib.ulValueLen == sizeof(CK_TRUST)) {
-		PORT_Memcpy(&clientTrust,trust->attrib.pValue,
-							 sizeof(clientTrust));
-	    }
-	    pk11_FreeAttribute(trust);
-	}
-	trust = pk11_FindAttribute(object,CKA_TRUST_EMAIL_PROTECTION);
-	if (trust) {
-	    if (trust->attrib.ulValueLen == sizeof(CK_TRUST)) {
-		PORT_Memcpy(&emailTrust,trust->attrib.pValue,
-							sizeof(emailTrust));
-	    }
-	    pk11_FreeAttribute(trust);
-	}
-	trust = pk11_FindAttribute(object,CKA_TRUST_CODE_SIGNING);
-	if (trust) {
-	    if (trust->attrib.ulValueLen == sizeof(CK_TRUST)) {
-		PORT_Memcpy(&signTrust,trust->attrib.pValue,
-							sizeof(signTrust));
-	    }
-	    pk11_FreeAttribute(trust);
-	}
-
-	/* preserve certain old fields */
-	if (cert->trust) {
-	    dbTrust.sslFlags =
-			  cert->trust->sslFlags & CERTDB_PRESERVE_TRUST_BITS;
-	    dbTrust.emailFlags=
-			cert->trust->emailFlags & CERTDB_PRESERVE_TRUST_BITS;
-	    dbTrust.objectSigningFlags = 
-		cert->trust->objectSigningFlags & CERTDB_PRESERVE_TRUST_BITS;
-	}
-
-	dbTrust.sslFlags |= pk11_MapTrust(sslTrust,PR_FALSE);
-	dbTrust.sslFlags |= pk11_MapTrust(clientTrust,PR_TRUE);
-	dbTrust.emailFlags |= pk11_MapTrust(emailTrust,PR_FALSE);
-	dbTrust.objectSigningFlags |= pk11_MapTrust(signTrust,PR_FALSE);
-
-	rv = nsslowcert_ChangeCertTrust(slot->certDB,cert,&dbTrust);
-	object->handle=pk11_mkHandle(slot,&cert->certKey,PK11_TOKEN_TYPE_TRUST);
-	nsslowcert_DestroyCertificate(cert);
-	if (rv != SECSuccess) {
-	   return CKR_DEVICE_ERROR;
-	}
+	crv = sftkdb_write(certHandle, object, &object->handle);
+	sftk_freeDB(certHandle);
+	return crv;
     }
 
     return CKR_OK;
@@ -828,80 +782,40 @@ pk11_handleTrustObject(PK11Session *session,PK11Object *object)
  * check the consistancy and initialize a Trust Object 
  */
 static CK_RV
-pk11_handleSMimeObject(PK11Session *session,PK11Object *object)
+sftk_handleSMimeObject(SFTKSession *session,SFTKObject *object)
 {
 
     /* we can't store any certs private */
-    if (pk11_isTrue(object,CKA_PRIVATE)) {
+    if (sftk_isTrue(object,CKA_PRIVATE)) {
 	return CKR_ATTRIBUTE_VALUE_INVALID;
     }
 
     /* certificates must have a type */
-    if ( !pk11_hasAttribute(object,CKA_SUBJECT) ) {
+    if ( !sftk_hasAttribute(object,CKA_SUBJECT) ) {
 	return CKR_TEMPLATE_INCOMPLETE;
     }
-    if ( !pk11_hasAttribute(object,CKA_NSS_EMAIL) ) {
+    if ( !sftk_hasAttribute(object,CKA_NETSCAPE_EMAIL) ) {
 	return CKR_TEMPLATE_INCOMPLETE;
     }
 
-    if (pk11_isTrue(object,CKA_TOKEN)) {
-	PK11Slot *slot = session->slot;
-	SECItem derSubj,rawProfile,rawTime,emailKey;
-	SECItem *pRawProfile = NULL;
-	SECItem *pRawTime = NULL;
-	char *email = NULL;
-    	PK11Attribute *subject,*profile,*time;
-	SECStatus rv;
+    if (sftk_isTrue(object,CKA_TOKEN)) {
+	SFTKSlot *slot = session->slot;
+	SFTKDBHandle *certHandle;
+	CK_RV crv;
 
 	PORT_Assert(slot);
-	if (slot->certDB == NULL) {
+	if (slot == NULL) {
+	    return CKR_SESSION_HANDLE_INVALID;
+	}
+
+	certHandle = sftk_getCertDB(slot);
+	if (certHandle == NULL) {
 	    return CKR_TOKEN_WRITE_PROTECTED;
 	}
 
-	/* lookup SUBJECT */
-	subject = pk11_FindAttribute(object,CKA_SUBJECT);
-	PORT_Assert(subject);
-	derSubj.data = (unsigned char *)subject->attrib.pValue;
-	derSubj.len = subject->attrib.ulValueLen ;
-	derSubj.type = 0;
-
-	/* lookup VALUE */
-	profile = pk11_FindAttribute(object,CKA_VALUE);
-	if (profile) {
-	    rawProfile.data = (unsigned char *)profile->attrib.pValue;
-	    rawProfile.len = profile->attrib.ulValueLen ;
-	    rawProfile.type = siBuffer;
-	    pRawProfile = &rawProfile;
-	}
-
-	/* lookup Time */
-	time = pk11_FindAttribute(object,CKA_NSS_SMIME_TIMESTAMP);
-	if (time) {
-	    rawTime.data = (unsigned char *)time->attrib.pValue;
-	    rawTime.len = time->attrib.ulValueLen ;
-	    rawTime.type = siBuffer;
-	    pRawTime = &rawTime;
-	}
-
-
-	email = pk11_getString(object,CKA_NSS_EMAIL);
-
-	/* Store CRL by SUBJECT */
-	rv = nsslowcert_SaveSMimeProfile(slot->certDB, email, &derSubj, 
-				pRawProfile,pRawTime);
-
-    	pk11_FreeAttribute(subject);
-    	if (profile) pk11_FreeAttribute(profile);
-    	if (time) pk11_FreeAttribute(time);
-	if (rv != SECSuccess) {
-    	    PORT_Free(email);
-	    return CKR_DEVICE_ERROR;
-	}
-	emailKey.data = (unsigned char *)email;
-	emailKey.len = PORT_Strlen(email)+1;
-
-	object->handle = pk11_mkHandle(slot, &emailKey, PK11_TOKEN_TYPE_SMIME);
-    	PORT_Free(email);
+	crv = sftkdb_write(certHandle, object, &object->handle);
+	sftk_freeDB(certHandle);
+	return crv;
     }
 
     return CKR_OK;
@@ -911,66 +825,34 @@ pk11_handleSMimeObject(PK11Session *session,PK11Object *object)
  * check the consistancy and initialize a Trust Object 
  */
 static CK_RV
-pk11_handleCrlObject(PK11Session *session,PK11Object *object)
+sftk_handleCrlObject(SFTKSession *session,SFTKObject *object)
 {
 
     /* we can't store any certs private */
-    if (pk11_isTrue(object,CKA_PRIVATE)) {
+    if (sftk_isTrue(object,CKA_PRIVATE)) {
 	return CKR_ATTRIBUTE_VALUE_INVALID;
     }
 
     /* certificates must have a type */
-    if ( !pk11_hasAttribute(object,CKA_SUBJECT) ) {
+    if ( !sftk_hasAttribute(object,CKA_SUBJECT) ) {
 	return CKR_TEMPLATE_INCOMPLETE;
     }
-    if ( !pk11_hasAttribute(object,CKA_VALUE) ) {
+    if ( !sftk_hasAttribute(object,CKA_VALUE) ) {
 	return CKR_TEMPLATE_INCOMPLETE;
     }
 
-    if (pk11_isTrue(object,CKA_TOKEN)) {
-	PK11Slot *slot = session->slot;
-	PRBool isKRL = PR_FALSE;
-	SECItem derSubj,derCrl;
-	char *url = NULL;
-    	PK11Attribute *subject,*crl;
-	SECStatus rv;
+    if (sftk_isTrue(object,CKA_TOKEN)) {
+	SFTKSlot *slot = session->slot;
+	SFTKDBHandle *certHandle = sftk_getCertDB(slot);
+	CK_RV crv;
 
-	PORT_Assert(slot);
-	if (slot->certDB == NULL) {
+	if (certHandle == NULL) {
 	    return CKR_TOKEN_WRITE_PROTECTED;
 	}
 
-	/* lookup SUBJECT */
-	subject = pk11_FindAttribute(object,CKA_SUBJECT);
-	PORT_Assert(subject);
-	derSubj.data = (unsigned char *)subject->attrib.pValue;
-	derSubj.len = subject->attrib.ulValueLen ;
-
-	/* lookup VALUE */
-	crl = pk11_FindAttribute(object,CKA_VALUE);
-	PORT_Assert(crl);
-	derCrl.data = (unsigned char *)crl->attrib.pValue;
-	derCrl.len = crl->attrib.ulValueLen ;
-
-
-	url = pk11_getString(object,CKA_NSS_URL);
-	isKRL = pk11_isTrue(object,CKA_NSS_KRL);
-
-	/* Store CRL by SUBJECT */
-	rv = nsslowcert_AddCrl(slot->certDB, &derCrl, &derSubj, url, isKRL);
-
-	if (url) {
-	    PORT_Free(url);
-	}
-    	pk11_FreeAttribute(crl);
-	if (rv != SECSuccess) {
-    	    pk11_FreeAttribute(subject);
-	    return CKR_DEVICE_ERROR;
-	}
-
-	object->handle = pk11_mkHandle(slot,&derSubj,
-			isKRL ? PK11_TOKEN_KRL_HANDLE : PK11_TOKEN_TYPE_CRL);
-    	pk11_FreeAttribute(subject);
+	crv = sftkdb_write(certHandle, object, &object->handle);
+	sftk_freeDB(certHandle);
+	return crv;
     }
 
     return CKR_OK;
@@ -980,7 +862,7 @@ pk11_handleCrlObject(PK11Session *session,PK11Object *object)
  * check the consistancy and initialize a Public Key Object 
  */
 static CK_RV
-pk11_handlePublicKeyObject(PK11Session *session, PK11Object *object,
+sftk_handlePublicKeyObject(SFTKSession *session, SFTKObject *object,
 							 CK_KEY_TYPE key_type)
 {
     CK_BBOOL encrypt = CK_TRUE;
@@ -988,305 +870,343 @@ pk11_handlePublicKeyObject(PK11Session *session, PK11Object *object,
     CK_BBOOL wrap = CK_TRUE;
     CK_BBOOL derive = CK_FALSE;
     CK_BBOOL verify = CK_TRUE;
-    CK_ATTRIBUTE_TYPE pubKeyAttr = CKA_VALUE;
     CK_RV crv;
 
     switch (key_type) {
     case CKK_RSA:
-	if ( !pk11_hasAttribute(object, CKA_MODULUS)) {
-	    return CKR_TEMPLATE_INCOMPLETE;
+	crv = sftk_ConstrainAttribute(object, CKA_MODULUS,
+						 RSA_MIN_MODULUS_BITS, 0, 0);
+	if (crv != CKR_OK) {
+	    return crv;
 	}
-	if ( !pk11_hasAttribute(object, CKA_PUBLIC_EXPONENT)) {
-	    return CKR_TEMPLATE_INCOMPLETE;
+	crv = sftk_ConstrainAttribute(object, CKA_PUBLIC_EXPONENT, 2, 0, 0);
+	if (crv != CKR_OK) {
+	    return crv;
 	}
-	pubKeyAttr = CKA_MODULUS;
 	break;
     case CKK_DSA:
-	if ( !pk11_hasAttribute(object, CKA_SUBPRIME)) {
-	    return CKR_TEMPLATE_INCOMPLETE;
+	crv = sftk_ConstrainAttribute(object, CKA_SUBPRIME, 
+					DSA_MIN_Q_BITS, DSA_MAX_Q_BITS, 0);
+	if (crv != CKR_OK) {
+	    return crv;
 	}
-	/* fall through */
-    case CKK_DH:
-	if ( !pk11_hasAttribute(object, CKA_PRIME)) {
-	    return CKR_TEMPLATE_INCOMPLETE;
+	crv = sftk_ConstrainAttribute(object, CKA_PRIME, 
+					DSA_MIN_P_BITS, DSA_MAX_P_BITS, 64);
+	if (crv != CKR_OK) {
+	    return crv;
 	}
-	if ( !pk11_hasAttribute(object, CKA_BASE)) {
-	    return CKR_TEMPLATE_INCOMPLETE;
+	crv = sftk_ConstrainAttribute(object, CKA_BASE, 2, DSA_MAX_P_BITS, 0);
+	if (crv != CKR_OK) {
+	    return crv;
 	}
-	if ( !pk11_hasAttribute(object, CKA_VALUE)) {
-	    return CKR_TEMPLATE_INCOMPLETE;
+	crv = sftk_ConstrainAttribute(object, CKA_VALUE, 2, DSA_MAX_P_BITS, 0);
+	if (crv != CKR_OK) {
+	    return crv;
 	}
-	if (key_type == CKK_DH) {
-	    verify = CK_FALSE;
-	    derive = CK_TRUE;
- 	}
 	encrypt = CK_FALSE;
 	recover = CK_FALSE;
 	wrap = CK_FALSE;
 	break;
+    case CKK_DH:
+	crv = sftk_ConstrainAttribute(object, CKA_PRIME, 
+					DH_MIN_P_BITS, DH_MAX_P_BITS, 0);
+	if (crv != CKR_OK) {
+	    return crv;
+	}
+	crv = sftk_ConstrainAttribute(object, CKA_BASE, 2, DH_MAX_P_BITS, 0);
+	if (crv != CKR_OK) {
+	    return crv;
+	}
+	crv = sftk_ConstrainAttribute(object, CKA_VALUE, 2, DH_MAX_P_BITS, 0);
+	if (crv != CKR_OK) {
+	    return crv;
+	}
+	verify = CK_FALSE;
+	derive = CK_TRUE;
+	encrypt = CK_FALSE;
+	recover = CK_FALSE;
+	wrap = CK_FALSE;
+	break;
+#ifdef NSS_ENABLE_ECC
+    case CKK_EC:
+	if ( !sftk_hasAttribute(object, CKA_EC_PARAMS)) {
+	    return CKR_TEMPLATE_INCOMPLETE;
+	}
+	if ( !sftk_hasAttribute(object, CKA_EC_POINT)) {
+	    return CKR_TEMPLATE_INCOMPLETE;
+	}
+	derive = CK_TRUE;    /* for ECDH */
+	verify = CK_TRUE;    /* for ECDSA */
+	encrypt = CK_FALSE;
+	recover = CK_FALSE;
+	wrap = CK_FALSE;
+	break;
+#endif /* NSS_ENABLE_ECC */
     default:
 	return CKR_ATTRIBUTE_VALUE_INVALID;
     }
 
     /* make sure the required fields exist */
-    crv = pk11_defaultAttribute(object,CKA_SUBJECT,NULL,0);
+    crv = sftk_defaultAttribute(object,CKA_SUBJECT,NULL,0);
     if (crv != CKR_OK)  return crv; 
-    crv = pk11_defaultAttribute(object,CKA_ENCRYPT,&encrypt,sizeof(CK_BBOOL));
+    crv = sftk_defaultAttribute(object,CKA_ENCRYPT,&encrypt,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
-    crv = pk11_defaultAttribute(object,CKA_VERIFY,&verify,sizeof(CK_BBOOL));
+    crv = sftk_defaultAttribute(object,CKA_VERIFY,&verify,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
-    crv = pk11_defaultAttribute(object,CKA_VERIFY_RECOVER,
+    crv = sftk_defaultAttribute(object,CKA_VERIFY_RECOVER,
 						&recover,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
-    crv = pk11_defaultAttribute(object,CKA_WRAP,&wrap,sizeof(CK_BBOOL));
+    crv = sftk_defaultAttribute(object,CKA_WRAP,&wrap,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
-    crv = pk11_defaultAttribute(object,CKA_DERIVE,&derive,sizeof(CK_BBOOL));
+    crv = sftk_defaultAttribute(object,CKA_DERIVE,&derive,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
 
-    object->objectInfo = pk11_GetPubKey(object,key_type, &crv);
+    object->objectInfo = sftk_GetPubKey(object,key_type, &crv);
     if (object->objectInfo == NULL) {
 	return crv;
     }
-    object->infoFree = (PK11Free) nsslowkey_DestroyPublicKey;
+    object->infoFree = (SFTKFree) nsslowkey_DestroyPublicKey;
 
-    if (pk11_isTrue(object,CKA_TOKEN)) {
-	PK11Slot *slot = session->slot;
-	NSSLOWKEYPrivateKey *priv;
-	SECItem pubKey;
+    if (sftk_isTrue(object,CKA_TOKEN)) {
+	SFTKSlot *slot = session->slot;
+	SFTKDBHandle *certHandle = sftk_getCertDB(slot);
 
-	crv = pk11_Attribute2SSecItem(NULL,&pubKey,object,pubKeyAttr);
-	if (crv != CKR_OK) return crv;
-
-	PORT_Assert(pubKey.data);
-	if (slot->keyDB == NULL) {
-	    PORT_Free(pubKey.data);
+	if (certHandle == NULL) {
 	    return CKR_TOKEN_WRITE_PROTECTED;
 	}
-	if (slot->keyDB->version != 3) {
-	    unsigned char buf[SHA1_LENGTH];
-	    SHA1_HashBuf(buf,pubKey.data,pubKey.len);
-	    PORT_Memcpy(pubKey.data,buf,sizeof(buf));
-	    pubKey.len = sizeof(buf);
-	}
-	/* make sure the associated private key already exists */
-	/* only works if we are logged in */
-	priv = nsslowkey_FindKeyByPublicKey(slot->keyDB, &pubKey,
-							 slot->password);
-	if (priv == NULL) {
-	    PORT_Free(pubKey.data);
-	    return CKR_ATTRIBUTE_VALUE_INVALID;
-	}
-	nsslowkey_DestroyPrivateKey(priv);
 
-	object->handle = pk11_mkHandle(slot, &pubKey, PK11_TOKEN_TYPE_PUB);
-	PORT_Free(pubKey.data);
+	crv = sftkdb_write(certHandle, object, &object->handle);
+	sftk_freeDB(certHandle);
+	return crv;
     }
 
     return CKR_OK;
 }
 
 static NSSLOWKEYPrivateKey * 
-pk11_mkPrivKey(PK11Object *object,CK_KEY_TYPE key, CK_RV *rvp);
+sftk_mkPrivKey(SFTKObject *object,CK_KEY_TYPE key, CK_RV *rvp);
+
+static SECStatus
+sftk_fillRSAPrivateKey(SFTKObject *object);
 
 /*
  * check the consistancy and initialize a Private Key Object 
  */
 static CK_RV
-pk11_handlePrivateKeyObject(PK11Session *session,PK11Object *object,CK_KEY_TYPE key_type)
+sftk_handlePrivateKeyObject(SFTKSession *session,SFTKObject *object,CK_KEY_TYPE key_type)
 {
     CK_BBOOL cktrue = CK_TRUE;
     CK_BBOOL encrypt = CK_TRUE;
+    CK_BBOOL sign = CK_FALSE;
     CK_BBOOL recover = CK_TRUE;
     CK_BBOOL wrap = CK_TRUE;
+    CK_BBOOL derive = CK_TRUE;
     CK_BBOOL ckfalse = CK_FALSE;
+    PRBool createObjectInfo = PR_TRUE;
+    int missing_rsa_mod_component = 0;
+    int missing_rsa_exp_component = 0;
+    int missing_rsa_crt_component = 0;
+    
     SECItem mod;
     CK_RV crv;
 
     switch (key_type) {
     case CKK_RSA:
-	if ( !pk11_hasAttribute(object, CKA_MODULUS)) {
-	    return CKR_TEMPLATE_INCOMPLETE;
+	if ( !sftk_hasAttribute(object, CKA_MODULUS)) {
+	    missing_rsa_mod_component++;
 	}
-	if ( !pk11_hasAttribute(object, CKA_PUBLIC_EXPONENT)) {
-	    return CKR_TEMPLATE_INCOMPLETE;
+	if ( !sftk_hasAttribute(object, CKA_PUBLIC_EXPONENT)) {
+	    missing_rsa_exp_component++;
 	}
-	if ( !pk11_hasAttribute(object, CKA_PRIVATE_EXPONENT)) {
-	    return CKR_TEMPLATE_INCOMPLETE;
+	if ( !sftk_hasAttribute(object, CKA_PRIVATE_EXPONENT)) {
+	    missing_rsa_exp_component++;
 	}
-	if ( !pk11_hasAttribute(object, CKA_PRIME_1)) {
-	    return CKR_TEMPLATE_INCOMPLETE;
+	if ( !sftk_hasAttribute(object, CKA_PRIME_1)) {
+	    missing_rsa_mod_component++;
 	}
-	if ( !pk11_hasAttribute(object, CKA_PRIME_2)) {
-	    return CKR_TEMPLATE_INCOMPLETE;
+	if ( !sftk_hasAttribute(object, CKA_PRIME_2)) {
+	    missing_rsa_mod_component++;
 	}
-	if ( !pk11_hasAttribute(object, CKA_EXPONENT_1)) {
-	    return CKR_TEMPLATE_INCOMPLETE;
+	if ( !sftk_hasAttribute(object, CKA_EXPONENT_1)) {
+	    missing_rsa_crt_component++;
 	}
-	if ( !pk11_hasAttribute(object, CKA_EXPONENT_2)) {
-	    return CKR_TEMPLATE_INCOMPLETE;
+	if ( !sftk_hasAttribute(object, CKA_EXPONENT_2)) {
+	    missing_rsa_crt_component++;
 	}
-	if ( !pk11_hasAttribute(object, CKA_COEFFICIENT)) {
-	    return CKR_TEMPLATE_INCOMPLETE;
+	if ( !sftk_hasAttribute(object, CKA_COEFFICIENT)) {
+	    missing_rsa_crt_component++;
 	}
+	if (missing_rsa_mod_component || missing_rsa_exp_component || 
+					 missing_rsa_crt_component) {
+	    /* we are missing a component, see if we have enough to rebuild
+	     * the rest */
+	    int have_exp = 2- missing_rsa_exp_component;
+	    int have_component = 5- 
+		(missing_rsa_exp_component+missing_rsa_mod_component);
+	    SECStatus rv;
+
+	    if ((have_exp == 0) || (have_component < 3)) {
+		/* nope, not enough to reconstruct the private key */
+		return CKR_TEMPLATE_INCOMPLETE;
+	    }
+	    /*fill in the missing parameters */
+	    rv = sftk_fillRSAPrivateKey(object);
+	    if (rv != SECSuccess) {
+		return CKR_TEMPLATE_INCOMPLETE;
+	    }
+	}
+		
 	/* make sure Netscape DB attribute is set correctly */
-	crv = pk11_Attribute2SSecItem(NULL, &mod, object, CKA_MODULUS);
+	crv = sftk_Attribute2SSecItem(NULL, &mod, object, CKA_MODULUS);
 	if (crv != CKR_OK) return crv;
-	crv = pk11_forceAttribute(object, CKA_NSS_DB, 
-						pk11_item_expand(&mod));
+	crv = sftk_forceAttribute(object, CKA_NETSCAPE_DB, 
+						sftk_item_expand(&mod));
 	if (mod.data) PORT_Free(mod.data);
 	if (crv != CKR_OK) return crv;
-	
+
+	sign = CK_TRUE;
+	derive = CK_FALSE;
 	break;
     case CKK_DSA:
-	if ( !pk11_hasAttribute(object, CKA_SUBPRIME)) {
+	if ( !sftk_hasAttribute(object, CKA_SUBPRIME)) {
 	    return CKR_TEMPLATE_INCOMPLETE;
 	}
-	if ( !pk11_hasAttribute(object, CKA_NSS_DB)) {
-	    return CKR_TEMPLATE_INCOMPLETE;
-	}
+	sign = CK_TRUE;
+	derive = CK_FALSE;
 	/* fall through */
     case CKK_DH:
-	if ( !pk11_hasAttribute(object, CKA_PRIME)) {
+	if ( !sftk_hasAttribute(object, CKA_PRIME)) {
 	    return CKR_TEMPLATE_INCOMPLETE;
 	}
-	if ( !pk11_hasAttribute(object, CKA_BASE)) {
+	if ( !sftk_hasAttribute(object, CKA_BASE)) {
 	    return CKR_TEMPLATE_INCOMPLETE;
 	}
-	if ( !pk11_hasAttribute(object, CKA_VALUE)) {
+	if ( !sftk_hasAttribute(object, CKA_VALUE)) {
 	    return CKR_TEMPLATE_INCOMPLETE;
 	}
 	encrypt = CK_FALSE;
 	recover = CK_FALSE;
 	wrap = CK_FALSE;
 	break;
+#ifdef NSS_ENABLE_ECC
+    case CKK_EC:
+	if ( !sftk_hasAttribute(object, CKA_EC_PARAMS)) {
+	    return CKR_TEMPLATE_INCOMPLETE;
+	}
+	if ( !sftk_hasAttribute(object, CKA_VALUE)) {
+	    return CKR_TEMPLATE_INCOMPLETE;
+	}
+	encrypt = CK_FALSE;
+	sign = CK_TRUE;
+	recover = CK_FALSE;
+	wrap = CK_FALSE;
+	break;
+#endif /* NSS_ENABLE_ECC */
+    case CKK_NSS_JPAKE_ROUND1:
+        if (!sftk_hasAttribute(object, CKA_PRIME) ||
+            !sftk_hasAttribute(object, CKA_SUBPRIME) ||
+            !sftk_hasAttribute(object, CKA_BASE)) {
+            return CKR_TEMPLATE_INCOMPLETE;
+        }
+        /* fall through */
+    case CKK_NSS_JPAKE_ROUND2:
+        /* CKA_NSS_JPAKE_SIGNERID and CKA_NSS_JPAKE_PEERID are checked in
+           the J-PAKE code. */
+        encrypt = sign = recover = wrap = CK_FALSE;
+        derive = CK_TRUE;
+        createObjectInfo = PR_FALSE;
+        break;
     default:
 	return CKR_ATTRIBUTE_VALUE_INVALID;
     }
-    crv = pk11_defaultAttribute(object,CKA_SUBJECT,NULL,0);
+    crv = sftk_defaultAttribute(object,CKA_SUBJECT,NULL,0);
     if (crv != CKR_OK)  return crv; 
-    crv = pk11_defaultAttribute(object,CKA_SENSITIVE,&cktrue,sizeof(CK_BBOOL));
+    crv = sftk_defaultAttribute(object,CKA_SENSITIVE,&cktrue,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
-    crv = pk11_defaultAttribute(object,CKA_EXTRACTABLE,&cktrue,sizeof(CK_BBOOL));
+    crv = sftk_defaultAttribute(object,CKA_EXTRACTABLE,&cktrue,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
-    crv = pk11_defaultAttribute(object,CKA_DECRYPT,&encrypt,sizeof(CK_BBOOL));
+    crv = sftk_defaultAttribute(object,CKA_DECRYPT,&encrypt,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
-    crv = pk11_defaultAttribute(object,CKA_SIGN,&cktrue,sizeof(CK_BBOOL));
+    crv = sftk_defaultAttribute(object,CKA_SIGN,&sign,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
-    crv = pk11_defaultAttribute(object,CKA_SIGN_RECOVER,&recover,
+    crv = sftk_defaultAttribute(object,CKA_SIGN_RECOVER,&recover,
 							     sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
-    crv = pk11_defaultAttribute(object,CKA_UNWRAP,&wrap,sizeof(CK_BBOOL));
+    crv = sftk_defaultAttribute(object,CKA_UNWRAP,&wrap,sizeof(CK_BBOOL));
+    if (crv != CKR_OK)  return crv; 
+    crv = sftk_defaultAttribute(object,CKA_DERIVE,&derive,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
     /* the next two bits get modified only in the key gen and token cases */
-    crv = pk11_forceAttribute(object,CKA_ALWAYS_SENSITIVE,
+    crv = sftk_forceAttribute(object,CKA_ALWAYS_SENSITIVE,
 						&ckfalse,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
-    crv = pk11_forceAttribute(object,CKA_NEVER_EXTRACTABLE,
+    crv = sftk_forceAttribute(object,CKA_NEVER_EXTRACTABLE,
 						&ckfalse,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
 
     /* should we check the non-token RSA private keys? */
 
-    if (pk11_isTrue(object,CKA_TOKEN)) {
-	PK11Slot *slot = session->slot;
-	NSSLOWKEYPrivateKey *privKey;
-	char *label;
-	SECStatus rv = SECSuccess;
-	SECItem pubKey;
+    if (sftk_isTrue(object,CKA_TOKEN)) {
+	SFTKSlot *slot = session->slot;
+	SFTKDBHandle *keyHandle = sftk_getKeyDB(slot);
+	CK_RV crv;
 
-	if (slot->keyDB == NULL) {
+	if (keyHandle == NULL) {
 	    return CKR_TOKEN_WRITE_PROTECTED;
 	}
 
-	privKey=pk11_mkPrivKey(object,key_type,&crv);
-	if (privKey == NULL) return crv;
-	label = pk11_getString(object,CKA_LABEL);
-
-	crv = pk11_Attribute2SSecItem(NULL,&pubKey,object,CKA_NSS_DB);
-	if (crv != CKR_OK) {
-	    if (label) PORT_Free(label);
-	    nsslowkey_DestroyPrivateKey(privKey);
-	    return CKR_TEMPLATE_INCOMPLETE;
-	}
-	if (slot->keyDB->version != 3) {
-	    unsigned char buf[SHA1_LENGTH];
-	    SHA1_HashBuf(buf,pubKey.data,pubKey.len);
-	    PORT_Memcpy(pubKey.data,buf,sizeof(buf));
-	    pubKey.len = sizeof(buf);
-	}
-
-        if (key_type == CKK_RSA) {
-	    rv = RSA_PrivateKeyCheck(&privKey->u.rsa);
-	    if (rv == SECFailure) {
-		goto fail;
-	    }
-	}
-	rv = nsslowkey_StoreKeyByPublicKey(object->slot->keyDB,
-			privKey, &pubKey, label, object->slot->password);
-
-fail:
-	if (label) PORT_Free(label);
-	object->handle = pk11_mkHandle(slot,&pubKey,PK11_TOKEN_TYPE_PRIV);
-	if (pubKey.data) PORT_Free(pubKey.data);
-	nsslowkey_DestroyPrivateKey(privKey);
-	if (rv != SECSuccess) return CKR_DEVICE_ERROR;
-    } else {
-	object->objectInfo = pk11_mkPrivKey(object,key_type,&crv);
+	crv = sftkdb_write(keyHandle, object, &object->handle);
+	sftk_freeDB(keyHandle);
+	return crv;
+    } else if (createObjectInfo) {
+	object->objectInfo = sftk_mkPrivKey(object,key_type,&crv);
 	if (object->objectInfo == NULL) return crv;
-	object->infoFree = (PK11Free) nsslowkey_DestroyPrivateKey;
-	/* now NULL out the sensitive attributes */
-	if (pk11_isTrue(object,CKA_SENSITIVE)) {
-	    pk11_nullAttribute(object,CKA_PRIVATE_EXPONENT);
-	    pk11_nullAttribute(object,CKA_PRIME_1);
-	    pk11_nullAttribute(object,CKA_PRIME_2);
-	    pk11_nullAttribute(object,CKA_EXPONENT_1);
-	    pk11_nullAttribute(object,CKA_EXPONENT_2);
-	    pk11_nullAttribute(object,CKA_COEFFICIENT);
-	}
+	object->infoFree = (SFTKFree) nsslowkey_DestroyPrivateKey;
     }
     return CKR_OK;
 }
 
-/* forward delcare the DES formating function for handleSecretKey */
-void pk11_FormatDESKey(unsigned char *key, int length);
-static NSSLOWKEYPrivateKey *pk11_mkSecretKeyRep(PK11Object *object);
+/* forward declare the DES formating function for handleSecretKey */
+void sftk_FormatDESKey(unsigned char *key, int length);
 
 /* Validate secret key data, and set defaults */
 static CK_RV
-validateSecretKey(PK11Session *session, PK11Object *object, 
+validateSecretKey(SFTKSession *session, SFTKObject *object, 
 					CK_KEY_TYPE key_type, PRBool isFIPS)
 {
     CK_RV crv;
     CK_BBOOL cktrue = CK_TRUE;
     CK_BBOOL ckfalse = CK_FALSE;
-    PK11Attribute *attribute = NULL;
-    crv = pk11_defaultAttribute(object,CKA_SENSITIVE,
+    SFTKAttribute *attribute = NULL;
+    unsigned long requiredLen;
+
+    crv = sftk_defaultAttribute(object,CKA_SENSITIVE,
 				isFIPS?&cktrue:&ckfalse,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
-    crv = pk11_defaultAttribute(object,CKA_EXTRACTABLE,
+    crv = sftk_defaultAttribute(object,CKA_EXTRACTABLE,
 						&cktrue,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
-    crv = pk11_defaultAttribute(object,CKA_ENCRYPT,&cktrue,sizeof(CK_BBOOL));
+    crv = sftk_defaultAttribute(object,CKA_ENCRYPT,&cktrue,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
-    crv = pk11_defaultAttribute(object,CKA_DECRYPT,&cktrue,sizeof(CK_BBOOL));
+    crv = sftk_defaultAttribute(object,CKA_DECRYPT,&cktrue,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
-    crv = pk11_defaultAttribute(object,CKA_SIGN,&ckfalse,sizeof(CK_BBOOL));
+    crv = sftk_defaultAttribute(object,CKA_SIGN,&ckfalse,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
-    crv = pk11_defaultAttribute(object,CKA_VERIFY,&ckfalse,sizeof(CK_BBOOL));
+    crv = sftk_defaultAttribute(object,CKA_VERIFY,&ckfalse,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
-    crv = pk11_defaultAttribute(object,CKA_WRAP,&cktrue,sizeof(CK_BBOOL));
+    crv = sftk_defaultAttribute(object,CKA_WRAP,&cktrue,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
-    crv = pk11_defaultAttribute(object,CKA_UNWRAP,&cktrue,sizeof(CK_BBOOL));
+    crv = sftk_defaultAttribute(object,CKA_UNWRAP,&cktrue,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
 
-    if ( !pk11_hasAttribute(object, CKA_VALUE)) {
+    if ( !sftk_hasAttribute(object, CKA_VALUE)) {
 	return CKR_TEMPLATE_INCOMPLETE;
     }
     /* the next two bits get modified only in the key gen and token cases */
-    crv = pk11_forceAttribute(object,CKA_ALWAYS_SENSITIVE,
+    crv = sftk_forceAttribute(object,CKA_ALWAYS_SENSITIVE,
 						&ckfalse,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
-    crv = pk11_forceAttribute(object,CKA_NEVER_EXTRACTABLE,
+    crv = sftk_forceAttribute(object,CKA_NEVER_EXTRACTABLE,
 						&ckfalse,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
 
@@ -1308,24 +1228,45 @@ validateSecretKey(PK11Session *session, PK11Object *object,
 #if NSS_SOFTOKEN_DOES_IDEA
     case CKK_IDEA:
 #endif
-	attribute = pk11_FindAttribute(object,CKA_VALUE);
+	attribute = sftk_FindAttribute(object,CKA_VALUE);
 	/* shouldn't happen */
 	if (attribute == NULL) return CKR_TEMPLATE_INCOMPLETE;
-	crv = pk11_forceAttribute(object, CKA_VALUE_LEN, 
+	crv = sftk_forceAttribute(object, CKA_VALUE_LEN, 
 			&attribute->attrib.ulValueLen, sizeof(CK_ULONG));
-	pk11_FreeAttribute(attribute);
+	sftk_FreeAttribute(attribute);
 	break;
     /* force the value to have the correct parity */
     case CKK_DES:
     case CKK_DES2:
     case CKK_DES3:
     case CKK_CDMF:
-	attribute = pk11_FindAttribute(object,CKA_VALUE);
+	attribute = sftk_FindAttribute(object,CKA_VALUE);
 	/* shouldn't happen */
-	if (attribute == NULL) return CKR_TEMPLATE_INCOMPLETE;
-	pk11_FormatDESKey((unsigned char*)attribute->attrib.pValue,
+	if (attribute == NULL) 
+	    return CKR_TEMPLATE_INCOMPLETE;
+	requiredLen = sftk_MapKeySize(key_type);
+	if (attribute->attrib.ulValueLen != requiredLen) {
+	    sftk_FreeAttribute(attribute);
+	    return CKR_KEY_SIZE_RANGE;
+	}
+	sftk_FormatDESKey((unsigned char*)attribute->attrib.pValue,
 						 attribute->attrib.ulValueLen);
-	pk11_FreeAttribute(attribute);
+	sftk_FreeAttribute(attribute);
+	break;
+    case CKK_AES:
+	attribute = sftk_FindAttribute(object,CKA_VALUE);
+	/* shouldn't happen */
+	if (attribute == NULL) 
+	    return CKR_TEMPLATE_INCOMPLETE;
+	if (attribute->attrib.ulValueLen != 16 &&
+	    attribute->attrib.ulValueLen != 24 &&
+	    attribute->attrib.ulValueLen != 32) {
+	    sftk_FreeAttribute(attribute);
+	    return CKR_KEY_SIZE_RANGE;
+	}
+	crv = sftk_forceAttribute(object, CKA_VALUE_LEN, 
+			&attribute->attrib.ulValueLen, sizeof(CK_ULONG));
+	sftk_FreeAttribute(attribute);
 	break;
     default:
 	break;
@@ -1334,121 +1275,35 @@ validateSecretKey(PK11Session *session, PK11Object *object,
     return crv;
 }
 
-#define PK11_KEY_MAX_RETRIES 10 /* don't hang if we are having problems with the rng */
-#define PK11_KEY_ID_SIZE 18 /* don't use either SHA1 or MD5 sizes */
-/*
- * Secret keys must have a CKA_ID value to be stored in the database. This code
- * will generate one if there wasn't one already. 
- */
-static CK_RV
-pk11_GenerateSecretCKA_ID(NSSLOWKEYDBHandle *handle, SECItem *id, char *label)
-{
-    unsigned int retries;
-    SECStatus rv = SECSuccess;
-    CK_RV crv = CKR_OK;
-
-    id->data = NULL;
-    if (label) {
-	id->data = (unsigned char *)PORT_Strdup(label);
-	if (id->data == NULL) {
-	    return CKR_HOST_MEMORY;
-	}
-	id->len = PORT_Strlen(label)+1;
-	if (!nsslowkey_KeyForIDExists(handle,id)) { 
-	    return CKR_OK;
-	}
-	PORT_Free(id->data);
-	id->data = NULL;
-	id->len = 0;
-    }
-    id->data = (unsigned char *)PORT_Alloc(PK11_KEY_ID_SIZE);
-    if (id->data == NULL) {
-	return CKR_HOST_MEMORY;
-    }
-    id->len = PK11_KEY_ID_SIZE;
-
-    retries = 0;
-    do {
-	rv = RNG_GenerateGlobalRandomBytes(id->data,id->len);
-    } while (rv == SECSuccess && nsslowkey_KeyForIDExists(handle,id) && 
-				(++retries <= PK11_KEY_MAX_RETRIES));
-
-    if ((rv != SECSuccess) || (retries > PK11_KEY_MAX_RETRIES)) {
-	crv = CKR_DEVICE_ERROR; /* random number generator is bad */
-	PORT_Free(id->data);
-	id->data = NULL;
-	id->len = 0;
-    }
-    return crv;
-}
-
 /*
  * check the consistancy and initialize a Secret Key Object 
  */
 static CK_RV
-pk11_handleSecretKeyObject(PK11Session *session,PK11Object *object,
+sftk_handleSecretKeyObject(SFTKSession *session,SFTKObject *object,
 					CK_KEY_TYPE key_type, PRBool isFIPS)
 {
     CK_RV crv;
-    NSSLOWKEYPrivateKey *privKey = NULL;
-    SECItem pubKey;
-    char *label = NULL;
-
-    pubKey.data = 0;
 
     /* First validate and set defaults */
     crv = validateSecretKey(session, object, key_type, isFIPS);
     if (crv != CKR_OK) goto loser;
 
     /* If the object is a TOKEN object, store in the database */
-    if (pk11_isTrue(object,CKA_TOKEN)) {
-	PK11Slot *slot = session->slot;
-	SECStatus rv = SECSuccess;
+    if (sftk_isTrue(object,CKA_TOKEN)) {
+	SFTKSlot *slot = session->slot;
+	SFTKDBHandle *keyHandle = sftk_getKeyDB(slot);
+	CK_RV crv;
 
-	if (slot->keyDB == NULL) {
+	if (keyHandle == NULL) {
 	    return CKR_TOKEN_WRITE_PROTECTED;
 	}
 
-	label = pk11_getString(object,CKA_LABEL);
-
-	crv = pk11_Attribute2SecItem(NULL, &pubKey, object, CKA_ID);  
-						/* Should this be ID? */
-	if (crv != CKR_OK) goto loser;
-
-	/* if we don't have an ID, generate one */
-	if (pubKey.len == 0) {
-	    if (pubKey.data) { 
-		PORT_Free(pubKey.data);
-		pubKey.data = NULL;
-	    }
-	    crv = pk11_GenerateSecretCKA_ID(slot->keyDB, &pubKey, label);
-	    if (crv != CKR_OK) goto loser;
-
-	    crv = pk11_forceAttribute(object, CKA_ID, pubKey.data, pubKey.len);
-	    if (crv != CKR_OK) goto loser;
-	}
-
-	privKey=pk11_mkSecretKeyRep(object);
-	if (privKey == NULL) {
-	    crv = CKR_HOST_MEMORY;
-	    goto loser;
-	}
-
-	PORT_Assert(slot->keyDB);
-	rv = nsslowkey_StoreKeyByPublicKey(slot->keyDB,
-			privKey, &pubKey, label, slot->password);
-	if (rv != SECSuccess) {
-	    crv = CKR_DEVICE_ERROR;
-	    goto loser;
-	}
-
-	object->handle = pk11_mkHandle(slot,&pubKey,PK11_TOKEN_TYPE_KEY);
+	crv = sftkdb_write(keyHandle, object, &object->handle);
+	sftk_freeDB(keyHandle);
+	return crv;
     }
 
 loser:
-    if (label) PORT_Free(label);
-    if (privKey) nsslowkey_DestroyPrivateKey(privKey);
-    if (pubKey.data) PORT_Free(pubKey.data);
 
     return crv;
 }
@@ -1457,44 +1312,46 @@ loser:
  * check the consistancy and initialize a Key Object 
  */
 static CK_RV
-pk11_handleKeyObject(PK11Session *session, PK11Object *object)
+sftk_handleKeyObject(SFTKSession *session, SFTKObject *object)
 {
-    PK11Attribute *attribute;
+    SFTKAttribute *attribute;
     CK_KEY_TYPE key_type;
-    CK_BBOOL cktrue = CK_TRUE;
     CK_BBOOL ckfalse = CK_FALSE;
     CK_RV crv;
 
     /* verify the required fields */
-    if ( !pk11_hasAttribute(object,CKA_KEY_TYPE) ) {
+    if ( !sftk_hasAttribute(object,CKA_KEY_TYPE) ) {
 	return CKR_TEMPLATE_INCOMPLETE;
     }
 
     /* now verify the common fields */
-    crv = pk11_defaultAttribute(object,CKA_ID,NULL,0);
+    crv = sftk_defaultAttribute(object,CKA_ID,NULL,0);
     if (crv != CKR_OK)  return crv; 
-    crv = pk11_defaultAttribute(object,CKA_START_DATE,NULL,0);
+    crv = sftk_defaultAttribute(object,CKA_START_DATE,NULL,0);
     if (crv != CKR_OK)  return crv; 
-    crv = pk11_defaultAttribute(object,CKA_END_DATE,NULL,0);
+    crv = sftk_defaultAttribute(object,CKA_END_DATE,NULL,0);
     if (crv != CKR_OK)  return crv; 
-    crv = pk11_defaultAttribute(object,CKA_DERIVE,&cktrue,sizeof(CK_BBOOL));
-    if (crv != CKR_OK)  return crv; 
-    crv = pk11_defaultAttribute(object,CKA_LOCAL,&ckfalse,sizeof(CK_BBOOL));
+    /* CKA_DERIVE is common to all keys, but it's default value is
+     * key dependent */
+    crv = sftk_defaultAttribute(object,CKA_LOCAL,&ckfalse,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
 
     /* get the key type */
-    attribute = pk11_FindAttribute(object,CKA_KEY_TYPE);
+    attribute = sftk_FindAttribute(object,CKA_KEY_TYPE);
+    if (!attribute) {
+        return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
     key_type = *(CK_KEY_TYPE *)attribute->attrib.pValue;
-    pk11_FreeAttribute(attribute);
+    sftk_FreeAttribute(attribute);
 
     switch (object->objclass) {
     case CKO_PUBLIC_KEY:
-	return pk11_handlePublicKeyObject(session,object,key_type);
+	return sftk_handlePublicKeyObject(session,object,key_type);
     case CKO_PRIVATE_KEY:
-	return pk11_handlePrivateKeyObject(session,object,key_type);
+	return sftk_handlePrivateKeyObject(session,object,key_type);
     case CKO_SECRET_KEY:
 	/* make sure the required fields exist */
-	return pk11_handleSecretKeyObject(session,object,key_type,
+	return sftk_handleSecretKeyObject(session,object,key_type,
 			     (PRBool)(session->slot->slotID == FIPS_SLOT_ID));
     default:
 	break;
@@ -1506,50 +1363,84 @@ pk11_handleKeyObject(PK11Session *session, PK11Object *object)
  * check the consistancy and Verify a DSA Parameter Object 
  */
 static CK_RV
-pk11_handleDSAParameterObject(PK11Session *session, PK11Object *object)
+sftk_handleDSAParameterObject(SFTKSession *session, SFTKObject *object)
 {
-    PK11Attribute *primeAttr = NULL;
-    PK11Attribute *subPrimeAttr = NULL;
-    PK11Attribute *baseAttr = NULL;
-    PK11Attribute *seedAttr = NULL;
-    PK11Attribute *hAttr = NULL;
-    PK11Attribute *attribute;
+    SFTKAttribute *primeAttr = NULL;
+    SFTKAttribute *subPrimeAttr = NULL;
+    SFTKAttribute *baseAttr = NULL;
+    SFTKAttribute *seedAttr = NULL;
+    SFTKAttribute *hAttr = NULL;
+    SFTKAttribute *attribute;
     CK_RV crv = CKR_TEMPLATE_INCOMPLETE;
     PQGParams params;
     PQGVerify vfy, *verify = NULL;
     SECStatus result,rv;
+    /* This bool keeps track of whether or not we need verify parameters.
+     * If a P, Q and G or supplied, we dont' need verify parameters, as we
+     * have PQ and G. 
+     *   - If G is not supplied, the presumption is that we want to
+     * verify P and Q only.
+     *   - If counter is supplied, it is presumed we want to verify PQ because
+     * the counter is only used in verification.
+     *   - If H is supplied, is is presumed we want to verify G because H is
+     * only used to verify G.
+     *   - Any verification step must have the SEED (counter or H could be 
+     * missing depending on exactly what we want to verify). If SEED is supplied,
+     * the code just goes ahead and runs verify (other errors are parameter
+     * errors are detected by the PQG_VerifyParams function). If SEED is not
+     * supplied, but we determined that we are trying to verify (because needVfy
+     * is set, go ahead and return CKR_TEMPLATE_INCOMPLETE.
+     */
+    PRBool needVfy = PR_FALSE;      
 
-    primeAttr = pk11_FindAttribute(object,CKA_PRIME);
+    primeAttr = sftk_FindAttribute(object,CKA_PRIME);
     if (primeAttr == NULL) goto loser;
     params.prime.data = primeAttr->attrib.pValue;
     params.prime.len = primeAttr->attrib.ulValueLen;
 
-    subPrimeAttr = pk11_FindAttribute(object,CKA_SUBPRIME);
+    subPrimeAttr = sftk_FindAttribute(object,CKA_SUBPRIME);
     if (subPrimeAttr == NULL) goto loser;
     params.subPrime.data = subPrimeAttr->attrib.pValue;
     params.subPrime.len = subPrimeAttr->attrib.ulValueLen;
 
-    baseAttr = pk11_FindAttribute(object,CKA_BASE);
-    if (baseAttr == NULL) goto loser;
-    params.base.data = baseAttr->attrib.pValue;
-    params.base.len = baseAttr->attrib.ulValueLen;
+    baseAttr = sftk_FindAttribute(object,CKA_BASE);
+    if (baseAttr != NULL) {
+	params.base.data = baseAttr->attrib.pValue;
+	params.base.len = baseAttr->attrib.ulValueLen;
+    } else {
+	params.base.data = NULL;
+	params.base.len = 0;
+	needVfy = PR_TRUE; /* presumably only including PQ so we can verify
+			    * them. */
+    }
 
-    attribute = pk11_FindAttribute(object, CKA_NSS_PQG_COUNTER);
+    attribute = sftk_FindAttribute(object, CKA_NETSCAPE_PQG_COUNTER);
     if (attribute != NULL) {
 	vfy.counter = *(CK_ULONG *) attribute->attrib.pValue;
-	pk11_FreeAttribute(attribute);
+	sftk_FreeAttribute(attribute);
+	needVfy = PR_TRUE; /* included a count so we can verify PQ */
+    } else {
+	vfy.counter = -1;
+    }
 
-	seedAttr = pk11_FindAttribute(object, CKA_NSS_PQG_SEED);
-	if (seedAttr == NULL) goto loser;
+    hAttr = sftk_FindAttribute(object, CKA_NETSCAPE_PQG_H);
+    if (hAttr != NULL) {
+	vfy.h.data = hAttr->attrib.pValue;
+	vfy.h.len = hAttr->attrib.ulValueLen;
+	needVfy = PR_TRUE; /* included H so we can verify G */
+    } else {
+	vfy.h.data = NULL;
+	vfy.h.len = 0;
+    }
+    seedAttr = sftk_FindAttribute(object, CKA_NETSCAPE_PQG_SEED);
+    if (seedAttr != NULL) {
 	vfy.seed.data = seedAttr->attrib.pValue;
 	vfy.seed.len = seedAttr->attrib.ulValueLen;
 
-	hAttr = pk11_FindAttribute(object, CKA_NSS_PQG_H);
-	if (hAttr == NULL) goto loser;
-	vfy.h.data = hAttr->attrib.pValue;
-	vfy.h.len = hAttr->attrib.ulValueLen;
-
 	verify = &vfy;
+    } else if (needVfy) {
+	goto loser; /* Verify always needs seed, if we need verify and not seed
+		     * then fail */
     }
 
     crv = CKR_FUNCTION_FAILED;
@@ -1559,11 +1450,11 @@ pk11_handleDSAParameterObject(PK11Session *session, PK11Object *object)
     }
 
 loser:
-    if (hAttr) pk11_FreeAttribute(hAttr);
-    if (seedAttr) pk11_FreeAttribute(seedAttr);
-    if (baseAttr) pk11_FreeAttribute(baseAttr);
-    if (subPrimeAttr) pk11_FreeAttribute(subPrimeAttr);
-    if (primeAttr) pk11_FreeAttribute(primeAttr);
+    if (hAttr) sftk_FreeAttribute(hAttr);
+    if (seedAttr) sftk_FreeAttribute(seedAttr);
+    if (baseAttr) sftk_FreeAttribute(baseAttr);
+    if (subPrimeAttr) sftk_FreeAttribute(subPrimeAttr);
+    if (primeAttr) sftk_FreeAttribute(primeAttr);
 
     return crv;
 }
@@ -1572,30 +1463,33 @@ loser:
  * check the consistancy and initialize a Key Parameter Object 
  */
 static CK_RV
-pk11_handleKeyParameterObject(PK11Session *session, PK11Object *object)
+sftk_handleKeyParameterObject(SFTKSession *session, SFTKObject *object)
 {
-    PK11Attribute *attribute;
+    SFTKAttribute *attribute;
     CK_KEY_TYPE key_type;
     CK_BBOOL ckfalse = CK_FALSE;
     CK_RV crv;
 
     /* verify the required fields */
-    if ( !pk11_hasAttribute(object,CKA_KEY_TYPE) ) {
+    if ( !sftk_hasAttribute(object,CKA_KEY_TYPE) ) {
 	return CKR_TEMPLATE_INCOMPLETE;
     }
 
     /* now verify the common fields */
-    crv = pk11_defaultAttribute(object,CKA_LOCAL,&ckfalse,sizeof(CK_BBOOL));
+    crv = sftk_defaultAttribute(object,CKA_LOCAL,&ckfalse,sizeof(CK_BBOOL));
     if (crv != CKR_OK)  return crv; 
 
     /* get the key type */
-    attribute = pk11_FindAttribute(object,CKA_KEY_TYPE);
+    attribute = sftk_FindAttribute(object,CKA_KEY_TYPE);
+    if (!attribute) {
+        return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
     key_type = *(CK_KEY_TYPE *)attribute->attrib.pValue;
-    pk11_FreeAttribute(attribute);
+    sftk_FreeAttribute(attribute);
 
     switch (key_type) {
     case CKK_DSA:
-	return pk11_handleDSAParameterObject(session,object);
+	return sftk_handleDSAParameterObject(session,object);
 	
     default:
 	break;
@@ -1610,76 +1504,106 @@ pk11_handleKeyParameterObject(PK11Session *session, PK11Object *object)
  * or stored in the DB.
  */
 CK_RV
-pk11_handleObject(PK11Object *object, PK11Session *session)
+sftk_handleObject(SFTKObject *object, SFTKSession *session)
 {
-    PK11Slot *slot = session->slot;
+    SFTKSlot *slot = session->slot;
+    SFTKAttribute *attribute;
+    SFTKObject *duplicateObject = NULL;
+    CK_OBJECT_HANDLE handle;
     CK_BBOOL ckfalse = CK_FALSE;
     CK_BBOOL cktrue = CK_TRUE;
-    PK11Attribute *attribute;
     CK_RV crv;
 
     /* make sure all the base object types are defined. If not set the
      * defaults */
-    crv = pk11_defaultAttribute(object,CKA_TOKEN,&ckfalse,sizeof(CK_BBOOL));
+    crv = sftk_defaultAttribute(object,CKA_TOKEN,&ckfalse,sizeof(CK_BBOOL));
     if (crv != CKR_OK) return crv;
-    crv = pk11_defaultAttribute(object,CKA_PRIVATE,&ckfalse,sizeof(CK_BBOOL));
+    crv = sftk_defaultAttribute(object,CKA_PRIVATE,&ckfalse,sizeof(CK_BBOOL));
     if (crv != CKR_OK) return crv;
-    crv = pk11_defaultAttribute(object,CKA_LABEL,NULL,0);
+    crv = sftk_defaultAttribute(object,CKA_LABEL,NULL,0);
     if (crv != CKR_OK) return crv;
-    crv = pk11_defaultAttribute(object,CKA_MODIFIABLE,&cktrue,sizeof(CK_BBOOL));
+    crv = sftk_defaultAttribute(object,CKA_MODIFIABLE,&cktrue,sizeof(CK_BBOOL));
     if (crv != CKR_OK) return crv;
 
     /* don't create a private object if we aren't logged in */
     if ((!slot->isLoggedIn) && (slot->needLogin) &&
-				(pk11_isTrue(object,CKA_PRIVATE))) {
+				(sftk_isTrue(object,CKA_PRIVATE))) {
 	return CKR_USER_NOT_LOGGED_IN;
     }
 
 
     if (((session->info.flags & CKF_RW_SESSION) == 0) &&
-				(pk11_isTrue(object,CKA_TOKEN))) {
+				(sftk_isTrue(object,CKA_TOKEN))) {
 	return CKR_SESSION_READ_ONLY;
     }
 	
-    /* PKCS #11 object ID's are unique for all objects on a
-     * token */
-    PK11_USE_THREADS(PZ_Lock(slot->objectLock);)
-    object->handle = slot->tokenIDCount++;
-    PK11_USE_THREADS(PZ_Unlock(slot->objectLock);)
+    /* Assign a unique SESSION object handle to every new object,
+     * whether it is a session object or a token object.  
+     * At this point, all new objects are structured as session objects.
+     * Objects with the CKA_TOKEN attribute true will be turned into 
+     * token objects and will have a token object handle assigned to 
+     * them by a call to sftk_mkHandle in the handler for each object 
+     * class, invoked below.
+     *
+     * It may be helpful to note/remember that 
+     * sftk_narrowToXxxObject uses sftk_isToken,
+     * sftk_isToken examines the sign bit of the object's handle, but
+     * sftk_isTrue(...,CKA_TOKEN) examines the CKA_TOKEN attribute.
+     */
+    do {
+	PRUint32 wrappedAround;
+
+	duplicateObject = NULL;
+	PZ_Lock(slot->objectLock);
+	wrappedAround = slot->sessionObjectHandleCount &  SFTK_TOKEN_MASK;
+	handle        = slot->sessionObjectHandleCount & ~SFTK_TOKEN_MASK;
+	if (!handle) /* don't allow zero handle */
+	    handle = minSessionObjectHandle;  
+	slot->sessionObjectHandleCount = (handle + 1U) | wrappedAround;
+	/* Is there already a session object with this handle? */
+	if (wrappedAround) {
+	    sftkqueue_find(duplicateObject, handle, slot->sessObjHashTable, \
+	                   slot->sessObjHashSize);
+	}
+	PZ_Unlock(slot->objectLock);
+    } while (duplicateObject != NULL);
+    object->handle = handle;
 
     /* get the object class */
-    attribute = pk11_FindAttribute(object,CKA_CLASS);
+    attribute = sftk_FindAttribute(object,CKA_CLASS);
     if (attribute == NULL) {
 	return CKR_TEMPLATE_INCOMPLETE;
     }
     object->objclass = *(CK_OBJECT_CLASS *)attribute->attrib.pValue;
-    pk11_FreeAttribute(attribute);
+    sftk_FreeAttribute(attribute);
 
-    /* now handle the specific. Get a session handle for these functions
-     * to use */
+    /* Now handle the specific object class. 
+     * At this point, all objects are session objects, and the session
+     * number must be passed to the object class handlers.
+     */
     switch (object->objclass) {
     case CKO_DATA:
-	crv = pk11_handleDataObject(session,object);
+	crv = sftk_handleDataObject(session,object);
 	break;
     case CKO_CERTIFICATE:
-	crv = pk11_handleCertObject(session,object);
+	crv = sftk_handleCertObject(session,object);
 	break;
-    case CKO_NSS_TRUST:
-	crv = pk11_handleTrustObject(session,object);
+    case CKO_NETSCAPE_TRUST:
+	crv = sftk_handleTrustObject(session,object);
 	break;
-    case CKO_NSS_CRL:
-	crv = pk11_handleCrlObject(session,object);
+    case CKO_NETSCAPE_CRL:
+	crv = sftk_handleCrlObject(session,object);
 	break;
-    case CKO_NSS_SMIME:
-	crv = pk11_handleSMimeObject(session,object);
+    case CKO_NETSCAPE_SMIME:
+	crv = sftk_handleSMimeObject(session,object);
 	break;
     case CKO_PRIVATE_KEY:
     case CKO_PUBLIC_KEY:
     case CKO_SECRET_KEY:
-	crv = pk11_handleKeyObject(session,object);
+	crv = sftk_handleKeyObject(session,object);
 	break;
     case CKO_KG_PARAMETERS:
-	crv = pk11_handleKeyParameterObject(session,object);
+	crv = sftk_handleKeyParameterObject(session,object);
 	break;
     default:
 	crv = CKR_ATTRIBUTE_VALUE_INVALID;
@@ -1692,12 +1616,16 @@ pk11_handleObject(PK11Object *object, PK11Session *session)
 	return crv;
     }
 
-    /* now link the object into the slot and session structures */
-    if (pk11_isToken(object->handle)) {
-	pk11_convertSessionToToken(object);
+    /* Now link the object into the slot and session structures.
+     * If the object has a true CKA_TOKEN attribute, the above object
+     * class handlers will have set the sign bit in the object handle,
+     * causing the following test to be true.
+     */
+    if (sftk_isToken(object->handle)) {
+	sftk_convertSessionToToken(object);
     } else {
 	object->slot = slot;
-	pk11_AddObject(session,object);
+	sftk_AddObject(session,object);
     }
 
     return CKR_OK;
@@ -1707,7 +1635,7 @@ pk11_handleObject(PK11Object *object, PK11Session *session)
  * ******************** Public Key Utilities ***************************
  */
 /* Generate a low public key structure from an object */
-NSSLOWKEYPublicKey *pk11_GetPubKey(PK11Object *object,CK_KEY_TYPE key_type,
+NSSLOWKEYPublicKey *sftk_GetPubKey(SFTKObject *object,CK_KEY_TYPE key_type, 
 								CK_RV *crvp)
 {
     NSSLOWKEYPublicKey *pubKey;
@@ -1719,7 +1647,7 @@ NSSLOWKEYPublicKey *pk11_GetPubKey(PK11Object *object,CK_KEY_TYPE key_type,
 	return NULL;
     }
 
-    if (pk11_isToken(object->handle)) {
+    if (sftk_isToken(object->handle)) {
 /* ferret out the token object handle */
     }
 
@@ -1739,8 +1667,8 @@ NSSLOWKEYPublicKey *pk11_GetPubKey(PK11Object *object,CK_KEY_TYPE key_type,
     pubKey = (NSSLOWKEYPublicKey *)
 			PORT_ArenaAlloc(arena,sizeof(NSSLOWKEYPublicKey));
     if (pubKey == NULL) {
-	*crvp = CKR_HOST_MEMORY;
     	PORT_FreeArena(arena,PR_FALSE);
+	*crvp = CKR_HOST_MEMORY;
 	return NULL;
     }
 
@@ -1749,37 +1677,98 @@ NSSLOWKEYPublicKey *pk11_GetPubKey(PK11Object *object,CK_KEY_TYPE key_type,
     switch (key_type) {
     case CKK_RSA:
 	pubKey->keyType = NSSLOWKEYRSAKey;
-	crv = pk11_Attribute2SSecItem(arena,&pubKey->u.rsa.modulus,
+	crv = sftk_Attribute2SSecItem(arena,&pubKey->u.rsa.modulus,
 							object,CKA_MODULUS);
     	if (crv != CKR_OK) break;
-    	crv = pk11_Attribute2SSecItem(arena,&pubKey->u.rsa.publicExponent,
+    	crv = sftk_Attribute2SSecItem(arena,&pubKey->u.rsa.publicExponent,
 						object,CKA_PUBLIC_EXPONENT);
 	break;
     case CKK_DSA:
 	pubKey->keyType = NSSLOWKEYDSAKey;
-	crv = pk11_Attribute2SSecItem(arena,&pubKey->u.dsa.params.prime,
+	crv = sftk_Attribute2SSecItem(arena,&pubKey->u.dsa.params.prime,
 							object,CKA_PRIME);
     	if (crv != CKR_OK) break;
-	crv = pk11_Attribute2SSecItem(arena,&pubKey->u.dsa.params.subPrime,
+	crv = sftk_Attribute2SSecItem(arena,&pubKey->u.dsa.params.subPrime,
 							object,CKA_SUBPRIME);
     	if (crv != CKR_OK) break;
-	crv = pk11_Attribute2SSecItem(arena,&pubKey->u.dsa.params.base,
+	crv = sftk_Attribute2SSecItem(arena,&pubKey->u.dsa.params.base,
 							object,CKA_BASE);
     	if (crv != CKR_OK) break;
-    	crv = pk11_Attribute2SSecItem(arena,&pubKey->u.dsa.publicValue,
+    	crv = sftk_Attribute2SSecItem(arena,&pubKey->u.dsa.publicValue,
 							object,CKA_VALUE);
 	break;
     case CKK_DH:
 	pubKey->keyType = NSSLOWKEYDHKey;
-	crv = pk11_Attribute2SSecItem(arena,&pubKey->u.dh.prime,
+	crv = sftk_Attribute2SSecItem(arena,&pubKey->u.dh.prime,
 							object,CKA_PRIME);
     	if (crv != CKR_OK) break;
-	crv = pk11_Attribute2SSecItem(arena,&pubKey->u.dh.base,
+	crv = sftk_Attribute2SSecItem(arena,&pubKey->u.dh.base,
 							object,CKA_BASE);
     	if (crv != CKR_OK) break;
-    	crv = pk11_Attribute2SSecItem(arena,&pubKey->u.dh.publicValue,
+    	crv = sftk_Attribute2SSecItem(arena,&pubKey->u.dh.publicValue,
 							object,CKA_VALUE);
 	break;
+#ifdef NSS_ENABLE_ECC
+    case CKK_EC:
+	pubKey->keyType = NSSLOWKEYECKey;
+	crv = sftk_Attribute2SSecItem(arena,
+	                              &pubKey->u.ec.ecParams.DEREncoding,
+	                              object,CKA_EC_PARAMS);
+	if (crv != CKR_OK) break;
+
+	/* Fill out the rest of the ecParams structure 
+	 * based on the encoded params
+	 */
+	if (EC_FillParams(arena, &pubKey->u.ec.ecParams.DEREncoding,
+		    &pubKey->u.ec.ecParams) != SECSuccess) {
+	    crv = CKR_DOMAIN_PARAMS_INVALID;
+	    break;
+	}
+	    
+	crv = sftk_Attribute2SSecItem(arena,&pubKey->u.ec.publicValue,
+	                              object,CKA_EC_POINT);
+	if (crv == CKR_OK) {
+	    int keyLen,curveLen;
+
+	    curveLen = (pubKey->u.ec.ecParams.fieldID.size +7)/8;
+	    keyLen = (2*curveLen)+1;
+
+	    /* special note: We can't just use the first byte to determine
+	     * between these 2 cases because both EC_POINT_FORM_UNCOMPRESSED 
+	     * and SEC_ASN1_OCTET_STRING are 0x04 */
+
+	    /* handle the non-DER encoded case (UNCOMPRESSED only) */	
+	    if (pubKey->u.ec.publicValue.data[0] == EC_POINT_FORM_UNCOMPRESSED
+		&& pubKey->u.ec.publicValue.len == keyLen) {
+		break; /* key was not DER encoded, no need to unwrap */
+	    }
+
+	    /* if we ever support compressed, handle it here */
+
+	    /* handle the encoded case */
+	    if ((pubKey->u.ec.publicValue.data[0] == SEC_ASN1_OCTET_STRING) 
+		&& pubKey->u.ec.publicValue.len > keyLen) {
+		SECItem publicValue;
+		SECStatus rv;
+
+		rv = SEC_QuickDERDecodeItem(arena, &publicValue, 
+					 SEC_ASN1_GET(SEC_OctetStringTemplate), 
+					 &pubKey->u.ec.publicValue);
+		/* nope, didn't decode correctly */
+		if ((rv != SECSuccess)
+		    || (publicValue.data[0] != EC_POINT_FORM_UNCOMPRESSED)
+		    || (publicValue.len != keyLen)) {
+	   	    crv = CKR_ATTRIBUTE_VALUE_INVALID;
+		    break;
+		}
+		/* replace our previous with the decoded key */
+		pubKey->u.ec.publicValue = publicValue;
+		break;
+	    }
+	   crv = CKR_ATTRIBUTE_VALUE_INVALID;
+	}
+	break;
+#endif /* NSS_ENABLE_ECC */
     default:
 	crv = CKR_KEY_TYPE_INCONSISTENT;
 	break;
@@ -1791,20 +1780,21 @@ NSSLOWKEYPublicKey *pk11_GetPubKey(PK11Object *object,CK_KEY_TYPE key_type,
     }
 
     object->objectInfo = pubKey;
-    object->infoFree = (PK11Free) nsslowkey_DestroyPublicKey;
+    object->infoFree = (SFTKFree) nsslowkey_DestroyPublicKey;
     return pubKey;
 }
 
 /* make a private key from a verified object */
 static NSSLOWKEYPrivateKey *
-pk11_mkPrivKey(PK11Object *object, CK_KEY_TYPE key_type, CK_RV *crvp)
+sftk_mkPrivKey(SFTKObject *object, CK_KEY_TYPE key_type, CK_RV *crvp)
 {
     NSSLOWKEYPrivateKey *privKey;
+    SFTKItemTemplate itemTemplate[SFTK_MAX_ITEM_TEMPLATE];
+    int itemTemplateCount = 0;
     PLArenaPool *arena;
     CK_RV crv = CKR_OK;
     SECStatus rv;
 
-    PORT_Assert(!pk11_isToken(object->handle));
     arena = PORT_NewArena(DER_DEFAULT_CHUNKSIZE);
     if (arena == NULL) {
 	*crvp = CKR_HOST_MEMORY;
@@ -1824,71 +1814,122 @@ pk11_mkPrivKey(PK11Object *object, CK_KEY_TYPE key_type, CK_RV *crvp)
     switch (key_type) {
     case CKK_RSA:
 	privKey->keyType = NSSLOWKEYRSAKey;
-	crv=pk11_Attribute2SSecItem(arena,&privKey->u.rsa.modulus,
-							object,CKA_MODULUS);
-	if (crv != CKR_OK) break;
-	crv=pk11_Attribute2SSecItem(arena,&privKey->u.rsa.publicExponent,object,
-							CKA_PUBLIC_EXPONENT);
-	if (crv != CKR_OK) break;
-	crv=pk11_Attribute2SSecItem(arena,&privKey->u.rsa.privateExponent,object,
-							CKA_PRIVATE_EXPONENT);
-	if (crv != CKR_OK) break;
-	crv=pk11_Attribute2SSecItem(arena,&privKey->u.rsa.prime1,object,
-								CKA_PRIME_1);
-	if (crv != CKR_OK) break;
-	crv=pk11_Attribute2SSecItem(arena,&privKey->u.rsa.prime2,object,
-								CKA_PRIME_2);
-	if (crv != CKR_OK) break;
-	crv=pk11_Attribute2SSecItem(arena,&privKey->u.rsa.exponent1,
-						object, CKA_EXPONENT_1);
-	if (crv != CKR_OK) break;
-	crv=pk11_Attribute2SSecItem(arena,&privKey->u.rsa.exponent2,
-							object, CKA_EXPONENT_2);
-	if (crv != CKR_OK) break;
-	crv=pk11_Attribute2SSecItem(arena,&privKey->u.rsa.coefficient,object,
-							      CKA_COEFFICIENT);
-	if (crv != CKR_OK) break;
+
+	SFTK_SET_ITEM_TEMPLATE(itemTemplate, itemTemplateCount,
+		&privKey->u.rsa.modulus,CKA_MODULUS);
+	itemTemplateCount++;
+	SFTK_SET_ITEM_TEMPLATE(itemTemplate, itemTemplateCount,
+		&privKey->u.rsa.publicExponent, CKA_PUBLIC_EXPONENT);
+	itemTemplateCount++;
+	SFTK_SET_ITEM_TEMPLATE(itemTemplate, itemTemplateCount,
+		&privKey->u.rsa.privateExponent, CKA_PRIVATE_EXPONENT);
+	itemTemplateCount++;
+	SFTK_SET_ITEM_TEMPLATE(itemTemplate, itemTemplateCount,
+		&privKey->u.rsa.prime1, CKA_PRIME_1);
+	itemTemplateCount++;
+	SFTK_SET_ITEM_TEMPLATE(itemTemplate, itemTemplateCount,
+		&privKey->u.rsa.prime2, CKA_PRIME_2);
+	itemTemplateCount++;
+	SFTK_SET_ITEM_TEMPLATE(itemTemplate, itemTemplateCount,
+		&privKey->u.rsa.exponent1, CKA_EXPONENT_1);
+	itemTemplateCount++;
+	SFTK_SET_ITEM_TEMPLATE(itemTemplate, itemTemplateCount,
+		&privKey->u.rsa.exponent2, CKA_EXPONENT_2);
+	itemTemplateCount++;
+	SFTK_SET_ITEM_TEMPLATE(itemTemplate, itemTemplateCount,
+		&privKey->u.rsa.coefficient, CKA_COEFFICIENT);
+	itemTemplateCount++;
         rv = DER_SetUInteger(privKey->arena, &privKey->u.rsa.version,
-                          NSSLOWKEY_VERSION);
+                          NSSLOWKEY_PRIVATE_KEY_INFO_VERSION);
 	if (rv != SECSuccess) crv = CKR_HOST_MEMORY;
 	break;
 
     case CKK_DSA:
 	privKey->keyType = NSSLOWKEYDSAKey;
-	crv = pk11_Attribute2SSecItem(arena,&privKey->u.dsa.params.prime,
-							object,CKA_PRIME);
-    	if (crv != CKR_OK) break;
-	crv = pk11_Attribute2SSecItem(arena,&privKey->u.dsa.params.subPrime,
-							object,CKA_SUBPRIME);
-    	if (crv != CKR_OK) break;
-	crv = pk11_Attribute2SSecItem(arena,&privKey->u.dsa.params.base,
-							object,CKA_BASE);
-    	if (crv != CKR_OK) break;
-    	crv = pk11_Attribute2SSecItem(arena,&privKey->u.dsa.privateValue,
-							object,CKA_VALUE);
-    	if (crv != CKR_OK) break;
-    	crv = pk11_Attribute2SSecItem(arena,&privKey->u.dsa.publicValue,
-							object,CKA_NSS_DB);
-	/* can't set the public value.... */
+	SFTK_SET_ITEM_TEMPLATE(itemTemplate, itemTemplateCount,
+		&privKey->u.dsa.params.prime, CKA_PRIME);
+	itemTemplateCount++;
+	SFTK_SET_ITEM_TEMPLATE(itemTemplate, itemTemplateCount,
+		&privKey->u.dsa.params.subPrime, CKA_SUBPRIME);
+	itemTemplateCount++;
+	SFTK_SET_ITEM_TEMPLATE(itemTemplate, itemTemplateCount,
+		&privKey->u.dsa.params.base, CKA_BASE);
+	itemTemplateCount++;
+	SFTK_SET_ITEM_TEMPLATE(itemTemplate, itemTemplateCount,
+		&privKey->u.dsa.privateValue, CKA_VALUE);
+	itemTemplateCount++;
+	/* privKey was zero'd so public value is already set to NULL, 0
+	 * if we don't set it explicitly */
 	break;
 
     case CKK_DH:
 	privKey->keyType = NSSLOWKEYDHKey;
-	crv = pk11_Attribute2SSecItem(arena,&privKey->u.dh.prime,
-							object,CKA_PRIME);
-    	if (crv != CKR_OK) break;
-	crv = pk11_Attribute2SSecItem(arena,&privKey->u.dh.base,
-							object,CKA_BASE);
-    	if (crv != CKR_OK) break;
-    	crv = pk11_Attribute2SSecItem(arena,&privKey->u.dh.privateValue,
-							object,CKA_VALUE);
-    	if (crv != CKR_OK) break;
-    	crv = pk11_Attribute2SSecItem(arena,&privKey->u.dh.publicValue,
-							object,CKA_NSS_DB);
+	SFTK_SET_ITEM_TEMPLATE(itemTemplate, itemTemplateCount,
+		&privKey->u.dh.prime, CKA_PRIME);
+	itemTemplateCount++;
+	SFTK_SET_ITEM_TEMPLATE(itemTemplate, itemTemplateCount,
+		&privKey->u.dh.base, CKA_BASE);
+	itemTemplateCount++;
+	SFTK_SET_ITEM_TEMPLATE(itemTemplate, itemTemplateCount,
+		&privKey->u.dh.privateValue, CKA_VALUE);
+	itemTemplateCount++;
+	/* privKey was zero'd so public value is already set to NULL, 0
+	 * if we don't set it explicitly */
 	break;
+
+#ifdef NSS_ENABLE_ECC
+    case CKK_EC:
+	privKey->keyType = NSSLOWKEYECKey;
+	crv = sftk_Attribute2SSecItem(arena, 
+				      &privKey->u.ec.ecParams.DEREncoding,
+				      object,CKA_EC_PARAMS);
+    	if (crv != CKR_OK) break;
+
+	/* Fill out the rest of the ecParams structure
+	 * based on the encoded params
+	 */
+	if (EC_FillParams(arena, &privKey->u.ec.ecParams.DEREncoding,
+		    &privKey->u.ec.ecParams) != SECSuccess) {
+	    crv = CKR_DOMAIN_PARAMS_INVALID;
+	    break;
+	}
+	crv = sftk_Attribute2SSecItem(arena,&privKey->u.ec.privateValue,
+							object,CKA_VALUE);
+	if (crv != CKR_OK) break;
+
+	if (sftk_hasAttribute(object, CKA_NETSCAPE_DB)) {
+	    crv = sftk_Attribute2SSecItem(arena, &privKey->u.ec.publicValue,
+ 				object, CKA_NETSCAPE_DB);
+	    if (crv != CKR_OK) break;
+	    /* privKey was zero'd so public value is already set to NULL, 0
+	     * if we don't set it explicitly */
+	}
+        rv = DER_SetUInteger(privKey->arena, &privKey->u.ec.version,
+                          NSSLOWKEY_EC_PRIVATE_KEY_VERSION);
+	if (rv != SECSuccess) {
+	    crv = CKR_HOST_MEMORY;
+	    /* The following ifdef is needed for Linux arm distros and
+	     * Android as gcc 4.6 has a bug when targeting arm (but not
+	     * thumb). The bug has been fixed in gcc 4.7.
+	     * http://gcc.gnu.org/bugzilla/show_bug.cgi?id=56561
+	     */
+#if defined (__arm__) && !defined(__thumb__) && defined (__GNUC__)
+	    *crvp = CKR_HOST_MEMORY;
+	    break;
+#endif
+	}
+	break;
+#endif /* NSS_ENABLE_ECC */
+
     default:
 	crv = CKR_KEY_TYPE_INCONSISTENT;
 	break;
+    }
+    if (crv == CKR_OK && itemTemplateCount != 0) {
+	PORT_Assert(itemTemplateCount > 0);
+	PORT_Assert(itemTemplateCount <= SFTK_MAX_ITEM_TEMPLATE);
+	crv = sftk_MultipleAttribute2SecItem(arena, object, itemTemplate, 
+						itemTemplateCount);
     }
     *crvp = crv;
     if (crv != CKR_OK) {
@@ -1898,10 +1939,120 @@ pk11_mkPrivKey(PK11Object *object, CK_KEY_TYPE key_type, CK_RV *crvp)
     return privKey;
 }
 
+/*
+ * we have a partial rsa private key, fill in the rest
+ */
+static SECStatus
+sftk_fillRSAPrivateKey(SFTKObject *object)
+{
+    RSAPrivateKey tmpKey = { 0 };
+    SFTKAttribute *modulus = NULL;
+    SFTKAttribute *prime1 = NULL;
+    SFTKAttribute *prime2 = NULL;
+    SFTKAttribute *privateExponent = NULL;
+    SFTKAttribute *publicExponent = NULL;
+    SECStatus rv;
+    CK_RV crv;
+
+    /* first fill in the components that we have. Populate only uses
+     * the non-crt components, so only fill those in  */
+    tmpKey.arena = NULL;
+    modulus = sftk_FindAttribute(object, CKA_MODULUS);
+    if (modulus) {
+	tmpKey.modulus.data = modulus->attrib.pValue;
+	tmpKey.modulus.len  = modulus->attrib.ulValueLen;
+    } 
+    prime1 = sftk_FindAttribute(object, CKA_PRIME_1);
+    if (prime1) {
+	tmpKey.prime1.data = prime1->attrib.pValue;
+	tmpKey.prime1.len  = prime1->attrib.ulValueLen;
+    } 
+    prime2 = sftk_FindAttribute(object, CKA_PRIME_2);
+    if (prime2) {
+	tmpKey.prime2.data = prime2->attrib.pValue;
+	tmpKey.prime2.len  = prime2->attrib.ulValueLen;
+    } 
+    privateExponent = sftk_FindAttribute(object, CKA_PRIVATE_EXPONENT);
+    if (privateExponent) {
+	tmpKey.privateExponent.data = privateExponent->attrib.pValue;
+	tmpKey.privateExponent.len  = privateExponent->attrib.ulValueLen;
+    } 
+    publicExponent = sftk_FindAttribute(object, CKA_PUBLIC_EXPONENT);
+    if (publicExponent) {
+	tmpKey.publicExponent.data = publicExponent->attrib.pValue;
+	tmpKey.publicExponent.len  = publicExponent->attrib.ulValueLen;
+    } 
+
+    /*
+     * populate requires one exponent plus 2 other components to work.
+     * we expected our caller to check that first. If that didn't happen,
+     * populate will simply return an error here.
+     */
+    rv = RSA_PopulatePrivateKey(&tmpKey);
+    if (rv != SECSuccess) {
+	goto loser;
+    }
+
+    /* now that we have a fully populated key, set all our attribute values */
+    rv = SECFailure;
+    crv = sftk_forceAttribute(object,CKA_MODULUS,
+                       sftk_item_expand(&tmpKey.modulus));
+    if (crv != CKR_OK) goto loser;
+    crv = sftk_forceAttribute(object,CKA_PUBLIC_EXPONENT,
+                       sftk_item_expand(&tmpKey.publicExponent));
+    if (crv != CKR_OK) goto loser;
+    crv = sftk_forceAttribute(object,CKA_PRIVATE_EXPONENT,
+                       sftk_item_expand(&tmpKey.privateExponent));
+    if (crv != CKR_OK) goto loser;
+    crv = sftk_forceAttribute(object,CKA_PRIME_1,
+                       sftk_item_expand(&tmpKey.prime1));
+    if (crv != CKR_OK) goto loser;
+    crv = sftk_forceAttribute(object,CKA_PRIME_2,
+                       sftk_item_expand(&tmpKey.prime2));
+    if (crv != CKR_OK) goto loser;
+    crv = sftk_forceAttribute(object,CKA_EXPONENT_1,
+                       sftk_item_expand(&tmpKey.exponent1));
+    if (crv != CKR_OK) goto loser;
+    crv = sftk_forceAttribute(object,CKA_EXPONENT_2,
+                       sftk_item_expand(&tmpKey.exponent2));
+    if (crv != CKR_OK) goto loser;
+    crv = sftk_forceAttribute(object,CKA_COEFFICIENT,
+                       sftk_item_expand(&tmpKey.coefficient));
+    if (crv != CKR_OK) goto loser;
+    rv = SECSuccess;
+
+    /* we're done (one way or the other), clean up all our stuff */
+loser:
+    if (tmpKey.arena) {
+	PORT_FreeArena(tmpKey.arena,PR_TRUE);
+    }
+    if (modulus) {
+	sftk_FreeAttribute(modulus);
+    }
+    if (prime1) {
+	sftk_FreeAttribute(prime1);
+    }
+    if (prime2) {
+	sftk_FreeAttribute(prime2);
+    }
+    if (privateExponent) {
+	sftk_FreeAttribute(privateExponent);
+    }
+    if (publicExponent) {
+	sftk_FreeAttribute(publicExponent);
+    }
+    return rv;
+}
+
+
+
+
+
+
 
 /* Generate a low private key structure from an object */
 NSSLOWKEYPrivateKey *
-pk11_GetPrivKey(PK11Object *object,CK_KEY_TYPE key_type, CK_RV *crvp)
+sftk_GetPrivKey(SFTKObject *object,CK_KEY_TYPE key_type, CK_RV *crvp)
 {
     NSSLOWKEYPrivateKey *priv = NULL;
 
@@ -1914,20 +2065,9 @@ pk11_GetPrivKey(PK11Object *object,CK_KEY_TYPE key_type, CK_RV *crvp)
 	return (NSSLOWKEYPrivateKey *)object->objectInfo;
     }
 
-    if (pk11_isToken(object->handle)) {
-	/* grab it from the data base */
-	PK11TokenObject *to = pk11_narrowToTokenObject(object);
-
-	PORT_Assert(to);
-	PORT_Assert(object->slot->keyDB);	
-	priv = nsslowkey_FindKeyByPublicKey(object->slot->keyDB, &to->dbKey,
-				       object->slot->password);
-	*crvp = priv ? CKR_OK : CKR_DEVICE_ERROR;
-    } else {
-	priv = pk11_mkPrivKey(object, key_type, crvp);
-    }
+    priv = sftk_mkPrivKey(object, key_type, crvp);
     object->objectInfo = priv;
-    object->infoFree = (PK11Free) nsslowkey_DestroyPrivateKey;
+    object->infoFree = (SFTKFree) nsslowkey_DestroyPrivateKey;
     return priv;
 }
 
@@ -1938,7 +2078,7 @@ pk11_GetPrivKey(PK11Object *object,CK_KEY_TYPE key_type, CK_RV *crvp)
  * set the DES key with parity bits correctly
  */
 void
-pk11_FormatDESKey(unsigned char *key, int length)
+sftk_FormatDESKey(unsigned char *key, int length)
 {
     int i;
 
@@ -1952,15 +2092,15 @@ pk11_FormatDESKey(unsigned char *key, int length)
  * check a des key (des2 or des3 subkey) for weak keys.
  */
 PRBool
-pk11_CheckDESKey(unsigned char *key)
+sftk_CheckDESKey(unsigned char *key)
 {
     int i;
 
     /* format the des key with parity  */
-    pk11_FormatDESKey(key, 8);
+    sftk_FormatDESKey(key, 8);
 
-    for (i=0; i < pk11_desWeakTableSize; i++) {
-	if (PORT_Memcmp(key,pk11_desWeakTable[i],8) == 0) {
+    for (i=0; i < sftk_desWeakTableSize; i++) {
+	if (PORT_Memcmp(key,sftk_desWeakTable[i],8) == 0) {
 	    return PR_TRUE;
 	}
     }
@@ -1971,109 +2111,25 @@ pk11_CheckDESKey(unsigned char *key)
  * check if a des or triple des key is weak.
  */
 PRBool
-pk11_IsWeakKey(unsigned char *key,CK_KEY_TYPE key_type)
+sftk_IsWeakKey(unsigned char *key,CK_KEY_TYPE key_type)
 {
 
     switch(key_type) {
     case CKK_DES:
-	return pk11_CheckDESKey(key);
+	return sftk_CheckDESKey(key);
     case CKM_DES2_KEY_GEN:
-	if (pk11_CheckDESKey(key)) return PR_TRUE;
-	return pk11_CheckDESKey(&key[8]);
+	if (sftk_CheckDESKey(key)) return PR_TRUE;
+	return sftk_CheckDESKey(&key[8]);
     case CKM_DES3_KEY_GEN:
-	if (pk11_CheckDESKey(key)) return PR_TRUE;
-	if (pk11_CheckDESKey(&key[8])) return PR_TRUE;
-	return pk11_CheckDESKey(&key[16]);
+	if (sftk_CheckDESKey(key)) return PR_TRUE;
+	if (sftk_CheckDESKey(&key[8])) return PR_TRUE;
+	return sftk_CheckDESKey(&key[16]);
     default:
 	break;
     }
     return PR_FALSE;
 }
 
-
-/* make a fake private key representing a symmetric key */
-static NSSLOWKEYPrivateKey *
-pk11_mkSecretKeyRep(PK11Object *object)
-{
-    NSSLOWKEYPrivateKey *privKey;
-    PLArenaPool *arena = 0;
-    CK_RV crv;
-    SECStatus rv;
-    static unsigned char derZero[1] = { 0 };
-
-    arena = PORT_NewArena(DER_DEFAULT_CHUNKSIZE);
-    if (arena == NULL) { crv = CKR_HOST_MEMORY; goto loser; }
-
-    privKey = (NSSLOWKEYPrivateKey *)
-			PORT_ArenaZAlloc(arena,sizeof(NSSLOWKEYPrivateKey));
-    if (privKey == NULL) { crv = CKR_HOST_MEMORY; goto loser; }
-
-    privKey->arena = arena;
-
-    /* Secret keys are represented in the database as "fake" RSA keys.  The RSA key
-     * is marked as a secret key representation by setting the public exponent field
-     * to 0, which is an invalid RSA exponent.  The other fields are set as follows:
-     *   modulus - CKA_ID value for the secret key
-     *   private exponent - CKA_VALUE (the key itself)
-     *   coefficient - CKA_KEY_TYPE, which indicates what encryption algorithm
-     *      is used for the key.
-     *   all others - set to integer 0
-     */
-    privKey->keyType = NSSLOWKEYRSAKey;
-
-    /* The modulus is set to the key id of the symmetric key */
-    crv=pk11_Attribute2SecItem(arena,&privKey->u.rsa.modulus,object,CKA_ID);
-    if (crv != CKR_OK) goto loser;
-
-    /* The public exponent is set to 0 length to indicate a special key */
-    privKey->u.rsa.publicExponent.len = sizeof derZero;
-    privKey->u.rsa.publicExponent.data = derZero;
-
-    /* The private exponent is the actual key value */
-    crv=pk11_Attribute2SecItem(arena,&privKey->u.rsa.privateExponent,object,CKA_VALUE);
-    if (crv != CKR_OK) goto loser;
-
-    /* All other fields empty - needs testing */
-    privKey->u.rsa.prime1.len = sizeof derZero;
-    privKey->u.rsa.prime1.data = derZero;
-
-    privKey->u.rsa.prime2.len = sizeof derZero;
-    privKey->u.rsa.prime2.data = derZero;
-
-    privKey->u.rsa.exponent1.len = sizeof derZero;
-    privKey->u.rsa.exponent1.data = derZero;
-
-    privKey->u.rsa.exponent2.len = sizeof derZero;
-    privKey->u.rsa.exponent2.data = derZero;
-
-    /* Coeficient set to KEY_TYPE */
-    crv=pk11_Attribute2SecItem(arena,&privKey->u.rsa.coefficient,object,CKA_KEY_TYPE);
-    if (crv != CKR_OK) goto loser;
-
-    /* Private key version field set normally for compatibility */
-    rv = DER_SetUInteger(privKey->arena, 
-			&privKey->u.rsa.version, NSSLOWKEY_VERSION);
-    if (rv != SECSuccess) { crv = CKR_HOST_MEMORY; goto loser; }
-
-loser:
-    if (crv != CKR_OK) {
-	PORT_FreeArena(arena,PR_FALSE);
-	privKey = 0;
-    }
-
-    return privKey;
-}
-
-static PRBool
-isSecretKey(NSSLOWKEYPrivateKey *privKey)
-{
-  if (privKey->keyType == NSSLOWKEYRSAKey && 
-		privKey->u.rsa.publicExponent.len == 1 &&
-      				privKey->u.rsa.publicExponent.data[0] == 0)
-    return PR_TRUE;
-
-  return PR_FALSE;
-}
 
 /**********************************************************************
  *
@@ -2085,18 +2141,22 @@ isSecretKey(NSSLOWKEYPrivateKey *privKey)
 /* return the function list */
 CK_RV NSC_GetFunctionList(CK_FUNCTION_LIST_PTR *pFunctionList)
 {
-    *pFunctionList = (CK_FUNCTION_LIST_PTR) &pk11_funcList;
+    CHECK_FORK();
+
+    *pFunctionList = (CK_FUNCTION_LIST_PTR) &sftk_funcList;
     return CKR_OK;
 }
 
 /* return the function list */
 CK_RV C_GetFunctionList(CK_FUNCTION_LIST_PTR *pFunctionList)
 {
+    CHECK_FORK();
+
     return NSC_GetFunctionList(pFunctionList);
 }
 
 static PLHashNumber
-pk11_HashNumber(const void *key)
+sftk_HashNumber(const void *key)
 {
     return (PLHashNumber) key;
 }
@@ -2107,7 +2167,7 @@ pk11_HashNumber(const void *key)
  * where it might be a little difficult.
  */
 const char *
-pk11_getDefTokName(CK_SLOT_ID slotID)
+sftk_getDefTokName(CK_SLOT_ID slotID)
 {
     static char buf[33];
 
@@ -2117,7 +2177,7 @@ pk11_getDefTokName(CK_SLOT_ID slotID)
     case PRIVATE_KEY_SLOT_ID:
 	return "NSS Certificate DB              ";
     case FIPS_SLOT_ID:
-        return "NSS FIPS-140-1 Certificate DB   ";
+        return "NSS FIPS 140-2 Certificate DB   ";
     default:
 	break;
     }
@@ -2126,20 +2186,20 @@ pk11_getDefTokName(CK_SLOT_ID slotID)
 }
 
 const char *
-pk11_getDefSlotName(CK_SLOT_ID slotID)
+sftk_getDefSlotName(CK_SLOT_ID slotID)
 {
     static char buf[65];
 
     switch (slotID) {
     case NETSCAPE_SLOT_ID:
 	return 
-	 "NSS Internal Cryptographic Services Version 3.4                 ";
+	 "NSS Internal Cryptographic Services                             ";
     case PRIVATE_KEY_SLOT_ID:
 	return 
 	 "NSS User Private Key and Certificate Services                   ";
     case FIPS_SLOT_ID:
         return 
-         "Netscape FIPS-140-1 User Private Key Services                   ";
+         "NSS FIPS 140-2 User Private Key Services                        ";
     default:
 	break;
     }
@@ -2155,9 +2215,9 @@ static CK_ULONG nscSlotListSize[2] = {0, 0};
 static PLHashTable *nscSlotHashTable[2] = {NULL, NULL};
 
 static int
-pk11_GetModuleIndex(CK_SLOT_ID slotID)
+sftk_GetModuleIndex(CK_SLOT_ID slotID)
 {
-    if ((slotID == FIPS_SLOT_ID) || (slotID > 100)) {
+    if ((slotID == FIPS_SLOT_ID) || (slotID >= SFTK_MIN_FIPS_USER_SLOT_ID)) {
 	return NSC_FIPS_MODULE;
     }
     return NSC_NON_FIPS_MODULE;
@@ -2165,16 +2225,24 @@ pk11_GetModuleIndex(CK_SLOT_ID slotID)
 
 /* look up a slot structure from the ID (used to be a macro when we only
  * had two slots) */
-PK11Slot *
-pk11_SlotFromID(CK_SLOT_ID slotID)
+/* if all is true, return the slot even if it has been 'unloaded' */
+/* if all is false, only return the slots which are present */
+SFTKSlot *
+sftk_SlotFromID(CK_SLOT_ID slotID, PRBool all)
 {
-    int index = pk11_GetModuleIndex(slotID);
-    return (PK11Slot *)PL_HashTableLookupConst(nscSlotHashTable[index], 
+    SFTKSlot *slot;
+    int index = sftk_GetModuleIndex(slotID);
+    
+    if (nscSlotHashTable[index] == NULL) return NULL;
+    slot = (SFTKSlot *)PL_HashTableLookupConst(nscSlotHashTable[index], 
 							(void *)slotID);
+    /* cleared slots shouldn't 'show up' */
+    if (slot && !all && !slot->present) slot = NULL;
+    return slot;
 }
 
-PK11Slot *
-pk11_SlotFromSessionHandle(CK_SESSION_HANDLE handle)
+SFTKSlot *
+sftk_SlotFromSessionHandle(CK_SESSION_HANDLE handle)
 {
     CK_ULONG slotIDIndex = (handle >> 24) & 0x7f;
     CK_ULONG moduleIndex = (handle >> 31) & 1;
@@ -2183,20 +2251,20 @@ pk11_SlotFromSessionHandle(CK_SESSION_HANDLE handle)
 	return NULL;
     }
 
-    return pk11_SlotFromID(nscSlotList[moduleIndex][slotIDIndex]);
+    return sftk_SlotFromID(nscSlotList[moduleIndex][slotIDIndex], PR_FALSE);
 }
  
-PK11Slot * pk11_NewSlotFromID(CK_SLOT_ID slotID, int moduleIndex)
+static CK_RV
+sftk_RegisterSlot(SFTKSlot *slot, int moduleIndex)
 {
-    PK11Slot *slot = NULL;
     PLHashEntry *entry;
     int index;
 
-    index = pk11_GetModuleIndex(slotID);
+    index = sftk_GetModuleIndex(slot->slotID);
 
     /* make sure the slotID for this module is valid */
     if (moduleIndex != index) {
-	return NULL;
+	return CKR_SLOT_ID_INVALID;
     }
 
     if (nscSlotList[index] == NULL) {
@@ -2204,7 +2272,7 @@ PK11Slot * pk11_NewSlotFromID(CK_SLOT_ID slotID, int moduleIndex)
 	nscSlotList[index] = (CK_SLOT_ID *)
 		PORT_ZAlloc(nscSlotListSize[index]*sizeof(CK_SLOT_ID));
 	if (nscSlotList[index] == NULL) {
-	    return NULL;
+	    return CKR_HOST_MEMORY;
 	}
     }
     if (nscSlotCount[index] >= nscSlotListSize[index]) {
@@ -2216,80 +2284,139 @@ PK11Slot * pk11_NewSlotFromID(CK_SLOT_ID slotID, int moduleIndex)
 	if (nscSlotList[index] == NULL) {
             nscSlotList[index] = oldNscSlotList;
             nscSlotListSize[index] = oldNscSlotListSize;
-            return NULL;
+            return CKR_HOST_MEMORY;
 	}
     }
 
     if (nscSlotHashTable[index] == NULL) {
-	nscSlotHashTable[index] = PL_NewHashTable(64,pk11_HashNumber,
+	nscSlotHashTable[index] = PL_NewHashTable(64,sftk_HashNumber,
 				PL_CompareValues, PL_CompareValues, NULL, 0);
 	if (nscSlotHashTable[index] == NULL) {
-	    return NULL;
+	    return CKR_HOST_MEMORY;
 	}
     }
 
-    slot = (PK11Slot *) PORT_ZAlloc(sizeof(PK11Slot));
-    if (slot == NULL) {
-	return NULL;
-    }
-
-    entry = PL_HashTableAdd(nscSlotHashTable[index],(void *)slotID,slot);
+    entry = PL_HashTableAdd(nscSlotHashTable[index],(void *)slot->slotID,slot);
     if (entry == NULL) {
-	PORT_Free(slot);
-	return NULL;
+	return CKR_HOST_MEMORY;
     }
     slot->index = (nscSlotCount[index] & 0x7f) | ((index << 7) & 0x80);
-    nscSlotList[index][nscSlotCount[index]++] = slotID;
+    nscSlotList[index][nscSlotCount[index]++] = slot->slotID;
 
-    return slot;
+    return CKR_OK;
 }
 
-static SECStatus
-pk11_set_user(NSSLOWCERTCertificate *cert, SECItem *dummy, void *arg)
-{
-    PK11Slot  *slot = (PK11Slot *)arg;
-    NSSLOWCERTCertTrust trust = *cert->trust;
 
-    if (nsslowkey_KeyForCertExists(slot->keyDB,cert)) {
-	trust.sslFlags |= CERTDB_USER;
-	trust.emailFlags |= CERTDB_USER;
-	trust.objectSigningFlags |= CERTDB_USER;
-    } else {
-	trust.sslFlags &= ~CERTDB_USER;
-	trust.emailFlags &= ~CERTDB_USER;
-	trust.objectSigningFlags &= ~CERTDB_USER;
+/*
+ * ths function has all the common initialization that happens whenever we
+ * create a new slot or repurpose an old slot (only valid for slotID's 4 
+ * and greater).
+ *
+ * things that are not reinitialized are:
+ *   slotID (can't change)
+ *   slotDescription (can't change once defined) 
+ *   the locks and hash tables (difficult to change in running code, and
+ *     unnecessary. hash tables and list are cleared on shutdown, but they
+ *     are cleared in a 'friendly' way).
+ *   session and object ID counters -- so any old sessions and objects in the
+ *     application will get properly notified that the world has changed.
+ * 
+ * things that are reinitialized:
+ *   database (otherwise what would the point be;).
+ *   state variables related to databases.
+ *   session count stat info.
+ *   tokenDescription.
+ *
+ * NOTE: slotID's 4 and greater show up as removable devices.
+ *
+ */
+CK_RV
+SFTK_SlotReInit(SFTKSlot *slot, char *configdir, char *updatedir, 
+	char *updateID, sftk_token_parameters *params, int moduleIndex)
+{
+    PRBool needLogin = !params->noKeyDB;
+    CK_RV crv;
+
+    slot->hasTokens = PR_FALSE;
+    slot->sessionIDConflict = 0;
+    slot->sessionCount = 0;
+    slot->rwSessionCount = 0;
+    slot->needLogin = PR_FALSE;
+    slot->isLoggedIn = PR_FALSE;
+    slot->ssoLoggedIn = PR_FALSE;
+    slot->DB_loaded = PR_FALSE;
+    slot->certDB = NULL;
+    slot->keyDB = NULL;
+    slot->minimumPinLen = 0;
+    slot->readOnly = params->readOnly;
+    sftk_setStringName(params->tokdes ? params->tokdes : 
+	sftk_getDefTokName(slot->slotID), slot->tokDescription, 
+					sizeof(slot->tokDescription),PR_TRUE);
+    sftk_setStringName(params->updtokdes ? params->updtokdes : " ", 
+				slot->updateTokDescription, 
+				sizeof(slot->updateTokDescription),PR_TRUE);
+
+    if ((!params->noCertDB) || (!params->noKeyDB)) {
+	SFTKDBHandle * certHandle = NULL;
+	SFTKDBHandle *keyHandle = NULL;
+	crv = sftk_DBInit(params->configdir ? params->configdir : configdir,
+		params->certPrefix, params->keyPrefix, 
+		params->updatedir ? params->updatedir : updatedir,
+		params->updCertPrefix, params->updKeyPrefix,
+		params->updateID  ? params->updateID : updateID, 
+		params->readOnly, params->noCertDB, params->noKeyDB,
+		params->forceOpen, 
+		moduleIndex == NSC_FIPS_MODULE,
+		&certHandle, &keyHandle);
+	if (crv != CKR_OK) {
+	    goto loser;
+	}
+
+	slot->certDB = certHandle;
+	slot->keyDB = keyHandle;
+    }
+    if (needLogin) {
+	/* if the data base is initialized with a null password,remember that */
+	slot->needLogin = 
+		(PRBool)!sftk_hasNullPassword(slot, slot->keyDB);
+	if ((params->minPW >= 0) && (params->minPW <= SFTK_MAX_PIN)) {
+	    slot->minimumPinLen = params->minPW;
+	}
+	if ((slot->minimumPinLen == 0) && (params->pwRequired)) {
+	    slot->minimumPinLen = 1;
+	}
+	if ((moduleIndex == NSC_FIPS_MODULE) &&
+		(slot->minimumPinLen < FIPS_MIN_PIN)) {
+	    slot->minimumPinLen = FIPS_MIN_PIN;
+	}
     }
 
-    if (PORT_Memcmp(&trust,cert->trust, sizeof (trust)) != 0) {
-	nsslowcert_ChangeCertTrust(slot->certDB,cert, &trust);
-    }
+    slot->present = PR_TRUE;
+    return CKR_OK;
 
-    /* should check for email address and make sure we have an s/mime profile */
-    return SECSuccess;
-}
-
-static  void
-pk11_DBVerify(PK11Slot *slot)
-{
-    /* walk through all the certs and check to see if there are any 
-     * user certs, and make sure there are s/mime profiles for all certs with
-     * email addresses */
-    nsslowcert_TraversePermCerts(slot->certDB,pk11_set_user,slot);
-
-    return;
+loser:
+    SFTK_ShutdownSlot(slot);
+    return crv;
 }
 
 /*
  * initialize one of the slot structures. figure out which by the ID
  */
 CK_RV
-PK11_SlotInit(char *configdir,pk11_token_parameters *params, int moduleIndex)
+SFTK_SlotInit(char *configdir, char *updatedir, char *updateID,
+		sftk_token_parameters *params, int moduleIndex)
 {
     unsigned int i;
     CK_SLOT_ID slotID = params->slotID;
-    PK11Slot *slot = pk11_NewSlotFromID(slotID, moduleIndex);
-    PRBool needLogin = !params->noKeyDB;
-    CK_RV crv;
+    SFTKSlot *slot;
+    CK_RV crv = CKR_HOST_MEMORY;
+
+    /*
+     * first we initialize everything that is 'permanent' with this slot.
+     * that is everything we aren't going to shutdown if we close this slot
+     * and open it up again with different databases */
+
+    slot = PORT_ZNew(SFTKSlot);
 
     if (slot == NULL) {
 	return CKR_HOST_MEMORY;
@@ -2297,180 +2424,239 @@ PK11_SlotInit(char *configdir,pk11_token_parameters *params, int moduleIndex)
 
     slot->optimizeSpace = params->optimizeSpace;
     if (slot->optimizeSpace) {
-	slot->tokObjHashSize = SPACE_TOKEN_OBJECT_HASH_SIZE;
+	slot->sessObjHashSize = SPACE_SESSION_OBJECT_HASH_SIZE;
 	slot->sessHashSize = SPACE_SESSION_HASH_SIZE;
 	slot->numSessionLocks = 1;
     } else {
-	slot->tokObjHashSize = TIME_TOKEN_OBJECT_HASH_SIZE;
+	slot->sessObjHashSize = TIME_SESSION_OBJECT_HASH_SIZE;
 	slot->sessHashSize = TIME_SESSION_HASH_SIZE;
 	slot->numSessionLocks = slot->sessHashSize/BUCKETS_PER_SESSION_LOCK;
     }
     slot->sessionLockMask = slot->numSessionLocks-1;
 
-#ifdef PKCS11_USE_THREADS
     slot->slotLock = PZ_NewLock(nssILockSession);
-    if (slot->slotLock == NULL) {
-	return CKR_HOST_MEMORY;
-    }
-    slot->sessionLock = (PZLock **)
-			PORT_ZAlloc(slot->numSessionLocks * sizeof(PZLock *));
-    if (slot->sessionLock == NULL) {
-	return CKR_HOST_MEMORY;
-    }
+    if (slot->slotLock == NULL)
+	goto mem_loser;
+    slot->sessionLock = PORT_ZNewArray(PZLock *, slot->numSessionLocks);
+    if (slot->sessionLock == NULL)
+	goto mem_loser;
     for (i=0; i < slot->numSessionLocks; i++) {
         slot->sessionLock[i] = PZ_NewLock(nssILockSession);
-        if (slot->sessionLock[i] == NULL) return CKR_HOST_MEMORY;
+        if (slot->sessionLock[i] == NULL) 
+	    goto mem_loser;
     }
     slot->objectLock = PZ_NewLock(nssILockObject);
-    if (slot->objectLock == NULL) return CKR_HOST_MEMORY;
-#else
-    slot->slotLock = NULL;
-    slot->sessionLock = (PZLock **)
-			PORT_ZAlloc(slot->numSessionLocks * sizeof(PZLock *));
-    if (slot->sessionLock == NULL) {
-	return CKR_HOST_MEMORY;
-    }
-    for (i=0; i < slot->numSessionLocks; i++) {
-        slot->sessionLock[i] = NULL;
-    }
-    slot->objectLock = NULL;
-#endif
-    slot->head = (PK11Session **)
-		PORT_ZAlloc(slot->sessHashSize*sizeof(PK11Session *));
-    if (slot->head == NULL) {
-	return CKR_HOST_MEMORY;
-    }
-    slot->tokObjects = (PK11Object **)
-		PORT_ZAlloc(slot->tokObjHashSize*sizeof(PK11Object *));
-    if (slot->tokObjects == NULL) {
-	return CKR_HOST_MEMORY;
-    }
-    slot->tokenHashTable = PL_NewHashTable(64,pk11_HashNumber,PL_CompareValues,
+    if (slot->objectLock == NULL) 
+    	goto mem_loser;
+    slot->pwCheckLock = PR_NewLock();
+    if (slot->pwCheckLock == NULL) 
+    	goto mem_loser;
+    slot->head = PORT_ZNewArray(SFTKSession *, slot->sessHashSize);
+    if (slot->head == NULL) 
+	goto mem_loser;
+    slot->sessObjHashTable = PORT_ZNewArray(SFTKObject *, slot->sessObjHashSize);
+    if (slot->sessObjHashTable == NULL) 
+	goto mem_loser;
+    slot->tokObjHashTable = PL_NewHashTable(64,sftk_HashNumber,PL_CompareValues,
 					SECITEM_HashCompare, NULL, 0);
-    if (slot->tokenHashTable == NULL) {
-	return CKR_HOST_MEMORY;
-    }
-    slot->password = NULL;
-    slot->hasTokens = PR_FALSE;
+    if (slot->tokObjHashTable == NULL) 
+	goto mem_loser;
+
     slot->sessionIDCount = 0;
-    slot->sessionIDConflict = 0;
-    slot->sessionCount = 0;
-    slot->rwSessionCount = 0;
-    slot->tokenIDCount = 1;
-    slot->needLogin = PR_FALSE;
-    slot->isLoggedIn = PR_FALSE;
-    slot->ssoLoggedIn = PR_FALSE;
-    slot->DB_loaded = PR_FALSE;
+    slot->sessionObjectHandleCount = minSessionObjectHandle;
     slot->slotID = slotID;
-    slot->certDB = NULL;
-    slot->keyDB = NULL;
-    slot->minimumPinLen = 0;
-    slot->readOnly = params->readOnly;
-    pk11_setStringName(params->tokdes ? params->tokdes : 
-	pk11_getDefTokName(slotID), slot->tokDescription, 
-						sizeof(slot->tokDescription));
-    pk11_setStringName(params->slotdes ? params->slotdes : 
-	pk11_getDefSlotName(slotID), slot->slotDescription, 
-						sizeof(slot->slotDescription));
+    sftk_setStringName(params->slotdes ? params->slotdes : 
+	      sftk_getDefSlotName(slotID), slot->slotDescription, 
+					sizeof(slot->slotDescription), PR_TRUE);
 
-    if ((!params->noCertDB) || (!params->noKeyDB)) {
-	crv = pk11_DBInit(params->configdir ? params->configdir : configdir,
-		params->certPrefix, params->keyPrefix, params->readOnly,
-		params->noCertDB, params->noKeyDB, params->forceOpen, 
-						&slot->certDB, &slot->keyDB);
-	if (crv != CKR_OK) {
-	    /* shoutdown slot? */
-	    return crv;
+    /* call the reinit code to set everything that changes between token
+     * init calls */
+    crv = SFTK_SlotReInit(slot, configdir, updatedir, updateID,
+			   params, moduleIndex);
+    if (crv != CKR_OK) {
+	goto loser;
+    }
+    crv = sftk_RegisterSlot(slot, moduleIndex);
+    if (crv != CKR_OK) {
+	goto loser;
+    }
+    return CKR_OK;
+
+mem_loser:
+    crv = CKR_HOST_MEMORY;
+loser:
+   SFTK_DestroySlotData(slot);
+    return crv;
+}
+
+
+CK_RV sftk_CloseAllSessions(SFTKSlot *slot, PRBool logout)
+{
+    SFTKSession *session;
+    unsigned int i;
+    SFTKDBHandle *handle;
+
+    /* first log out the card */
+    /* special case - if we are in a middle of upgrade, we want to close the
+     * sessions to fake a token removal to tell the upper level code we have
+     * switched from one database to another, but we don't want to 
+     * explicity logout in case we can continue the upgrade with the 
+      * existing password if possible.
+     */
+    if (logout) {
+	handle = sftk_getKeyDB(slot);
+	SKIP_AFTER_FORK(PZ_Lock(slot->slotLock));
+	slot->isLoggedIn = PR_FALSE;
+	if (slot->needLogin && handle) {
+	    sftkdb_ClearPassword(handle);
 	}
-
-	if (nsslowcert_needDBVerify(slot->certDB)) {
-	    pk11_DBVerify(slot);
+	SKIP_AFTER_FORK(PZ_Unlock(slot->slotLock));
+	if (handle) {
+            sftk_freeDB(handle);
 	}
     }
-    if (needLogin) {
-	/* if the data base is initialized with a null password,remember that */
-	slot->needLogin = 
-		(PRBool)!pk11_hasNullPassword(slot->keyDB,&slot->password);
-	if (params->minPW <= PK11_MAX_PIN) {
-	    slot->minimumPinLen = params->minPW;
-	}
-	if ((slot->minimumPinLen == 0) && (params->pwRequired) && 
-		(slot->minimumPinLen <= PK11_MAX_PIN)) {
-	    slot->minimumPinLen = 1;
-	}
+
+    /* now close all the current sessions */
+    /* NOTE: If you try to open new sessions before NSC_CloseAllSessions
+     * completes, some of those new sessions may or may not be closed by
+     * NSC_CloseAllSessions... but any session running when this code starts
+     * will guarrenteed be close, and no session will be partially closed */
+    for (i=0; i < slot->sessHashSize; i++) {
+	PZLock *lock = SFTK_SESSION_LOCK(slot,i);
+	do {
+	    SKIP_AFTER_FORK(PZ_Lock(lock));
+	    session = slot->head[i];
+	    /* hand deque */
+	    /* this duplicates function of NSC_close session functions, but 
+	     * because we know that we are freeing all the sessions, we can
+	     * do more efficient processing */
+	    if (session) {
+		slot->head[i] = session->next;
+		if (session->next) session->next->prev = NULL;
+		session->next = session->prev = NULL;
+		SKIP_AFTER_FORK(PZ_Unlock(lock));
+		SKIP_AFTER_FORK(PZ_Lock(slot->slotLock));
+		--slot->sessionCount;
+		SKIP_AFTER_FORK(PZ_Unlock(slot->slotLock));
+		if (session->info.flags & CKF_RW_SESSION) {
+		    PR_ATOMIC_DECREMENT(&slot->rwSessionCount);
+		}
+	    } else {
+		SKIP_AFTER_FORK(PZ_Unlock(lock));
+	    }
+	    if (session) sftk_FreeSession(session);
+	} while (session != NULL);
     }
     return CKR_OK;
 }
 
-static PRIntn
-pk11_freeHashItem(PLHashEntry* entry, PRIntn index, void *arg)
+/*
+ * shut down the databases.
+ * we get the slot lock (which also protects slot->certDB and slot->keyDB)
+ * and clear the values so the new users will not find the databases.
+ * once things are clear, we can release our references to the databases.
+ * The databases will close when the last reference is released.
+ *
+ * We use reference counts so that we don't crash if someone shuts down
+ * a token that another thread is actively using.
+ */
+static void
+sftk_DBShutdown(SFTKSlot *slot)
 {
-    SECItem *item = (SECItem *)entry->value;
+    SFTKDBHandle *certHandle;
+    SFTKDBHandle      *keyHandle;
+    SKIP_AFTER_FORK(PZ_Lock(slot->slotLock));
+    certHandle = slot->certDB;
+    slot->certDB = NULL;
+    keyHandle = slot->keyDB;
+    slot->keyDB = NULL;
+    SKIP_AFTER_FORK(PZ_Unlock(slot->slotLock));
+    if (certHandle) {
+	sftk_freeDB(certHandle);
+    }
+    if (keyHandle) {
+	sftk_freeDB(keyHandle);
+    }
+}
 
-    SECITEM_FreeItem(item, PR_TRUE);
-    return HT_ENUMERATE_NEXT;
+CK_RV
+SFTK_ShutdownSlot(SFTKSlot *slot)
+{
+    /* make sure no new PK11 calls work except C_GetSlotInfo */
+    slot->present = PR_FALSE;
+
+    /* close all outstanding sessions
+     * the sessHashSize variable guarentees we have all the session
+     * mechanism set up */
+    if (slot->head) {
+	sftk_CloseAllSessions(slot, PR_TRUE);
+     }
+
+    /* clear all objects.. session objects are cleared as a result of
+     * closing all the sessions. We just need to clear the token object
+     * cache. slot->tokObjHashTable guarentees we have the token 
+     * infrastructure set up. */
+    if (slot->tokObjHashTable) {
+	SFTK_ClearTokenKeyHashTable(slot);
+    }
+
+    /* clear the slot description for the next guy */
+    PORT_Memset(slot->tokDescription, 0, sizeof(slot->tokDescription));
+
+    /* now shut down the databases. */
+    sftk_DBShutdown(slot);
+    return CKR_OK;
 }
 
 /*
  * initialize one of the slot structures. figure out which by the ID
  */
-static CK_RV
-pk11_DestroySlotData(PK11Slot *slot)
+CK_RV
+SFTK_DestroySlotData(SFTKSlot *slot)
 {
     unsigned int i;
 
-#ifdef PKCS11_USE_THREADS
-    if (slot->slotLock) {
-	PZ_DestroyLock(slot->slotLock);
-	slot->slotLock = NULL;
-    }
-    if (slot->sessionLock) {
-	for (i=0; i < slot->numSessionLocks; i++) {
-	    if (slot->sessionLock[i]) {
-		PZ_DestroyLock(slot->sessionLock[i]);
-		slot->sessionLock[i] = NULL;
-	    }
-	}
-    }
-    if (slot->objectLock) {
-	PZ_DestroyLock(slot->objectLock);
-	slot->objectLock = NULL;
-    }
-#endif
-    if (slot->sessionLock) {
-	PORT_Free(slot->sessionLock);
-	slot->sessionLock = NULL;
+    SFTK_ShutdownSlot(slot);
+
+    if (slot->tokObjHashTable) {
+	PL_HashTableDestroy(slot->tokObjHashTable);
+	slot->tokObjHashTable = NULL;
     }
 
-    if (slot->tokenHashTable) {
-	PL_HashTableEnumerateEntries(slot->tokenHashTable,
-							pk11_freeHashItem,NULL);
-	PL_HashTableDestroy(slot->tokenHashTable);
-	slot->tokenHashTable = NULL;
+    if (slot->sessObjHashTable) {
+	PORT_Free(slot->sessObjHashTable);
+	slot->sessObjHashTable = NULL;
     }
+    slot->sessObjHashSize = 0;
 
-    if (slot->tokObjects) {
-	for(i=0; i < slot->tokObjHashSize; i++) {
-	    PK11Object *object = slot->tokObjects[i];
-	    slot->tokObjects[i] = NULL;
-	    if (object) pk11_FreeObject(object);
-	}
-	PORT_Free(slot->tokObjects);
-	slot->tokObjects = NULL;
-    }
-    slot->tokObjHashSize = 0;
     if (slot->head) {
-	for(i=0; i < slot->sessHashSize; i++) {
-	    PK11Session *session = slot->head[i];
-	    slot->head[i] = NULL;
-	    if (session) pk11_FreeSession(session);
-	}
 	PORT_Free(slot->head);
 	slot->head = NULL;
     }
     slot->sessHashSize = 0;
-    pk11_DBShutdown(slot->certDB,slot->keyDB);
 
+    /* OK everything has been disassembled, now we can finally get rid
+     * of the locks */
+    SKIP_AFTER_FORK(PZ_DestroyLock(slot->slotLock));
+    slot->slotLock = NULL;
+    if (slot->sessionLock) {
+	for (i=0; i < slot->numSessionLocks; i++) {
+	    if (slot->sessionLock[i]) {
+		SKIP_AFTER_FORK(PZ_DestroyLock(slot->sessionLock[i]));
+		slot->sessionLock[i] = NULL;
+	    }
+	}
+	PORT_Free(slot->sessionLock);
+	slot->sessionLock = NULL;
+    }
+    if (slot->objectLock) {
+	SKIP_AFTER_FORK(PZ_DestroyLock(slot->objectLock));
+	slot->objectLock = NULL;
+    }
+    if (slot->pwCheckLock) {
+	SKIP_AFTER_FORK(PR_DestroyLock(slot->pwCheckLock));
+	slot->pwCheckLock = NULL;
+    }
     PORT_Free(slot);
     return CKR_OK;
 }
@@ -2484,26 +2670,88 @@ NSC_ModuleDBFunc(unsigned long function,char *parameters, void *args)
     char *secmod = NULL;
     char *appName = NULL;
     char *filename = NULL;
+    NSSDBType dbType = NSS_DB_TYPE_NONE;
     PRBool rw;
     static char *success="Success";
     char **rvstr = NULL;
 
-    secmod = secmod_getSecmodName(parameters,&appName,&filename, &rw);
+    rvstr = NSSUTIL_DoModuleDBFunction(function, parameters, args);
+    if (rvstr != NULL) {
+	return rvstr;
+    }
+
+    if (PORT_GetError() != SEC_ERROR_LEGACY_DATABASE) {
+	return NULL;
+    }
+
+   /* The legacy database uses the old dbm, which is only linked with the 
+    * legacy DB handler, which is only callable from softoken */
+
+    secmod = _NSSUTIL_GetSecmodName(parameters, &dbType, &appName,
+				    &filename, &rw);
 
     switch (function) {
     case SECMOD_MODULE_DB_FUNCTION_FIND:
-	rvstr = secmod_ReadPermDB(appName,filename,secmod,(char *)parameters,rw);
+	if (secmod == NULL) {
+	    PORT_SetError(SEC_ERROR_INVALID_ARGS);
+	    return NULL;
+	}
+	if (rw && (dbType != NSS_DB_TYPE_LEGACY) && 
+	    (dbType != NSS_DB_TYPE_MULTIACCESS)) {
+	    /* if we get here, we are trying to update the local database */
+	    /* force data from the legacy DB */
+	    char *oldSecmod = NULL;
+	    char *oldAppName = NULL;
+	    char *oldFilename = NULL;
+	    PRBool oldrw;
+	    char **strings = NULL;
+	    int i;
+
+	    dbType = NSS_DB_TYPE_LEGACY;
+	    oldSecmod = _NSSUTIL_GetSecmodName(parameters,&dbType, &oldAppName,
+					    &oldFilename, &oldrw);
+	    strings = sftkdbCall_ReadSecmodDB(appName, oldFilename, oldSecmod,
+					(char *)parameters, oldrw);
+	    if (strings) {
+		/* write out the strings */
+		for (i=0; strings[i]; i++) {
+		    NSSUTIL_DoModuleDBFunction(SECMOD_MODULE_DB_FUNCTION_ADD,
+				parameters, strings[i]);
+		}
+		sftkdbCall_ReleaseSecmodDBData(oldAppName,oldFilename,oldSecmod,
+			(char **)strings,oldrw);
+	    } else {
+		/* write out a dummy record */
+		NSSUTIL_DoModuleDBFunction(SECMOD_MODULE_DB_FUNCTION_ADD,
+				parameters, " ");
+	    }
+	    if (oldSecmod) { PR_smprintf_free(oldSecmod); }
+	    if (oldAppName) { PORT_Free(oldAppName); }
+	    if (oldFilename) { PORT_Free(oldFilename); }
+	    rvstr = NSSUTIL_DoModuleDBFunction(function, parameters, args);
+	    break;
+	}
+	rvstr = sftkdbCall_ReadSecmodDB(appName,filename,secmod,
+					(char *)parameters,rw);
 	break;
     case SECMOD_MODULE_DB_FUNCTION_ADD:
-	rvstr = (secmod_AddPermDB(appName,filename,secmod,(char *)args,rw) 
-				== SECSuccess) ? &success: NULL;
+	if (secmod == NULL) {
+	    PORT_SetError(SEC_ERROR_INVALID_ARGS);
+	    return NULL;
+	}
+	rvstr = (sftkdbCall_AddSecmodDB(appName,filename,secmod,
+			(char *)args,rw) == SECSuccess) ? &success: NULL;
 	break;
     case SECMOD_MODULE_DB_FUNCTION_DEL:
-	rvstr = (secmod_DeletePermDB(appName,filename,secmod,(char *)args,rw)
-				 == SECSuccess) ? &success: NULL;
+	if (secmod == NULL) {
+	    PORT_SetError(SEC_ERROR_INVALID_ARGS);
+	    return NULL;
+	}
+	rvstr = (sftkdbCall_DeleteSecmodDB(appName,filename,secmod,
+			(char *)args,rw) == SECSuccess) ? &success: NULL;
 	break;
     case SECMOD_MODULE_DB_FUNCTION_RELEASE:
-	rvstr = (secmod_ReleasePermDBData(appName,filename,secmod,
+	rvstr = (sftkdbCall_ReleaseSecmodDBData(appName,filename,secmod,
 			(char **)args,rw) == SECSuccess) ? &success: NULL;
 	break;
     }
@@ -2516,7 +2764,7 @@ NSC_ModuleDBFunc(unsigned long function,char *parameters, void *args)
 static void nscFreeAllSlots(int moduleIndex)
 {
     /* free all the slots */
-    PK11Slot *slot = NULL;
+    SFTKSlot *slot = NULL;
     CK_SLOT_ID slotID;
     int i;
 
@@ -2539,11 +2787,11 @@ static void nscFreeAllSlots(int moduleIndex)
 
 	for (i=0; i < (int) tmpSlotCount; i++) {
 	    slotID = tmpSlotList[i];
-	    slot = (PK11Slot *)
+	    slot = (SFTKSlot *)
 			PL_HashTableLookup(tmpSlotHashTable, (void *)slotID);
 	    PORT_Assert(slot);
 	    if (!slot) continue;
-	    pk11_DestroySlotData(slot);
+	    SFTK_DestroySlotData(slot);
 	    PL_HashTableRemove(tmpSlotHashTable, (void *)slotID);
 	}
 	PORT_Free(tmpSlotList);
@@ -2552,24 +2800,20 @@ static void nscFreeAllSlots(int moduleIndex)
 }
 
 static void
-pk11_closePeer(PRBool isFIPS)
+sftk_closePeer(PRBool isFIPS)
 {
     CK_SLOT_ID slotID = isFIPS ? PRIVATE_KEY_SLOT_ID: FIPS_SLOT_ID;
-    PK11Slot *slot;
+    SFTKSlot *slot;
     int moduleIndex = isFIPS? NSC_NON_FIPS_MODULE : NSC_FIPS_MODULE;
     PLHashTable *tmpSlotHashTable = nscSlotHashTable[moduleIndex];
 
-    slot = (PK11Slot *) PL_HashTableLookup(tmpSlotHashTable, (void *)slotID);
+    slot = (SFTKSlot *) PL_HashTableLookup(tmpSlotHashTable, (void *)slotID);
     if (slot == NULL) {
 	return;
     }
-    pk11_DBShutdown(slot->certDB,slot->keyDB);
-    slot->certDB = NULL;
-    slot->keyDB = NULL;
+    sftk_DBShutdown(slot);
     return;
 }
-
-static PRBool nsc_init = PR_FALSE;
 
 /* NSC_Initialize initializes the Cryptoki library. */
 CK_RV nsc_CommonInitialize(CK_VOID_PTR pReserved, PRBool isFIPS)
@@ -2580,13 +2824,28 @@ CK_RV nsc_CommonInitialize(CK_VOID_PTR pReserved, PRBool isFIPS)
     int i;
     int moduleIndex = isFIPS? NSC_FIPS_MODULE : NSC_NON_FIPS_MODULE;
 
+    if (isFIPS) {
+	loginWaitTime = PR_SecondsToInterval(1);
+    }
+
+    ENABLE_FORK_CHECK();
+
+    rv = SECOID_Init();
+    if (rv != SECSuccess) {
+	crv = CKR_DEVICE_ERROR;
+	return crv;
+    }
+
     rv = RNG_RNGInit();         /* initialize random number generator */
     if (rv != SECSuccess) {
 	crv = CKR_DEVICE_ERROR;
 	return crv;
     }
-    RNG_SystemInfoForRNG();
-
+    rv = BL_Init();             /* initialize freebl engine */
+    if (rv != SECSuccess) {
+	crv = CKR_DEVICE_ERROR;
+	return crv;
+    }
 
     /* NOTE:
      * we should be getting out mutexes from this list, not statically binding
@@ -2594,19 +2853,35 @@ CK_RV nsc_CommonInitialize(CK_VOID_PTR pReserved, PRBool isFIPS)
      * off from the rest on NSS.
      */
 
-    /* initialize the key and cert db's */
-    nsslowkey_SetDefaultKeyDBAlg
-			     (SEC_OID_PKCS12_PBE_WITH_SHA1_AND_TRIPLE_DES_CBC);
+   /* initialize the key and cert db's */
+    if (init_args && (!(init_args->flags & CKF_OS_LOCKING_OK))) {
+        if (init_args->CreateMutex && init_args->DestroyMutex &&
+            init_args->LockMutex && init_args->UnlockMutex) {
+            /* softoken always uses NSPR (ie. OS locking), and doesn't know how
+             * to use the lock functions provided by the application.
+             */
+            crv = CKR_CANT_LOCK;
+            return crv;
+        }
+        if (init_args->CreateMutex || init_args->DestroyMutex ||
+            init_args->LockMutex || init_args->UnlockMutex) {
+            /* only some of the lock functions were provided by the
+             * application. This is invalid per PKCS#11 spec.
+             */
+            crv = CKR_ARGUMENTS_BAD;
+            return crv;
+        }
+    }
     crv = CKR_ARGUMENTS_BAD;
     if ((init_args && init_args->LibraryParameters)) {
-	pk11_parameters paramStrings;
+	sftk_parameters paramStrings;
        
-	crv = secmod_parseParameters
+	crv = sftk_parseParameters
 		((char *)init_args->LibraryParameters, &paramStrings, isFIPS);
 	if (crv != CKR_OK) {
 	    return crv;
 	}
-	crv = pk11_configure(paramStrings.man, paramStrings.libdes);
+	crv = sftk_configure(paramStrings.man, paramStrings.libdes);
         if (crv != CKR_OK) {
 	    goto loser;
 	}
@@ -2614,28 +2889,78 @@ CK_RV nsc_CommonInitialize(CK_VOID_PTR pReserved, PRBool isFIPS)
 	/* if we have a peer already open, have him close his DB's so we
 	 * don't clobber each other. */
 	if ((isFIPS && nsc_init) || (!isFIPS && nsf_init)) {
-	    pk11_closePeer(isFIPS);
+	    sftk_closePeer(isFIPS);
+	    if (sftk_audit_enabled) {
+		if (isFIPS && nsc_init) {
+		    sftk_LogAuditMessage(NSS_AUDIT_INFO, NSS_AUDIT_FIPS_STATE, 
+				"enabled FIPS mode");
+		} else {
+		    sftk_LogAuditMessage(NSS_AUDIT_INFO, NSS_AUDIT_FIPS_STATE, 
+				"disabled FIPS mode");
+		}
+	    }
 	}
 
 	for (i=0; i < paramStrings.token_count; i++) {
-	    crv = 
-		PK11_SlotInit(paramStrings.configdir, &paramStrings.tokens[i],
-			moduleIndex);
+	    crv = SFTK_SlotInit(paramStrings.configdir, 
+			paramStrings.updatedir, paramStrings.updateID,
+			&paramStrings.tokens[i], moduleIndex);
 	    if (crv != CKR_OK) {
                 nscFreeAllSlots(moduleIndex);
                 break;
             }
 	}
 loser:
-	secmod_freeParams(&paramStrings);
+	sftk_freeParams(&paramStrings);
+    }
+    if (CKR_OK == crv) {
+        sftk_InitFreeLists();
     }
 
+#ifndef NO_FORK_CHECK
+    if (CKR_OK == crv) {
+#if defined(CHECK_FORK_MIXED)
+        /* Before Solaris 10, fork handlers are not unregistered at dlclose()
+         * time. So, we only use pthread_atfork on Solaris 10 and later. For
+         * earlier versions, we use PID checks.
+         */
+        char buf[200];
+        int major = 0, minor = 0;
+
+        long rv = sysinfo(SI_RELEASE, buf, sizeof(buf));
+        if (rv > 0 && rv < sizeof(buf)) {
+            if (2 == sscanf(buf, "%d.%d", &major, &minor)) {
+                /* Are we on Solaris 10 or greater ? */
+                if (major >5 || (5 == major && minor >= 10)) {
+                    /* we are safe to use pthread_atfork */
+                    usePthread_atfork = PR_TRUE;
+                }
+            }
+        }
+        if (usePthread_atfork) {
+            pthread_atfork(NULL, NULL, ForkedChild);
+        } else {
+            myPid = getpid();
+        }
+
+#elif defined(CHECK_FORK_PTHREAD)
+        pthread_atfork(NULL, NULL, ForkedChild);
+#elif defined(CHECK_FORK_GETPID)
+        myPid = getpid();
+#else
+#error Incorrect fork check method.
+#endif
+    }
+#endif
     return crv;
 }
 
 CK_RV NSC_Initialize(CK_VOID_PTR pReserved)
 {
     CK_RV crv;
+    
+    sftk_ForkReset(pReserved, &crv);
+
     if (nsc_init) {
 	return CKR_CRYPTOKI_ALREADY_INITIALIZED;
     }
@@ -2644,15 +2969,18 @@ CK_RV NSC_Initialize(CK_VOID_PTR pReserved)
     return crv;
 }
 
+
 /* NSC_Finalize indicates that an application is done with the 
  * Cryptoki library.*/
 CK_RV nsc_CommonFinalize (CK_VOID_PTR pReserved, PRBool isFIPS)
 {
-    
+    /* propagate the fork status to freebl and util */
+    BL_SetForkState(parentForkedAfterC_Initialize);
+    UTIL_SetForkState(parentForkedAfterC_Initialize);
 
     nscFreeAllSlots(isFIPS ? NSC_FIPS_MODULE : NSC_NON_FIPS_MODULE);
 
-    /* don't muck with the globals is our peer is still initialized */
+    /* don't muck with the globals if our peer is still initialized */
     if (isFIPS && nsc_init) {
 	return CKR_OK;
     }
@@ -2660,27 +2988,70 @@ CK_RV nsc_CommonFinalize (CK_VOID_PTR pReserved, PRBool isFIPS)
 	return CKR_OK;
     }
 
-    nsslowcert_DestroyGlobalLocks();
+    sftk_CleanupFreeLists();
+    sftkdb_Shutdown();
 
-#ifdef LEAK_TEST
-    /*
-     * do we really want to throw away all our hard earned entropy here!!?
-     * No we don't! Not calling RNG_RNGShutdown only 'leaks' data on the 
-     * initial call to RNG_Init(). So the only reason to call this is to clean
-     * up leak detection warnings on shutdown. In many cases we *don't* want
-     * to free up the global RNG context because the application has Finalized
-     * simply to swap profiles. We don't want to loose the entropy we've 
-     * already collected.
-     */
+    /* This function does not discard all our previously aquired entropy. */
     RNG_RNGShutdown();
-#endif
 
-    pk11_CleanupFreeLists();
     /* tell freeBL to clean up after itself */
     BL_Cleanup();
+    
+    /* reset fork status in freebl. We must do this before BL_Unload so that
+     * this call doesn't force freebl to be reloaded. */
+    BL_SetForkState(PR_FALSE);
+    
+    /* unload freeBL shared library from memory. This may only decrement the
+     * OS refcount if it's been loaded multiple times, eg. by libssl */
+    BL_Unload();
+
+    /* clean up the default OID table */
+    SECOID_Shutdown();
+
+    /* reset fork status in util */
+    UTIL_SetForkState(PR_FALSE);
+
     nsc_init = PR_FALSE;
 
+#ifdef CHECK_FORK_MIXED
+    if (!usePthread_atfork) {
+        myPid = 0; /* allow CHECK_FORK in the next softoken initialization to
+                    * succeed */
+    } else {
+        forked = PR_FALSE; /* allow reinitialization */
+    }
+#elif defined(CHECK_FORK_GETPID)
+    myPid = 0; /* allow reinitialization */
+#elif defined (CHECK_FORK_PTHREAD)
+    forked = PR_FALSE; /* allow reinitialization */
+#endif
     return CKR_OK;
+}
+
+/* Hard-reset the entire softoken PKCS#11 module if the parent process forked
+ * while it was initialized. */
+PRBool sftk_ForkReset(CK_VOID_PTR pReserved, CK_RV* crv)
+{
+#ifndef NO_FORK_CHECK
+    if (PARENT_FORKED()) {
+        parentForkedAfterC_Initialize = PR_TRUE;
+        if (nsc_init) {
+            /* finalize non-FIPS token */
+            *crv = nsc_CommonFinalize(pReserved, PR_FALSE);
+            PORT_Assert(CKR_OK == *crv);
+            nsc_init = (PRBool) !(*crv == CKR_OK);
+        }
+        if (nsf_init) {
+            /* finalize FIPS token */
+            *crv = nsc_CommonFinalize(pReserved, PR_TRUE);
+            PORT_Assert(CKR_OK == *crv);
+            nsf_init = (PRBool) !(*crv == CKR_OK);
+        }
+        parentForkedAfterC_Initialize = PR_FALSE;
+        return PR_TRUE;
+    }
+#endif
+    return PR_FALSE;
 }
 
 /* NSC_Finalize indicates that an application is done with the 
@@ -2689,8 +3060,13 @@ CK_RV NSC_Finalize (CK_VOID_PTR pReserved)
 {
     CK_RV crv;
 
+    /* reset entire PKCS#11 module upon fork */
+    if (sftk_ForkReset(pReserved, &crv)) {
+        return crv;
+    }
+
     if (!nsc_init) {
-	return CKR_OK;
+        return CKR_OK;
     }
 
     crv = nsc_CommonFinalize (pReserved, PR_FALSE);
@@ -2708,12 +3084,14 @@ CK_RV  NSC_GetInfo(CK_INFO_PTR pInfo)
 {
     volatile char c; /* force a reference that won't get optimized away */
 
+    CHECK_FORK();
+    
     c = __nss_softokn_rcsid[0] + __nss_softokn_sccsid[0]; 
     pInfo->cryptokiVersion.major = 2;
-    pInfo->cryptokiVersion.minor = 11;
+    pInfo->cryptokiVersion.minor = 20;
     PORT_Memcpy(pInfo->manufacturerID,manufacturerID,32);
-    pInfo->libraryVersion.major = 3;
-    pInfo->libraryVersion.minor = 7;
+    pInfo->libraryVersion.major = SOFTOKEN_VMAJOR;
+    pInfo->libraryVersion.minor = SOFTOKEN_VMINOR;
     PORT_Memcpy(pInfo->libraryDescription,libraryDescription,32);
     pInfo->flags = 0;
     return CKR_OK;
@@ -2736,6 +3114,7 @@ CK_RV nsc_CommonGetSlotList(CK_BBOOL tokenPresent,
 CK_RV NSC_GetSlotList(CK_BBOOL tokenPresent,
 	 		CK_SLOT_ID_PTR	pSlotList, CK_ULONG_PTR pulCount)
 {
+    CHECK_FORK();
     return nsc_CommonGetSlotList(tokenPresent, pSlotList, pulCount, 
 							NSC_NON_FIPS_MODULE);
 }
@@ -2743,68 +3122,98 @@ CK_RV NSC_GetSlotList(CK_BBOOL tokenPresent,
 /* NSC_GetSlotInfo obtains information about a particular slot in the system. */
 CK_RV NSC_GetSlotInfo(CK_SLOT_ID slotID, CK_SLOT_INFO_PTR pInfo)
 {
-    PK11Slot *slot = pk11_SlotFromID(slotID);
+    SFTKSlot *slot = sftk_SlotFromID(slotID, PR_TRUE);
+
+    CHECK_FORK();
+
     if (slot == NULL) return CKR_SLOT_ID_INVALID;
 
     pInfo->firmwareVersion.major = 0;
     pInfo->firmwareVersion.minor = 0;
-    PORT_Memcpy(pInfo->manufacturerID,manufacturerID,32);
-    PORT_Memcpy(pInfo->slotDescription,slot->slotDescription,64);
-    pInfo->flags = CKF_TOKEN_PRESENT;
+
+    PORT_Memcpy(pInfo->manufacturerID,manufacturerID,
+		sizeof(pInfo->manufacturerID));
+    PORT_Memcpy(pInfo->slotDescription,slot->slotDescription,
+		sizeof(pInfo->slotDescription));
+    pInfo->flags = (slot->present) ? CKF_TOKEN_PRESENT : 0;
+
+    /* all user defined slots are defined as removable */
+    if (slotID >= SFTK_MIN_USER_SLOT_ID) {
+	pInfo->flags |= CKF_REMOVABLE_DEVICE;
+    } else {
+	/* In the case where we are doing a merge update, we need
+	 * the DB slot to be removable so the token name can change
+	 * appropriately. */
+	SFTKDBHandle *handle = sftk_getKeyDB(slot);
+	if (handle) { 
+	    if (sftkdb_InUpdateMerge(handle)) {
+		pInfo->flags |= CKF_REMOVABLE_DEVICE;
+	    }
+            sftk_freeDB(handle);
+	}
+    }
+
     /* ok we really should read it out of the keydb file. */
     /* pInfo->hardwareVersion.major = NSSLOWKEY_DB_FILE_VERSION; */
-    pInfo->hardwareVersion.major = 3;
-    pInfo->hardwareVersion.minor = 7;
+    pInfo->hardwareVersion.major = SOFTOKEN_VMAJOR;
+    pInfo->hardwareVersion.minor = SOFTOKEN_VMINOR;
     return CKR_OK;
 }
-
-#define CKF_THREAD_SAFE 0x8000 /* for now */
 
 /*
  * check the current state of the 'needLogin' flag in case the database has
  * been changed underneath us.
  */
 static PRBool
-pk11_checkNeedLogin(PK11Slot *slot)
+sftk_checkNeedLogin(SFTKSlot *slot, SFTKDBHandle *keyHandle)
 {
-    if (slot->password) {
-	if (nsslowkey_CheckKeyDBPassword(slot->keyDB,slot->password) 
-							== SECSuccess) {
-	    return slot->needLogin;
-	} else {
-	    SECITEM_FreeItem(slot->password, PR_TRUE);
-	    slot->password = NULL;
-	    slot->isLoggedIn = PR_FALSE;
-	}
+    if (sftkdb_PWCached(keyHandle) == SECSuccess) {
+	return slot->needLogin;
     }
-    slot->needLogin = 
-		(PRBool)!pk11_hasNullPassword(slot->keyDB,&slot->password);
+    slot->needLogin = (PRBool)!sftk_hasNullPassword(slot, keyHandle);
     return (slot->needLogin);
 }
 
+static PRBool
+sftk_isBlank(const char *s, int len)
+{
+    int i;
+    for (i=0; i < len; i++) {
+	if (s[i] != ' ') {
+	    return PR_FALSE;
+	}
+    }
+    return PR_TRUE;
+}
 
 /* NSC_GetTokenInfo obtains information about a particular token in 
  * the system. */
 CK_RV NSC_GetTokenInfo(CK_SLOT_ID slotID,CK_TOKEN_INFO_PTR pInfo)
 {
-    PK11Slot *slot = pk11_SlotFromID(slotID);
-    NSSLOWKEYDBHandle *handle;
+    SFTKSlot *slot;
+    SFTKDBHandle *handle;
 
+    CHECK_FORK();
+    
+    if (!nsc_init && !nsf_init) return CKR_CRYPTOKI_NOT_INITIALIZED;
+    slot = sftk_SlotFromID(slotID, PR_FALSE);
     if (slot == NULL) return CKR_SLOT_ID_INVALID;
 
     PORT_Memcpy(pInfo->manufacturerID,manufacturerID,32);
     PORT_Memcpy(pInfo->model,"NSS 3           ",16);
     PORT_Memcpy(pInfo->serialNumber,"0000000000000000",16);
+    PORT_Memcpy(pInfo->utcTime,"0000000000000000",16);
     pInfo->ulMaxSessionCount = 0; /* arbitrarily large */
     pInfo->ulSessionCount = slot->sessionCount;
     pInfo->ulMaxRwSessionCount = 0; /* arbitarily large */
     pInfo->ulRwSessionCount = slot->rwSessionCount;
     pInfo->firmwareVersion.major = 0;
     pInfo->firmwareVersion.minor = 0;
-    PORT_Memcpy(pInfo->label,slot->tokDescription,32);
-    handle = slot->keyDB;
+    PORT_Memcpy(pInfo->label,slot->tokDescription,sizeof(pInfo->label));
+    handle = sftk_getKeyDB(slot);
+    pInfo->flags = CKF_RNG | CKF_DUAL_CRYPTO_OPERATIONS;
     if (handle == NULL) {
-        pInfo->flags= CKF_RNG | CKF_WRITE_PROTECTED | CKF_THREAD_SAFE;
+	pInfo->flags |= CKF_WRITE_PROTECTED;
 	pInfo->ulMaxPinLen = 0;
 	pInfo->ulMinPinLen = 0;
 	pInfo->ulTotalPublicMemory = 0;
@@ -2823,25 +3232,60 @@ CK_RV NSC_GetTokenInfo(CK_SLOT_ID slotID,CK_TOKEN_INFO_PTR pInfo)
 	 *   (3) Finally we have an initialized password whicn is not NULL, and
 	 *   we will need to prompt for it.
 	 */
-	if (nsslowkey_HasKeyDBPassword(handle) == SECFailure) {
-	    pInfo->flags = CKF_THREAD_SAFE | CKF_LOGIN_REQUIRED;
-	} else if (!pk11_checkNeedLogin(slot)) {
-	    pInfo->flags = CKF_THREAD_SAFE | CKF_USER_PIN_INITIALIZED;
+	if (sftkdb_HasPasswordSet(handle) == SECFailure) {
+	    pInfo->flags |= CKF_LOGIN_REQUIRED;
+	} else if (!sftk_checkNeedLogin(slot,handle)) {
+	    pInfo->flags |= CKF_USER_PIN_INITIALIZED;
 	} else {
-	    pInfo->flags = CKF_THREAD_SAFE | 
-				CKF_LOGIN_REQUIRED | CKF_USER_PIN_INITIALIZED;
+	    pInfo->flags |= CKF_LOGIN_REQUIRED | CKF_USER_PIN_INITIALIZED;
+	/* 
+         * if we are doing a merge style update, and we need to get the password
+	 * of our source database (the database we are updating from), make sure we
+         * return a token name that will match the database we are prompting for.
+	 */
+	if (sftkdb_NeedUpdateDBPassword(handle)) {
+	    /* if we have an update tok description, use it. otherwise
+             * use the updateID for this database */
+	    if (!sftk_isBlank(slot->updateTokDescription,
+						sizeof(pInfo->label))) {
+		PORT_Memcpy(pInfo->label,slot->updateTokDescription,
+				sizeof(pInfo->label));
+	    } else {
+		/* build from updateID */
+		const char *updateID = sftkdb_GetUpdateID(handle);
+		if (updateID) {
+		    sftk_setStringName(updateID, (char *)pInfo->label,
+				 sizeof(pInfo->label), PR_FALSE);
+		}
+	    }
 	}
-	pInfo->ulMaxPinLen = PK11_MAX_PIN;
-	pInfo->ulMinPinLen = 0;
-	if (slot->minimumPinLen > 0) {
-	    pInfo->ulMinPinLen = (CK_ULONG)slot->minimumPinLen;
 	}
+	pInfo->ulMaxPinLen = SFTK_MAX_PIN;
+	pInfo->ulMinPinLen = (CK_ULONG)slot->minimumPinLen;
 	pInfo->ulTotalPublicMemory = 1;
 	pInfo->ulFreePublicMemory = 1;
 	pInfo->ulTotalPrivateMemory = 1;
 	pInfo->ulFreePrivateMemory = 1;
+#ifdef SHDB_FIXME
 	pInfo->hardwareVersion.major = CERT_DB_FILE_VERSION;
 	pInfo->hardwareVersion.minor = handle->version;
+#else
+	pInfo->hardwareVersion.major = 0;
+	pInfo->hardwareVersion.minor = 0;
+#endif
+        sftk_freeDB(handle);
+    }
+    /*
+     * CKF_LOGIN_REQUIRED CKF_USER_PIN_INITIALIZED  how CKF_TOKEN_INITIALIZED
+     *                                              should be set
+     *         0                   0                           1
+     *         1                   0                           0
+     *         0                   1                           1
+     *         1                   1                           1
+     */
+    if (!(pInfo->flags & CKF_LOGIN_REQUIRED) ||
+	(pInfo->flags & CKF_USER_PIN_INITIALIZED)) {
+	pInfo->flags |= CKF_TOKEN_INITIALIZED;
     }
     return CKR_OK;
 }
@@ -2851,20 +3295,23 @@ CK_RV NSC_GetTokenInfo(CK_SLOT_ID slotID,CK_TOKEN_INFO_PTR pInfo)
 CK_RV NSC_GetMechanismList(CK_SLOT_ID slotID,
 	CK_MECHANISM_TYPE_PTR pMechanismList, CK_ULONG_PTR pulCount)
 {
-    int i;
+    CK_ULONG i;
+
+    CHECK_FORK();
 
     switch (slotID) {
+    /* default: */
     case NETSCAPE_SLOT_ID:
 	*pulCount = mechanismCount;
 	if (pMechanismList != NULL) {
-	    for (i=0; i < (int) mechanismCount; i++) {
+	    for (i=0; i < mechanismCount; i++) {
 		pMechanismList[i] = mechanisms[i].type;
 	    }
 	}
 	break;
      default:
 	*pulCount = 0;
-	for (i=0; i < (int) mechanismCount; i++) {
+	for (i=0; i < mechanismCount; i++) {
 	    if (mechanisms[i].privkey) {
 		(*pulCount)++;
 		if (pMechanismList != NULL) {
@@ -2884,8 +3331,10 @@ CK_RV NSC_GetMechanismInfo(CK_SLOT_ID slotID, CK_MECHANISM_TYPE type,
     					CK_MECHANISM_INFO_PTR pInfo)
 {
     PRBool isPrivateKey;
-    int i;
+    CK_ULONG i;
 
+    CHECK_FORK();
+    
     switch (slotID) {
     case NETSCAPE_SLOT_ID:
 	isPrivateKey = PR_FALSE;
@@ -2894,46 +3343,56 @@ CK_RV NSC_GetMechanismInfo(CK_SLOT_ID slotID, CK_MECHANISM_TYPE type,
 	isPrivateKey = PR_TRUE;
 	break;
     }
-    for (i=0; i < (int) mechanismCount; i++) {
+    for (i=0; i < mechanismCount; i++) {
         if (type == mechanisms[i].type) {
 	    if (isPrivateKey && !mechanisms[i].privkey) {
     		return CKR_MECHANISM_INVALID;
 	    }
-	    PORT_Memcpy(pInfo,&mechanisms[i].domestic,
-						sizeof(CK_MECHANISM_INFO));
+	    PORT_Memcpy(pInfo,&mechanisms[i].info, sizeof(CK_MECHANISM_INFO));
 	    return CKR_OK;
 	}
     }
     return CKR_MECHANISM_INVALID;
 }
 
-static SECStatus
-pk11_TurnOffUser(NSSLOWCERTCertificate *cert, SECItem *k, void *arg)
+CK_RV sftk_MechAllowsOperation(CK_MECHANISM_TYPE type, CK_ATTRIBUTE_TYPE op)
 {
-   NSSLOWCERTCertTrust trust;
-   SECStatus rv;
+    CK_ULONG i;
+    CK_FLAGS flags;
 
-   rv = nsslowcert_GetCertTrust(cert,&trust);
-   if (rv == SECSuccess && ((trust.emailFlags & CERTDB_USER) ||
-			    (trust.sslFlags & CERTDB_USER) ||
-			    (trust.objectSigningFlags & CERTDB_USER))) {
-	trust.emailFlags &= ~CERTDB_USER;
-	trust.sslFlags &= ~CERTDB_USER;
-	trust.objectSigningFlags &= ~CERTDB_USER;
-	nsslowcert_ChangeCertTrust(cert->dbhandle,cert,&trust);
-   }
-   return SECSuccess;
+    switch (op) {
+    case CKA_ENCRYPT:         flags = CKF_ENCRYPT;         break;
+    case CKA_DECRYPT:         flags = CKF_DECRYPT;         break;
+    case CKA_WRAP:            flags = CKF_WRAP;            break;
+    case CKA_UNWRAP:          flags = CKF_UNWRAP;          break;
+    case CKA_SIGN:            flags = CKF_SIGN;            break;
+    case CKA_SIGN_RECOVER:    flags = CKF_SIGN_RECOVER;    break;
+    case CKA_VERIFY:          flags = CKF_VERIFY;          break;
+    case CKA_VERIFY_RECOVER:  flags = CKF_VERIFY_RECOVER;  break;
+    case CKA_DERIVE:          flags = CKF_DERIVE;          break;
+    default:
+    	return CKR_ARGUMENTS_BAD;
+    }
+    for (i=0; i < mechanismCount; i++) {
+        if (type == mechanisms[i].type) {
+	    return (flags & mechanisms[i].info.flags) ? CKR_OK 
+	                                              : CKR_MECHANISM_INVALID;
+	}
+    }
+    return CKR_MECHANISM_INVALID;
 }
 
 /* NSC_InitToken initializes a token. */
 CK_RV NSC_InitToken(CK_SLOT_ID slotID,CK_CHAR_PTR pPin,
  				CK_ULONG ulPinLen,CK_CHAR_PTR pLabel) {
-    PK11Slot *slot = pk11_SlotFromID(slotID);
-    NSSLOWKEYDBHandle *handle;
-    NSSLOWCERTCertDBHandle *certHandle;
+    SFTKSlot *slot = sftk_SlotFromID(slotID, PR_FALSE);
+    SFTKDBHandle *handle;
+    SFTKDBHandle *certHandle;
     SECStatus rv;
     unsigned int i;
-    PK11Object *object;
+    SFTKObject *object;
+
+    CHECK_FORK();
 
     if (slot == NULL) return CKR_SLOT_ID_INVALID;
 
@@ -2946,40 +3405,43 @@ CK_RV NSC_InitToken(CK_SLOT_ID slotID,CK_CHAR_PTR pPin,
 
     /* first, delete all our loaded key and cert objects from our 
      * internal list. */
-    PK11_USE_THREADS(PZ_Lock(slot->objectLock);)
-    for (i=0; i < slot->tokObjHashSize; i++) {
+    PZ_Lock(slot->objectLock);
+    for (i=0; i < slot->sessObjHashSize; i++) {
 	do {
-	    object = slot->tokObjects[i];
+	    object = slot->sessObjHashTable[i];
 	    /* hand deque */
 	    /* this duplicates function of NSC_close session functions, but 
 	     * because we know that we are freeing all the sessions, we can
 	     * do more efficient processing */
 	    if (object) {
-		slot->tokObjects[i] = object->next;
+		slot->sessObjHashTable[i] = object->next;
 
 		if (object->next) object->next->prev = NULL;
 		object->next = object->prev = NULL;
 	    }
-	    if (object) pk11_FreeObject(object);
+	    if (object) sftk_FreeObject(object);
 	} while (object != NULL);
     }
     slot->DB_loaded = PR_FALSE;
-    PK11_USE_THREADS(PZ_Unlock(slot->objectLock);)
+    PZ_Unlock(slot->objectLock);
 
     /* then clear out the key database */
-    handle = slot->keyDB;
+    handle = sftk_getKeyDB(slot);
     if (handle == NULL) {
 	return CKR_TOKEN_WRITE_PROTECTED;
     }
 
-    /* what to do on an error here? */
-    rv = nsslowkey_ResetKeyDB(handle);
+    rv = sftkdb_ResetKeyDB(handle);
+    sftk_freeDB(handle);
+    if (rv != SECSuccess) {
+	return CKR_DEVICE_ERROR;
+    }
 
     /* finally  mark all the user certs as non-user certs */
-    certHandle = slot->certDB;
+    certHandle = sftk_getCertDB(slot);
     if (certHandle == NULL) return CKR_OK;
 
-    nsslowcert_TraversePermCerts(certHandle,pk11_TurnOffUser, NULL);
+    sftk_freeDB(certHandle);
 
     return CKR_OK; /*is this the right function for not implemented*/
 }
@@ -2989,73 +3451,85 @@ CK_RV NSC_InitToken(CK_SLOT_ID slotID,CK_CHAR_PTR pPin,
 CK_RV NSC_InitPIN(CK_SESSION_HANDLE hSession,
     					CK_CHAR_PTR pPin, CK_ULONG ulPinLen)
 {
-    PK11Session *sp;
-    PK11Slot *slot;
-    NSSLOWKEYDBHandle *handle;
-    SECItem *newPin;
-    char newPinStr[PK11_MAX_PIN+1];
+    SFTKSession *sp = NULL;
+    SFTKSlot *slot;
+    SFTKDBHandle *handle = NULL;
+    char newPinStr[SFTK_MAX_PIN+1];
     SECStatus rv;
+    CK_RV crv = CKR_SESSION_HANDLE_INVALID;
+    PRBool tokenRemoved = PR_FALSE;
 
+    CHECK_FORK();
     
-    sp = pk11_SessionFromHandle(hSession);
+    sp = sftk_SessionFromHandle(hSession);
     if (sp == NULL) {
-	return CKR_SESSION_HANDLE_INVALID;
+	goto loser;
     }
 
-    slot = pk11_SlotFromSession(sp);
+    slot = sftk_SlotFromSession(sp);
     if (slot == NULL) {
-	pk11_FreeSession(sp);
-	return CKR_SESSION_HANDLE_INVALID;;
+	goto loser;
     }
 
-    handle = slot->keyDB;
+    handle = sftk_getKeyDB(slot);
     if (handle == NULL) {
-	pk11_FreeSession(sp);
-	return CKR_PIN_LEN_RANGE;
+	crv = CKR_PIN_LEN_RANGE;
+	goto loser;
     }
 
 
     if (sp->info.state != CKS_RW_SO_FUNCTIONS) {
-	pk11_FreeSession(sp);
-	return CKR_USER_NOT_LOGGED_IN;
+	crv = CKR_USER_NOT_LOGGED_IN;
+	goto loser;
     }
 
-    pk11_FreeSession(sp);
+    sftk_FreeSession(sp);
+    sp = NULL;
 
     /* make sure the pins aren't too long */
-    if (ulPinLen > PK11_MAX_PIN) {
-	return CKR_PIN_LEN_RANGE;
+    if (ulPinLen > SFTK_MAX_PIN) {
+	crv = CKR_PIN_LEN_RANGE;
+	goto loser;
     }
     if (ulPinLen < (CK_ULONG)slot->minimumPinLen) {
-	return CKR_PIN_LEN_RANGE;
+	crv = CKR_PIN_LEN_RANGE;
+	goto loser;
     }
 
-    if (nsslowkey_HasKeyDBPassword(handle) != SECFailure) {
-	return CKR_DEVICE_ERROR;
+    if (sftkdb_HasPasswordSet(handle) != SECFailure) {
+	crv = CKR_DEVICE_ERROR;
+	goto loser;
     }
 
     /* convert to null terminated string */
-    PORT_Memcpy(newPinStr,pPin,ulPinLen);
+    PORT_Memcpy(newPinStr, pPin, ulPinLen);
     newPinStr[ulPinLen] = 0; 
 
     /* build the hashed pins which we pass around */
-    newPin = nsslowkey_HashPassword(newPinStr,handle->global_salt);
-    PORT_Memset(newPinStr,0,sizeof(newPinStr));
 
     /* change the data base */
-    rv = nsslowkey_SetKeyDBPassword(handle,newPin);
+    rv = sftkdb_ChangePassword(handle, NULL, newPinStr, &tokenRemoved);
+    if (tokenRemoved) {
+	sftk_CloseAllSessions(slot, PR_FALSE);
+    }
+    sftk_freeDB(handle);
+    handle = NULL;
 
     /* Now update our local copy of the pin */
     if (rv == SECSuccess) {
-	if (slot->password) {
-    	    SECITEM_ZfreeItem(slot->password, PR_TRUE);
-	}
-	slot->password = newPin;
 	if (ulPinLen == 0) slot->needLogin = PR_FALSE;
 	return CKR_OK;
     }
-    SECITEM_ZfreeItem(newPin, PR_TRUE);
-    return CKR_PIN_INCORRECT;
+    crv = CKR_PIN_INCORRECT;
+
+loser:
+    if (sp) {
+	sftk_FreeSession(sp);
+    }
+    if (handle) {
+	sftk_freeDB(handle);
+    }
+    return crv;
 }
 
 
@@ -3064,45 +3538,48 @@ CK_RV NSC_InitPIN(CK_SESSION_HANDLE hSession,
 CK_RV NSC_SetPIN(CK_SESSION_HANDLE hSession, CK_CHAR_PTR pOldPin,
     CK_ULONG ulOldLen, CK_CHAR_PTR pNewPin, CK_ULONG ulNewLen)
 {
-    PK11Session *sp;
-    PK11Slot *slot;
-    NSSLOWKEYDBHandle *handle;
-    SECItem *newPin;
-    SECItem *oldPin;
-    char newPinStr[PK11_MAX_PIN+1],oldPinStr[PK11_MAX_PIN+1];
+    SFTKSession *sp = NULL;
+    SFTKSlot *slot;
+    SFTKDBHandle *handle = NULL;
+    char newPinStr[SFTK_MAX_PIN+1],oldPinStr[SFTK_MAX_PIN+1];
     SECStatus rv;
+    CK_RV crv = CKR_SESSION_HANDLE_INVALID;
+    PRBool tokenRemoved = PR_FALSE;
 
+    CHECK_FORK();
     
-    sp = pk11_SessionFromHandle(hSession);
+    sp = sftk_SessionFromHandle(hSession);
     if (sp == NULL) {
-	return CKR_SESSION_HANDLE_INVALID;
+	goto loser;
     }
 
-    slot = pk11_SlotFromSession(sp);
+    slot = sftk_SlotFromSession(sp);
     if (!slot) {
-	pk11_FreeSession(sp);
-	return CKR_SESSION_HANDLE_INVALID;;
+	goto loser;
     }
 
-    handle = slot->keyDB;
+    handle = sftk_getKeyDB(slot);
     if (handle == NULL) {
-	pk11_FreeSession(sp);
-	return CKR_PIN_LEN_RANGE;
+	sftk_FreeSession(sp);
+	return CKR_PIN_LEN_RANGE; /* XXX FIXME wrong return value */
     }
 
     if (slot->needLogin && sp->info.state != CKS_RW_USER_FUNCTIONS) {
-	pk11_FreeSession(sp);
-	return CKR_USER_NOT_LOGGED_IN;
+	crv = CKR_USER_NOT_LOGGED_IN;
+	goto loser;
     }
 
-    pk11_FreeSession(sp);
+    sftk_FreeSession(sp);
+    sp = NULL;
 
     /* make sure the pins aren't too long */
-    if ((ulNewLen > PK11_MAX_PIN) || (ulOldLen > PK11_MAX_PIN)) {
-	return CKR_PIN_LEN_RANGE;
+    if ((ulNewLen > SFTK_MAX_PIN) || (ulOldLen > SFTK_MAX_PIN)) {
+	crv = CKR_PIN_LEN_RANGE;
+	goto loser;
     }
     if (ulNewLen < (CK_ULONG)slot->minimumPinLen) {
-	return CKR_PIN_LEN_RANGE;
+	crv = CKR_PIN_LEN_RANGE;
+	goto loser;
     }
 
 
@@ -3112,72 +3589,95 @@ CK_RV NSC_SetPIN(CK_SESSION_HANDLE hSession, CK_CHAR_PTR pOldPin,
     PORT_Memcpy(oldPinStr,pOldPin,ulOldLen);
     oldPinStr[ulOldLen] = 0; 
 
-    /* build the hashed pins which we pass around */
-    newPin = nsslowkey_HashPassword(newPinStr,handle->global_salt);
-    oldPin = nsslowkey_HashPassword(oldPinStr,handle->global_salt);
-    PORT_Memset(newPinStr,0,sizeof(newPinStr));
-    PORT_Memset(oldPinStr,0,sizeof(oldPinStr));
-
-    /* change the data base */
-    rv = nsslowkey_ChangeKeyDBPassword(handle,oldPin,newPin);
+    /* change the data base password */
+    PR_Lock(slot->pwCheckLock);
+    rv = sftkdb_ChangePassword(handle, oldPinStr, newPinStr, &tokenRemoved);
+    if (tokenRemoved) {
+	sftk_CloseAllSessions(slot, PR_FALSE);
+    }
+    if ((rv != SECSuccess) && (slot->slotID == FIPS_SLOT_ID)) {
+	PR_Sleep(loginWaitTime);
+    }
+    PR_Unlock(slot->pwCheckLock);
 
     /* Now update our local copy of the pin */
-    SECITEM_ZfreeItem(oldPin, PR_TRUE);
     if (rv == SECSuccess) {
-	if (slot->password) {
-    	    SECITEM_ZfreeItem(slot->password, PR_TRUE);
-	}
-	slot->password = newPin;
 	slot->needLogin = (PRBool)(ulNewLen != 0);
+        /* Reset login flags. */
+        if (ulNewLen == 0) {
+            PRBool tokenRemoved = PR_FALSE;
+            PZ_Lock(slot->slotLock);
+            slot->isLoggedIn = PR_FALSE;
+            slot->ssoLoggedIn = PR_FALSE;
+            PZ_Unlock(slot->slotLock);
+
+            rv = sftkdb_CheckPassword(handle, "", &tokenRemoved);
+            if (tokenRemoved) {
+                sftk_CloseAllSessions(slot, PR_FALSE);
+            }
+        }
+        sftk_update_all_states(slot);
+        sftk_freeDB(handle);
 	return CKR_OK;
     }
-    SECITEM_ZfreeItem(newPin, PR_TRUE);
-    return CKR_PIN_INCORRECT;
+    crv = CKR_PIN_INCORRECT;
+loser:
+    if (sp) {
+	sftk_FreeSession(sp);
+    }
+    if (handle) {
+	sftk_freeDB(handle);
+    }
+    return crv;
 }
 
 /* NSC_OpenSession opens a session between an application and a token. */
 CK_RV NSC_OpenSession(CK_SLOT_ID slotID, CK_FLAGS flags,
    CK_VOID_PTR pApplication,CK_NOTIFY Notify,CK_SESSION_HANDLE_PTR phSession)
 {
-    PK11Slot *slot;
+    SFTKSlot *slot;
     CK_SESSION_HANDLE sessionID;
-    PK11Session *session;
-    PK11Session *sameID;
+    SFTKSession *session;
+    SFTKSession *sameID;
 
-    slot = pk11_SlotFromID(slotID);
+    CHECK_FORK();
+    
+    slot = sftk_SlotFromID(slotID, PR_FALSE);
     if (slot == NULL) return CKR_SLOT_ID_INVALID;
 
     /* new session (we only have serial sessions) */
-    session = pk11_NewSession(slotID, Notify, pApplication,
+    session = sftk_NewSession(slotID, Notify, pApplication,
 						 flags | CKF_SERIAL_SESSION);
     if (session == NULL) return CKR_HOST_MEMORY;
 
-    PK11_USE_THREADS(PZ_Lock(slot->slotLock);)
     if (slot->readOnly && (flags & CKF_RW_SESSION)) {
 	/* NETSCAPE_SLOT_ID is Read ONLY */
 	session->info.flags &= ~CKF_RW_SESSION;
     }
-    slot->sessionCount++;
+    PZ_Lock(slot->slotLock);
+    ++slot->sessionCount;
+    PZ_Unlock(slot->slotLock);
     if (session->info.flags & CKF_RW_SESSION) {
-	slot->rwSessionCount++;
+	PR_ATOMIC_INCREMENT(&slot->rwSessionCount);
     }
-    PK11_USE_THREADS(PZ_Unlock(slot->slotLock);)
 
     do {
+        PZLock *lock;
         do {
-            sessionID = (PR_AtomicIncrement(&slot->sessionIDCount) & 0xffffff)
+            sessionID = (PR_ATOMIC_INCREMENT(&slot->sessionIDCount) & 0xffffff)
                         | (slot->index << 24);
         } while (sessionID == CK_INVALID_HANDLE);
-        PK11_USE_THREADS(PZ_Lock(PK11_SESSION_LOCK(slot,sessionID));)
-        pk11queue_find(sameID, sessionID, slot->head, slot->sessHashSize);
+        lock = SFTK_SESSION_LOCK(slot,sessionID);
+        PZ_Lock(lock);
+        sftkqueue_find(sameID, sessionID, slot->head, slot->sessHashSize);
         if (sameID == NULL) {
             session->handle = sessionID;
-            pk11_update_state(slot, session);
-            pk11queue_add(session, sessionID, slot->head,slot->sessHashSize);
+            sftk_update_state(slot, session);
+            sftkqueue_add(session, sessionID, slot->head,slot->sessHashSize);
         } else {
             slot->sessionIDConflict++;  /* for debugging */
         }
-        PK11_USE_THREADS(PZ_Unlock(PK11_SESSION_LOCK(slot,sessionID));)
+        PZ_Unlock(lock);
     } while (sameID != NULL);
 
     *phSession = sessionID;
@@ -3188,42 +3688,49 @@ CK_RV NSC_OpenSession(CK_SLOT_ID slotID, CK_FLAGS flags,
 /* NSC_CloseSession closes a session between an application and a token. */
 CK_RV NSC_CloseSession(CK_SESSION_HANDLE hSession)
 {
-    PK11Slot *slot;
-    PK11Session *session;
-    SECItem *pw = NULL;
+    SFTKSlot *slot;
+    SFTKSession *session;
     PRBool sessionFound;
+    PZLock *lock;
 
-    session = pk11_SessionFromHandle(hSession);
+    CHECK_FORK();
+
+    session = sftk_SessionFromHandle(hSession);
     if (session == NULL) return CKR_SESSION_HANDLE_INVALID;
-    slot = pk11_SlotFromSession(session);
+    slot = sftk_SlotFromSession(session);
     sessionFound = PR_FALSE;
 
     /* lock */
-    PK11_USE_THREADS(PZ_Lock(PK11_SESSION_LOCK(slot,hSession));)
-    if (pk11queue_is_queued(session,hSession,slot->head,slot->sessHashSize)) {
+    lock = SFTK_SESSION_LOCK(slot,hSession);
+    PZ_Lock(lock);
+    if (sftkqueue_is_queued(session,hSession,slot->head,slot->sessHashSize)) {
 	sessionFound = PR_TRUE;
-	pk11queue_delete(session,hSession,slot->head,slot->sessHashSize);
+	sftkqueue_delete(session,hSession,slot->head,slot->sessHashSize);
 	session->refCount--; /* can't go to zero while we hold the reference */
 	PORT_Assert(session->refCount > 0);
     }
-    PK11_USE_THREADS(PZ_Unlock(PK11_SESSION_LOCK(slot,hSession));)
+    PZ_Unlock(lock);
 
-    PK11_USE_THREADS(PZ_Lock(slot->slotLock);)
     if (sessionFound) {
-	slot->sessionCount--;
+	SFTKDBHandle *handle;
+	handle = sftk_getKeyDB(slot);
+	PZ_Lock(slot->slotLock);
+	if (--slot->sessionCount == 0) {
+	    slot->isLoggedIn = PR_FALSE;
+	    if (slot->needLogin && handle) {
+		sftkdb_ClearPassword(handle);
+	    }
+	}
+	PZ_Unlock(slot->slotLock);
+	if (handle) {
+	    sftk_freeDB(handle);
+	}
 	if (session->info.flags & CKF_RW_SESSION) {
-	    slot->rwSessionCount--;
+	    PR_ATOMIC_DECREMENT(&slot->rwSessionCount);
 	}
     }
-    if (slot->sessionCount == 0) {
-	pw = slot->password;
-	slot->isLoggedIn = PR_FALSE;
-	slot->password = NULL;
-    }
-    PK11_USE_THREADS(PZ_Unlock(slot->slotLock);)
 
-    pk11_FreeSession(session);
-    if (pw) SECITEM_ZfreeItem(pw, PR_TRUE);
+    sftk_FreeSession(session);
     return CKR_OK;
 }
 
@@ -3231,67 +3738,36 @@ CK_RV NSC_CloseSession(CK_SESSION_HANDLE hSession)
 /* NSC_CloseAllSessions closes all sessions with a token. */
 CK_RV NSC_CloseAllSessions (CK_SLOT_ID slotID)
 {
-    PK11Slot *slot;
-    SECItem *pw = NULL;
-    PK11Session *session;
-    unsigned int i;
+    SFTKSlot *slot;
 
-    slot = pk11_SlotFromID(slotID);
+#ifndef NO_FORK_CHECK
+    /* skip fork check if we are being called from C_Initialize or C_Finalize */
+    if (!parentForkedAfterC_Initialize) {
+        CHECK_FORK();
+    }
+#endif
+
+    slot = sftk_SlotFromID(slotID, PR_FALSE);
     if (slot == NULL) return CKR_SLOT_ID_INVALID;
 
-    /* first log out the card */
-    PK11_USE_THREADS(PZ_Lock(slot->slotLock);)
-    pw = slot->password;
-    slot->isLoggedIn = PR_FALSE;
-    slot->password = NULL;
-    PK11_USE_THREADS(PZ_Unlock(slot->slotLock);)
-    if (pw) SECITEM_ZfreeItem(pw, PR_TRUE);
-
-    /* now close all the current sessions */
-    /* NOTE: If you try to open new sessions before NSC_CloseAllSessions
-     * completes, some of those new sessions may or may not be closed by
-     * NSC_CloseAllSessions... but any session running when this code starts
-     * will guarrenteed be close, and no session will be partially closed */
-    for (i=0; i < slot->sessHashSize; i++) {
-	do {
-	    PK11_USE_THREADS(PZ_Lock(PK11_SESSION_LOCK(slot,i));)
-	    session = slot->head[i];
-	    /* hand deque */
-	    /* this duplicates function of NSC_close session functions, but 
-	     * because we know that we are freeing all the sessions, we can
-	     * do more efficient processing */
-	    if (session) {
-		slot->head[i] = session->next;
-		if (session->next) session->next->prev = NULL;
-		session->next = session->prev = NULL;
-		PK11_USE_THREADS(PZ_Unlock(PK11_SESSION_LOCK(slot,i));)
-		PK11_USE_THREADS(PZ_Lock(slot->slotLock);)
-		slot->sessionCount--;
-		if (session->info.flags & CKF_RW_SESSION) {
-		    slot->rwSessionCount--;
-		}
-		PK11_USE_THREADS(PZ_Unlock(slot->slotLock);)
-	    } else {
-		PK11_USE_THREADS(PZ_Unlock(PK11_SESSION_LOCK(slot,i));)
-	    }
-	    if (session) pk11_FreeSession(session);
-	} while (session != NULL);
-    }
-    return CKR_OK;
+    return sftk_CloseAllSessions(slot, PR_TRUE);
 }
+
 
 
 /* NSC_GetSessionInfo obtains information about the session. */
 CK_RV NSC_GetSessionInfo(CK_SESSION_HANDLE hSession,
     						CK_SESSION_INFO_PTR pInfo)
 {
-    PK11Session *session;
+    SFTKSession *session;
 
-    session = pk11_SessionFromHandle(hSession);
+    CHECK_FORK();
+
+    session = sftk_SessionFromHandle(hSession);
     if (session == NULL) return CKR_SESSION_HANDLE_INVALID;
 
     PORT_Memcpy(pInfo,&session->info,sizeof(CK_SESSION_INFO));
-    pk11_FreeSession(session);
+    sftk_FreeSession(session);
     return CKR_OK;
 }
 
@@ -3299,38 +3775,50 @@ CK_RV NSC_GetSessionInfo(CK_SESSION_HANDLE hSession,
 CK_RV NSC_Login(CK_SESSION_HANDLE hSession, CK_USER_TYPE userType,
 				    CK_CHAR_PTR pPin, CK_ULONG ulPinLen)
 {
-    PK11Slot *slot;
-    PK11Session *session;
-    NSSLOWKEYDBHandle *handle;
+    SFTKSlot *slot;
+    SFTKSession *session;
+    SFTKDBHandle *handle;
     CK_FLAGS sessionFlags;
-    SECItem *pin;
-    char pinStr[PK11_MAX_PIN+1];
+    SECStatus rv;
+    CK_RV crv;
+    char pinStr[SFTK_MAX_PIN+1];
+    PRBool tokenRemoved = PR_FALSE;
 
+    CHECK_FORK();
 
     /* get the slot */
-    slot = pk11_SlotFromSessionHandle(hSession);
+    slot = sftk_SlotFromSessionHandle(hSession);
+    if (slot == NULL) {
+	return CKR_SESSION_HANDLE_INVALID;
+    }
 
     /* make sure the session is valid */
-    session = pk11_SessionFromHandle(hSession);
-    if (session == NULL) return CKR_SESSION_HANDLE_INVALID;
+    session = sftk_SessionFromHandle(hSession);
+    if (session == NULL) {
+	return CKR_SESSION_HANDLE_INVALID;
+    }
     sessionFlags = session->info.flags;
-    pk11_FreeSession(session);
+    sftk_FreeSession(session);
     session = NULL;
 
     /* can't log into the Netscape Slot */
-    if (slot->slotID == NETSCAPE_SLOT_ID)
+    if (slot->slotID == NETSCAPE_SLOT_ID) {
 	 return CKR_USER_TYPE_INVALID;
+    }
 
     if (slot->isLoggedIn) return CKR_USER_ALREADY_LOGGED_IN;
+    if (!slot->needLogin) {
+        return ulPinLen ? CKR_PIN_INCORRECT : CKR_OK;
+    }
     slot->ssoLoggedIn = PR_FALSE;
 
-    if (ulPinLen > PK11_MAX_PIN) return CKR_PIN_LEN_RANGE;
+    if (ulPinLen > SFTK_MAX_PIN) return CKR_PIN_LEN_RANGE;
 
     /* convert to null terminated string */
     PORT_Memcpy(pinStr,pPin,ulPinLen);
     pinStr[ulPinLen] = 0; 
 
-    handle = slot->keyDB;
+    handle = sftk_getKeyDB(slot);
     if (handle == NULL) {
 	 return CKR_USER_TYPE_INVALID;
     }
@@ -3340,7 +3828,8 @@ CK_RV NSC_Login(CK_SESSION_HANDLE hSession, CK_USER_TYPE userType,
      * password if and only if we haven't initialized the KEY DB yet.
      * We only allow this on a RW session.
      */
-    if (nsslowkey_HasKeyDBPassword(handle) == SECFailure) {
+    rv = sftkdb_HasPasswordSet(handle);
+    if (rv == SECFailure) {
 	/* allow SSO's to log in only if there is not password on the
 	 * key database */
 	if (((userType == CKU_SO) && (sessionFlags & CKF_RW_SESSION))
@@ -3348,72 +3837,203 @@ CK_RV NSC_Login(CK_SESSION_HANDLE hSession, CK_USER_TYPE userType,
 					|| (slot->slotID == FIPS_SLOT_ID)) {
 	    /* should this be a fixed password? */
 	    if (ulPinLen == 0) {
-		SECItem *pw;
-    		PK11_USE_THREADS(PZ_Lock(slot->slotLock);)
-		pw = slot->password;
-		slot->password = NULL;
+		sftkdb_ClearPassword(handle);
+    		PZ_Lock(slot->slotLock);
 		slot->isLoggedIn = PR_TRUE;
 		slot->ssoLoggedIn = (PRBool)(userType == CKU_SO);
-		PK11_USE_THREADS(PZ_Unlock(slot->slotLock);)
-		pk11_update_all_states(slot);
-		SECITEM_ZfreeItem(pw,PR_TRUE);
-		return CKR_OK;
+		PZ_Unlock(slot->slotLock);
+		sftk_update_all_states(slot);
+		crv = CKR_OK;
+		goto done;
 	    }
-	    return CKR_PIN_INCORRECT;
+	    crv = CKR_PIN_INCORRECT;
+	    goto done;
 	} 
-	return CKR_USER_TYPE_INVALID;
+	crv = CKR_USER_TYPE_INVALID;
+	goto done;
     } 
 
     /* don't allow the SSO to log in if the user is already initialized */
-    if (userType != CKU_USER) { return CKR_USER_TYPE_INVALID; }
+    if (userType != CKU_USER) { 
+	crv = CKR_USER_TYPE_INVALID; 
+	goto done;
+    }
 
 
     /* build the hashed pins which we pass around */
-    pin = nsslowkey_HashPassword(pinStr,handle->global_salt);
-    if (pin == NULL) return CKR_HOST_MEMORY;
+    PR_Lock(slot->pwCheckLock);
+    rv = sftkdb_CheckPassword(handle,pinStr, &tokenRemoved);
+    if (tokenRemoved) {
+	sftk_CloseAllSessions(slot, PR_FALSE);
+    }
+    if ((rv != SECSuccess) && (slot->slotID == FIPS_SLOT_ID)) {
+	PR_Sleep(loginWaitTime);
+    }
+    PR_Unlock(slot->pwCheckLock);
+    if (rv == SECSuccess) {
+	PZ_Lock(slot->slotLock);
+	/* make sure the login state matches the underlying
+	 * database state */
+	slot->isLoggedIn = sftkdb_PWCached(handle) == SECSuccess ?
+		PR_TRUE : PR_FALSE;
+	PZ_Unlock(slot->slotLock);
 
-    if (nsslowkey_CheckKeyDBPassword(handle,pin) == SECSuccess) {
-	SECItem *tmp;
-	PK11_USE_THREADS(PZ_Lock(slot->slotLock);)
-	tmp = slot->password;
-	slot->isLoggedIn = PR_TRUE;
-	slot->password = pin;
-	PK11_USE_THREADS(PZ_Unlock(slot->slotLock);)
-        if (tmp) SECITEM_ZfreeItem(tmp, PR_TRUE);
+ 	sftk_freeDB(handle);
+	handle = NULL;
 
 	/* update all sessions */
-	pk11_update_all_states(slot);
+	sftk_update_all_states(slot);
 	return CKR_OK;
     }
 
-    SECITEM_ZfreeItem(pin, PR_TRUE);
-    return CKR_PIN_INCORRECT;
+    crv = CKR_PIN_INCORRECT;
+done:
+    if (handle) {
+	sftk_freeDB(handle);
+    }
+    return crv;
 }
 
 /* NSC_Logout logs a user out from a token. */
 CK_RV NSC_Logout(CK_SESSION_HANDLE hSession)
 {
-    PK11Slot *slot = pk11_SlotFromSessionHandle(hSession);
-    PK11Session *session;
-    SECItem *pw = NULL;
+    SFTKSlot *slot = sftk_SlotFromSessionHandle(hSession);
+    SFTKSession *session;
+    SFTKDBHandle *handle;
 
-    session = pk11_SessionFromHandle(hSession);
+    CHECK_FORK();
+
+    if (slot == NULL) {
+	return CKR_SESSION_HANDLE_INVALID;
+    }
+    session = sftk_SessionFromHandle(hSession);
     if (session == NULL) return CKR_SESSION_HANDLE_INVALID;
-    pk11_FreeSession(session);
+    sftk_FreeSession(session);
     session = NULL;
 
     if (!slot->isLoggedIn) return CKR_USER_NOT_LOGGED_IN;
 
-    PK11_USE_THREADS(PZ_Lock(slot->slotLock);)
-    pw = slot->password;
+    handle = sftk_getKeyDB(slot);
+    PZ_Lock(slot->slotLock);
     slot->isLoggedIn = PR_FALSE;
     slot->ssoLoggedIn = PR_FALSE;
-    slot->password = NULL;
-    PK11_USE_THREADS(PZ_Unlock(slot->slotLock);)
-    if (pw) SECITEM_ZfreeItem(pw, PR_TRUE);
+    if (slot->needLogin && handle) {
+	sftkdb_ClearPassword(handle);
+    }
+    PZ_Unlock(slot->slotLock);
+    if (handle) {
+	sftk_freeDB(handle);
+    }
 
-    pk11_update_all_states(slot);
+    sftk_update_all_states(slot);
     return CKR_OK;
+}
+
+/*
+ * Create or remove a new slot on the fly.
+ * When creating a slot, "slot" is the slot that the request came from. The
+ * resulting slot will live in the same module as "slot".
+ * When removing a slot, "slot" is the slot to be removed.
+ * "object" is the creation object that specifies the module spec for the slot
+ * to add or remove.
+ */
+static CK_RV sftk_CreateNewSlot(SFTKSlot *slot, CK_OBJECT_CLASS class,
+                                SFTKObject *object)
+{
+    PRBool isValidUserSlot = PR_FALSE;
+    PRBool isValidFIPSUserSlot = PR_FALSE;
+    PRBool isValidSlot = PR_FALSE;
+    PRBool isFIPS = PR_FALSE;
+    unsigned long moduleIndex;
+    SFTKAttribute *attribute;
+    sftk_parameters paramStrings;
+    char *paramString;
+    CK_SLOT_ID slotID = 0;
+    SFTKSlot *newSlot = NULL;
+    CK_RV crv = CKR_OK;
+
+    if (class != CKO_NETSCAPE_DELSLOT && class != CKO_NETSCAPE_NEWSLOT) {
+	return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+    if (class == CKO_NETSCAPE_NEWSLOT && slot->slotID == FIPS_SLOT_ID) {
+	isFIPS = PR_TRUE;
+    }
+    attribute = sftk_FindAttribute(object, CKA_NETSCAPE_MODULE_SPEC);
+    if (attribute == NULL) {
+	return CKR_TEMPLATE_INCOMPLETE;
+    }
+    paramString = (char *)attribute->attrib.pValue;
+    crv = sftk_parseParameters(paramString, &paramStrings, isFIPS);
+    if (crv != CKR_OK) {
+	goto loser;
+    }
+
+    /* enforce only one at a time */
+    if (paramStrings.token_count != 1) {
+	crv = CKR_ATTRIBUTE_VALUE_INVALID;
+	goto loser;
+    }
+
+    slotID = paramStrings.tokens[0].slotID;
+
+    /* stay within the valid ID space */
+    isValidUserSlot = (slotID >= SFTK_MIN_USER_SLOT_ID &&
+                       slotID <= SFTK_MAX_USER_SLOT_ID);
+    isValidFIPSUserSlot = (slotID >= SFTK_MIN_FIPS_USER_SLOT_ID &&
+                           slotID <= SFTK_MAX_FIPS_USER_SLOT_ID);
+
+    if (class == CKO_NETSCAPE_DELSLOT) {
+	if (slot->slotID == slotID) {
+	    isValidSlot = isValidUserSlot || isValidFIPSUserSlot;
+	}
+    } else {
+	/* only the crypto or FIPS slots can create new slot objects */
+	if (slot->slotID == NETSCAPE_SLOT_ID) {
+	    isValidSlot = isValidUserSlot;
+	    moduleIndex = NSC_NON_FIPS_MODULE;
+	} else if (slot->slotID == FIPS_SLOT_ID) {
+	    isValidSlot = isValidFIPSUserSlot;
+	    moduleIndex = NSC_FIPS_MODULE;
+	}
+    }
+
+    if (!isValidSlot) {
+	crv = CKR_ATTRIBUTE_VALUE_INVALID;
+	goto loser;
+    }
+
+    /* unload any existing slot at this id */
+    newSlot = sftk_SlotFromID(slotID, PR_TRUE);
+    if (newSlot && newSlot->present) {
+	crv = SFTK_ShutdownSlot(newSlot);
+	if (crv != CKR_OK) {
+	    goto loser;
+	}
+    }
+
+    /* if we were just planning on deleting the slot, then do so now */
+    if (class == CKO_NETSCAPE_DELSLOT) {
+	/* sort of a unconventional use of this error code, be we are
+	 * overusing CKR_ATTRIBUTE_VALUE_INVALID, and it does apply */
+	crv = newSlot ? CKR_OK : CKR_SLOT_ID_INVALID;
+	goto loser; /* really exit */
+    }
+
+    if (newSlot) {
+	crv = SFTK_SlotReInit(newSlot, paramStrings.configdir, 
+			paramStrings.updatedir, paramStrings.updateID,
+			&paramStrings.tokens[0], moduleIndex);
+    } else {
+	crv = SFTK_SlotInit(paramStrings.configdir, 
+			paramStrings.updatedir, paramStrings.updateID,
+			&paramStrings.tokens[0], moduleIndex);
+    }
+
+loser:
+    sftk_freeParams(&paramStrings);
+    sftk_FreeAttribute(attribute);
+
+    return crv;
 }
 
 
@@ -3422,17 +4042,26 @@ CK_RV NSC_CreateObject(CK_SESSION_HANDLE hSession,
 		CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount, 
 					CK_OBJECT_HANDLE_PTR phObject)
 {
-    PK11Slot *slot = pk11_SlotFromSessionHandle(hSession);
-    PK11Session *session;
-    PK11Object *object;
+    SFTKSlot *slot = sftk_SlotFromSessionHandle(hSession);
+    SFTKSession *session;
+    SFTKObject *object;
+    /* make sure class isn't randomly CKO_NETSCAPE_NEWSLOT or
+     * CKO_NETSCPE_DELSLOT. */
+    CK_OBJECT_CLASS class = CKO_VENDOR_DEFINED;
     CK_RV crv;
     int i;
 
+    CHECK_FORK();
 
+    *phObject = CK_INVALID_HANDLE;
+
+    if (slot == NULL) {
+	return CKR_SESSION_HANDLE_INVALID;
+    }
     /*
      * now lets create an object to hang the attributes off of
      */
-    object = pk11_NewObject(slot); /* fill in the handle later */
+    object = sftk_NewObject(slot); /* fill in the handle later */
     if (object == NULL) {
 	return CKR_HOST_MEMORY;
     }
@@ -3441,30 +4070,43 @@ CK_RV NSC_CreateObject(CK_SESSION_HANDLE hSession,
      * load the template values into the object
      */
     for (i=0; i < (int) ulCount; i++) {
-	crv = pk11_AddAttributeType(object,pk11_attr_expand(&pTemplate[i]));
+	crv = sftk_AddAttributeType(object,sftk_attr_expand(&pTemplate[i]));
 	if (crv != CKR_OK) {
-	    pk11_FreeObject(object);
+	    sftk_FreeObject(object);
 	    return crv;
+	}
+	if ((pTemplate[i].type == CKA_CLASS) && pTemplate[i].pValue) {
+	    class = *(CK_OBJECT_CLASS *)pTemplate[i].pValue;
 	}
     }
 
     /* get the session */
-    session = pk11_SessionFromHandle(hSession);
+    session = sftk_SessionFromHandle(hSession);
     if (session == NULL) {
-	pk11_FreeObject(object);
+	sftk_FreeObject(object);
         return CKR_SESSION_HANDLE_INVALID;
     }
 
     /*
+     * handle pseudo objects (CKO_NEWSLOT)
+     */
+    if ((class == CKO_NETSCAPE_NEWSLOT)  || (class == CKO_NETSCAPE_DELSLOT)) {
+	crv = sftk_CreateNewSlot(slot, class, object);
+	goto done;
+    } 
+
+    /*
      * handle the base object stuff
      */
-    crv = pk11_handleObject(object,session);
+    crv = sftk_handleObject(object,session);
     *phObject = object->handle;
-    pk11_FreeSession(session);
-    pk11_FreeObject(object);
+done:
+    sftk_FreeSession(session);
+    sftk_FreeObject(object);
 
     return crv;
 }
+
 
 
 /* NSC_CopyObject copies an object, creating a new object for the copy. */
@@ -3472,29 +4114,34 @@ CK_RV NSC_CopyObject(CK_SESSION_HANDLE hSession,
        CK_OBJECT_HANDLE hObject, CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount,
 					CK_OBJECT_HANDLE_PTR phNewObject) 
 {
-    PK11Object *destObject,*srcObject;
-    PK11Session *session;
+    SFTKObject *destObject,*srcObject;
+    SFTKSession *session;
     CK_RV crv = CKR_OK;
-    PK11Slot *slot = pk11_SlotFromSessionHandle(hSession);
+    SFTKSlot *slot = sftk_SlotFromSessionHandle(hSession);
     int i;
 
+    CHECK_FORK();
+
+    if (slot == NULL) {
+	return CKR_SESSION_HANDLE_INVALID;
+    }
     /* Get srcObject so we can find the class */
-    session = pk11_SessionFromHandle(hSession);
+    session = sftk_SessionFromHandle(hSession);
     if (session == NULL) {
         return CKR_SESSION_HANDLE_INVALID;
     }
-    srcObject = pk11_ObjectFromHandle(hObject,session);
+    srcObject = sftk_ObjectFromHandle(hObject,session);
     if (srcObject == NULL) {
-	pk11_FreeSession(session);
+	sftk_FreeSession(session);
 	return CKR_OBJECT_HANDLE_INVALID;
     }
     /*
      * create an object to hang the attributes off of
      */
-    destObject = pk11_NewObject(slot); /* fill in the handle later */
+    destObject = sftk_NewObject(slot); /* fill in the handle later */
     if (destObject == NULL) {
-	pk11_FreeSession(session);
-        pk11_FreeObject(srcObject);
+	sftk_FreeSession(session);
+        sftk_FreeObject(srcObject);
 	return CKR_HOST_MEMORY;
     }
 
@@ -3502,26 +4149,26 @@ CK_RV NSC_CopyObject(CK_SESSION_HANDLE hSession,
      * load the template values into the object
      */
     for (i=0; i < (int) ulCount; i++) {
-	if (pk11_modifyType(pTemplate[i].type,srcObject->objclass) == PK11_NEVER) {
+	if (sftk_modifyType(pTemplate[i].type,srcObject->objclass) == SFTK_NEVER) {
 	    crv = CKR_ATTRIBUTE_READ_ONLY;
 	    break;
 	}
-	crv = pk11_AddAttributeType(destObject,pk11_attr_expand(&pTemplate[i]));
+	crv = sftk_AddAttributeType(destObject,sftk_attr_expand(&pTemplate[i]));
 	if (crv != CKR_OK) { break; }
     }
     if (crv != CKR_OK) {
-	pk11_FreeSession(session);
-        pk11_FreeObject(srcObject);
-	pk11_FreeObject(destObject);
+	sftk_FreeSession(session);
+        sftk_FreeObject(srcObject);
+	sftk_FreeObject(destObject);
 	return crv;
     }
 
     /* sensitive can only be changed to CK_TRUE */
-    if (pk11_hasAttribute(destObject,CKA_SENSITIVE)) {
-	if (!pk11_isTrue(destObject,CKA_SENSITIVE)) {
-	    pk11_FreeSession(session);
-            pk11_FreeObject(srcObject);
-	    pk11_FreeObject(destObject);
+    if (sftk_hasAttribute(destObject,CKA_SENSITIVE)) {
+	if (!sftk_isTrue(destObject,CKA_SENSITIVE)) {
+	    sftk_FreeSession(session);
+            sftk_FreeObject(srcObject);
+	    sftk_FreeObject(destObject);
 	    return CKR_ATTRIBUTE_READ_ONLY;
 	}
     }
@@ -3532,19 +4179,20 @@ CK_RV NSC_CopyObject(CK_SESSION_HANDLE hSession,
     /* don't create a token object if we aren't in a rw session */
     /* we need to hold the lock to copy a consistant version of
      * the object. */
-    crv = pk11_CopyObject(destObject,srcObject);
+    crv = sftk_CopyObject(destObject,srcObject);
 
     destObject->objclass = srcObject->objclass;
-    pk11_FreeObject(srcObject);
+    sftk_FreeObject(srcObject);
     if (crv != CKR_OK) {
-	pk11_FreeObject(destObject);
-	pk11_FreeSession(session);
+	sftk_FreeObject(destObject);
+	sftk_FreeSession(session);
+        return crv;
     }
 
-    crv = pk11_handleObject(destObject,session);
+    crv = sftk_handleObject(destObject,session);
     *phNewObject = destObject->handle;
-    pk11_FreeSession(session);
-    pk11_FreeObject(destObject);
+    sftk_FreeSession(session);
+    sftk_FreeObject(destObject);
     
     return crv;
 }
@@ -3552,7 +4200,10 @@ CK_RV NSC_CopyObject(CK_SESSION_HANDLE hSession,
 
 /* NSC_GetObjectSize gets the size of an object in bytes. */
 CK_RV NSC_GetObjectSize(CK_SESSION_HANDLE hSession,
-    			CK_OBJECT_HANDLE hObject, CK_ULONG_PTR pulSize) {
+    			CK_OBJECT_HANDLE hObject, CK_ULONG_PTR pulSize)
+{
+    CHECK_FORK();
+
     *pulSize = 0;
     return CKR_OK;
 }
@@ -3560,46 +4211,89 @@ CK_RV NSC_GetObjectSize(CK_SESSION_HANDLE hSession,
 
 /* NSC_GetAttributeValue obtains the value of one or more object attributes. */
 CK_RV NSC_GetAttributeValue(CK_SESSION_HANDLE hSession,
-    CK_OBJECT_HANDLE hObject,CK_ATTRIBUTE_PTR pTemplate,CK_ULONG ulCount) {
-    PK11Slot *slot = pk11_SlotFromSessionHandle(hSession);
-    PK11Session *session;
-    PK11Object *object;
-    PK11Attribute *attribute;
+    CK_OBJECT_HANDLE hObject,CK_ATTRIBUTE_PTR pTemplate,CK_ULONG ulCount)
+{
+    SFTKSlot *slot = sftk_SlotFromSessionHandle(hSession);
+    SFTKSession *session;
+    SFTKObject *object;
+    SFTKAttribute *attribute;
     PRBool sensitive;
     CK_RV crv;
     int i;
 
+    CHECK_FORK();
+
+    if (slot == NULL) {
+	return CKR_SESSION_HANDLE_INVALID;
+    }
     /*
      * make sure we're allowed
      */
-    session = pk11_SessionFromHandle(hSession);
+    session = sftk_SessionFromHandle(hSession);
     if (session == NULL) {
         return CKR_SESSION_HANDLE_INVALID;
     }
 
-    object = pk11_ObjectFromHandle(hObject,session);
-    pk11_FreeSession(session);
+    /* short circuit everything for token objects */
+    if (sftk_isToken(hObject)) {
+	SFTKSlot *slot = sftk_SlotFromSession(session);
+	SFTKDBHandle *dbHandle = sftk_getDBForTokenObject(slot, hObject);
+	SFTKDBHandle *keydb = NULL;
+
+	if (dbHandle == NULL) {
+	    sftk_FreeSession(session);
+	    return CKR_OBJECT_HANDLE_INVALID;
+	}
+
+	crv = sftkdb_GetAttributeValue(dbHandle, hObject, pTemplate, ulCount);
+
+	/* make sure we don't export any sensitive information */
+	keydb = sftk_getKeyDB(slot);
+	if (dbHandle == keydb) {
+	    for (i=0; i < (int) ulCount; i++) {
+		if (sftk_isSensitive(pTemplate[i].type,CKO_PRIVATE_KEY)) {
+		    crv = CKR_ATTRIBUTE_SENSITIVE;
+		    if (pTemplate[i].pValue && (pTemplate[i].ulValueLen!= -1)){
+			PORT_Memset(pTemplate[i].pValue, 0, 
+					pTemplate[i].ulValueLen);
+		    }
+		    pTemplate[i].ulValueLen = -1;
+		}
+	    }
+	}
+
+	sftk_FreeSession(session);
+	sftk_freeDB(dbHandle);
+	if (keydb) {
+	    sftk_freeDB(keydb);
+	}
+	return crv;
+    }
+
+    /* handle the session object */
+    object = sftk_ObjectFromHandle(hObject,session);
+    sftk_FreeSession(session);
     if (object == NULL) {
 	return CKR_OBJECT_HANDLE_INVALID;
     }
 
     /* don't read a private object if we aren't logged in */
     if ((!slot->isLoggedIn) && (slot->needLogin) &&
-				(pk11_isTrue(object,CKA_PRIVATE))) {
-	pk11_FreeObject(object);
+				(sftk_isTrue(object,CKA_PRIVATE))) {
+	sftk_FreeObject(object);
 	return CKR_USER_NOT_LOGGED_IN;
     }
 
     crv = CKR_OK;
-    sensitive = pk11_isTrue(object,CKA_SENSITIVE);
+    sensitive = sftk_isTrue(object,CKA_SENSITIVE);
     for (i=0; i < (int) ulCount; i++) {
 	/* Make sure that this attribute is retrievable */
-	if (sensitive && pk11_isSensitive(pTemplate[i].type,object->objclass)) {
+	if (sensitive && sftk_isSensitive(pTemplate[i].type,object->objclass)) {
 	    crv = CKR_ATTRIBUTE_SENSITIVE;
 	    pTemplate[i].ulValueLen = -1;
 	    continue;
 	}
-	attribute = pk11_FindAttribute(object,pTemplate[i].type);
+	attribute = sftk_FindAttribute(object,pTemplate[i].type);
 	if (attribute == NULL) {
 	    crv = CKR_ATTRIBUTE_TYPE_INVALID;
 	    pTemplate[i].ulValueLen = -1;
@@ -3610,848 +4304,312 @@ CK_RV NSC_GetAttributeValue(CK_SESSION_HANDLE hSession,
 						attribute->attrib.ulValueLen);
 	}
 	pTemplate[i].ulValueLen = attribute->attrib.ulValueLen;
-	pk11_FreeAttribute(attribute);
+	sftk_FreeAttribute(attribute);
     }
 
-    pk11_FreeObject(object);
+    sftk_FreeObject(object);
     return crv;
 }
 
 /* NSC_SetAttributeValue modifies the value of one or more object attributes */
 CK_RV NSC_SetAttributeValue (CK_SESSION_HANDLE hSession,
- CK_OBJECT_HANDLE hObject,CK_ATTRIBUTE_PTR pTemplate,CK_ULONG ulCount) {
-    PK11Slot *slot = pk11_SlotFromSessionHandle(hSession);
-    PK11Session *session;
-    PK11Attribute *attribute;
-    PK11Object *object;
+ CK_OBJECT_HANDLE hObject,CK_ATTRIBUTE_PTR pTemplate,CK_ULONG ulCount)
+{
+    SFTKSlot *slot = sftk_SlotFromSessionHandle(hSession);
+    SFTKSession *session;
+    SFTKAttribute *attribute;
+    SFTKObject *object;
     PRBool isToken;
     CK_RV crv = CKR_OK;
     CK_BBOOL legal;
     int i;
 
+    CHECK_FORK();
+
+    if (slot == NULL) {
+	return CKR_SESSION_HANDLE_INVALID;
+    }
     /*
      * make sure we're allowed
      */
-    session = pk11_SessionFromHandle(hSession);
+    session = sftk_SessionFromHandle(hSession);
     if (session == NULL) {
         return CKR_SESSION_HANDLE_INVALID;
     }
 
-    object = pk11_ObjectFromHandle(hObject,session);
+    object = sftk_ObjectFromHandle(hObject,session);
     if (object == NULL) {
-        pk11_FreeSession(session);
+        sftk_FreeSession(session);
 	return CKR_OBJECT_HANDLE_INVALID;
     }
 
     /* don't modify a private object if we aren't logged in */
     if ((!slot->isLoggedIn) && (slot->needLogin) &&
-				(pk11_isTrue(object,CKA_PRIVATE))) {
-	pk11_FreeSession(session);
-	pk11_FreeObject(object);
+				(sftk_isTrue(object,CKA_PRIVATE))) {
+	sftk_FreeSession(session);
+	sftk_FreeObject(object);
 	return CKR_USER_NOT_LOGGED_IN;
     }
 
     /* don't modify a token object if we aren't in a rw session */
-    isToken = pk11_isTrue(object,CKA_TOKEN);
+    isToken = sftk_isTrue(object,CKA_TOKEN);
     if (((session->info.flags & CKF_RW_SESSION) == 0) && isToken) {
-	pk11_FreeSession(session);
-	pk11_FreeObject(object);
+	sftk_FreeSession(session);
+	sftk_FreeObject(object);
 	return CKR_SESSION_READ_ONLY;
     }
-    pk11_FreeSession(session);
+    sftk_FreeSession(session);
 
     /* only change modifiable objects */
-    if (!pk11_isTrue(object,CKA_MODIFIABLE)) {
-	pk11_FreeObject(object);
+    if (!sftk_isTrue(object,CKA_MODIFIABLE)) {
+	sftk_FreeObject(object);
 	return CKR_ATTRIBUTE_READ_ONLY;
     }
 
     for (i=0; i < (int) ulCount; i++) {
 	/* Make sure that this attribute is changeable */
-	switch (pk11_modifyType(pTemplate[i].type,object->objclass)) {
-	case PK11_NEVER:
-	case PK11_ONCOPY:
+	switch (sftk_modifyType(pTemplate[i].type,object->objclass)) {
+	case SFTK_NEVER:
+	case SFTK_ONCOPY:
         default:
 	    crv = CKR_ATTRIBUTE_READ_ONLY;
 	    break;
 
-        case PK11_SENSITIVE:
+        case SFTK_SENSITIVE:
 	    legal = (pTemplate[i].type == CKA_EXTRACTABLE) ? CK_FALSE : CK_TRUE;
 	    if ((*(CK_BBOOL *)pTemplate[i].pValue) != legal) {
 	        crv = CKR_ATTRIBUTE_READ_ONLY;
 	    }
 	    break;
-        case PK11_ALWAYS:
+        case SFTK_ALWAYS:
 	    break;
 	}
 	if (crv != CKR_OK) break;
 
 	/* find the old attribute */
-	attribute = pk11_FindAttribute(object,pTemplate[i].type);
+	attribute = sftk_FindAttribute(object,pTemplate[i].type);
 	if (attribute == NULL) {
 	    crv =CKR_ATTRIBUTE_TYPE_INVALID;
 	    break;
 	}
-    	pk11_FreeAttribute(attribute);
-	crv = pk11_forceAttribute(object,pk11_attr_expand(&pTemplate[i]));
+    	sftk_FreeAttribute(attribute);
+	crv = sftk_forceAttribute(object,sftk_attr_expand(&pTemplate[i]));
 	if (crv != CKR_OK) break;
 
     }
 
-    pk11_FreeObject(object);
+    sftk_FreeObject(object);
     return crv;
 }
 
-/*
- * find any certs that may match the template and load them.
- */
-#define NSC_CERT	0x00000001
-#define NSC_TRUST	0x00000002
-#define NSC_CRL		0x00000004
-#define NSC_SMIME	0x00000008
-#define NSC_PRIVATE	0x00000010
-#define NSC_PUBLIC	0x00000020
-#define NSC_KEY		0x00000040
-
-/*
- * structure to collect key handles.
- */
-typedef struct pk11CrlDataStr {
-    PK11Slot *slot;
-    PK11SearchResults *searchHandles;
-    CK_ATTRIBUTE *template;
-    CK_ULONG templ_count;
-} pk11CrlData;
-
-
-static SECStatus
-pk11_crl_collect(SECItem *data, SECItem *key, certDBEntryType type, void *arg)
+static CK_RV
+sftk_expandSearchList(SFTKSearchResults *search, int count)
 {
-    pk11CrlData *crlData;
-    CK_OBJECT_HANDLE class_handle;
-    PK11Slot *slot;
-    
-    crlData = (pk11CrlData *)arg;
-    slot = crlData->slot;
-
-    class_handle = (type == certDBEntryTypeRevocation) ? PK11_TOKEN_TYPE_CRL :
-							PK11_TOKEN_KRL_HANDLE;
-    if (pk11_tokenMatch(slot, key, class_handle,
-			crlData->template, crlData->templ_count)) {
-	pk11_addHandle(crlData->searchHandles,
-				 pk11_mkHandle(slot,key,class_handle));
-    }
-    return(SECSuccess);
+    search->array_size += count;
+    search->handles = (CK_OBJECT_HANDLE *)PORT_Realloc(search->handles,
+			sizeof(CK_OBJECT_HANDLE)*search->array_size);
+    return search->handles ? CKR_OK : CKR_HOST_MEMORY;
 }
 
-static void
-pk11_searchCrls(PK11Slot *slot, SECItem *derSubject, PRBool isKrl, 
-		unsigned long classFlags, PK11SearchResults *search,
-		CK_ATTRIBUTE *pTemplate, CK_ULONG ulCount)
+
+
+static CK_RV
+sftk_searchDatabase(SFTKDBHandle *handle, SFTKSearchResults *search,
+                        const CK_ATTRIBUTE *pTemplate, CK_ULONG ulCount)
 {
-    NSSLOWCERTCertDBHandle *certHandle = NULL;
+    CK_RV crv;
+    int objectListSize = search->array_size-search->size;
+    CK_OBJECT_HANDLE *array = &search->handles[search->size];
+    SDBFind *find;
+    CK_ULONG count;
 
-    certHandle = slot->certDB;
-    if (certHandle == NULL) {
-	return;
-    }
-    if (derSubject->data != NULL)  {
-	certDBEntryRevocation *crl = 
-	    nsslowcert_FindCrlByKey(certHandle, derSubject, isKrl);
+    crv = sftkdb_FindObjectsInit(handle, pTemplate, ulCount, &find);
+    if (crv != CKR_OK)
+	return crv;
+    do {
+	crv = sftkdb_FindObjects(handle, find, array, objectListSize, &count);
+	if ((crv != CKR_OK) || (count == 0))
+	    break;
+	search->size += count;
+	objectListSize -= count;
+	if (objectListSize > 0)
+	    break;
+	crv = sftk_expandSearchList(search,NSC_SEARCH_BLOCK_SIZE);
+	objectListSize = NSC_SEARCH_BLOCK_SIZE;
+	array = &search->handles[search->size];
+    } while (crv == CKR_OK);
+    sftkdb_FindObjectsFinal(handle, find);
 
-	if (crl != NULL) {
-	    pk11_addHandle(search, pk11_mkHandle(slot, derSubject,
-		isKrl ? PK11_TOKEN_KRL_HANDLE : PK11_TOKEN_TYPE_CRL));
-	    nsslowcert_DestroyDBEntry((certDBEntry *)crl);
-	}
-    } else {
-	pk11CrlData crlData;
-
-	/* traverse */
-	crlData.slot = slot;
-	crlData.searchHandles = search;
-	crlData.template = pTemplate;
-	crlData.templ_count = ulCount;
-	nsslowcert_TraverseDBEntries(certHandle, certDBEntryTypeRevocation,
-		pk11_crl_collect, (void *)&crlData);
-	nsslowcert_TraverseDBEntries(certHandle, certDBEntryTypeKeyRevocation,
-		pk11_crl_collect, (void *)&crlData);
-    } 
+    return crv;
 }
 
-/*
- * structure to collect key handles.
+/* softoken used to search the SMimeEntries automatically instead of
+ * doing this in pk11wrap. This code should really be up in
+ * pk11wrap so that it will work with other tokens other than softoken.
  */
-typedef struct pk11KeyDataStr {
-    PK11Slot *slot;
-    PK11SearchResults *searchHandles;
-    SECItem *id;
-    CK_ATTRIBUTE *template;
-    CK_ULONG templ_count;
-    unsigned long classFlags;
-    PRBool isLoggedIn;
-    PRBool strict;
-} pk11KeyData;
-
-
-static SECStatus
-pk11_key_collect(DBT *key, DBT *data, void *arg)
+CK_RV
+sftk_emailhack(SFTKSlot *slot, SFTKDBHandle *handle, 
+    SFTKSearchResults *search, CK_ATTRIBUTE *pTemplate, CK_ULONG ulCount)
 {
-    pk11KeyData *keyData;
-    NSSLOWKEYPrivateKey *privKey = NULL;
-    SECItem tmpDBKey;
-    PK11Slot *slot;
-    
-    keyData = (pk11KeyData *)arg;
-    slot = keyData->slot;
+    PRBool isCert = PR_FALSE;
+    int emailIndex = -1;
+    int i;
+    SFTKSearchResults smime_search;
+    CK_ATTRIBUTE smime_template[2];
+    CK_OBJECT_CLASS smime_class = CKO_NETSCAPE_SMIME;
+    SFTKAttribute *attribute = NULL;
+    SFTKObject *object = NULL;
+    CK_RV crv = CKR_OK;
 
-    tmpDBKey.data = key->data;
-    tmpDBKey.len = key->size;
-    tmpDBKey.type = siBuffer;
 
-    PORT_Assert(slot->keyDB);
-    if (!keyData->strict && keyData->id) {
-	SECItem result;
-	PRBool haveMatch= PR_FALSE;
-	unsigned char hashKey[SHA1_LENGTH];
-	result.data = hashKey;
-	result.len = sizeof(hashKey);
+    smime_search.handles = NULL; /* paranoia, some one is bound to add a goto
+				  * loser before this gets initialized */
 
-	if (keyData->id->len == 0) {
-	    /* Make sure this isn't a NSC_KEY */
-	    privKey = nsslowkey_FindKeyByPublicKey(keyData->slot->keyDB, 
-					&tmpDBKey, keyData->slot->password);
-	    if (privKey) {
-		haveMatch = isSecretKey(privKey) ?
-				(PRBool)(keyData->classFlags & NSC_KEY) != 0:
-				(PRBool)(keyData->classFlags & 
-					      (NSC_PRIVATE|NSC_PUBLIC)) != 0;
-		nsslowkey_DestroyPrivateKey(privKey);
-	    }
-	} else {
-	    SHA1_HashBuf( hashKey, key->data, key->size ); /* match id */
-	    haveMatch = SECITEM_ItemsAreEqual(keyData->id,&result);
-	    if (!haveMatch && ((unsigned char *)key->data)[0] == 0) {
-		/* This is a fix for backwards compatibility.  The key
-		 * database indexes private keys by the public key, and
-		 * versions of NSS prior to 3.4 stored the public key as
-		 * a signed integer.  The public key is now treated as an
-		 * unsigned integer, with no leading zero.  In order to
-		 * correctly compute the hash of an old key, it is necessary
-		 * to fallback and detect the leading zero.
-		 */
-		SHA1_HashBuf(hashKey, 
-		             (unsigned char *)key->data + 1, key->size - 1);
-		haveMatch = SECITEM_ItemsAreEqual(keyData->id,&result);
-	    }
+    /* see if we are looking for email certs */
+    for (i=0; i < ulCount; i++) {
+	if (pTemplate[i].type == CKA_CLASS) {
+	   if ((pTemplate[i].ulValueLen != sizeof(CK_OBJECT_CLASS) ||
+	       (*(CK_OBJECT_CLASS *)pTemplate[i].pValue) != CKO_CERTIFICATE)) {
+		/* not a cert, skip out */
+		break;
+	   }
+	   isCert = PR_TRUE;
+	} else if (pTemplate[i].type == CKA_NETSCAPE_EMAIL) {
+	   emailIndex = i;
+	 
 	}
-	if (haveMatch) {
-	    if (keyData->classFlags & NSC_PRIVATE)  {
-		pk11_addHandle(keyData->searchHandles,
-			pk11_mkHandle(slot,&tmpDBKey,PK11_TOKEN_TYPE_PRIV));
-	    }
-	    if (keyData->classFlags & NSC_PUBLIC) {
-		pk11_addHandle(keyData->searchHandles,
-			pk11_mkHandle(slot,&tmpDBKey,PK11_TOKEN_TYPE_PUB));
-	    }
-	    if (keyData->classFlags & NSC_KEY) {
-		pk11_addHandle(keyData->searchHandles,
-			pk11_mkHandle(slot,&tmpDBKey,PK11_TOKEN_TYPE_KEY));
-	    }
-	}
-	return SECSuccess;
+	if (isCert && (emailIndex != -1)) break;
     }
 
-    privKey = nsslowkey_FindKeyByPublicKey(keyData->slot->keyDB, &tmpDBKey, 
-						 keyData->slot->password);
-    if ( privKey == NULL ) {
+    if (!isCert || (emailIndex == -1)) {
+	return CKR_OK;
+    }
+
+    /* we are doing a cert and email search, find the SMimeEntry */
+    smime_template[0].type = CKA_CLASS;
+    smime_template[0].pValue = &smime_class;
+    smime_template[0].ulValueLen = sizeof(smime_class);
+    smime_template[1] = pTemplate[emailIndex];
+
+    smime_search.handles = (CK_OBJECT_HANDLE *)
+		PORT_Alloc(sizeof(CK_OBJECT_HANDLE) * NSC_SEARCH_BLOCK_SIZE);
+    if (smime_search.handles == NULL) {
+	crv = CKR_HOST_MEMORY;
+	goto loser;
+    }
+    smime_search.index = 0;
+    smime_search.size = 0;
+    smime_search.array_size = NSC_SEARCH_BLOCK_SIZE;
+	
+    crv = sftk_searchDatabase(handle, &smime_search, smime_template, 2);
+    if (crv != CKR_OK || smime_search.size == 0) {
 	goto loser;
     }
 
-    if (isSecretKey(privKey)) {
-	if ((keyData->classFlags & NSC_KEY) && 
-		pk11_tokenMatch(keyData->slot, &tmpDBKey, PK11_TOKEN_TYPE_KEY,
-			keyData->template, keyData->templ_count)) {
-	    pk11_addHandle(keyData->searchHandles,
-		pk11_mkHandle(keyData->slot, &tmpDBKey, PK11_TOKEN_TYPE_KEY));
-	}
-    } else {
-	if ((keyData->classFlags & NSC_PRIVATE) && 
-		pk11_tokenMatch(keyData->slot, &tmpDBKey, PK11_TOKEN_TYPE_PRIV,
-			keyData->template, keyData->templ_count)) {
-	    pk11_addHandle(keyData->searchHandles,
-		pk11_mkHandle(keyData->slot,&tmpDBKey,PK11_TOKEN_TYPE_PRIV));
-	}
-	if ((keyData->classFlags & NSC_PUBLIC) && 
-		pk11_tokenMatch(keyData->slot, &tmpDBKey, PK11_TOKEN_TYPE_PUB,
-			keyData->template, keyData->templ_count)) {
-	    pk11_addHandle(keyData->searchHandles,
-		pk11_mkHandle(keyData->slot, &tmpDBKey,PK11_TOKEN_TYPE_PUB));
-	}
+    /* get the SMime subject */
+    object = sftk_NewTokenObject(slot, NULL, smime_search.handles[0]);
+    if (object == NULL) {
+	crv = CKR_HOST_MEMORY; /* is there any other reason for this failure? */
+	goto loser;
     }
+    attribute = sftk_FindAttribute(object,CKA_SUBJECT);
+    if (attribute == NULL) {
+	crv = CKR_ATTRIBUTE_TYPE_INVALID;
+	goto loser;
+    }
+
+    /* now find the certs with that subject */
+    pTemplate[emailIndex] = attribute->attrib;
+    /* now add the appropriate certs to the search list */
+    crv = sftk_searchDatabase(handle, search, pTemplate, ulCount);
+    pTemplate[emailIndex] = smime_template[1]; /* restore the user's template*/
 
 loser:
-    if ( privKey ) {
-	nsslowkey_DestroyPrivateKey(privKey);
+    if (attribute) {
+	sftk_FreeAttribute(attribute);
     }
-    return(SECSuccess);
+    if (object) {
+	sftk_FreeObject(object);
+    }
+    if (smime_search.handles) {
+	PORT_Free(smime_search.handles);
+    }
+
+    return crv;
 }
-
+	
 static void
-pk11_searchKeys(PK11Slot *slot, SECItem *key_id, PRBool isLoggedIn,
-	unsigned long classFlags, PK11SearchResults *search,
-	CK_ATTRIBUTE *pTemplate, CK_ULONG ulCount)
-{
-    NSSLOWKEYDBHandle *keyHandle = NULL;
-    NSSLOWKEYPrivateKey *privKey;
-    pk11KeyData keyData;
-    PRBool found = PR_FALSE;
+sftk_pruneSearch(CK_ATTRIBUTE *pTemplate, CK_ULONG ulCount,
+			PRBool *searchCertDB, PRBool *searchKeyDB) {
+    CK_ULONG i;
 
-    keyHandle = slot->keyDB;
-    if (keyHandle == NULL) {
-	return;
-    }
-
-    if (key_id->data) {
-	privKey = nsslowkey_FindKeyByPublicKey(keyHandle, key_id, slot->password);
-	if (privKey) {
-	    if ((classFlags & NSC_KEY) && isSecretKey(privKey)) {
-    	        pk11_addHandle(search,
-			pk11_mkHandle(slot,key_id,PK11_TOKEN_TYPE_KEY));
-		found = PR_TRUE;
+    *searchCertDB = PR_TRUE;
+    *searchKeyDB = PR_TRUE;
+    for (i = 0; i < ulCount; i++) {
+	if (pTemplate[i].type == CKA_CLASS && pTemplate[i].pValue != NULL) {
+	    CK_OBJECT_CLASS class = *((CK_OBJECT_CLASS*)pTemplate[i].pValue);
+	    if (class == CKO_PRIVATE_KEY || class == CKO_SECRET_KEY) {
+		*searchCertDB = PR_FALSE;
+	    } else {
+		*searchKeyDB = PR_FALSE;
 	    }
-	    if ((classFlags & NSC_PRIVATE) && !isSecretKey(privKey)) {
-    	        pk11_addHandle(search,
-			pk11_mkHandle(slot,key_id,PK11_TOKEN_TYPE_PRIV));
-		found = PR_TRUE;
-	    }
-	    if ((classFlags & NSC_PUBLIC) && !isSecretKey(privKey)) {
-    	        pk11_addHandle(search,
-			pk11_mkHandle(slot,key_id,PK11_TOKEN_TYPE_PUB));
-		found = PR_TRUE;
-	    }
-    	    nsslowkey_DestroyPrivateKey(privKey);
-	}
-	/* don't do the traversal if we have an up to date db */
-	if (keyHandle->version != 3) {
-	    return;
-	}
-	/* don't do the traversal if it can't possibly be the correct id */
-	/* all soft token id's are SHA1_HASH_LEN's */
-	if (key_id->len != SHA1_LENGTH) {
-	    return;
-	}
-	if (found) {
-	   /* if we already found some keys, don't do the traversal */
-	   return;
+	    break;
 	}
     }
-    keyData.slot = slot;
-    keyData.searchHandles = search;
-    keyData.id = key_id;
-    keyData.template = pTemplate;
-    keyData.templ_count = ulCount;
-    keyData.isLoggedIn = isLoggedIn;
-    keyData.classFlags = classFlags;
-    keyData.strict = NSC_STRICT;
-
-    nsslowkey_TraverseKeys(keyHandle, pk11_key_collect, &keyData);
-}
-
-/*
- * structure to collect certs into
- */
-typedef struct pk11CertDataStr {
-    PK11Slot *slot;
-    int cert_count;
-    int max_cert_count;
-    NSSLOWCERTCertificate **certs;
-    CK_ATTRIBUTE *template;
-    CK_ULONG	templ_count;
-    unsigned long classFlags;
-    PRBool	strict;
-} pk11CertData;
-
-/*
- * collect all the certs from the traverse call.
- */	
-static SECStatus
-pk11_cert_collect(NSSLOWCERTCertificate *cert,void *arg)
-{
-    pk11CertData *cd = (pk11CertData *)arg;
-
-    if (cert == NULL) {
-	return SECSuccess;
-    }
-
-    if (cd->certs == NULL) {
-	return SECFailure;
-    }
-
-    if (cd->strict) {
-	if ((cd->classFlags & NSC_CERT) && !pk11_tokenMatch(cd->slot,
-	  &cert->certKey, PK11_TOKEN_TYPE_CERT, cd->template,cd->templ_count)) {
-	    return SECSuccess;
-	}
-	if ((cd->classFlags & NSC_TRUST) && !pk11_tokenMatch(cd->slot,
-	  &cert->certKey, PK11_TOKEN_TYPE_TRUST, 
-					     cd->template, cd->templ_count)) {
-	    return SECSuccess;
-	}
-    }
-
-    /* allocate more space if we need it. This should only happen in
-     * the general traversal case */
-    if (cd->cert_count >= cd->max_cert_count) {
-	int size;
-	cd->max_cert_count += NSC_CERT_BLOCK_SIZE;
-	size = cd->max_cert_count * sizeof (NSSLOWCERTCertificate *);
-	cd->certs = (NSSLOWCERTCertificate **)PORT_Realloc(cd->certs,size);
-	if (cd->certs == NULL) {
-	    return SECFailure;
-	}
-    }
-
-    cd->certs[cd->cert_count++] = nsslowcert_DupCertificate(cert);
-    return SECSuccess;
-}
-
-/* provide impedence matching ... */
-static SECStatus
-pk11_cert_collect2(NSSLOWCERTCertificate *cert, SECItem *dymmy, void *arg)
-{
-    return pk11_cert_collect(cert, arg);
-}
-
-static void
-pk11_searchSingleCert(pk11CertData *certData,NSSLOWCERTCertificate *cert)
-{
-    if (cert == NULL) {
-	    return;
-    }
-    if (certData->strict && 
-	!pk11_tokenMatch(certData->slot, &cert->certKey, PK11_TOKEN_TYPE_CERT, 
-				certData->template,certData->templ_count)) {
-	nsslowcert_DestroyCertificate(cert);
-	return;
-    }
-    certData->certs = (NSSLOWCERTCertificate **) 
-				PORT_Alloc(sizeof (NSSLOWCERTCertificate *));
-    if (certData->certs == NULL) {
-	nsslowcert_DestroyCertificate(cert);
-	return;
-    }
-    certData->certs[0] = cert;
-    certData->cert_count = 1;
-}
-
-static void
-pk11_CertSetupData(pk11CertData *certData,int count)
-{
-    certData->max_cert_count = count;
-
-    if (certData->max_cert_count <= 0) {
-	return;
-    }
-    certData->certs = (NSSLOWCERTCertificate **)
-			 PORT_Alloc( count * sizeof(NSSLOWCERTCertificate *));
-    return;
-}
-
-static void
-pk11_searchCertsAndTrust(PK11Slot *slot, SECItem *derCert, SECItem *name, 
-			SECItem *derSubject, NSSLOWCERTIssuerAndSN *issuerSN, 
-			SECItem *email,
-			unsigned long classFlags, PK11SearchResults *handles, 
-			CK_ATTRIBUTE *pTemplate, CK_LONG ulCount)
-{
-    NSSLOWCERTCertDBHandle *certHandle = NULL;
-    pk11CertData certData;
-    int i;
-
-    certHandle = slot->certDB;
-    if (certHandle == NULL) return;
-
-    certData.slot = slot;
-    certData.max_cert_count = 0;
-    certData.certs = NULL;
-    certData.cert_count = 0;
-    certData.template = pTemplate;
-    certData.templ_count = ulCount;
-    certData.classFlags = classFlags; 
-    certData.strict = NSC_STRICT; 
-
-
-    /*
-     * Find the Cert.
-     */
-    if (derCert->data != NULL) {
-	NSSLOWCERTCertificate *cert = 
-			nsslowcert_FindCertByDERCert(certHandle,derCert);
-	pk11_searchSingleCert(&certData,cert);
-    } else if (name->data != NULL) {
-	char *tmp_name = (char*)PORT_Alloc(name->len+1);
-	int count;
-
-	if (tmp_name == NULL) {
-	    return;
-	}
-	PORT_Memcpy(tmp_name,name->data,name->len);
-	tmp_name[name->len] = 0;
-
-	count= nsslowcert_NumPermCertsForNickname(certHandle,tmp_name);
-	pk11_CertSetupData(&certData,count);
-	nsslowcert_TraversePermCertsForNickname(certHandle,tmp_name,
-				pk11_cert_collect, &certData);
-	PORT_Free(tmp_name);
-    } else if (derSubject->data != NULL) {
-	int count;
-
-	count = nsslowcert_NumPermCertsForSubject(certHandle,derSubject);
-	pk11_CertSetupData(&certData,count);
-	nsslowcert_TraversePermCertsForSubject(certHandle,derSubject,
-				pk11_cert_collect, &certData);
-    } else if ((issuerSN->derIssuer.data != NULL) && 
-			(issuerSN->serialNumber.data != NULL)) {
-        if (classFlags & NSC_CERT) {
-	    NSSLOWCERTCertificate *cert = 
-		nsslowcert_FindCertByIssuerAndSN(certHandle,issuerSN);
-
-	    pk11_searchSingleCert(&certData,cert);
-	}
-	if (classFlags & NSC_TRUST) {
-	    NSSLOWCERTTrust *trust = 
-		nsslowcert_FindTrustByIssuerAndSN(certHandle, issuerSN);
-
-	    if (trust) {
-		pk11_addHandle(handles,
-		    pk11_mkHandle(slot,&trust->dbKey,PK11_TOKEN_TYPE_TRUST));
-		nsslowcert_DestroyTrust(trust);
-	    }
-	}
-    } else if (email->data != NULL) {
-	char *tmp_name = (char*)PORT_Alloc(email->len+1);
-	certDBEntrySMime *entry = NULL;
-
-	if (tmp_name == NULL) {
-	    return;
-	}
-	PORT_Memcpy(tmp_name,email->data,email->len);
-	tmp_name[email->len] = 0;
-
-	entry = nsslowcert_ReadDBSMimeEntry(certHandle,tmp_name);
-	if (entry) {
-	    int count;
-	    SECItem *subjectName = &entry->subjectName;
-
-	    count = nsslowcert_NumPermCertsForSubject(certHandle, subjectName);
-	    pk11_CertSetupData(&certData,count);
-	    nsslowcert_TraversePermCertsForSubject(certHandle, subjectName, 
-						pk11_cert_collect, &certData);
-
-	    nsslowcert_DestroyDBEntry((certDBEntry *)entry);
-	}
-	PORT_Free(tmp_name);
-    } else {
-	/* we aren't filtering the certs, we are working on all, so turn
-	 * on the strict filters. */
-        certData.strict = PR_TRUE;
-	pk11_CertSetupData(&certData,NSC_CERT_BLOCK_SIZE);
-	nsslowcert_TraversePermCerts(certHandle, pk11_cert_collect2, &certData);
-    }
-
-    /*
-     * build the handles
-     */	
-    for (i=0 ; i < certData.cert_count ; i++) {
-	NSSLOWCERTCertificate *cert = certData.certs[i];
-
-	/* if we filtered it would have been on the stuff above */
-	if (classFlags & NSC_CERT) {
-	    pk11_addHandle(handles,
-		pk11_mkHandle(slot,&cert->certKey,PK11_TOKEN_TYPE_CERT));
-	}
-	if ((classFlags & NSC_TRUST) && nsslowcert_hasTrust(cert->trust)) {
-	    pk11_addHandle(handles,
-		pk11_mkHandle(slot,&cert->certKey,PK11_TOKEN_TYPE_TRUST));
-	}
-	nsslowcert_DestroyCertificate(cert);
-    }
-
-    if (certData.certs) PORT_Free(certData.certs);
-    return;
-}
-
-static void
-pk11_searchSMime(PK11Slot *slot, SECItem *email, PK11SearchResults *handles, 
-			CK_ATTRIBUTE *pTemplate, CK_LONG ulCount)
-{
-    NSSLOWCERTCertDBHandle *certHandle = NULL;
-    certDBEntrySMime *entry;
-
-    certHandle = slot->certDB;
-    if (certHandle == NULL) return;
-
-    if (email->data != NULL) {
-	char *tmp_name = (char*)PORT_Alloc(email->len+1);
-
-	if (tmp_name == NULL) {
-	    return;
-	}
-	PORT_Memcpy(tmp_name,email->data,email->len);
-	tmp_name[email->len] = 0;
-
-	entry = nsslowcert_ReadDBSMimeEntry(certHandle,tmp_name);
-	if (entry) {
-	    SECItem emailKey;
-
-	    emailKey.data = (unsigned char *)tmp_name;
-	    emailKey.len = PORT_Strlen(tmp_name)+1;
-	    emailKey.type = 0;
-	    pk11_addHandle(handles,
-		pk11_mkHandle(slot,&emailKey,PK11_TOKEN_TYPE_SMIME));
-	    nsslowcert_DestroyDBEntry((certDBEntry *)entry);
-	}
-	PORT_Free(tmp_name);
-    }
-    return;
 }
 
 static CK_RV
-pk11_searchTokenList(PK11Slot *slot, PK11SearchResults *search,
-	 		CK_ATTRIBUTE *pTemplate, CK_LONG ulCount, 
-			PRBool *tokenOnly, PRBool isLoggedIn)
+sftk_searchTokenList(SFTKSlot *slot, SFTKSearchResults *search,
+                        CK_ATTRIBUTE *pTemplate, CK_ULONG ulCount,
+                        PRBool *tokenOnly, PRBool isLoggedIn)
 {
-    int i;
-    PRBool isKrl = PR_FALSE;
-    SECItem derCert = { siBuffer, NULL, 0 };
-    SECItem derSubject = { siBuffer, NULL, 0 };
-    SECItem name = { siBuffer, NULL, 0 };
-    SECItem email = { siBuffer, NULL, 0 };
-    SECItem key_id = { siBuffer, NULL, 0 };
-    SECItem cert_sha1_hash = { siBuffer, NULL, 0 };
-    SECItem cert_md5_hash  = { siBuffer, NULL, 0 };
-    NSSLOWCERTIssuerAndSN issuerSN = {
-	{ siBuffer, NULL, 0 },
-	{ siBuffer, NULL, 0 }
-    };
-    SECItem *copy = NULL;
-    unsigned long classFlags = 
-	NSC_CERT|NSC_TRUST|NSC_PRIVATE|NSC_PUBLIC|NSC_KEY|NSC_SMIME|NSC_CRL;
+    CK_RV crv = CKR_OK;
+    CK_RV crv2;
+    PRBool searchCertDB;
+    PRBool searchKeyDB;
+    
+    sftk_pruneSearch(pTemplate, ulCount, &searchCertDB, &searchKeyDB);
 
-    /* if we aren't logged in, don't look for private or secret keys */
-    if (!isLoggedIn) {
-	classFlags &= ~(NSC_PRIVATE|NSC_KEY);
+    if (searchCertDB) {
+	SFTKDBHandle *certHandle = sftk_getCertDB(slot);
+	crv = sftk_searchDatabase(certHandle, search, pTemplate, ulCount);
+	crv2 = sftk_emailhack(slot, certHandle, search, pTemplate, ulCount);
+	if (crv == CKR_OK) crv = crv2;
+	sftk_freeDB(certHandle);
     }
 
-    /*
-     * look for things to search on token objects for. If the right options
-     * are specified, we can use them as direct indeces into the database
-     * (rather than using linear searches. We can also use the attributes to
-     * limit the kinds of objects we are searching for. Later we can use this
-     * array to filter the remaining objects more finely.
-     */
-    for (i=0 ;classFlags && i < (int)ulCount; i++) {
-
-	switch (pTemplate[i].type) {
-	case CKA_SUBJECT:
-	    copy = &derSubject;
-	    classFlags &= (NSC_CERT|NSC_PRIVATE|NSC_PUBLIC|NSC_SMIME|NSC_CRL);
-	    break;
-	case CKA_ISSUER: 
-	    copy = &issuerSN.derIssuer;
-	    classFlags &= (NSC_CERT|NSC_TRUST);
-	    break;
-	case CKA_SERIAL_NUMBER: 
-	    copy = &issuerSN.serialNumber;
-	    classFlags &= (NSC_CERT|NSC_TRUST);
-	    break;
-	case CKA_VALUE:
-	    copy = &derCert;
-	    classFlags &= (NSC_CERT|NSC_CRL|NSC_SMIME);
-	    break;
-	case CKA_LABEL:
-	    copy = &name;
-	    break;
-	case CKA_NSS_EMAIL:
-	    copy = &email;
-	    classFlags &= NSC_SMIME|NSC_CERT;
-	    break;
-	case CKA_NSS_SMIME_TIMESTAMP:
-	    classFlags &= NSC_SMIME;
-	    break;
-	case CKA_CLASS:
-	    if (pTemplate[i].ulValueLen != sizeof(CK_OBJECT_CLASS)) {
-		classFlags = 0;
-		break;;
-	    }
-	    switch (*((CK_OBJECT_CLASS *)pTemplate[i].pValue)) {
-	    case CKO_CERTIFICATE:
-		classFlags &= NSC_CERT;
-		break;
-	    case CKO_NSS_TRUST:
-		classFlags &= NSC_TRUST;
-		break;
-	    case CKO_NSS_CRL:
-		classFlags &= NSC_CRL;
-		break;
-	    case CKO_NSS_SMIME:
-		classFlags &= NSC_SMIME;
-		break;
-	    case CKO_PRIVATE_KEY:
-		classFlags &= NSC_PRIVATE;
-		break;
-	    case CKO_PUBLIC_KEY:
-		classFlags &= NSC_PUBLIC;
-		break;
-	    case CKO_SECRET_KEY:
-		classFlags &= NSC_KEY;
-		break;
-	    default:
-		classFlags = 0;
-		break;
-	    }
-	    break;
-	case CKA_PRIVATE:
-	    if (pTemplate[i].ulValueLen != sizeof(CK_BBOOL)) {
-		classFlags = 0;
-	    }
-	    if (*((CK_BBOOL *)pTemplate[i].pValue) == CK_TRUE) {
-		classFlags &= (NSC_PRIVATE|NSC_KEY);
-	    } else {
-		classFlags &= ~(NSC_PRIVATE|NSC_KEY);
-	    }
-	    break;
-	case CKA_SENSITIVE:
-	    if (pTemplate[i].ulValueLen != sizeof(CK_BBOOL)) {
-		classFlags = 0;
-	    }
-	    if (*((CK_BBOOL *)pTemplate[i].pValue) == CK_TRUE) {
-		classFlags &= (NSC_PRIVATE|NSC_KEY);
-	    } else {
-		classFlags = 0;
-	    }
-	    break;
-	case CKA_TOKEN:
-	    if (pTemplate[i].ulValueLen != sizeof(CK_BBOOL)) {
-		classFlags = 0;
-	    }
-	    if (*((CK_BBOOL *)pTemplate[i].pValue) == CK_TRUE) {
-		*tokenOnly = PR_TRUE;
-	    } else {
-		classFlags = 0;
-	    }
-	    break;
-	case CKA_CERT_SHA1_HASH:
-	    classFlags &= NSC_TRUST;
-	    copy = &cert_sha1_hash; break;
-	case CKA_CERT_MD5_HASH:
-	    classFlags &= NSC_TRUST;
-	    copy = &cert_md5_hash; break;
-	case CKA_CERTIFICATE_TYPE:
-	    if (pTemplate[i].ulValueLen != sizeof(CK_CERTIFICATE_TYPE)) {
-		classFlags = 0;
-	    }
-	    classFlags &= NSC_CERT;
-	    if (*((CK_CERTIFICATE_TYPE *)pTemplate[i].pValue) != CKC_X_509) {
-		classFlags = 0;
-	    }
-	    break;
-	case CKA_ID:
-	    copy = &key_id;
-	    classFlags &= (NSC_CERT|NSC_PRIVATE|NSC_KEY|NSC_PUBLIC);
-	    break;
-	case CKA_NSS_KRL:
-	    if (pTemplate[i].ulValueLen != sizeof(CK_BBOOL)) {
-		classFlags = 0;
-	    }
-	    classFlags &= NSC_CRL;
-	    isKrl = (PRBool)(*((CK_BBOOL *)pTemplate[i].pValue) == CK_TRUE);
-	    break;
-	case CKA_MODIFIABLE:
-	     break;
-	case CKA_KEY_TYPE:
-	case CKA_DERIVE:
-	    classFlags &= NSC_PUBLIC|NSC_PRIVATE|NSC_KEY;
-	    break;
-	case CKA_VERIFY_RECOVER:
-	    classFlags &= NSC_PUBLIC;
-	    break;
-	case CKA_SIGN_RECOVER:
-	    classFlags &= NSC_PRIVATE;
-	    break;
-	case CKA_ENCRYPT:
-	case CKA_VERIFY:
-	case CKA_WRAP:
-	    classFlags &= NSC_PUBLIC|NSC_KEY;
-	    break;
-	case CKA_DECRYPT:
-	case CKA_SIGN:
-	case CKA_UNWRAP:
-	case CKA_ALWAYS_SENSITIVE:
-	case CKA_EXTRACTABLE:
-	case CKA_NEVER_EXTRACTABLE:
-	    classFlags &= NSC_PRIVATE|NSC_KEY;
-	    break;
-	/* can't be a certificate if it doesn't match one of the above 
-	 * attributes */
-	default: 
-	     classFlags  = 0;
-	     break;
-	}
- 	if (copy) {
-	    copy->data = (unsigned char*)pTemplate[i].pValue;
-	    copy->len = pTemplate[i].ulValueLen;
-	}
-	copy = NULL;
+    if (crv == CKR_OK && isLoggedIn && searchKeyDB) {
+	SFTKDBHandle *keyHandle = sftk_getKeyDB(slot);
+    	crv = sftk_searchDatabase(keyHandle, search, pTemplate, ulCount);
+    	sftk_freeDB(keyHandle);
     }
-
-
-    /* certs */
-    if (classFlags & (NSC_CERT|NSC_TRUST)) {
-	pk11_searchCertsAndTrust(slot,&derCert,&name,&derSubject,
-				 &issuerSN, &email,classFlags,search, 
-				pTemplate, ulCount);
-    }
-
-    /* keys */
-    if (classFlags & (NSC_PRIVATE|NSC_PUBLIC|NSC_KEY)) {
-	pk11_searchKeys(slot, &key_id, isLoggedIn, classFlags, search,
-			pTemplate, ulCount);
-    }
-
-    /* crl's */
-    if (classFlags & NSC_CRL) {
-	pk11_searchCrls(slot, &derSubject, isKrl, classFlags, search,
-			pTemplate, ulCount);
-    }
-    /* Add S/MIME entry stuff */
-    if (classFlags & NSC_SMIME) {
-	pk11_searchSMime(slot, &email, search, pTemplate, ulCount);
-    }
-    return CKR_OK;
+    return crv;
 }
-	
 
 /* NSC_FindObjectsInit initializes a search for token and session objects 
  * that match a template. */
 CK_RV NSC_FindObjectsInit(CK_SESSION_HANDLE hSession,
     			CK_ATTRIBUTE_PTR pTemplate,CK_ULONG ulCount)
 {
-    PK11SearchResults *search = NULL, *freeSearch = NULL;
-    PK11Session *session = NULL;
-    PK11Slot *slot = pk11_SlotFromSessionHandle(hSession);
+    SFTKSearchResults *search = NULL, *freeSearch = NULL;
+    SFTKSession *session = NULL;
+    SFTKSlot *slot = sftk_SlotFromSessionHandle(hSession);
     PRBool tokenOnly = PR_FALSE;
     CK_RV crv = CKR_OK;
     PRBool isLoggedIn;
+
+    CHECK_FORK();
     
-    session = pk11_SessionFromHandle(hSession);
+    if (slot == NULL) {
+	return CKR_SESSION_HANDLE_INVALID;
+    }
+    session = sftk_SessionFromHandle(hSession);
     if (session == NULL) {
 	crv = CKR_SESSION_HANDLE_INVALID;
 	goto loser;
     }
    
-    search = (PK11SearchResults *)PORT_Alloc(sizeof(PK11SearchResults));
+    search = (SFTKSearchResults *)PORT_Alloc(sizeof(SFTKSearchResults));
     if (search == NULL) {
 	crv = CKR_HOST_MEMORY;
 	goto loser;
@@ -4467,7 +4625,7 @@ CK_RV NSC_FindObjectsInit(CK_SESSION_HANDLE hSession,
     search->array_size = NSC_SEARCH_BLOCK_SIZE;
     isLoggedIn = (PRBool)((!slot->needLogin) || slot->isLoggedIn);
 
-    crv = pk11_searchTokenList(slot, search, pTemplate, ulCount, &tokenOnly,
+    crv = sftk_searchTokenList(slot, search, pTemplate, ulCount, &tokenOnly,
 								isLoggedIn);
     if (crv != CKR_OK) {
 	goto loser;
@@ -4475,8 +4633,8 @@ CK_RV NSC_FindObjectsInit(CK_SESSION_HANDLE hSession,
     
     /* build list of found objects in the session */
     if (!tokenOnly) {
-	crv = pk11_searchObjectList(search, slot->tokObjects, 
-				slot->tokObjHashSize, slot->objectLock, 
+	crv = sftk_searchObjectList(search, slot->sessObjHashTable, 
+				slot->sessObjHashSize, slot->objectLock, 
 					pTemplate, ulCount, isLoggedIn);
     }
     if (crv != CKR_OK) {
@@ -4485,18 +4643,18 @@ CK_RV NSC_FindObjectsInit(CK_SESSION_HANDLE hSession,
 
     if ((freeSearch = session->search) != NULL) {
 	session->search = NULL;
-	pk11_FreeSearch(freeSearch);
+	sftk_FreeSearch(freeSearch);
     }
     session->search = search;
-    pk11_FreeSession(session);
+    sftk_FreeSession(session);
     return CKR_OK;
 
 loser:
     if (search) {
-	pk11_FreeSearch(search);
+	sftk_FreeSearch(search);
     }
     if (session) {
-	pk11_FreeSession(session);
+	sftk_FreeSession(session);
     }
     return crv;
 }
@@ -4508,16 +4666,18 @@ CK_RV NSC_FindObjects(CK_SESSION_HANDLE hSession,
     CK_OBJECT_HANDLE_PTR phObject,CK_ULONG ulMaxObjectCount,
     					CK_ULONG_PTR pulObjectCount)
 {
-    PK11Session *session;
-    PK11SearchResults *search;
+    SFTKSession *session;
+    SFTKSearchResults *search;
     int	transfer;
     int left;
 
+    CHECK_FORK();
+
     *pulObjectCount = 0;
-    session = pk11_SessionFromHandle(hSession);
+    session = sftk_SessionFromHandle(hSession);
     if (session == NULL) return CKR_SESSION_HANDLE_INVALID;
     if (session->search == NULL) {
-	pk11_FreeSession(session);
+	sftk_FreeSession(session);
 	return CKR_OK;
     }
     search = session->search;
@@ -4525,7 +4685,7 @@ CK_RV NSC_FindObjects(CK_SESSION_HANDLE hSession,
     transfer = ((int)ulMaxObjectCount > left) ? left : ulMaxObjectCount;
     if (transfer > 0) {
 	PORT_Memcpy(phObject,&search->handles[search->index],
-                                        transfer*sizeof(CK_OBJECT_HANDLE_PTR));
+                                        transfer*sizeof(CK_OBJECT_HANDLE));
     } else {
        *phObject = CK_INVALID_HANDLE;
     }
@@ -4533,26 +4693,28 @@ CK_RV NSC_FindObjects(CK_SESSION_HANDLE hSession,
     search->index += transfer;
     if (search->index == search->size) {
 	session->search = NULL;
-	pk11_FreeSearch(search);
+	sftk_FreeSearch(search);
     }
     *pulObjectCount = transfer;
-    pk11_FreeSession(session);
+    sftk_FreeSession(session);
     return CKR_OK;
 }
 
 /* NSC_FindObjectsFinal finishes a search for token and session objects. */
 CK_RV NSC_FindObjectsFinal(CK_SESSION_HANDLE hSession)
 {
-    PK11Session *session;
-    PK11SearchResults *search;
+    SFTKSession *session;
+    SFTKSearchResults *search;
 
-    session = pk11_SessionFromHandle(hSession);
+    CHECK_FORK();
+
+    session = sftk_SessionFromHandle(hSession);
     if (session == NULL) return CKR_SESSION_HANDLE_INVALID;
     search = session->search;
     session->search = NULL;
-    pk11_FreeSession(session);
+    sftk_FreeSession(session);
     if (search != NULL) {
-	pk11_FreeSearch(search);
+	sftk_FreeSearch(search);
     }
     return CKR_OK;
 }
@@ -4562,5 +4724,8 @@ CK_RV NSC_FindObjectsFinal(CK_SESSION_HANDLE hSession)
 CK_RV NSC_WaitForSlotEvent(CK_FLAGS flags, CK_SLOT_ID_PTR pSlot,
 							 CK_VOID_PTR pReserved)
 {
+    CHECK_FORK();
+
     return CKR_FUNCTION_NOT_SUPPORTED;
 }
+

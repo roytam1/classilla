@@ -1,40 +1,9 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Private header defining OCSP types.
- *
- * $Id: ocspti.h,v 1.4 2002/07/03 20:18:07 javi%netscape.com Exp $
  */
 
 #ifndef _OCSPTI_H_
@@ -103,7 +72,7 @@ typedef struct ocspTBSRequestStr ocspTBSRequest;
  * An OCSPRequest; this is what is sent (encoded) to an OCSP responder.
  */
 struct CERTOCSPRequestStr {
-    PRArenaPool *arena;			/* local; not part of encoding */
+    PLArenaPool *arena;			/* local; not part of encoding */
     ocspTBSRequest *tbsRequest;
     ocspSignature *optionalSignature;
 };
@@ -175,7 +144,7 @@ struct ocspSignatureStr {
  * XXX figure out how to get rid of that arena -- there must be a way
  */
 struct ocspSingleRequestStr {
-    PRArenaPool *arena;			/* just a copy of the response arena,
+    PLArenaPool *arena;			/* just a copy of the response arena,
 					 * needed here for extension handling
 					 * routines, on creation only */
     CERTOCSPCertID *reqCert;
@@ -200,7 +169,7 @@ struct CERTOCSPCertIDStr {
     SECItem issuerSHA1KeyHash;		/* keep other hashes around when */
     SECItem issuerMD5KeyHash;              /* we have them */
     SECItem issuerMD2KeyHash;
-    PRArenaPool *poolp;
+    PLArenaPool *poolp;
 };
 
 /*
@@ -218,6 +187,7 @@ struct CERTOCSPCertIDStr {
  * }
  */
 typedef enum {
+    ocspResponse_min = 0,
     ocspResponse_successful = 0,
     ocspResponse_malformedRequest = 1,
     ocspResponse_internalError = 2,
@@ -225,7 +195,10 @@ typedef enum {
     ocspResponse_unused = 4,
     ocspResponse_sigRequired = 5,
     ocspResponse_unauthorized = 6,
-    ocspResponse_other			/* unknown/unrecognized value */
+    ocspResponse_max = 6 /* Please update max when adding values.
+                          * Remember to also update arrays, e.g.
+                          * "responseStatusNames" in ocspclnt.c
+                          * and potentially other places. */
 } ocspResponseStatus;
 
 /*
@@ -236,7 +209,7 @@ typedef enum {
  * type ocspResponseStatus.
  */
 struct CERTOCSPResponseStr {
-    PRArenaPool *arena;			/* local; not part of encoding */
+    PLArenaPool *arena;			/* local; not part of encoding */
     SECItem responseStatus;		/* an ENUMERATED, see above */
     ocspResponseStatus statusValue;	/* local; not part of encoding */
     ocspResponseBytes *responseBytes;	/* only when status is successful */
@@ -276,6 +249,7 @@ struct ocspResponseBytesStr {
  * the C data structure here and in some shared code to operate on them.
  */
 struct ocspBasicOCSPResponseStr {
+    SECItem tbsResponseDataDER;
     ocspResponseData *tbsResponseData;	/* "tbs" == To Be Signed */
     ocspSignature responseSignature;
 };
@@ -294,28 +268,8 @@ struct ocspResponseDataStr {
     CERTCertExtension **responseExtensions;
 };
 
-/*
- * A ResponderID identifies the responder -- or more correctly, the
- * signer of the response.  The ASN.1 definition of a ResponderID is:
- *
- * ResponderID	::=	CHOICE {
- *	byName			[1] EXPLICIT Name,
- *	byKey			[2] EXPLICIT KeyHash }
- *
- * Because it is CHOICE, the type of identification used and the
- * identification itself are actually encoded together.  To represent
- * this same information internally, we explicitly define a type and
- * save it, along with the value, into a data structure.
- */
-
-typedef enum {
-    ocspResponderID_byName,
-    ocspResponderID_byKey,
-    ocspResponderID_other		/* unknown kind of responderID */
-} ocspResponderIDType;
-
 struct ocspResponderIDStr {
-    ocspResponderIDType responderIDType;/* local; not part of encoding */
+    CERTOCSPResponderIDType responderIDType;/* local; not part of encoding */
     union {
 	CERTName name;			/* when ocspResponderID_byName */
 	SECItem keyHash;		/* when ocspResponderID_byKey */
@@ -330,7 +284,7 @@ struct ocspResponderIDStr {
  * XXX figure out how to get rid of that arena -- there must be a way
  */
 struct CERTOCSPSingleResponseStr {
-    PRArenaPool *arena;			/* just a copy of the response arena,
+    PLArenaPool *arena;			/* just a copy of the response arena,
 					 * needed here for extension handling
 					 * routines, on creation only */
     CERTOCSPCertID *certID;

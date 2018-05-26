@@ -1,37 +1,8 @@
-#! /bin/sh
+#! /bin/bash
 #
-# The contents of this file are subject to the Mozilla Public
-# License Version 1.1 (the "License"); you may not use this file
-# except in compliance with the License. You may obtain a copy of
-# the License at http://www.mozilla.org/MPL/
-# 
-# Software distributed under the License is distributed on an "AS
-# IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
-# implied. See the License for the specific language governing
-# rights and limitations under the License.
-# 
-# The Original Code is the Netscape security libraries.
-# 
-# The Initial Developer of the Original Code is Netscape
-# Communications Corporation.  Portions created by Netscape are 
-# Copyright (C) 1994-2000 Netscape Communications Corporation.  All
-# Rights Reserved.
-# 
-# Contributor(s):
-# Sonja Mirtitsch Sun Microsystems
-# 
-# Alternatively, the contents of this file may be used under the
-# terms of the GNU General Public License Version 2 or later (the
-# "GPL"), in which case the provisions of the GPL are applicable 
-# instead of those above.  If you wish to allow use of your 
-# version of this file only under the terms of the GPL and not to
-# allow others to use your version of this file under the MPL,
-# indicate your decision by deleting the provisions above and
-# replace them with the notice and other provisions required by
-# the GPL.  If you do not delete the provisions above, a recipient
-# may use your version of this file under either the MPL or the
-# GPL.
-#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 ########################################################################
 #
@@ -76,14 +47,9 @@ dbtest_init()
   fi
 
   SCRIPTNAME="dbtests.sh"
-  DBTEST_LOG=${HOSTDIR}/dbtest.log    #we don't want all the errormessages 
-         # in the output.log, otherwise we can't tell what's a real error
   RONLY_DIR=${HOSTDIR}/ronlydir
   EMPTY_DIR=${HOSTDIR}/emptydir
-  grep "SUCCESS: SSL passed" $CERT_LOG_FILE >/dev/null || {
-      html_head "SSL Test failure"
-      Exit : "Fatal - SSL of cert.sh needs to pass first"
-  }
+  CONFLICT_DIR=${HOSTDIR}/conflictdir
 
   html_head "CERT and Key DB Tests"
 
@@ -113,63 +79,79 @@ dbtest_main()
     cd ${HOSTDIR}
 
     
-    Echo "test opening the database readonly in a nonexisting directory"
-    certutil -L -X -d ./non_existant_dir
+    Echo "test opening the database read/write in a nonexisting directory"
+    ${BINDIR}/certutil -L -X -d ./non_existent_dir
     ret=$?
     if [ $ret -ne 255 ]; then
-      html_failed "<TR><TD> Certutil succeeded in a nonexisting directory $ret"
+      html_failed "Certutil succeeded in a nonexisting directory $ret"
     else
-      html_passed "<TR><TD> Certutil failed in a nonexisting dir $ret" 
+      html_passed "Certutil didn't work in a nonexisting dir $ret" 
     fi
-    dbtest -r -d ./non_existant_dir
+    ${BINDIR}/dbtest -r -d ./non_existent_dir
     ret=$?
     if [ $ret -ne 46 ]; then
-      html_failed "<TR><TD> Dbtest readonly succeeded in a nonexisting directory $ret"
+      html_failed "Dbtest readonly succeeded in a nonexisting directory $ret"
     else
-      html_passed "<TR><TD> Dbtest readonly failed in a nonexisting dir $ret" 
+      html_passed "Dbtest readonly didn't work in a nonexisting dir $ret" 
     fi
 
     Echo "test force opening the database in a nonexisting directory"
-    dbtest -f -d ./non_existant_dir
+    ${BINDIR}/dbtest -f -d ./non_existent_dir
     ret=$?
     if [ $ret -ne 0 ]; then
-      html_failed "<TR><TD> Dbtest force failed in a nonexisting directory $ret"
+      html_failed "Dbtest force failed in a nonexisting directory $ret"
     else
-      html_passed "<TR><TD> Dbtest force succeeded in a nonexisting dir $ret"
+      html_passed "Dbtest force succeeded in a nonexisting dir $ret"
     fi
 
     Echo "test opening the database readonly in an empty directory"
     mkdir $EMPTY_DIR
-    tstclnt -h  ${HOST}  -d $EMPTY_DIR 
+    ${BINDIR}/tstclnt -h  ${HOST}  -d $EMPTY_DIR 
     ret=$?
     if [ $ret -ne 1 ]; then
-      html_failed "<TR><TD> Tstclnt succeded in an empty directory $ret"
+      html_failed "Tstclnt succeded in an empty directory $ret"
     else
-      html_passed "<TR><TD> Tstclnt failed in an empty dir $ret"
+      html_passed "Tstclnt didn't work in an empty dir $ret"
     fi
-    dbtest -r -d $EMPTY_DIR
+    ${BINDIR}/dbtest -r -d $EMPTY_DIR
     ret=$?
     if [ $ret -ne 46 ]; then
-      html_failed "<TR><TD> Dbtest readonly succeeded in an empty directory $ret"
+      html_failed "Dbtest readonly succeeded in an empty directory $ret"
     else
-      html_passed "<TR><TD> Dbtest readonly failed in an empty dir $ret" 
+      html_passed "Dbtest readonly didn't work in an empty dir $ret" 
     fi
     rm -rf $EMPTY_DIR/* 2>/dev/null
-    certutil -D -n xxxx -d $EMPTY_DIR #created DB
+    ${BINDIR}/dbtest -i -d $EMPTY_DIR
+    ret=$?
+    if [ $ret -ne 0 ]; then
+      html_failed "Dbtest logout after empty DB Init loses key $ret"
+    else
+      html_passed "Dbtest logout after empty DB Init has key" 
+    fi
+    rm -rf $EMPTY_DIR/* 2>/dev/null
+    ${BINDIR}/dbtest -i -p pass -d $EMPTY_DIR
+    ret=$?
+    if [ $ret -ne 0 ]; then
+      html_failed "Dbtest password DB Init loses needlogin state $ret"
+    else
+      html_passed "Dbtest password DB Init maintains needlogin state" 
+    fi
+    rm -rf $EMPTY_DIR/* 2>/dev/null
+    ${BINDIR}/certutil -D -n xxxx -d $EMPTY_DIR #created DB
     ret=$?
     if [ $ret -ne 255 ]; then 
-        html_failed "<TR><TD> Certutil succeeded in deleting a cert in an empty directory $ret"
+        html_failed "Certutil succeeded in deleting a cert in an empty directory $ret"
     else
-        html_passed "<TR><TD> Certutil failed in an empty dir $ret"
+        html_passed "Certutil didn't work in an empty dir $ret"
     fi
     rm -rf $EMPTY_DIR/* 2>/dev/null
     Echo "test force opening the database  readonly in a empty directory"
-    dbtest -r -f -d $EMPTY_DIR
+    ${BINDIR}/dbtest -r -f -d $EMPTY_DIR
     ret=$?
     if [ $ret -ne 0 ]; then
-      html_failed "<TR><TD> Dbtest force readonly failed in an empty directory $ret"
+      html_failed "Dbtest force readonly failed in an empty directory $ret"
     else
-      html_passed "<TR><TD> Dbtest force readonly succeeded in an empty dir $ret"
+      html_passed "Dbtest force readonly succeeded in an empty dir $ret"
     fi
 
     Echo "test opening the database r/w in a readonly directory"
@@ -186,47 +168,85 @@ dbtest_main()
         cat $RONLY_DIR/* > /dev/null
     fi
 
-    dbtest -d $RONLY_DIR
+    ${BINDIR}/dbtest -d $RONLY_DIR
     ret=$?
     if [ $ret -ne 46 ]; then
-      html_failed "<TR><TD> Dbtest r/w succeeded in an readonly directory $ret"
+      html_failed "Dbtest r/w succeeded in an readonly directory $ret"
     else
-      html_passed "<TR><TD> Dbtest r/w failed in an readonly dir $ret" 
+      html_passed "Dbtest r/w didn't work in an readonly dir $ret" 
     fi
-    certutil -D -n "TestUser" -d .
+    ${BINDIR}/certutil -D -n "TestUser" -d .
     ret=$?
     if [ $ret -ne 255 ]; then
-      html_failed "<TR><TD> Certutil succeeded in deleting a cert in an readonly directory $ret"
+      html_failed "Certutil succeeded in deleting a cert in an readonly directory $ret"
     else
-        html_passed "<TR><TD> Certutil failed in an readonly dir $ret"
+        html_passed "Certutil didn't work in an readonly dir $ret"
     fi
     
     Echo "test opening the database ronly in a readonly directory"
 
-    dbtest -d $RONLY_DIR -r
+    ${BINDIR}/dbtest -d $RONLY_DIR -r
     ret=$?
     if [ $ret -ne 0 ]; then
-      html_failed "<TR><TD> Dbtest readonly failed in a readonly directory $ret"
+      html_failed "Dbtest readonly failed in a readonly directory $ret"
     else
-      html_passed "<TR><TD> Dbtest readonly succeeded in a readonly dir $ret" 
+      html_passed "Dbtest readonly succeeded in a readonly dir $ret" 
     fi
 
     Echo "test force opening the database  r/w in a readonly directory"
-    dbtest -d $RONLY_DIR -f
+    ${BINDIR}/dbtest -d $RONLY_DIR -f
     ret=$?
     if [ $ret -ne 0 ]; then
-      html_failed "<TR><TD> Dbtest force failed in a readonly directory $ret"
+      html_failed "Dbtest force failed in a readonly directory $ret"
     else
-      html_passed "<TR><TD> Dbtest force succeeded in a readonly dir $ret"
+      html_passed "Dbtest force succeeded in a readonly dir $ret"
     fi
 
     Echo "ls -l $RONLY_DIR"
     ls -ld $RONLY_DIR $RONLY_DIR/*
+
+    mkdir ${CONFLICT_DIR}
+    Echo "test creating a new cert with a conflicting nickname"
+    cd ${CONFLICT_DIR}
+    pwd
+    ${BINDIR}/certutil -N -d ${CONFLICT_DIR} -f ${R_PWFILE}
+    ret=$?
+    if [ $ret -ne 0 ]; then
+      html_failed "Nicknane conflict test failed, couldn't create database $ret"
+    else 
+      ${BINDIR}/certutil -A -n alice -t ,, -i ${R_ALICEDIR}/Alice.cert -d ${CONFLICT_DIR}
+      ret=$?
+      if [ $ret -ne 0 ]; then
+        html_failed "Nicknane conflict test failed, couldn't import alice cert $ret"
+      else
+        ${BINDIR}/certutil -A -n alice -t ,, -i ${R_BOBDIR}/Bob.cert -d ${CONFLICT_DIR}
+        ret=$?
+        if [ $ret -eq 0 ]; then
+          html_failed "Nicknane conflict test failed, could import conflict nickname $ret"
+        else
+          html_passed "Nicknane conflict test, could not import conflict nickname $ret"
+        fi
+      fi
+    fi
+
+    Echo "test importing an old cert to a conflicting nickname"
+    # first, import the certificate
+    ${BINDIR}/certutil -A -n bob -t ,, -i ${R_BOBDIR}/Bob.cert -d ${CONFLICT_DIR}
+    # now import with a different nickname
+    ${BINDIR}/certutil -A -n alice -t ,, -i ${R_BOBDIR}/Bob.cert -d ${CONFLICT_DIR}
+    # the old one should still be there...
+    ${BINDIR}/certutil -L -n bob -d ${CONFLICT_DIR}
+    ret=$?
+    if [ $ret -ne 0 ]; then
+      html_failed "Nicknane conflict test-setting nickname conflict incorrectly worked"
+    else
+      html_passed "Nicknane conflict test-setting nickname conflict was correctly rejected"
+    fi
 
 }
 
 ################## main #################################################
 
 dbtest_init 
-dbtest_main >$DBTEST_LOG 2>&1
+dbtest_main 2>&1
 dbtest_cleanup

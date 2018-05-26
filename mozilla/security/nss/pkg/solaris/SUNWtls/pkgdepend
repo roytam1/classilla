@@ -1,7 +1,9 @@
-# Copyright 2002 Microsystems, Inc.  All Rights Reserved.
+# Copyright 2005 Microsystems, Inc.  All Rights Reserved.
 # Use is subject to license terms.
 #
-#	$Id: pkgdepend,v 1.2 2002/10/26 18:04:32 kirk.erickson%sun.com Exp $
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #
 # This package information file defines software dependencies associated
 # with the pkg.  You can define three types of pkg dependencies with this file:

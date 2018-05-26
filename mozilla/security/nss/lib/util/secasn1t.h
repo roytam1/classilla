@@ -1,45 +1,16 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Types for encoding/decoding of ASN.1 using BER/DER (Basic/Distinguished
  * Encoding Rules).
- *
- * $Id: secasn1t.h,v 1.6 2002/08/07 03:25:13 jpierre%netscape.com Exp $
  */
 
 #ifndef _SECASN1T_H_
 #define _SECASN1T_H_
+
+#include "utilrename.h"
 
 /*
 ** An array of these structures defines a BER/DER encoding for an object.
@@ -116,12 +87,14 @@ typedef struct sec_ASN1Template_struct {
 #define SEC_ASN1_ENUMERATED		0x0a
 #define SEC_ASN1_EMBEDDED_PDV           0x0b
 #define SEC_ASN1_UTF8_STRING		0x0c
+/*                                      0x0d */
+/*                                      0x0e */
+/*                                      0x0f */
 #define SEC_ASN1_SEQUENCE		0x10
 #define SEC_ASN1_SET			0x11
 #define SEC_ASN1_NUMERIC_STRING         0x12
 #define SEC_ASN1_PRINTABLE_STRING	0x13
 #define SEC_ASN1_T61_STRING		0x14
-#define SEC_ASN1_TELETEX_STRING SEC_ASN1_T61_STRING
 #define SEC_ASN1_VIDEOTEX_STRING        0x15
 #define SEC_ASN1_IA5_STRING		0x16
 #define SEC_ASN1_UTC_TIME		0x17
@@ -133,6 +106,7 @@ typedef struct sec_ASN1Template_struct {
 /*                                      0x1d */
 #define SEC_ASN1_BMP_STRING		0x1e
 #define SEC_ASN1_HIGH_TAG_NUMBER	0x1f
+#define SEC_ASN1_TELETEX_STRING 	SEC_ASN1_T61_STRING
 
 /*
 ** Modifiers to type tags.  These are also specified by a/the
@@ -196,6 +170,8 @@ typedef struct sec_ASN1Template_struct {
 #define SEC_ASN1_SET_OF		(SEC_ASN1_GROUP | SEC_ASN1_SET)
 #define SEC_ASN1_ANY_CONTENTS	(SEC_ASN1_ANY | SEC_ASN1_INNER)
 
+/* Maximum depth of nested SEQUENCEs and SETs */
+#define SEC_ASN1D_MAX_DEPTH 32
 
 /*
 ** Function used for SEC_ASN1_DYNAMIC.
@@ -205,7 +181,7 @@ typedef struct sec_ASN1Template_struct {
 typedef const SEC_ASN1Template * SEC_ASN1TemplateChooser(void *arg, PRBool enc);
 typedef SEC_ASN1TemplateChooser * SEC_ASN1TemplateChooserPtr;
 
-#if defined(_WIN32)
+#if defined(_WIN32) || defined(ANDROID)
 #define SEC_ASN1_GET(x)        NSS_Get_##x(NULL, PR_FALSE)
 #define SEC_ASN1_SUB(x)        &p_NSS_Get_##x
 #define SEC_ASN1_XTRN          SEC_ASN1_DYNAMIC

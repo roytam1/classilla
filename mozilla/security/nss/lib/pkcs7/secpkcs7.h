@@ -1,40 +1,9 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Interface to the PKCS7 implementation.
- *
- * $Id: secpkcs7.h,v 1.3 2001/01/04 06:02:39 wtc%netscape.com Exp $
  */
 
 #ifndef _SECPKCS7_H_
@@ -98,6 +67,10 @@ SEC_PKCS7DecoderUpdate(SEC_PKCS7DecoderContext *p7dcx,
 extern SEC_PKCS7ContentInfo *
 SEC_PKCS7DecoderFinish(SEC_PKCS7DecoderContext *p7dcx);
 
+
+/*  Abort the underlying ASN.1 stream & set an error  */
+void SEC_PKCS7DecoderAbort(SEC_PKCS7DecoderContext *p7dcx, int error);
+
 extern SEC_PKCS7ContentInfo *
 SEC_PKCS7DecodeItem(SECItem *p7item,
 		    SEC_PKCS7DecoderContentCallback cb, void *cb_arg,
@@ -154,9 +127,27 @@ extern PRBool SEC_PKCS7VerifySignature(SEC_PKCS7ContentInfo *cinfo,
  */
 extern PRBool SEC_PKCS7VerifyDetachedSignature(SEC_PKCS7ContentInfo *cinfo,
 					       SECCertUsage certusage,
-					       SECItem *detached_digest,
+					       const SECItem *detached_digest,
 					       HASH_HashType digest_type,
 					       PRBool keepcerts);
+
+/*
+ * SEC_PKCS7VerifyDetachedSignatureAtTime
+ *      Look at a PKCS7 contentInfo and check if the signature matches
+ *      a passed-in digest (calculated, supposedly, from detached contents).
+ *      The verification checks that the signing cert is valid and trusted
+ *      for the purpose specified by "certusage" at time "atTime".
+ *
+ *	In addition, if "keepcerts" is true, add any new certificates found
+ *	into our local database.
+ */
+extern PRBool
+SEC_PKCS7VerifyDetachedSignatureAtTime(SEC_PKCS7ContentInfo *cinfo,
+				       SECCertUsage certusage,
+				       const SECItem *detached_digest,
+				       HASH_HashType digest_type,
+				       PRBool keepcerts,
+				       PRTime atTime);
 
 /*
  * SEC_PKCS7GetSignerCommonName, SEC_PKCS7GetSignerEmailAddress
@@ -482,7 +473,7 @@ extern SECStatus SEC_PKCS7Encode (SEC_PKCS7ContentInfo *cinfo,
  *
  * "pwfnarg" is an opaque argument to the above callback.
  */
-extern SECItem *SEC_PKCS7EncodeItem (PRArenaPool *pool,
+extern SECItem *SEC_PKCS7EncodeItem (PLArenaPool *pool,
 				     SECItem *dest,
 				     SEC_PKCS7ContentInfo *cinfo,
 				     PK11SymKey *bulkkey,
@@ -547,6 +538,9 @@ extern SECStatus SEC_PKCS7EncoderFinish (SEC_PKCS7EncoderContext *p7ecx,
 					 SECKEYGetPasswordKey pwfn,
 					 void *pwfnarg);
 
+/*  Abort the underlying ASN.1 stream & set an error  */
+void SEC_PKCS7EncoderAbort(SEC_PKCS7EncoderContext *p7dcx, int error);
+
 /* retrieve the algorithm ID used to encrypt the content info
  * for encrypted and enveloped data.  The SECAlgorithmID pointer
  * returned needs to be freed as it is a copy of the algorithm
@@ -570,7 +564,7 @@ SEC_PKCS7GetEncryptionAlgorithm(SEC_PKCS7ContentInfo *cinfo);
  * indicates a success.
  */
 extern SECStatus 
-SEC_PKCS7EncryptContents(PRArenaPool *poolp,
+SEC_PKCS7EncryptContents(PLArenaPool *poolp,
 			 SEC_PKCS7ContentInfo *cinfo, 
 			 SECItem *key,
 			 void *wincx); 
@@ -590,7 +584,7 @@ SEC_PKCS7EncryptContents(PRArenaPool *poolp,
  * indicates a success.
  */
 extern SECStatus 
-SEC_PKCS7DecryptContents(PRArenaPool *poolp,
+SEC_PKCS7DecryptContents(PLArenaPool *poolp,
 			 SEC_PKCS7ContentInfo *cinfo, 
 			 SECItem *key,
 			 void *wincx); 

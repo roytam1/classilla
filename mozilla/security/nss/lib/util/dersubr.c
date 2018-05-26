@@ -1,42 +1,13 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "secder.h"
 #include <limits.h>
 #include "secerr.h"
 
 int
-DER_LengthLength(uint32 len)
+DER_LengthLength(PRUint32 len)
 {
     if (len > 127) {
 	if (len > 255) {
@@ -58,7 +29,7 @@ DER_LengthLength(uint32 len)
 }
 
 unsigned char *
-DER_StoreHeader(unsigned char *buf, unsigned int code, uint32 len)
+DER_StoreHeader(unsigned char *buf, unsigned int code, PRUint32 len)
 {
     unsigned char b[4];
 
@@ -102,10 +73,10 @@ DER_StoreHeader(unsigned char *buf, unsigned int code, uint32 len)
 
 /*
  * XXX This should be rewritten, generalized, to take a long instead
- * of an int32.
+ * of a PRInt32.
  */
 SECStatus
-DER_SetInteger(PRArenaPool *arena, SECItem *it, int32 i)
+DER_SetInteger(PLArenaPool *arena, SECItem *it, PRInt32 i)
 {
     unsigned char bb[4];
     unsigned len;
@@ -153,10 +124,10 @@ DER_SetInteger(PRArenaPool *arena, SECItem *it, int32 i)
 
 /*
  * XXX This should be rewritten, generalized, to take an unsigned long instead
- * of a uint32.
+ * of a PRUint32.
  */
 SECStatus
-DER_SetUInteger(PRArenaPool *arena, SECItem *it, uint32 ui)
+DER_SetUInteger(PLArenaPool *arena, SECItem *it, PRUint32 ui)
 {
     unsigned char bb[5];
     int len;
@@ -205,13 +176,19 @@ DER_SetUInteger(PRArenaPool *arena, SECItem *it, uint32 ui)
 ** If an underflow/overflow occurs, sets error code and returns min/max.
 */
 long
-DER_GetInteger(SECItem *it)
+DER_GetInteger(const SECItem *it)
 {
     long ival = 0;
     unsigned len = it->len;
     unsigned char *cp = it->data;
     unsigned long overflow = 0x1ffUL << (((sizeof(ival) - 1) * 8) - 1);
     unsigned long ofloinit;
+
+    PORT_Assert(len);
+    if (!len) {
+	PORT_SetError(SEC_ERROR_INPUT_LEN);
+	return 0;
+    }
 
     if (*cp & 0x80)
     	ival = -1L;
@@ -234,7 +211,7 @@ DER_GetInteger(SECItem *it)
 
 /*
 ** Convert a der encoded *unsigned* integer into a machine integral value.
-** If an underflow/overflow occurs, sets error code and returns min/max.
+** If an overflow occurs, sets error code and returns max.
 */
 unsigned long
 DER_GetUInteger(SECItem *it)
@@ -243,6 +220,12 @@ DER_GetUInteger(SECItem *it)
     unsigned len = it->len;
     unsigned char *cp = it->data;
     unsigned long overflow = 0xffUL << ((sizeof(ival) - 1) * 8);
+
+    PORT_Assert(len);
+    if (!len) {
+	PORT_SetError(SEC_ERROR_INPUT_LEN);
+	return 0;
+    }
 
     /* Cannot put a negative value into an unsigned container. */
     if (*cp & 0x80) {

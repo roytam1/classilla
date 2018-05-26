@@ -1,36 +1,39 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 /*
 ** File:        pripv6.c
@@ -275,52 +278,44 @@ static PRInt32 PR_CALLBACK Ipv6ToIpv4SocketRecvFrom(PRFileDesc *fd, void *buf,
 }
 
 #if defined(_PR_INET6_PROBE)
-PRBool _pr_ipv6_is_present;
-PR_EXTERN(PRBool) _pr_test_ipv6_socket();
-#if defined(_PR_HAVE_GETIPNODEBYNAME)
-void *_pr_getipnodebyname_fp;
-void *_pr_getipnodebyaddr_fp;
-void *_pr_freehostent_fp;
-#endif
+static PRBool ipv6_is_present;
+extern PRBool _pr_test_ipv6_socket(void);
+
+#if !defined(_PR_INET6) && defined(_PR_HAVE_GETIPNODEBYNAME)
+extern PRStatus _pr_find_getipnodebyname(void);
 #endif
 
-PRStatus _pr_init_ipv6()
+#if !defined(_PR_INET6) && defined(_PR_HAVE_GETADDRINFO)
+extern PRStatus _pr_find_getaddrinfo(void);
+#endif
+
+static PRBool
+_pr_probe_ipv6_presence(void)
+{
+#if !defined(_PR_INET6) && defined(_PR_HAVE_GETIPNODEBYNAME)
+    if (_pr_find_getipnodebyname() != PR_SUCCESS)
+        return PR_FALSE;
+#endif
+
+#if !defined(_PR_INET6) && defined(_PR_HAVE_GETADDRINFO)
+    if (_pr_find_getaddrinfo() != PR_SUCCESS)
+        return PR_FALSE;
+#endif
+
+    return _pr_test_ipv6_socket();
+}
+#endif  /* _PR_INET6_PROBE */
+
+static PRCallOnceType _pr_init_ipv6_once;
+
+static PRStatus PR_CALLBACK _pr_init_ipv6(void)
 {
     const PRIOMethods *stubMethods;
 
 #if defined(_PR_INET6_PROBE)
-
-#if !defined(_PR_INET6) && defined(_PR_HAVE_GETIPNODEBYNAME)
-	PRLibrary *lib;	
-#if defined(VMS)
-#define GETIPNODEBYNAME getenv("GETIPNODEBYNAME")
-#define GETIPNODEBYADDR getenv("GETIPNODEBYADDR")
-#define FREEHOSTENT     getenv("FREEHOSTENT")
-#else
-#define GETIPNODEBYNAME "getipnodebyname"
-#define GETIPNODEBYADDR "getipnodebyaddr"
-#define FREEHOSTENT     "freehostent"
-#endif
-	_pr_getipnodebyname_fp = PR_FindSymbolAndLibrary(GETIPNODEBYNAME, &lib);
-	if (NULL != _pr_getipnodebyname_fp) {
-		_pr_freehostent_fp = PR_FindSymbol(lib, FREEHOSTENT);
-		if (NULL != _pr_freehostent_fp) {
-			_pr_getipnodebyaddr_fp = PR_FindSymbol(lib, GETIPNODEBYADDR);
-			if (NULL != _pr_getipnodebyaddr_fp)
-				_pr_ipv6_is_present = PR_TRUE;
-			else
-				_pr_ipv6_is_present = PR_FALSE;
-		} else
-			_pr_ipv6_is_present = PR_FALSE;
-		(void)PR_UnloadLibrary(lib);
-	} else
-		_pr_ipv6_is_present = PR_FALSE;
-	if (PR_TRUE == _pr_ipv6_is_present)
-#endif
-	
-	_pr_ipv6_is_present = _pr_test_ipv6_socket();
-	if (PR_TRUE == _pr_ipv6_is_present)
-			return PR_SUCCESS;
+    ipv6_is_present = _pr_probe_ipv6_presence();
+    if (ipv6_is_present)
+        return PR_SUCCESS;
 #endif
 
     _pr_ipv6_to_ipv4_id = PR_GetUniqueIdentity("Ipv6_to_Ipv4 layer");
@@ -346,18 +341,30 @@ PRStatus _pr_init_ipv6()
 	ipv6_to_v4_udpMethods.bind = Ipv6ToIpv4SocketBind;
 	ipv6_to_v4_udpMethods.sendto = Ipv6ToIpv4SocketSendTo;
 	ipv6_to_v4_udpMethods.recvfrom = Ipv6ToIpv4SocketRecvFrom;
-	ipv6_to_v4_tcpMethods.getsockname = Ipv6ToIpv4SocketGetName;
-	ipv6_to_v4_tcpMethods.getpeername = Ipv6ToIpv4SocketGetPeerName;
+	ipv6_to_v4_udpMethods.getsockname = Ipv6ToIpv4SocketGetName;
+	ipv6_to_v4_udpMethods.getpeername = Ipv6ToIpv4SocketGetPeerName;
 /*
-	ipv6_to_v4_tcpMethods.getsocketoption = Ipv6ToIpv4GetSocketOption;
-	ipv6_to_v4_tcpMethods.setsocketoption = Ipv6ToIpv4SetSocketOption;
+	ipv6_to_v4_udpMethods.getsocketoption = Ipv6ToIpv4GetSocketOption;
+	ipv6_to_v4_udpMethods.setsocketoption = Ipv6ToIpv4SetSocketOption;
 */
 	return PR_SUCCESS;
 }
 
+#if defined(_PR_INET6_PROBE)
+PRBool _pr_ipv6_is_present(void)
+{
+    if (PR_CallOnce(&_pr_init_ipv6_once, _pr_init_ipv6) != PR_SUCCESS)
+        return PR_FALSE;
+    return ipv6_is_present;
+}
+#endif
+
 PR_IMPLEMENT(PRStatus) _pr_push_ipv6toipv4_layer(PRFileDesc *fd)
 {
 	PRFileDesc *ipv6_fd = NULL;
+
+	if (PR_CallOnce(&_pr_init_ipv6_once, _pr_init_ipv6) != PR_SUCCESS)
+		return PR_FAILURE;
 
 	/*
 	 * For platforms with no support for IPv6 

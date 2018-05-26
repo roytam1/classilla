@@ -1,35 +1,6 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
 ** secutil.c - various functions used by security stuff
@@ -76,7 +47,7 @@ sv_PrintAsHex(FILE *out, SECItem *data, char *m)
 {
     unsigned i;
 
-    if (m) fprintf(out, m);
+    if (m) fprintf(out, "%s", m);
     
     for (i = 0; i < data->len; i++) {
         if (i < data->len - 1) {
@@ -103,41 +74,41 @@ sv_PrintInteger(FILE *out, SECItem *i, char *m)
 
 
 int
-sv_PrintUTCTime(FILE *out, SECItem *t, char *m)
+sv_PrintTime(FILE *out, SECItem *t, char *m)
 {
     PRExplodedTime printableTime; 
-    int64 time;
+    PRTime time;
     char *timeString;
     int rv;
 
-    rv = DER_UTCTimeToTime(&time, t);
+    rv = DER_DecodeTimeChoice(&time, t);
     if (rv) return rv;
 
-    /* Converse to local time */
-    PR_ExplodeTime(time, PR_GMTParameters, &printableTime);
+    /* Convert to local time */
+    PR_ExplodeTime(time, PR_LocalTimeParameters, &printableTime);
 
-    timeString = (char *)PORT_Alloc(100);
+    timeString = (char *)PORT_Alloc(256);
 
     if ( timeString ) {
-        PR_FormatTime( timeString, 100, "%a %b %d %H:%M:%S %Y", &printableTime );
-        fprintf(out, "%s%s\n", m, timeString);
+        if (PR_FormatTime( timeString, 256, "%a %b %d %H:%M:%S %Y", &printableTime )) {
+            fprintf(out, "%s%s\n", m, timeString);
+        }
         PORT_Free(timeString);
         return 0;
     }
     return SECFailure;
 }
 
-
 int
 sv_PrintValidity(FILE *out, CERTValidity *v, char *m)
 {
     int rv;
 
-    fprintf(out, m);
-    rv = sv_PrintUTCTime(out, &v->notBefore, "notBefore=");
+    fprintf(out, "%s", m);
+    rv = sv_PrintTime(out, &v->notBefore, "notBefore=");
     if (rv) return rv;
-    fprintf(out, m);
-    sv_PrintUTCTime(out, &v->notAfter, "notAfter=");
+    fprintf(out, "%s", m);
+    sv_PrintTime(out, &v->notAfter, "notAfter=");
     return rv;
 }
 
@@ -178,7 +149,7 @@ sv_PrintAttribute(FILE *out, SEC_PKCS7Attribute *attr, char *m)
     int i;
     char om[100];
 
-    fprintf(out, m);
+    fprintf(out, "%s", m);
 
     /*
      * XXX Make this smarter; look at the type field and then decode
@@ -200,7 +171,7 @@ sv_PrintAttribute(FILE *out, SEC_PKCS7Attribute *attr, char *m)
                         sv_PrintObjectID(out, value, om);
                         break;
                     case SEC_OID_PKCS9_SIGNING_TIME:
-                        sv_PrintUTCTime(out, value, om);
+                        sv_PrintTime(out, value, om);
                         break;
                 }
             }
@@ -215,6 +186,7 @@ sv_PrintName(FILE *out, CERTName *name, char *msg)
 
     str = CERT_NameToAscii(name);
     fprintf(out, "%s%s\n", msg, str);
+    PORT_Free(str);
 }
 
 
@@ -274,16 +246,16 @@ sv_PrintSignerInfo(FILE *out, SEC_PKCS7SignerInfo *info, char *m)
     SEC_PKCS7Attribute *attr;
     int iv;
     
-    fprintf(out, m);
+    fprintf(out, "%s", m);
     sv_PrintInteger(out, &(info->version), "version=");
 
-    fprintf(out, m);
+    fprintf(out, "%s", m);
     sv_PrintName(out, &(info->issuerAndSN->issuer), "issuerName=");
-    fprintf(out, m);
+    fprintf(out, "%s", m);
     sv_PrintInteger(out, &(info->issuerAndSN->serialNumber), 
                         "serialNumber=");
   
-    fprintf(out, m);
+    fprintf(out, "%s", m);
     sv_PrintAlgorithmID(out, &(info->digestAlg), "digestAlgorithm=");
     
     if (info->authAttr != NULL) {
@@ -300,9 +272,9 @@ sv_PrintSignerInfo(FILE *out, SEC_PKCS7SignerInfo *info, char *m)
     }
     
     /* Parse and display signature */
-    fprintf(out, m);
+    fprintf(out, "%s", m);
     sv_PrintAlgorithmID(out, &(info->digestEncAlg), "digestEncryptionAlgorithm=");
-    fprintf(out, m);
+    fprintf(out, "%s", m);
     sv_PrintAsHex(out, &(info->encDigest), "encryptedDigest=");
     
     if (info->unAuthAttr != NULL) {
@@ -322,27 +294,27 @@ sv_PrintSignerInfo(FILE *out, SEC_PKCS7SignerInfo *info, char *m)
 void
 sv_PrintRSAPublicKey(FILE *out, SECKEYPublicKey *pk, char *m)
 {
-    fprintf(out, m);
+    fprintf(out, "%s", m);
     sv_PrintInteger(out, &pk->u.rsa.modulus, "modulus=");
-    fprintf(out, m);
+    fprintf(out, "%s", m);
     sv_PrintInteger(out, &pk->u.rsa.publicExponent, "exponent=");
 }
 
 void
 sv_PrintDSAPublicKey(FILE *out, SECKEYPublicKey *pk, char *m)
 {
-    fprintf(out, m);
+    fprintf(out, "%s", m);
     sv_PrintInteger(out, &pk->u.dsa.params.prime, "prime=");
-    fprintf(out, m);
+    fprintf(out, "%s", m);
     sv_PrintInteger(out, &pk->u.dsa.params.subPrime, "subprime=");
-    fprintf(out, m);
+    fprintf(out, "%s", m);
     sv_PrintInteger(out, &pk->u.dsa.params.base, "base=");
-    fprintf(out, m);
+    fprintf(out, "%s", m);
     sv_PrintInteger(out, &pk->u.dsa.publicValue, "publicValue=");
 }
 
 int
-sv_PrintSubjectPublicKeyInfo(FILE *out, PRArenaPool *arena,
+sv_PrintSubjectPublicKeyInfo(FILE *out, PLArenaPool *arena,
                              CERTSubjectPublicKeyInfo *i,  char *msg)
 {
     SECKEYPublicKey *pk;
@@ -358,14 +330,16 @@ sv_PrintSubjectPublicKeyInfo(FILE *out, PRArenaPool *arena,
     DER_ConvertBitString(&i->subjectPublicKey);
     switch(SECOID_FindOIDTag(&i->algorithm.algorithm)) {
         case SEC_OID_PKCS1_RSA_ENCRYPTION:
-            rv = SEC_ASN1DecodeItem(arena, pk, SECKEY_RSAPublicKeyTemplate,
+            rv = SEC_ASN1DecodeItem(arena, pk,
+                                    SEC_ASN1_GET(SECKEY_RSAPublicKeyTemplate),
                                     &i->subjectPublicKey);
             if (rv) return rv;
             sprintf(mm, "%s.rsaPublicKey.", msg);
             sv_PrintRSAPublicKey(out, pk, mm);
             break;
         case SEC_OID_ANSIX9_DSA_SIGNATURE:
-            rv = SEC_ASN1DecodeItem(arena, pk, SECKEY_DSAPublicKeyTemplate,
+            rv = SEC_ASN1DecodeItem(arena, pk,
+                                    SEC_ASN1_GET(SECKEY_DSAPublicKeyTemplate),
                                     &i->subjectPublicKey);
             if (rv) return rv;
             sprintf(mm, "%s.dsaPublicKey.", msg);
@@ -384,11 +358,12 @@ sv_PrintInvalidDateExten  (FILE *out, SECItem *value, char *msg)
 {
     SECItem decodedValue;
     SECStatus rv;
-    int64 invalidTime;
+    PRTime invalidTime;
     char *formattedTime = NULL;
 
     decodedValue.data = NULL;
-    rv = SEC_ASN1DecodeItem (NULL, &decodedValue, SEC_GeneralizedTimeTemplate,
+    rv = SEC_ASN1DecodeItem (NULL, &decodedValue,
+                             SEC_ASN1_GET(SEC_GeneralizedTimeTemplate),
                              value);
     if (rv == SECSuccess) {
         rv = DER_GeneralizedTimeToTime(&invalidTime, &decodedValue);
@@ -425,7 +400,7 @@ sv_PrintExtensions(FILE *out, CERTCertExtension **extensions, char *msg)
 
             oidTag = SECOID_FindOIDTag (&((*extensions)->id));
 
-            fprintf(out, msg);
+            fprintf(out, "%s", msg);
             tmpitem = &((*extensions)->value);
             if (oidTag == SEC_OID_X509_INVALID_DATE) 
                 sv_PrintInvalidDateExten (out, tmpitem,"invalidExt");
@@ -451,14 +426,14 @@ sv_PrintCRLInfo(FILE *out, CERTCrl *crl, char *m)
     int iv;
     char om[100];
     
-    fprintf(out, m);
+    fprintf(out, "%s", m);
     sv_PrintAlgorithmID(out, &(crl->signatureAlg), "signatureAlgorithm=");
-    fprintf(out, m);
+    fprintf(out, "%s", m);
     sv_PrintName(out, &(crl->name), "name=");
-    fprintf(out, m);
-    sv_PrintUTCTime(out, &(crl->lastUpdate), "lastUpdate=");
-    fprintf(out, m);
-    sv_PrintUTCTime(out, &(crl->nextUpdate), "nextUpdate=");
+    fprintf(out, "%s", m);
+    sv_PrintTime(out, &(crl->lastUpdate), "lastUpdate=");
+    fprintf(out, "%s", m);
+    sv_PrintTime(out, &(crl->nextUpdate), "nextUpdate=");
     
     if (crl->entries != NULL) {
         iv = 0;
@@ -466,7 +441,7 @@ sv_PrintCRLInfo(FILE *out, CERTCrl *crl, char *m)
             fprintf(out, "%sentry[%d].", m, iv); 
             sv_PrintInteger(out, &(entry->serialNumber), "serialNumber=");
             fprintf(out, "%sentry[%d].", m, iv); 
-            sv_PrintUTCTime(out, &(entry->revocationDate), "revocationDate=");
+            sv_PrintTime(out, &(entry->revocationDate), "revocationDate=");
             sprintf(om, "%sentry[%d].signedCRLEntriesExtensions.", m, iv++); 
             sv_PrintExtensions(out, entry->extensions, om);
         }
@@ -479,7 +454,7 @@ sv_PrintCRLInfo(FILE *out, CERTCrl *crl, char *m)
 int
 sv_PrintCertificate(FILE *out, SECItem *der, char *m, int level)
 {
-    PRArenaPool *arena = NULL;
+    PLArenaPool *arena = NULL;
     CERTCertificate *c;
     int rv;
     int iv;
@@ -492,7 +467,8 @@ sv_PrintCertificate(FILE *out, SECItem *der, char *m, int level)
     arena = PORT_NewArena(DER_DEFAULT_CHUNKSIZE);
     if (!arena) return SEC_ERROR_NO_MEMORY;
 
-    rv = SEC_ASN1DecodeItem(arena, c, CERT_CertificateTemplate, der);
+    rv = SEC_ASN1DecodeItem(arena, c, SEC_ASN1_GET(CERT_CertificateTemplate),
+                            der);
     if (rv) {
         PORT_FreeArena(arena, PR_FALSE);
         return rv;
@@ -527,7 +503,7 @@ sv_PrintCertificate(FILE *out, SECItem *der, char *m, int level)
 int
 sv_PrintSignedData(FILE *out, SECItem *der, char *m, SECU_PPFunc inner)
 {
-    PRArenaPool *arena = NULL;
+    PLArenaPool *arena = NULL;
     CERTSignedData *sd;
     int rv;
 
@@ -538,7 +514,8 @@ sv_PrintSignedData(FILE *out, SECItem *der, char *m, SECU_PPFunc inner)
     arena = PORT_NewArena(DER_DEFAULT_CHUNKSIZE);
     if (!arena) return SEC_ERROR_NO_MEMORY;
 
-    rv = SEC_ASN1DecodeItem(arena, sd, CERT_SignedDataTemplate, der);
+    rv = SEC_ASN1DecodeItem(arena, sd, SEC_ASN1_GET(CERT_SignedDataTemplate),
+                            der);
     if (rv) {
         PORT_FreeArena(arena, PR_FALSE);
         return rv;
@@ -554,10 +531,10 @@ sv_PrintSignedData(FILE *out, SECItem *der, char *m, SECU_PPFunc inner)
     }
 
     m[PORT_Strlen(m) - 5] = 0;
-    fprintf(out, m);
+    fprintf(out, "%s", m);
     sv_PrintAlgorithmID(out, &sd->signatureAlgorithm, "signatureAlgorithm=");
     DER_ConvertBitString(&sd->signature);
-    fprintf(out, m);
+    fprintf(out, "%s", m);
     sv_PrintAsHex(out, &sd->signature, "signature=");
 
     PORT_FreeArena(arena, PR_FALSE);
@@ -623,11 +600,11 @@ sv_PrintPKCS7Signed(FILE *out, SEC_PKCS7SignedData *src)
         iv = 0;
         while ((aCrl = src->crls[iv]) != NULL) {
             sprintf(om, "signedRevocationList[%d].", iv);
-            fprintf(out, om);
+            fprintf(out, "%s", om);
             sv_PrintAlgorithmID(out, &aCrl->signatureWrap.signatureAlgorithm, 
                                 "signatureAlgorithm=");
             DER_ConvertBitString(&aCrl->signatureWrap.signature);
-            fprintf(out, om);
+            fprintf(out, "%s", om);
             sv_PrintAsHex(out, &aCrl->signatureWrap.signature, "signature=");
             sprintf(om, "certificateRevocationList[%d].", iv);
             sv_PrintCRLInfo(out, &aCrl->crl, om);
@@ -769,37 +746,6 @@ secu_PrintPKCS7SignedAndEnveloped(FILE *out,
     }  
 
     return 0;
-}
-
-PR_IMPLEMENT(int)
-SECU_PrintCrl (FILE *out, SECItem *der, char *m, int level)
-{
-    PRArenaPool *arena = NULL;
-    CERTCrl *c = NULL;
-    int rv;
-
-    do {
-	/* Decode CRL */
-	c = (CERTCrl*) PORT_ZAlloc(sizeof(CERTCrl));
-	if (!c) {
-	    rv = PORT_GetError();
-	    break;
-	}
-
-	arena = PORT_NewArena(DER_DEFAULT_CHUNKSIZE);
-	if (!arena) {
-	    rv = SEC_ERROR_NO_MEMORY;
-	    break;
-	}
-
-	rv = SEC_ASN1DecodeItem(arena, c, CERT_CrlTemplate, der);
-	if (rv != SECSuccess)
-	    break;
-	SECU_PrintCRLInfo (out, c, m, level);
-    } while (0);
-    PORT_FreeArena (arena, PR_FALSE);
-    PORT_Free (c);
-    return (rv);
 }
 
 /*

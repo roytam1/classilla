@@ -1,37 +1,7 @@
 dnl
-dnl The contents of this file are subject to the Mozilla Public
-dnl License Version 1.1 (the "License"); you may not use this file
-dnl except in compliance with the License. You may obtain a copy of
-dnl the License at http://www.mozilla.org/MPL/
-dnl 
-dnl Software distributed under the License is distributed on an "AS
-dnl IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
-dnl implied. See the License for the specific language governing
-dnl rights and limitations under the License.
-dnl 
-dnl The Original Code is a trivial PKCS#11 test program.
-dnl 
-dnl The Initial Developer of the Original Code is Netscape
-dnl Communications Corp.  Portions created by Netscape are 
-dnl Copyright (C) 2000.  All Rights Reserved.
-dnl 
-dnl Contributor(s): 
-dnl
-dnl Alternatively, the contents of this file may be used under the
-dnl terms of the GNU General Public License Version 2 or later (the
-dnl "GPL"), in which case the provisions of the GPL are applicable 
-dnl instead of those above.  If you wish to allow use of your 
-dnl version of this file only under the terms of the GPL and not to
-dnl allow others to use your version of this file under the MPL,
-dnl indicate your decision by deleting the provisions above and
-dnl replace them with the notice and other provisions required by
-dnl the GPL.  If you do not delete the provisions above, a recipient
-dnl may use your version of this file under either the MPL or the
-dnl GPL.
-dnl
-
-dnl My revision info: "@(#) $RCSfile: configure.in,v $ $Revision: 1.1 $ $Date: 2000/05/08 23:19:45 $ $Name:  $"
-dnl Don't use AC_REVISION; it's broken
+dnl This Source Code Form is subject to the terms of the Mozilla Public
+dnl License, v. 2.0. If a copy of the MPL was not distributed with this
+dnl file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 AC_INIT(trivial.c)
 AC_CONFIG_HEADER(config.h)

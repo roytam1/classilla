@@ -1,36 +1,39 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 #include "primpl.h"
 
@@ -65,7 +68,7 @@
  * PRInt32* pointer to a _PRSockLen_t* pointer.
  */
 #if defined(HAVE_SOCKLEN_T) \
-    || (defined(LINUX) && defined(__GLIBC__) && __GLIBC__ >= 2)
+    || (defined(__GLIBC__) && __GLIBC__ >= 2)
 #define _PRSockLen_t socklen_t
 #elif defined(IRIX) || defined(HPUX) || defined(OSF1) || defined(SOLARIS) \
     || defined(AIX4_1) || defined(LINUX) || defined(SONY) \
@@ -75,7 +78,7 @@
 #define _PRSockLen_t int
 #elif (defined(AIX) && !defined(AIX4_1)) || defined(FREEBSD) \
     || defined(NETBSD) || defined(OPENBSD) || defined(UNIXWARE) \
-    || defined(DGUX) || defined(VMS) || defined(NTO)
+    || defined(DGUX) || defined(VMS) || defined(NTO) || defined(RISCOS)
 #define _PRSockLen_t size_t
 #else
 #error "Cannot determine architecture"
@@ -133,7 +136,7 @@ _PRInterruptTable _pr_interruptTable[] = {
         0     }
 };
 
-PR_IMPLEMENT(void) _MD_unix_init_running_cpu(_PRCPU *cpu)
+void _MD_unix_init_running_cpu(_PRCPU *cpu)
 {
     PR_INIT_CLIST(&(cpu->md.md_unix.ioQ));
     cpu->md.md_unix.ioq_max_osfd = -1;
@@ -177,6 +180,7 @@ int err;
           * XXX: readdir() is not MT-safe. There is an MT-safe version
           * readdir_r() on some systems.
           */
+        _MD_ERRNO() = 0;
         de = readdir(d->d);
         if (!de) {
             err = _MD_ERRNO();
@@ -3337,7 +3341,7 @@ void PR_XNotifyAll(void)
 
 #if defined(HAVE_FCNTL_FILE_LOCKING)
 
-PR_IMPLEMENT(PRStatus)
+PRStatus
 _MD_LockFile(PRInt32 f)
 {
     PRInt32 rv;
@@ -3354,7 +3358,7 @@ _MD_LockFile(PRInt32 f)
     return PR_FAILURE;
 }
 
-PR_IMPLEMENT(PRStatus)
+PRStatus
 _MD_TLockFile(PRInt32 f)
 {
     PRInt32 rv;
@@ -3371,7 +3375,7 @@ _MD_TLockFile(PRInt32 f)
     return PR_FAILURE;
 }
 
-PR_IMPLEMENT(PRStatus)
+PRStatus
 _MD_UnlockFile(PRInt32 f)
 {
     PRInt32 rv;
@@ -3392,7 +3396,7 @@ _MD_UnlockFile(PRInt32 f)
 
 #include <sys/file.h>
 
-PR_IMPLEMENT(PRStatus)
+PRStatus
 _MD_LockFile(PRInt32 f)
 {
     PRInt32 rv;
@@ -3403,7 +3407,7 @@ _MD_LockFile(PRInt32 f)
     return PR_FAILURE;
 }
 
-PR_IMPLEMENT(PRStatus)
+PRStatus
 _MD_TLockFile(PRInt32 f)
 {
     PRInt32 rv;
@@ -3414,7 +3418,7 @@ _MD_TLockFile(PRInt32 f)
     return PR_FAILURE;
 }
 
-PR_IMPLEMENT(PRStatus)
+PRStatus
 _MD_UnlockFile(PRInt32 f)
 {
     PRInt32 rv;
@@ -3426,7 +3430,7 @@ _MD_UnlockFile(PRInt32 f)
 }
 #else
 
-PR_IMPLEMENT(PRStatus)
+PRStatus
 _MD_LockFile(PRInt32 f)
 {
     PRInt32 rv;
@@ -3437,7 +3441,7 @@ _MD_LockFile(PRInt32 f)
     return PR_FAILURE;
 }
 
-PR_IMPLEMENT(PRStatus)
+PRStatus
 _MD_TLockFile(PRInt32 f)
 {
     PRInt32 rv;
@@ -3448,7 +3452,7 @@ _MD_TLockFile(PRInt32 f)
     return PR_FAILURE;
 }
 
-PR_IMPLEMENT(PRStatus)
+PRStatus
 _MD_UnlockFile(PRInt32 f)
 {
     PRInt32 rv;
@@ -3460,7 +3464,7 @@ _MD_UnlockFile(PRInt32 f)
 }
 #endif
 
-PR_IMPLEMENT(PRStatus) _MD_gethostname(char *name, PRUint32 namelen)
+PRStatus _MD_gethostname(char *name, PRUint32 namelen)
 {
     PRIntn rv;
 
@@ -3472,7 +3476,7 @@ PR_IMPLEMENT(PRStatus) _MD_gethostname(char *name, PRUint32 namelen)
     return PR_FAILURE;
 }
 
-PR_IMPLEMENT(PRStatus) _MD_getsysinfo(PRSysInfo cmd, char *name, PRUint32 namelen)
+PRStatus _MD_getsysinfo(PRSysInfo cmd, char *name, PRUint32 namelen)
 {
 	struct utsname info;
 

@@ -1,47 +1,44 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* 
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
  * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
+ *
+ * The Initial Developer of the Original Code is
+ * Netscape Communications Corporation.
+ * Portions created by the Initial Developer are Copyright (C) 1998-2000
+ * the Initial Developer. All Rights Reserved.
+ *
  * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
 
 #include "primpl.h"
 #include <process.h>  /* for _beginthread() */
-
-#ifdef XP_OS2_VACPP
-#include <time.h>     /* for _tzset() */
-#endif
-
-#ifdef XP_OS2_EMX
 #include <signal.h>
-#endif
+#include <float.h>
 
 /* --- globals ------------------------------------------------ */
 _NSPR_TLS*        pThreadLocalStorage = 0;
@@ -70,10 +67,6 @@ _PR_MD_EARLY_INIT()
    if (DosLoadModule(NULL, 0, "DOSCALL1", &hmod) == 0)
        DosQueryProcAddr(hmod, 877, "DOSQUERYTHREADCONTEXT",
                         (PFN *)&QueryThreadContext);
-
-#ifdef XP_OS2_VACPP
-   _tzset();
-#endif
 }
 
 static void
@@ -88,19 +81,92 @@ _pr_SetThreadMDHandle(PRThread *thread)
    thread->md.handle = ptib->tib_ptib2->tib2_ultid;
 }
 
+/* On OS/2, some system function calls seem to change the FPU control word,
+ * such that we crash with a floating underflow exception.  The FIX_FPU() call
+ * in jsnum.c does not always work, as sometimes FIX_FPU() is called BEFORE the
+ * OS/2 system call that horks the FPU control word.  So, we set an exception
+ * handler that covers any floating point exceptions and resets the FPU CW to
+ * the required value.
+ */
+static ULONG
+_System OS2_FloatExcpHandler(PEXCEPTIONREPORTRECORD p1,
+                             PEXCEPTIONREGISTRATIONRECORD p2,
+                             PCONTEXTRECORD p3,
+                             PVOID pv)
+{
+#ifdef DEBUG_pedemonte
+    printf("Entering exception handler; ExceptionNum = %x\n", p1->ExceptionNum);
+    switch(p1->ExceptionNum) {
+        case XCPT_FLOAT_DENORMAL_OPERAND:
+            printf("got XCPT_FLOAT_DENORMAL_OPERAND\n");
+            break;
+        case XCPT_FLOAT_DIVIDE_BY_ZERO:
+            printf("got XCPT_FLOAT_DIVIDE_BY_ZERO\n");
+            break;
+        case XCPT_FLOAT_INEXACT_RESULT:
+            printf("got XCPT_FLOAT_INEXACT_RESULT\n");
+            break;
+        case XCPT_FLOAT_INVALID_OPERATION:
+            printf("got XCPT_FLOAT_INVALID_OPERATION\n");
+            break;
+        case XCPT_FLOAT_OVERFLOW:
+            printf("got XCPT_FLOAT_OVERFLOW\n");
+            break;
+        case XCPT_FLOAT_STACK_CHECK:
+            printf("got XCPT_FLOAT_STACK_CHECK\n");
+            break;
+        case XCPT_FLOAT_UNDERFLOW:
+            printf("got XCPT_FLOAT_UNDERFLOW\n");
+            break;
+    }
+#endif
+
+    switch(p1->ExceptionNum) {
+        case XCPT_FLOAT_DENORMAL_OPERAND:
+        case XCPT_FLOAT_DIVIDE_BY_ZERO:
+        case XCPT_FLOAT_INEXACT_RESULT:
+        case XCPT_FLOAT_INVALID_OPERATION:
+        case XCPT_FLOAT_OVERFLOW:
+        case XCPT_FLOAT_STACK_CHECK:
+        case XCPT_FLOAT_UNDERFLOW:
+        {
+            unsigned cw = p3->ctx_env[0];
+            if ((cw & MCW_EM) != MCW_EM) {
+                /* Mask out all floating point exceptions */
+                p3->ctx_env[0] |= MCW_EM;
+                /* Following two lines set precision to 53 bit mantissa.  See jsnum.c */
+                p3->ctx_env[0] &= ~MCW_PC;
+                p3->ctx_env[0] |= PC_53;
+                return XCPT_CONTINUE_EXECUTION;
+            }
+        }
+    }
+    return XCPT_CONTINUE_SEARCH;
+}
+
+PR_IMPLEMENT(void)
+PR_OS2_SetFloatExcpHandler(EXCEPTIONREGISTRATIONRECORD* excpreg)
+{
+    /* setup the exception handler for the thread */
+    APIRET rv;
+    excpreg->ExceptionHandler = OS2_FloatExcpHandler;
+    excpreg->prev_structure = NULL;
+    rv = DosSetExceptionHandler(excpreg);
+    PR_ASSERT(rv == NO_ERROR);
+}
+
+PR_IMPLEMENT(void)
+PR_OS2_UnsetFloatExcpHandler(EXCEPTIONREGISTRATIONRECORD* excpreg)
+{
+    /* unset exception handler */
+    APIRET rv = DosUnsetExceptionHandler(excpreg);
+    PR_ASSERT(rv == NO_ERROR);
+}
 
 PRStatus
 _PR_MD_INIT_THREAD(PRThread *thread)
 {
    APIRET rv;
-#ifdef XP_OS2_EMX
-   /* disable SIGPIPE */
-   struct sigaction sa;
-   sa.sa_handler = SIG_IGN;
-   sa.sa_flags = 0;
-   sigemptyset( &sa.sa_mask);
-   sigaction( SIGPIPE, &sa, NULL);
-#endif
 
    if (thread->flags & (_PR_PRIMORDIAL | _PR_ATTACHED)) {
       _pr_SetThreadMDHandle(thread);
@@ -111,6 +177,29 @@ _PR_MD_INIT_THREAD(PRThread *thread)
    return (rv == NO_ERROR) ? PR_SUCCESS : PR_FAILURE;
 }
 
+typedef struct param_store
+{
+    void (*start)(void *);
+    PRThread* thread;
+} PARAMSTORE;
+
+/* This is a small intermediate function that sets/unsets the exception
+   handler before calling the initial thread function */
+static void
+ExcpStartFunc(void* arg)
+{
+    EXCEPTIONREGISTRATIONRECORD excpreg;
+    PARAMSTORE params, *pParams = arg;
+
+    PR_OS2_SetFloatExcpHandler(&excpreg);
+
+    params = *pParams;
+    PR_Free(pParams);
+    params.start(params.thread);
+
+    PR_OS2_UnsetFloatExcpHandler(&excpreg);
+}
+
 PRStatus
 _PR_MD_CREATE_THREAD(PRThread *thread, 
                   void (*start)(void *), 
@@ -119,11 +208,13 @@ _PR_MD_CREATE_THREAD(PRThread *thread,
                   PRThreadState state, 
                   PRUint32 stackSize)
 {
-    thread->md.handle = thread->id = (TID) _beginthread(
-                    (void(* _Optlink)(void*))start,
-                    NULL, 
-                    thread->stack->stackSize,
-                    thread);
+    PARAMSTORE* params = PR_Malloc(sizeof(PARAMSTORE));
+    params->start = start;
+    params->thread = thread;
+    thread->md.handle = thread->id = (TID) _beginthread(ExcpStartFunc,
+                                                        NULL, 
+                                                        thread->stack->stackSize,
+                                                        params);
     if(thread->md.handle == -1) {
         return PR_FAILURE;
     }
@@ -150,7 +241,7 @@ _PR_MD_YIELD(void)
 void
 _PR_MD_SET_PRIORITY(_MDThread *thread, PRThreadPriority newPri)
 {
-    int nativePri;
+    int nativePri = PRTYC_NOCHANGE;
     BOOL rv;
 
     if (newPri < PR_PRIORITY_FIRST) {
@@ -160,8 +251,6 @@ _PR_MD_SET_PRIORITY(_MDThread *thread, PRThreadPriority newPri)
     }
     switch (newPri) {
         case PR_PRIORITY_LOW:
-            nativePri = PRTYC_IDLETIME;
-            break;
         case PR_PRIORITY_NORMAL:
             nativePri = PRTYC_REGULAR;
             break;
@@ -174,7 +263,7 @@ _PR_MD_SET_PRIORITY(_MDThread *thread, PRThreadPriority newPri)
     rv = DosSetPriority(PRTYS_THREAD, nativePri, 0, thread->handle);
     PR_ASSERT(rv == NO_ERROR);
     if (rv != NO_ERROR) {
-	PR_LOG(_pr_thread_lm, PR_LOG_MIN,
+        PR_LOG(_pr_thread_lm, PR_LOG_MIN,
                 ("PR_SetThreadPriority: can't set thread priority\n"));
     }
     return;
@@ -276,5 +365,21 @@ _PR_MD_RESUME_THREAD(PRThread *thread)
     if (_PR_IS_NATIVE_THREAD(thread)) {
         DosResumeThread(thread->md.handle);
     }
+}
+
+
+PRThread*
+_MD_CURRENT_THREAD(void)
+{
+    PRThread *thread;
+
+    thread = _MD_GET_ATTACHED_THREAD();
+
+    if (NULL == thread) {
+        thread = _PRI_AttachThread(PR_USER_THREAD, PR_PRIORITY_NORMAL, NULL, 0);
+    }
+
+    PR_ASSERT(thread != NULL);
+    return thread;
 }
 

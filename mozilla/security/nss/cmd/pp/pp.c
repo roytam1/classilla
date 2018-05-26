@@ -1,41 +1,10 @@
-/*
- * The contents of this file are subject to the Mozilla Public
- * License Version 1.1 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of
- * the License at http://www.mozilla.org/MPL/
- * 
- * Software distributed under the License is distributed on an "AS
- * IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * rights and limitations under the License.
- * 
- * The Original Code is the Netscape security libraries.
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1994-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the
- * terms of the GNU General Public License Version 2 or later (the
- * "GPL"), in which case the provisions of the GPL are applicable 
- * instead of those above.  If you wish to allow use of your 
- * version of this file only under the terms of the GPL and not to
- * allow others to use your version of this file under the MPL,
- * indicate your decision by deleting the provisions above and
- * replace them with the notice and other provisions required by
- * the GPL.  If you do not delete the provisions above, a recipient
- * may use your version of this file under either the MPL or the
- * GPL.
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Pretty-print some well-known BER or DER encoded data (e.g. certificates,
  * keys, pkcs7)
- *
- * $Id: pp.c,v 1.3 2001/09/20 22:00:05 relyea%netscape.com Exp $
  */
 
 #include "secutil.h"
@@ -53,19 +22,22 @@ extern int fprintf(FILE *, char *, ...);
 static void Usage(char *progName)
 {
     fprintf(stderr,
-	    "Usage:  %s -t type [-a] [-i input] [-o output]\n",
+	    "Usage:  %s -t type [-a] [-i input] [-o output] [-w]\n",
 	    progName);
     fprintf(stderr, "%-20s Specify the input type (must be one of %s,\n",
 	    "-t type", SEC_CT_PRIVATE_KEY);
     fprintf(stderr, "%-20s %s, %s, %s,\n", "", SEC_CT_PUBLIC_KEY,
 	    SEC_CT_CERTIFICATE, SEC_CT_CERTIFICATE_REQUEST);
-    fprintf(stderr, "%-20s %s or %s)\n", "", SEC_CT_PKCS7, SEC_CT_CRL);    
+    fprintf(stderr, "%-20s %s, %s, %s or %s)\n", "", SEC_CT_CERTIFICATE_ID,
+            SEC_CT_PKCS7, SEC_CT_CRL, SEC_CT_NAME);
     fprintf(stderr, "%-20s Input is in ascii encoded form (RFC1113)\n",
 	    "-a");
     fprintf(stderr, "%-20s Define an input file to use (default is stdin)\n",
 	    "-i input");
     fprintf(stderr, "%-20s Define an output file to use (default is stdout)\n",
 	    "-o output");
+    fprintf(stderr, "%-20s Don't wrap long output lines\n",
+	    "-w");
     exit(-1);
 }
 
@@ -78,6 +50,7 @@ int main(int argc, char **argv)
     SECItem der, data;
     char *typeTag;
     PLOptState *optstate;
+    PRBool wrap = PR_TRUE;
 
     progName = strrchr(argv[0], '/');
     progName = progName ? progName+1 : argv[0];
@@ -86,7 +59,7 @@ int main(int argc, char **argv)
     inFile = 0;
     outFile = 0;
     typeTag = 0;
-    optstate = PL_CreateOptState(argc, argv, "at:i:o:");
+    optstate = PL_CreateOptState(argc, argv, "at:i:o:w");
     while ( PL_GetNextOpt(optstate) == PL_OPT_OK ) {
 	switch (optstate->option) {
 	  case '?':
@@ -118,9 +91,13 @@ int main(int argc, char **argv)
 	  case 't':
 	    typeTag = strdup(optstate->value);
 	    break;
+
+	  case 'w':
+	    wrap = PR_FALSE;
+	    break;
 	}
     }
-
+    PL_DestroyOptState(optstate);
     if (!typeTag) Usage(progName);
 
     if (!inFile) inFile = PR_STDIN;
@@ -129,11 +106,13 @@ int main(int argc, char **argv)
     PR_Init(PR_SYSTEM_THREAD, PR_PRIORITY_NORMAL, 1);
     rv = NSS_NoDB_Init(NULL);
     if (rv != SECSuccess) {
-	fprintf(stderr, "%s: NSS_NoDB_Init failed\n", progName);
+	fprintf(stderr, "%s: NSS_NoDB_Init failed (%s)\n",
+		progName, SECU_Strerror(PORT_GetError()));
 	exit(1);
     }
+    SECU_RegisterDynamicOids();
 
-    rv = SECU_ReadDERFromFile(&der, inFile, ascii);
+    rv = SECU_ReadDERFromFile(&der, inFile, ascii, PR_FALSE);
     if (rv != SECSuccess) {
 	fprintf(stderr, "%s: SECU_ReadDERFromFile failed\n", progName);
 	exit(1);
@@ -143,10 +122,15 @@ int main(int argc, char **argv)
     data.data = der.data;
     data.len = der.len;
 
+    SECU_EnableWrap(wrap);
+
     /* Pretty print it */
     if (PORT_Strcmp(typeTag, SEC_CT_CERTIFICATE) == 0) {
 	rv = SECU_PrintSignedData(outFile, &data, "Certificate", 0,
 			     SECU_PrintCertificate);
+    } else if (PORT_Strcmp(typeTag, SEC_CT_CERTIFICATE_ID) == 0) {
+        rv = SECU_PrintSignedContent(outFile, &data, 0, 0,
+                                     SECU_PrintDumpDerIssuerAndSerial);
     } else if (PORT_Strcmp(typeTag, SEC_CT_CERTIFICATE_REQUEST) == 0) {
 	rv = SECU_PrintSignedData(outFile, &data, "Certificate Request", 0,
 			     SECU_PrintCertificateRequest);
@@ -157,20 +141,31 @@ int main(int argc, char **argv)
 	rv = SECU_PrintPrivateKey(outFile, &data, "Private Key", 0);
 #endif
     } else if (PORT_Strcmp(typeTag, SEC_CT_PUBLIC_KEY) == 0) {
-	rv = SECU_PrintPublicKey(outFile, &data, "Public Key", 0);
+	rv = SECU_PrintSubjectPublicKeyInfo(outFile, &data, "Public Key", 0);
     } else if (PORT_Strcmp(typeTag, SEC_CT_PKCS7) == 0) {
 	rv = SECU_PrintPKCS7ContentInfo(outFile, &data,
 					"PKCS #7 Content Info", 0);
+    } else if (PORT_Strcmp(typeTag, SEC_CT_NAME) == 0) {
+	rv = SECU_PrintDERName(outFile, &data, "Name", 0);
     } else {
 	fprintf(stderr, "%s: don't know how to print out '%s' files\n",
 		progName, typeTag);
+	SECU_PrintAny(outFile, &data, "File contains", 0);
 	return -1;
     }
 
+    if (inFile != PR_STDIN)
+	PR_Close(inFile);
+    PORT_Free(der.data);
     if (rv) {
 	fprintf(stderr, "%s: problem converting data (%s)\n",
 		progName, SECU_Strerror(PORT_GetError()));
-	return -1;
     }
-    return 0;
+    if (NSS_Shutdown() != SECSuccess) {
+	fprintf(stderr, "%s: NSS_Shutdown failed (%s)\n",
+		progName, SECU_Strerror(PORT_GetError()));
+	rv = SECFailure;
+    }
+    PR_Cleanup();
+    return rv;
 }
