@@ -1235,7 +1235,7 @@ cross_compiling=$ac_cv_prog_cc_cross
     _MIDL_MAJOR_VERSION=`echo ${_MIDL_FULL_VERSION} | awk -F\. '{ print $ 1 }'`
     _MIDL_MINOR_VERSION=`echo ${_MIDL_FULL_VERSION} | awk -F\. '{ print $ 2 }'`
     _MIDL_REV_VERSION=`echo ${_MIDL_FULL_VERSION} | awk -F\. '{ print $ 3 }'`
-    if test "$_MIDL_MAJOR_VERSION" != "5" -a "$_MIDL_FULL_VERSION" != "6.00.0347"; then
+    if test "$_MIDL_MAJOR_VERSION" != "5" -a "$_MIDL_MAJOR_VERSION" != "6"; then
         { echo "configure: error: Midl version $_MIDL_FULL_VERSION was found.  Midl version must be 5.x.x (VC6*) or 6.00.0347 (VC7)." 1>&2; exit 1; }
     fi
     ;;
