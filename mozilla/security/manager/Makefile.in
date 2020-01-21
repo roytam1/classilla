@@ -32,20 +32,58 @@ LOADABLE_ROOT_MODULE = $(LIB_PREFIX)nssckbi$(DLL_SUFFIX)
 NSS3_LIB = $(LIB_PREFIX)nss3$(DLL_SUFFIX)
 NSSUTIL3_LIB = $(LIB_PREFIX)nssutil3$(DLL_SUFFIX)
 SMIME3_LIB = $(LIB_PREFIX)smime3$(DLL_SUFFIX)
+SQLITE3_LIB =  $(LIB_PREFIX)sqlite3$(DLL_SUFFIX)
 SSL3_LIB =  $(LIB_PREFIX)ssl3$(DLL_SUFFIX)
 SOFTOKEN3_LIB = $(LIB_PREFIX)softokn3$(DLL_SUFFIX)
 SOFTOKEN3_CHK = $(LIB_PREFIX)softokn3.chk
+NSSDBM3_LIB = $(DLL_PREFIX)nssdbm3$(DLL_SUFFIX)
 
-ifneq (,$(filter SunOS HP-UX,$(OS_ARCH)))
-ifeq (,$(filter i86pc ia64,$(OS_TEST)))
+# Default
+HAVE_FREEBL_LIBS = 1
+
+# 32-bit HP-UX PA-RISC
+ifeq ($(OS_ARCH), HP-UX)
+ifneq ($(OS_TEST), ia64)
 ifndef HAVE_64BIT_OS
-HAVE_FREEBL_MODULES = 1
-FREEBL_PURE32_MODULE = libfreebl_pure32_3$(DLL_SUFFIX)
-FREEBL_PURE32_CHK = libfreebl_pure32_3.chk
-FREEBL_HYBRID_MODULE = libfreebl_hybrid_3$(DLL_SUFFIX)
-FREEBL_HYBRID_CHK = libfreebl_hybrid_3.chk
+HAVE_FREEBL_LIBS =
+HAVE_FREEBL_LIBS_32 = 1
 endif
 endif
+endif
+
+# SunOS SPARC
+ifeq ($(OS_ARCH), SunOS)
+ifneq ($(OS_TEST), i86pc)
+ifdef HAVE_64BIT_OS
+HAVE_FREEBL_LIBS =
+HAVE_FREEBL_LIBS_64 = 1
+else
+HAVE_FREEBL_LIBS =
+HAVE_FREEBL_LIBS_32 = 1
+HAVE_FREEBL_LIBS_32INT64 = 1
+endif
+endif
+endif
+
+ifdef HAVE_FREEBL_LIBS
+FREEBL_LIB = $(DLL_PREFIX)freebl3$(DLL_SUFFIX)
+FREEBL_CHK = $(DLL_PREFIX)freebl3.chk
+endif
+ifdef HAVE_FREEBL_LIBS_32
+FREEBL_32INT_LIB = libfreebl_32int_3$(DLL_SUFFIX)
+FREEBL_32INT_CHK = libfreebl_32int_3.chk
+FREEBL_32FPU_LIB = libfreebl_32fpu_3$(DLL_SUFFIX)
+FREEBL_32FPU_CHK = libfreebl_32fpu_3.chk
+endif
+ifdef HAVE_FREEBL_LIBS_32INT64
+FREEBL_32INT64_LIB = libfreebl_32int64_3$(DLL_SUFFIX)
+FREEBL_32INT64_CHK = libfreebl_32int64_3.chk
+endif
+ifdef HAVE_FREEBL_LIBS_64
+FREEBL_64INT_LIB = libfreebl_64int_3$(DLL_SUFFIX)
+FREEBL_64INT_CHK = libfreebl_64int_3.chk
+FREEBL_64FPU_LIB = libfreebl_64fpu_3$(DLL_SUFFIX)
+FREEBL_64FPU_CHK = libfreebl_64fpu_3.chk
 endif
 
 # NSS makefiles are not safe for parallel execution.
@@ -128,14 +166,30 @@ ifndef DISABLE_DIST_GRE
 	$(INSTALL) -m 755 $(DIST)/lib/$(SOFTOKEN3_LIB) $(GRE_DIST)
 	$(INSTALL) -m 644 $(DIST)/lib/$(SOFTOKEN3_CHK) $(GRE_DIST)
 	$(INSTALL) -m 755 $(DIST)/lib/$(NSS3_LIB) $(GRE_DIST)
+	$(INSTALL) -m 755 $(DIST)/lib/$(NSSDBM3_LIB) $(GRE_DIST)
 	$(INSTALL) -m 755 $(DIST)/lib/$(NSSUTIL3_LIB) $(GRE_DIST)
 	$(INSTALL) -m 755 $(DIST)/lib/$(SSL3_LIB) $(GRE_DIST)
+	$(INSTALL) -m 755 $(DIST)/lib/$(SQLITE3_LIB) $(GRE_DIST)
 	$(INSTALL) -m 755 $(DIST)/lib/$(SMIME3_LIB) $(GRE_DIST)
-ifdef HAVE_FREEBL_MODULES
-	$(INSTALL) -m 644 $(DIST)/lib/$(FREEBL_PURE32_CHK) $(GRE_DIST)
-	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_PURE32_MODULE) $(GRE_DIST)
-	$(INSTALL) -m 644 $(DIST)/lib/$(FREEBL_HYBRID_CHK) $(GRE_DIST)
-	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_HYBRID_MODULE) $(GRE_DIST)
+ifdef HAVE_FREEBL_LIBS
+	$(INSTALL) -m 644 $(DIST)/lib/$(FREEBL_CHK) $(GRE_DIST)
+	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_LIB) $(GRE_DIST)
+endif
+ifdef HAVE_FREEBL_LIBS_32
+	$(INSTALL) -m 644 $(DIST)/lib/$(FREEBL_32INT_CHK) $(GRE_DIST)
+	$(INSTALL) -m 644 $(DIST)/lib/$(FREEBL_32FPU_CHK) $(GRE_DIST)
+	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_32INT_LIB) $(GRE_DIST)
+	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_32FPU_LIB) $(GRE_DIST)
+endif
+ifdef HAVE_FREEBL_LIBS_32INT64
+	$(INSTALL) -m 644 $(DIST)/lib/$(FREEBL_32INT64_CHK) $(GRE_DIST)
+	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_32INT64_LIB) $(GRE_DIST)
+endif
+ifdef HAVE_FREEBL_LIBS_64
+	$(INSTALL) -m 644 $(DIST)/lib/$(FREEBL_64INT_CHK) $(GRE_DIST)
+	$(INSTALL) -m 644 $(DIST)/lib/$(FREEBL_64FPU_CHK) $(GRE_DIST)
+	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_64INT_LIB) $(GRE_DIST)
+	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_64FPU_LIB) $(GRE_DIST)
 endif
 endif
 ifndef _SKIP_OLD_GRE_INSTALL
@@ -143,14 +197,30 @@ ifndef _SKIP_OLD_GRE_INSTALL
 	$(INSTALL) -m 644 $(DIST)/lib/$(SOFTOKEN3_CHK) $(DIST)/bin
 	$(INSTALL) -m 755 $(DIST)/lib/$(SOFTOKEN3_LIB) $(DIST)/bin
 	$(INSTALL) -m 755 $(DIST)/lib/$(NSS3_LIB) $(DIST)/bin
-	$(INSTALL) -m 755 $(DIST)/lib/$(NSSUTIL3_LIB) $(GRE_DIST)
+	$(INSTALL) -m 755 $(DIST)/lib/$(NSSDBM3_LIB) $(DIST)/bin
+	$(INSTALL) -m 755 $(DIST)/lib/$(NSSUTIL3_LIB) $(DIST)/bin
 	$(INSTALL) -m 755 $(DIST)/lib/$(SSL3_LIB) $(DIST)/bin
+	$(INSTALL) -m 755 $(DIST)/lib/$(SQLITE3_LIB) $(DIST)/bin
 	$(INSTALL) -m 755 $(DIST)/lib/$(SMIME3_LIB) $(DIST)/bin
-ifdef HAVE_FREEBL_MODULES
-	$(INSTALL) -m 644 $(DIST)/lib/$(FREEBL_PURE32_CHK) $(DIST)/bin
-	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_PURE32_MODULE) $(DIST)/bin
-	$(INSTALL) -m 644 $(DIST)/lib/$(FREEBL_HYBRID_CHK) $(DIST)/bin
-	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_HYBRID_MODULE) $(DIST)/bin
+ifdef HAVE_FREEBL_LIBS
+	$(INSTALL) -m 644 $(DIST)/lib/$(FREEBL_CHK) $(DIST)/bin
+	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_LIB) $(DIST)/bin
+endif
+ifdef HAVE_FREEBL_LIBS_32
+	$(INSTALL) -m 644 $(DIST)/lib/$(FREEBL_32INT_CHK) $(DIST)/bin
+	$(INSTALL) -m 644 $(DIST)/lib/$(FREEBL_32FPU_CHK) $(DIST)/bin
+	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_32INT_LIB) $(DIST)/bin
+	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_32FPU_LIB) $(DIST)/bin
+endif
+ifdef HAVE_FREEBL_LIBS_32INT64
+	$(INSTALL) -m 644 $(DIST)/lib/$(FREEBL_32INT64_CHK) $(DIST)/bin
+	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_32INT64_LIB) $(DIST)/bin
+endif
+ifdef HAVE_FREEBL_LIBS_64
+	$(INSTALL) -m 644 $(DIST)/lib/$(FREEBL_64INT_CHK) $(DIST)/bin
+	$(INSTALL) -m 644 $(DIST)/lib/$(FREEBL_64FPU_CHK) $(DIST)/bin
+	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_64INT_LIB) $(DIST)/bin
+	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_64FPU_LIB) $(DIST)/bin
 endif
 endif
 	$(MAKE) -C boot $@
@@ -162,14 +232,30 @@ install::
 	$(SYSINSTALL) -m 644 $(DIST)/lib/$(SOFTOKEN3_CHK) $(DESTDIR)$(mozappdir)
 	$(SYSINSTALL) -m 755 $(DIST)/lib/$(SOFTOKEN3_LIB) $(DESTDIR)$(mozappdir)
 	$(SYSINSTALL) -m 755 $(DIST)/lib/$(NSS3_LIB) $(DESTDIR)$(mozappdir)
+	$(SYSINSTALL) -m 755 $(DIST)/lib/$(NSSDBM3_LIB) $(DESTDIR)$(mozappdir)
 	$(SYSINSTALL) -m 755 $(DIST)/lib/$(NSSUTIL3_LIB) $(DESTDIR)$(mozappdir)
 	$(SYSINSTALL) -m 755 $(DIST)/lib/$(SSL3_LIB) $(DESTDIR)$(mozappdir)
+	$(SYSINSTALL) -m 755 $(DIST)/lib/$(SQLITE3_LIB) $(DESTDIR)$(mozappdir)
 	$(SYSINSTALL) -m 755 $(DIST)/lib/$(SMIME3_LIB) $(DESTDIR)$(mozappdir)
-ifdef HAVE_FREEBL_MODULES
-	$(SYSINSTALL) -m 644 $(DIST)/lib/$(FREEBL_PURE32_CHK) $(DESTDIR)$(mozappdir)
-	$(SYSINSTALL) -m 755 $(DIST)/lib/$(FREEBL_PURE32_MODULE) $(DESTDIR)$(mozappdir)
-	$(SYSINSTALL) -m 644 $(DIST)/lib/$(FREEBL_HYBRID_CHK) $(DESTDIR)$(mozappdir)
-	$(SYSINSTALL) -m 755 $(DIST)/lib/$(FREEBL_HYBRID_MODULE) $(DESTDIR)$(mozappdir)
+ifdef HAVE_FREEBL_LIBS
+	$(INSTALL) -m 644 $(DIST)/lib/$(FREEBL_CHK) $(DESTDIR)$(mozappdir)
+	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_LIB) $(DESTDIR)$(mozappdir)
+endif
+ifdef HAVE_FREEBL_LIBS_32
+	$(INSTALL) -m 644 $(DIST)/lib/$(FREEBL_32INT_CHK) $(DESTDIR)$(mozappdir)
+	$(INSTALL) -m 644 $(DIST)/lib/$(FREEBL_32FPU_CHK) $(DESTDIR)$(mozappdir)
+	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_32INT_LIB) $(DESTDIR)$(mozappdir)
+	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_32FPU_LIB) $(DESTDIR)$(mozappdir)
+endif
+ifdef HAVE_FREEBL_LIBS_32INT64
+	$(INSTALL) -m 644 $(DIST)/lib/$(FREEBL_32INT64_CHK) $(DESTDIR)$(mozappdir)
+	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_32INT64_LIB) $(DESTDIR)$(mozappdir)
+endif
+ifdef HAVE_FREEBL_LIBS_64
+	$(INSTALL) -m 644 $(DIST)/lib/$(FREEBL_64INT_CHK) $(DESTDIR)$(mozappdir)
+	$(INSTALL) -m 644 $(DIST)/lib/$(FREEBL_64FPU_CHK) $(DESTDIR)$(mozappdir)
+	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_64INT_LIB) $(DESTDIR)$(mozappdir)
+	$(INSTALL) -m 755 $(DIST)/lib/$(FREEBL_64FPU_LIB) $(DESTDIR)$(mozappdir)
 endif
 	$(MAKE) -C boot $@
 	$(MAKE) -C ssl $@
