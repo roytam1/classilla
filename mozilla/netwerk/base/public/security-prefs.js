@@ -1,7 +1,7 @@
 pref("general.useragent.security",       "U");
 
 pref("security.enable_ssl2",             false);
-pref("security.enable_ssl3",             true);
+pref("security.enable_ssl3",             false);
 pref("security.enable_tls",		 true);
 
 pref("security.ssl2.rc4_128", true);
@@ -32,6 +32,13 @@ pref("security.ssl3.dhe_rsa_des_sha", true);
 pref("security.ssl3.dhe_dss_des_sha", true);
 pref("security.ssl3.rsa_null_sha", false);
 pref("security.ssl3.rsa_null_md5", false);
+
+pref("security.ssl3.ecdhe_rsa_aes_256_gcm_sha384", true);
+pref("security.ssl3.ecdhe_rsa_aes_128_gcm_sha256", true);
+pref("security.ssl3.ecdhe_ecdsa_aes_128_gcm_sha256", true);
+pref("security.ssl3.ecdhe_rsa_camellia_128_gcm_sha256", true);
+pref("security.ssl3.ecdhe_ecdsa_camellia_128_gcm_sha256", true);
+pref("security.ssl3.ecdhe_rsa_aes_128_sha256", true);
 
 pref("security.default_personal_cert",   "Select Automatically");
 pref("security.ask_for_password",        0);
