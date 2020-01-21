@@ -161,7 +161,7 @@ nsProxyAutoConfig.prototype = {
         // evaluate loded js file
         evalInSandbox(mypac, ProxySandBox, pacURL);
         try {
-            ProxySandBox.myIP = dns.myIPAddress;
+            ProxySandBox.myIP = dns.resolve(dns.myHostName, false).getNextAddrAsString();
         } catch (e) {
             // Well, theres nothing better.
             // see bugs 80363 and 92516.
@@ -189,7 +189,7 @@ function dnsResolve(host) {
         return dnsResolveCachedIp;
     }
     try {
-        dnsResolveCachedIp = dns.resolve(host);
+        dnsResolveCachedIp = dns.resolve(host, false).getNextAddrAsString();
         dnsResolveCachedHost = host;
     }
     catch (e) {

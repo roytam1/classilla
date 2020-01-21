@@ -1201,7 +1201,8 @@ static void InitNSSMethods()
 }
 
 nsresult
-nsSSLIOLayerNewSocket(const char *host,
+nsSSLIOLayerNewSocket(PRInt32 family,
+                      const char *host,
                       PRInt32 port,
                       const char *proxyHost,
                       PRInt32 proxyPort,
@@ -1219,10 +1220,10 @@ nsSSLIOLayerNewSocket(const char *host,
     firstTime = PR_FALSE;
   }
 
-  PRFileDesc* sock = PR_OpenTCPSocket(PR_AF_INET6);
+  PRFileDesc* sock = PR_OpenTCPSocket(family);
   if (!sock) return NS_ERROR_OUT_OF_MEMORY;
 
-  nsresult rv = nsSSLIOLayerAddToSocket(host, port, proxyHost, proxyPort,
+  nsresult rv = nsSSLIOLayerAddToSocket(family, host, port, proxyHost, proxyPort,
                                         sock, info, forSTARTTLS);
   if (NS_FAILED(rv)) {
     PR_Close(sock);
@@ -2325,7 +2326,8 @@ nsSSLIOLayerSetOptions(PRFileDesc *fd, PRBool forSTARTTLS,
 }
 
 nsresult
-nsSSLIOLayerAddToSocket(const char* host,
+nsSSLIOLayerAddToSocket(PRInt32 family,
+                        const char* host,
                         PRInt32 port,
                         const char* proxyHost,
                         PRInt32 proxyPort,
