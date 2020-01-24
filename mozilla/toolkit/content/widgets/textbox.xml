@@ -18,7 +18,6 @@
     
     <content>
       <xul:hbox class="textbox-input-box" flex="1">
-        <children/>
         <html:input class="textbox-input" flex="1" anonid="input"
                     xbl:inherits="onfocus,onblur,value,type,maxlength,disabled,size,readonly,tabindex,accesskey"/>
       </xul:hbox>
@@ -51,7 +50,7 @@
                                          if (val) this.setAttribute('readonly', 'true');
                                          else this.removeAttribute('readonly'); return val;"
                                   onget="return this.inputField.readonly;"/>
-      
+                            
       <method name="select">
         <body>
           this.inputField.select();
@@ -100,7 +99,7 @@
       </handler>
     </handlers>    
   </binding>
-  
+
   <binding id="timed-textbox" extends="chrome://global/content/bindings/textbox.xml#textbox">
     <content>
       <xul:hbox class="textbox-input-box" flex="1">
@@ -154,6 +153,7 @@
                                      this.parentNode.doPopupItemEnabling(this);"
                      oncommand="this.parentNode.doCommand(event.originalTarget.getAttribute('cmd'));">
         <xul:menuitem label="&undoCmd.label;" accesskey="&undoCmd.accesskey;" cmd="cmd_undo"/>
+        <xul:menuitem label="&redoCmd.label;" accesskey="&redoCmd.accesskey;" cmd="cmd_redo"/>
         <xul:menuseparator/>
         <xul:menuitem label="&cutCmd.label;" accesskey="&cutCmd.accesskey;" cmd="cmd_cut"/>
         <xul:menuitem label="&copyCmd.label;" accesskey="&copyCmd.accesskey;" cmd="cmd_copy"/>

@@ -48,7 +48,7 @@ window[chromehidden~="location"][chromehidden~="toolbar"] .chromeclass-toolbar
 
 /****** elements that have no visual representation ******/
 
-data,
+script, data,
 xbl|children,
 commands, commandset, command,
 broadcasterset, broadcaster, observes,
@@ -88,6 +88,7 @@ radio {
 window, 
 page {
   overflow: hidden;
+  //overflow: -moz-hidden-unscrollable;
   -moz-box-orient: vertical;
 }
 
@@ -96,6 +97,10 @@ page {
 vbox {
   -moz-box-orient: vertical;
 }
+bbox {
+  -moz-box-align: baseline;
+}
+
 
 /********** button **********/
 
@@ -628,6 +633,7 @@ textbox[multiline="true"] {
 
 html|*.textbox-input {
   -moz-appearance: none !important;
+  text-align: inherit;
 }
 
 html|*.textbox-textarea {

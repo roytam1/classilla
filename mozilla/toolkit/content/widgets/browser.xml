@@ -61,8 +61,18 @@
         <body>
           <![CDATA[
             var webNavigation = this.webNavigation;
+            // bug 302575
             if (webNavigation.canGoBack)
               webNavigation.goBack();
+            if (webNavigation.canGoBack) {
+              try {
+                this.userTypedClear++;
+                webNavigation.goBack();
+              } finally {
+                if (this.userTypedClear)
+                  this.userTypedClear--;
+              }
+            }            
           ]]>
         </body>
       </method>
@@ -71,8 +81,18 @@
         <body>
           <![CDATA[
             var webNavigation = this.webNavigation;
+            // bug 302575
             if (webNavigation.canGoForward)
               webNavigation.goForward();
+            if (webNavigation.canGoForward) {
+              try {
+                this.userTypedClear++;
+                webNavigation.goForward();
+              } finally {
+                if (this.userTypedClear)
+                  this.userTypedClear--;
+              }
+            }            
           ]]>
         </body>
       </method>
@@ -130,6 +150,14 @@
               aURI = "about:blank";
 
             this.webNavigation.loadURI(aURI, aFlags, aReferrerURI, null, null);
+            // bug 302575
+            try {
+              this.userTypedClear++;
+              this.webNavigation.loadURI(aURI, aFlags, aReferrerURI, null, null);
+            } finally {
+              if (this.userTypedClear)
+                this.userTypedClear--;
+            }
           ]]>
         </body>
       </method>
@@ -172,6 +200,14 @@
         <body>
           <![CDATA[
             this.webNavigation.gotoIndex(aIndex);
+            // bug 302575
+            try {
+              this.userTypedClear++;
+              this.webNavigation.gotoIndex(aIndex);
+            } finally {
+              if (this.userTypedClear)
+                this.userTypedClear--;
+            }            
           ]]>
         </body>
       </method>
@@ -275,93 +311,6 @@
         </body>
       </method>
 
-      <method name="attachFormFill">
-        <body>
-          <![CDATA[
-          if (!this.mFormFillAttached && this.hasAttribute("autocompletepopup")) {
-            // hoop up the form fill autocomplete controller
-            var controller = Components.classes["@mozilla.org/satchel/form-fill-controller;1"].
-                               getService(Components.interfaces.nsIFormFillController);
-
-            var popup = document.getElementById(this.getAttribute("autocompletepopup"));
-            if (popup)
-              controller.attachToBrowser(this.docShell, popup.QueryInterface(Components.interfaces.nsIAutoCompletePopup));
-            
-            this.mFormFillAttached = true;
-          }
-          ]]>
-        </body>
-      </method>
-
-      <method name="detachFormFill">
-        <body>
-          <![CDATA[
-          if (this.mFormFillAttached) {
-            // hoop up the form fill autocomplete controller
-            var controller = Components.classes["@mozilla.org/satchel/form-fill-controller;1"].
-                               getService(Components.interfaces.nsIFormFillController);
-            controller.detachFromBrowser(this.docShell);
-            
-            this.mFormFillAttached = false;
-          }
-          ]]>
-        </body>
-      </method>
-      
-      <method name="onLoad">
-        <parameter name="aEvent"/>
-        <body>
-          <![CDATA[
-            this.removeEventListener("load", this.handleEvent, true);
-            this.attachFormFill();
-         ]]>
-        </body>
-      </method>
-
-      <method name="onUnload">
-        <parameter name="aEvent"/>
-        <body>
-          <![CDATA[
-            if (this.pageReport) {
-              this.pageReport = null;
-              this.updatePageReport();
-            }
-         ]]>
-        </body>
-      </method>
-
-      <method name="updatePageReport">
-        <body>
-          <![CDATA[
-            var n = this.parentNode;
-            while (n && n.localName != "tabbrowser")
-              n = n.parentNode;
-
-            if (!n || n.mCurrentBrowser != this) return;
-           
-            var event = document.createEvent("Events");
-            event.initEvent("DOMUpdatePageReport", true, true);
-            n.dispatchEvent(event);
-          ]]>
-        </body>
-      </method>
-
-      <method name="onPopupBlocked">
-        <parameter name="evt"/>
-        <body>
-          <![CDATA[
-            if (!this.pageReport) {
-              this.pageReport = new Array();
-              this.updatePageReport(); 
-            }
-
-            this.pageReport.push(evt.target.location);
-          ]]> 
-        </body>
-      </method>
-
-      <field name="pageReport">null</field>
-
       <field name="mDragDropHandler">
         null
       </field>
@@ -369,10 +318,59 @@
       <field name="securityUI">
         null
       </field>
+<!-- backported from 1.7/bug 231393 -->
+<!--
+This field tracks the location bar state. The value that the user typed
+in to the location bar may not be changed while this field is zero.
+However invoking a load will tempoarily increase this field to allow
+the location bar to be updated to the new URL.
 
-      <field name="mFormFillAttached">
-        false
+Case 1: Anchor scroll
+  The user appends the anchor to the URL. This sets the location bar
+  into typed state, and disables changes to the location bar. The user
+  then requests the scroll. loadURIWithFlags temporarily increases the
+  flag by 1 so that the anchor scroll's location change resets the
+  location bar state.
+
+Case 2: Interrupted load
+  The user types in and submits the URL. This triggers an asynchronous
+  network load which increases the flag by 2. (The temporary increase
+  from loadURIWithFlags is not noticable in this case.) When the load
+  is interrupted the flag returns to zero, and the location bar stays
+  in typed state.
+
+Case 3: New load
+  This works like case 2, but as the load is not interrupted the
+  location changes while the flag is still 2 thus resetting the
+  location bar state.
+
+Case 4: Corrected load
+  This is a combination of case 2 and case 3, except that the original
+  load is interrupted by the new load. Normally cancelling and starting
+  a new load would reset the flag to 0 and then increase it to 2 again.
+  However both actions occur as a consequence of the loadURIWithFlags
+  invocation, which adds its temporary increase in to the mix. Since
+  the new URL would have been typed in the flag would have been reset
+  before loadURIWithFlags incremented it. The interruption resets the
+  flag to 0 and increases it to 2. Although loadURIWithFlags will
+  decrement the flag it remains at 1 thus allowing the location bar
+  state to be reset when the new load changes the location.
+  This case also applies when loading into a new browser, as this
+  interruptes the default load of about:blank.
+-->
+      
+      <field name="userTypedClear">
+        1
       </field>
+
+      <field name="_userTypedValue">
+        null
+      </field>
+
+      <property name="userTypedValue"
+                onget="return this._userTypedValue;"
+                onset="this.userTypedClear = 0; return this._userTypedValue = val;"/>
+      <!-- end pull up -->
 
       <constructor>
         <![CDATA[
@@ -405,37 +403,17 @@
           }
           catch (e) {
           }
-
-          // Listen for first load for lazy attachment to form fill controller
-          this.addEventListener("load", this.onLoad, true);
-          this.addEventListener("unload", this.onUnload, true);
-          this.addEventListener("DOMPopupBlocked", this.onPopupBlocked, false);
         ]]>
       </constructor>
       
       <destructor>
         <![CDATA[
-          this.destroy();
-        ]]>
-      </destructor>
-
-      <!-- This is necessary because the destructor doesn't always get called when
-           we are removed from a tabbrowser. This will be explicitly called by tabbrowser -->
-      <method name="destroy">
-        <body>
-          <![CDATA[
           if (this.mDragDropHandler)
             this.mDragDropHandler.detach();
 
-          this.detachFormFill();
-          
           this.securityUI = null;
-          this.mDragDropHandler = null;
-
-          this.removeEventListener("unload", this.onUnload, true);
-          ]]>
-        </body>
-      </method>
+        ]]>
+      </destructor>
     </implementation>
 
     <handlers>

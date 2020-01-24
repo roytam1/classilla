@@ -190,8 +190,9 @@
             if (!button.hasAttribute("label")) {
               button.setAttribute("label", this.mStrBundle.GetStringFromName("button-"+dlgtype));
               var accessKey = this.mStrBundle.GetStringFromName("accesskey-"+dlgtype);
-              if (accessKey)
+              if (accessKey) {
                 button.setAttribute("accesskey", accessKey);
+              }
             }
           }
           

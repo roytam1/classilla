@@ -40,7 +40,8 @@
           } else if (this.type == "radio" && val) {
             var sibs = this.parentNode.getElementsByAttribute("group", this.group);
             for (var i = 0; i < sibs.length; ++i)
-              sibs[i].removeAttribute("checked");
+              if (sibs[i].checked)
+                sibs[i].checked = false;
           }
 
           if (val)
@@ -128,8 +129,9 @@
             event.keyCode == KeyEvent.DOM_VK_RIGHT)
           return window.document.commandDispatcher.advanceFocus();
 
-        if (event.keyCode || event.charCode <= ' ')
-          return;  // No arrow key or potential accesskey pressed
+        if (event.keyCode || event.charCode <= 32 || event.altKey || 
+            event.ctrlKey || event.metaKey)
+          return;  // No printable char pressed, not a potential accesskey
 
         // Possible accesskey pressed
         var charPressedLower = String.fromCharCode(event.charCode).toLowerCase();

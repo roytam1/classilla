@@ -144,15 +144,7 @@
       })]]>
       </field>
 
-      <field name="_eventNode">
-        var eventNode = this;
-        switch (this.getAttribute("eventnode")) {
-          case "parent": eventNode = this.parentNode; break;
-          case "window": eventNode = window; break;
-          case "document": eventNode = document; break;
-        }
-        eventNode;
-      </field>
+      <field name="_eventNode">this</field>
 
       <property name="eventNode" onget="return this._eventNode;">
         <setter>
@@ -168,6 +160,11 @@
       </property>
 
       <constructor>
+        switch (this.getAttribute("eventnode")) {
+          case "parent": this._eventNode = this.parentNode; break;
+          case "window": this._eventNode = window; break;
+          case "document": this._eventNode = document; break;
+        }
         this._eventNode.addEventListener("keypress", this._keyEventHandler, false);
       </constructor>
 
@@ -215,7 +212,7 @@
         <![CDATA[
           const tabs = this.childNodes;
           for (var i = 0; i < tabs.length; i++) {
-            if (tabs.selected)
+            if (tabs[i].selected)
               return i;
           }
           // throw an exception when no tab is selected (we shouldn't get here)
@@ -357,6 +354,10 @@
   <binding id="tabs-closebutton" 
            extends="chrome://global/content/bindings/tabbox.xml#tabs">
     <content>
+      <xul:stack>
+        <xul:spacer class="tabs-left"/>
+        <xul:toolbarbutton class="tabs-newbutton" xbl:inherits="oncommand=onnewtab,tooltiptext=tooltiptextnew"/>
+      </xul:stack>
       <xul:hbox flex="1" style="min-width: 1px;">
         <children/>
         <xul:spacer class="tabs-right" flex="1"/>
@@ -364,7 +365,7 @@
       <xul:stack>
         <xul:spacer class="tabs-right"/>
         <xul:hbox class="tabs-closebutton-box" align="center" pack="end">
-          <xul:toolbarbutton ondblclick="event.preventBubble();" class="tabs-closebutton close-button" xbl:inherits="disabled=disableclose,oncommand=onclosetab"/>
+          <xul:toolbarbutton class="tabs-closebutton close-button" xbl:inherits="disabled=disableclose,oncommand=onclosetab"/>
         </xul:hbox>
       </xul:stack>
     </content>
@@ -382,6 +383,8 @@
         </getter>
       </property>
 
+      <field name="_selectedPanel">null</field>
+
       <property name="selectedIndex">
         <getter>
         <![CDATA[
@@ -392,12 +395,14 @@
                         
         <setter>
         <![CDATA[
-          if (this.selectedIndex == val)
-            return val;
+          var panel = this._selectedPanel;
+          this._selectedPanel = this.childNodes[val];
           this.setAttribute("selectedIndex", val);
-          var event = document.createEvent("Events");
-          event.initEvent("select", false, true);
-          this.dispatchEvent(event);
+          if (this._selectedPanel != panel) {
+            var event = document.createEvent("Events");
+            event.initEvent("select", false, true);
+            this.dispatchEvent(event);
+          }
           return val;
         ]]>
         </setter>
@@ -407,7 +412,7 @@
       <property name="selectedPanel">
         <getter>
           <![CDATA[
-            return this.childNodes[this.selectedIndex];
+            return this._selectedPanel;
           ]]>
         </getter>
 
@@ -482,14 +487,7 @@
     <handlers>
       <handler event="click" button="0">
       <![CDATA[
-        var tabs = this.parentNode;
-        do {
-          if (tabs.localName == "tabs")
-            break;
-          tabs = tabs.parentNode;
-        } while(tabs.localName != "tabbox");
-        tabs.selectedItem = this;
-        if (!this.selected) this.selected = true;
+        this.parentNode.selectedItem = this;
       ]]>
       </handler>
       
