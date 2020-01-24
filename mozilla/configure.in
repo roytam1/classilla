@@ -1050,6 +1050,7 @@ case "$target" in
 
     dnl Remove cygwinism from MOZ_BUILD_ROOT
     MOZ_BUILD_ROOT=`cygpath -w $MOZ_BUILD_ROOT | sed -e 's|\\\\|/|g'`
+    CYGDRIVE_MOUNT=`mount -p | awk '{ if (/^\//) { print $1; exit } }'`
 
     if test -z "$MOZ_TOOLS"; then
         AC_MSG_ERROR([MOZ_TOOLS is not set])
@@ -4752,6 +4753,7 @@ AC_SUBST(MOZ_MAPINFO)
 AC_SUBST(MOZ_BROWSE_INFO)
 AC_SUBST(MOZ_TOOLS_DIR)
 AC_SUBST(CYGWIN_WRAPPER)
+AC_SUBST(CYGDRIVE_MOUNT)
 
 dnl Disable profile at startup, hack for tinderbox.
 if test "$MOZ_BYPASS_PROFILE_AT_STARTUP"; then

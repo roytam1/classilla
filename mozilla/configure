@@ -5283,6 +5283,7 @@ EOF
 
 
         MOZ_BUILD_ROOT=`cygpath -w $MOZ_BUILD_ROOT | sed -e 's|\\\\|/|g'`
+        CYGDRIVE_MOUNT=`mount -p | awk '{ if (/^\//) { print $1; exit } }'`
 
     if test -z "$MOZ_TOOLS"; then
         { echo "configure: error: MOZ_TOOLS is not set" 1>&2; exit 1; }
@@ -15413,6 +15414,7 @@ s%@MOZ_MAPINFO@%$MOZ_MAPINFO%g
 s%@MOZ_BROWSE_INFO@%$MOZ_BROWSE_INFO%g
 s%@MOZ_TOOLS_DIR@%$MOZ_TOOLS_DIR%g
 s%@CYGWIN_WRAPPER@%$CYGWIN_WRAPPER%g
+s%@CYGDRIVE_MOUNT@%$CYGDRIVE_MOUNT%g
 s%@SYSTEM_JPEG@%$SYSTEM_JPEG%g
 s%@SYSTEM_PNG@%$SYSTEM_PNG%g
 s%@SYSTEM_MNG@%$SYSTEM_MNG%g
