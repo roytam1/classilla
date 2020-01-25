@@ -425,8 +425,9 @@ nsDirIndexParser::ProcessData(nsIRequest *aRequest, nsISupports *aCtxt) {
           } else if (buf[2] == '1' && buf[3] == ':') {
             // 101. Human-readable information line.
             mComment.Append(buf + 4);
-            // Cameron Kaiser: but we also need to flag the listener in this version.
-            mListener->OnCommentAvailable(aRequest, aCtxt, (const char *)nsUnescape((char *)(buf + 4)));
+            char    *value = ((char *)buf) + 4;
+            nsUnescape(value);
+            mListener->OnInformationAvailable(aRequest, aCtxt, NS_ConvertUTF8toUCS2(value));
           } else if (buf[2] == '2' && buf[3] == ':') {
             // 102. Human-readable information line, HTML.
             mComment.Append(buf + 4);

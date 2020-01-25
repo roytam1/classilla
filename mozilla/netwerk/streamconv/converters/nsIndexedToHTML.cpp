@@ -464,16 +464,22 @@ nsIndexedToHTML::OnDataAvailable(nsIRequest *aRequest,
 // see nsIDirIndexListener.idl, nsIDirIndexListener.h
 // and nsIndexedToHTML.h
 NS_IMETHODIMP
-nsIndexedToHTML::OnCommentAvailable(nsIRequest *aRequest,
-                                    nsISupports *aCtxt,
-                                    const char *buf) {
+nsIndexedToHTML::OnInformationAvailable(nsIRequest *aRequest,
+                                        nsISupports *aCtxt,
+                                        const nsAString& aInfo) {
     
-    nsString pushBuffer;
- 
-    if (!buf)
-      return NS_ERROR_NULL_POINTER;
+    nsAutoString pushBuffer;
     pushBuffer.Append(NS_LITERAL_STRING("<tr>\n <td>"));
-    /* a slightly modified version of nsEscapeHTML. We'll use it again below. */
+// Modified using the above in a slightly different
+// version. -- Cameron Kaiser
+#if(0)
+    PRUnichar* escaped = nsEscapeHTML2(PromiseFlatString(aInfo).get());
+    if (!escaped)
+        return NS_ERROR_OUT_OF_MEMORY;
+    pushBuffer.Append(escaped);
+    nsMemory::Free(escaped);
+#else
+	const wchar_t *buf = PromiseFlatString(aInfo).get();
     for (; *buf != '\0'; buf++) {
     	switch(*buf) {
     		case '<':
@@ -492,11 +498,18 @@ nsIndexedToHTML::OnCommentAvailable(nsIRequest *aRequest,
     			pushBuffer.Append(NS_LITERAL_STRING("&nbsp;"));
     			break;
     		default:
-				pushBuffer.Append((wchar_t)*buf);
+				pushBuffer.Append(*buf);
     	}
     }
-    pushBuffer.Append(NS_LITERAL_STRING("</td>\n <td></td>\n <td></td>\n <td></td>\n</tr>\n"));      
-    
+#endif
+    pushBuffer.Append(NS_LITERAL_STRING("</td>\n <td></td>\n <td></td>\n <td></td>\n</tr>\n"));
+
+    // Split this up to avoid slow layout performance with large tables
+    // - bug 85381
+    if (++mRowCount > ROWS_PER_TABLE) {
+        pushBuffer.Append(NS_LITERAL_STRING("</table>\n<table>\n"));
+        mRowCount = 0;
+    }   
     return FormatInputStream(aRequest, aCtxt, pushBuffer);
 }
                                     

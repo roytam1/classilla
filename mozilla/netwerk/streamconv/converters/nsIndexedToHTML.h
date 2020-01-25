@@ -65,7 +65,6 @@ public:
     NS_DECL_NSIREQUESTOBSERVER
     NS_DECL_NSISTREAMLISTENER
     NS_DECL_NSIDIRINDEXLISTENER
-    NS_IMETHOD OnCommentAvailable(nsIRequest *aRequest, nsISupports *aCtxt, const char *buf); // split from .idl. Cameron Kaiser
 
     nsIndexedToHTML();
     virtual ~nsIndexedToHTML();

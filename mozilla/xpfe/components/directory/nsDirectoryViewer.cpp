@@ -393,11 +393,10 @@ nsHTTPIndex::OnDataAvailable(nsIRequest *request,
   return mParser->OnDataAvailable(request, mDirectory, aStream, aSourceOffset, aCount);
 }
 
-// needed for the DirIndex
-NS_IMETHODIMP
-nsHTTPIndex::OnCommentAvailable(nsIRequest *aRequest,
-                                    nsISupports *aCtxt,
-                                    const char *buf) {
+nsresult
+nsHTTPIndex::OnInformationAvailable(nsIRequest *aRequest,
+                                  nsISupports *aCtxt,
+                                  const nsAString& aInfo) {
   return NS_ERROR_NOT_IMPLEMENTED;
 }
 

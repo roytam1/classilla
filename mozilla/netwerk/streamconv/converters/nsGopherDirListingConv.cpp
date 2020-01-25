@@ -295,12 +295,16 @@ nsGopherDirListingConv::DigestBufferLines(char* aBuffer, nsCAutoString& aString)
 
         /* Get the description */
         if (tabPos) {
-            char* descStr = PL_strndup(line,tabPos-line);
-            char* escName = nsEscape(descStr,url_Path);
-            desc = escName;
-            nsMemory::Free(escName);
-            nsMemory::Free(descStr);
-
+            /* if the description is not empty */
+            if (tabPos != line) {
+                char* descStr = PL_strndup(line,tabPos-line);
+                char* escName = nsEscape(descStr,url_Path);
+                desc = escName;
+                nsMemory::Free(escName);
+                nsMemory::Free(descStr);
+            } else {
+                desc = "%20";
+            }
             line = tabPos+1;
             tabPos = PL_strchr(line,'\t');
         }
@@ -382,11 +386,10 @@ nsGopherDirListingConv::DigestBufferLines(char* aBuffer, nsCAutoString& aString)
                 else
                     aString.Append("FILE");
                 aString.Append(char(nsCRT::LF));
-            } else {
-            	/* DAMN IT I WANT ITEM TYPE i and 3! -- Cameron Kaiser */
-            	aString.Append("101: ");
-            	aString.Append(desc);
-            	aString.Append(char(nsCRT::LF));
+            } else if(type == 'i'){
+                aString.Append("101: ");
+                aString.Append(desc);
+                aString.Append(char(nsCRT::LF));
             }
         } else {
             NS_WARNING("Error parsing gopher directory response.\n");
