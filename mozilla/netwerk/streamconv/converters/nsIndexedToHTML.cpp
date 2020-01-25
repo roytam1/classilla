@@ -306,7 +306,7 @@ nsIndexedToHTML::OnStartRequest(nsIRequest* request, nsISupports *aContext) {
 
     buffer.Append(NS_LITERAL_STRING("<style type=\"text/css\">\n") +
                   NS_LITERAL_STRING("img { border: 0; padding: 0 2px; vertical-align: text-bottom; }\n") +
-                  NS_LITERAL_STRING("td  { font-family: monospace; padding: 2px 3px; text-align: right; vertical-align: bottom; white-space: pre; }\n") +
+                  NS_LITERAL_STRING("td  { font-family: monospace; padding: 2px 3px; text-align: right; vertical-align: bottom; white-space: -moz-pre-wrap; }\n") +
                   NS_LITERAL_STRING("td:first-child { text-align: left; padding: 2px 10px 2px 3px; }\n") +
                   NS_LITERAL_STRING("table { border: 0; }\n") +
                   NS_LITERAL_STRING("a.symlink { font-style: italic; }\n") +
@@ -494,9 +494,9 @@ nsIndexedToHTML::OnInformationAvailable(nsIRequest *aRequest,
     		case '"':
     			pushBuffer.Append(NS_LITERAL_STRING("&quot;"));
     			break;
-    		case ' ':
+    		/*case ' ':
     			pushBuffer.Append(NS_LITERAL_STRING("&nbsp;"));
-    			break;
+    			break;*/
     		default:
 				pushBuffer.Append(*buf);
     	}
@@ -615,9 +615,9 @@ nsIndexedToHTML::OnIndexAvailable(nsIRequest *aRequest,
     		case '"':
     			pushBuffer.Append(NS_LITERAL_STRING("&quot;"));
     			break;
-    		case ' ':
+    		/*case ' ':
     			pushBuffer.Append(NS_LITERAL_STRING("&nbsp;"));
-    			break;
+    			break;*/
     		default:
 				pushBuffer.Append(*buf);
     	}
