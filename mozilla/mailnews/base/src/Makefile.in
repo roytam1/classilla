@@ -68,6 +68,7 @@ REQUIRES	= xpcom \
 		  profile \
 		  webbrwsr \
 		  exthandler \
+		  view \
 		  $(NULL)
 
 CPPSRCS		= \
