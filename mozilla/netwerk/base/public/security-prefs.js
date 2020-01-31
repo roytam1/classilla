@@ -39,6 +39,8 @@ pref("security.ssl3.ecdhe_ecdsa_aes_128_gcm_sha256", true);
 pref("security.ssl3.ecdhe_rsa_camellia_128_gcm_sha256", true);
 pref("security.ssl3.ecdhe_ecdsa_camellia_128_gcm_sha256", true);
 pref("security.ssl3.ecdhe_rsa_aes_128_sha256", true);
+pref("security.ssl3.ecdhe_ecdsa_chacha20_poly1305_sha256", true);
+pref("security.ssl3.ecdhe_rsa_chacha20_poly1305_sha256", true);
 
 pref("security.default_personal_cert",   "Select Automatically");
 pref("security.ask_for_password",        0);
