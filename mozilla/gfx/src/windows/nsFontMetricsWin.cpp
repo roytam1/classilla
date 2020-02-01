@@ -2268,7 +2268,7 @@ nsFontMetricsWin::LoadGlobalFont(HDC aDC, nsGlobalFont* aGlobalFont)
 
 static int CALLBACK 
 enumProc(const LOGFONT* logFont, const TEXTMETRIC* metrics,
-         DWORD fontType, LPARAM closure)
+         DWORD fontType, LPARAM hasFontSig)
 {
   // XXX ignore vertical fonts
   if (logFont->lfFaceName[0] == '@') {
@@ -2365,9 +2365,11 @@ nsFontMetricsWin::InitializeGlobalFonts(HDC aDC)
 
     /*
      * msdn.microsoft.com/library states that
-     * EnumFontFamiliesExW is only on NT/2000
+     * EnumFontFamiliesExW is only on NT4+
      */
-    EnumFontFamiliesEx(aDC, &logFont, enumProc, nsnull, 0);
+    EnumFontFamiliesEx(aDC, &logFont, enumProc, TRUETYPE_FONTTYPE, 0);
+    if (gGlobalFonts->Count() == 0)
+      EnumFontFamilies(aDC, nsnull, enumProc, 0);
 
     // Sort the global list of fonts to put the 'preferred' fonts first
     gGlobalFonts->Sort(CompareGlobalFonts, nsnull);
@@ -2741,6 +2743,8 @@ nsFontMetricsWin::GetFontWeightTable(HDC aDC, nsString* aFontName)
   weightInfo.mWeights = 0;
   weightInfo.mFontCount = 0;
   ::EnumFontFamiliesEx(aDC, &logFont, nsFontWeightCallback, (LPARAM)&weightInfo, 0);
+  if (weightInfo.mFontCount == 0)
+    ::EnumFontFamilies(aDC, logFont.lfFaceName, nsFontWeightCallback, (LPARAM)&weightInfo);
   SearchSimulatedFontWeight(aDC, &weightInfo);
 //  printf("font weights for %s dec %d hex %x \n", logFont.lfFaceName, weightInfo.mWeights, weightInfo.mWeights);
   return weightInfo.mWeights;
