@@ -39,7 +39,11 @@
 /* #include "jsosdep.h" */
 
 #ifdef XP_MAC
-#define JS_HAVE_LONG_LONG
+// issue 133
+#if 0
+#define JS_HAVE_LONG_LONG // Have not confirmed this is CodeWarrior 7.1 issue but should use 64-bit emulation instead to work correctly
+#endif
+// end bug
 #undef  IS_LITTLE_ENDIAN
 #define IS_BIG_ENDIAN 1
 

@@ -147,6 +147,7 @@ nsHttpHandler::nsHttpHandler()
     , mUserAgentIsDirty(PR_TRUE)
     , mUseCache(PR_TRUE)
     , mSendSecureXSiteReferrer(PR_TRUE)
+    , mUseHttpProxyForHttps(PR_FALSE) // Classilla
 {
 #if defined(PR_LOGGING)
     gHttpLog = PR_NewLogModule("nsHttp");
@@ -986,6 +987,13 @@ nsHttpHandler::PrefsChanged(nsIPrefBranch *prefs, const char *pref)
     }
 
     PRBool cVar = PR_FALSE;
+
+    // Classilla (for Cryanc)
+    if (PREF_CHANGED(HTTP_PREF("proxy.use-http-proxy-for-https"))) {
+        rv = prefs->GetBoolPref(HTTP_PREF("proxy.use-http-proxy-for-https"), &cVar);
+        if (NS_SUCCEEDED(rv))
+            mUseHttpProxyForHttps = cVar;
+    }
 
     if (PREF_CHANGED(HTTP_PREF("keep-alive"))) {
         rv = prefs->GetBoolPref(HTTP_PREF("keep-alive"), &cVar);

@@ -35,6 +35,7 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+#include "nsHttpHandler.h" // for gHttpHandler
 #include "nsHttpConnectionMgr.h"
 #include "nsHttpConnection.h"
 #include "nsHttpPipeline.h"
@@ -469,7 +470,7 @@ nsHttpConnectionMgr::AtActiveConnectionLimit(nsConnectionEntry *ent, PRUint8 cap
     PRUint16 maxConns;
     PRUint16 maxPersistConns;
 
-    if (ci->UsingHttpProxy() && !ci->UsingSSL()) {
+    if (ci->UsingHttpProxy() && (!ci->UsingSSL() || !gHttpHandler || gHttpHandler->UseHttpProxyForHttps())) { // CRYANC
         maxConns = mMaxConnsPerProxy;
         maxPersistConns = mMaxPersistConnsPerProxy;
     }

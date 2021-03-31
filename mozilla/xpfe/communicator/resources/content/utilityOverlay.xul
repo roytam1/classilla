@@ -271,10 +271,10 @@
                 label="&aboutCmd.label;"
                 id="aboutName"
                 oncommand="goAboutDialog();"/>
-      <menuitem accesskey="&checkForUpdates.accesskey;"
+      <!-- menuitem accesskey="&checkForUpdates.accesskey;"
       			label="&checkForUpdates.label;"
       			id="checkForUpdates"
-      			oncommand="goCheckForUpdates();"/>
+      			oncommand="goCheckForUpdates();"/ -->
     </menupopup>
   </menu>
         

@@ -1,5 +1,5 @@
 <!-- brand.dtd -->
-<!ENTITY  vendorURL             "http://www.classilla.org/">
-<!ENTITY  releaseURL            "http://www.classilla.org/releases/">
+<!ENTITY  vendorURL             "http://www.floodgap.com/software/classilla/">
+<!ENTITY  releaseURL            "http://www.floodgap.com/software/classilla/">
 <!ENTITY  getNewThemesURL       "http://mozilla.org/themes/download/">
-<!ENTITY  content.version       "9.3.3">
+<!ENTITY  content.version       "9.3.4">

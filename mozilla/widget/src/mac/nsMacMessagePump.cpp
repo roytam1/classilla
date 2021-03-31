@@ -512,6 +512,14 @@ void nsMacMessagePump::DispatchEvent(PRBool aRealEvent, EventRecord *anEvent)
 //#include "ProfilerUtils.h"
 void nsMacMessagePump::DoUpdate(EventRecord &anEvent)
 {
+#if(0)
+// Peek at the next event. If it's a paint one, defer.
+EventRecord something;
+::EventAvail(everyEvent, &something);
+if (something.what == updateEvt)
+	return;
+#endif
+
   WindowPtr whichWindow = reinterpret_cast<WindowPtr>(anEvent.message);
   
   StPortSetter portSetter(whichWindow);

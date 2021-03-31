@@ -271,8 +271,8 @@ nsHttpChannel::Init(nsIURI *uri,
 
     rv = gHttpHandler->
         AddStandardRequestHeaders(&mRequestHead.Headers(), caps,
-                                  !mConnectionInfo->UsingSSL() &&
-                                  mConnectionInfo->UsingHttpProxy());
+                                  (!mConnectionInfo->UsingSSL() || gHttpHandler->UseHttpProxyForHttps()) &&
+                                  mConnectionInfo->UsingHttpProxy()); // CRYANC
 
     return rv;
 }
@@ -513,11 +513,14 @@ nsHttpChannel::SetupTransaction()
         //   (1) pipelining has been explicitly disabled
         //   (2) request corresponds to a top-level document load (link click)
         //   (3) request method is non-idempotent
+        //   (4) we're using a HTTP-to-HTTPS proxy (Cryanc), since we don't support that (XXX?)
+        //       see also nsHttpConnection::SupportsPipelining
         //
         // XXX does the toplevel document check really belong here?  or, should
         //     we push it out entirely to necko consumers?
         //
         if (!mAllowPipelining || (mLoadFlags & LOAD_INITIAL_DOCUMENT_URI) ||
+            gHttpHandler->UseHttpProxyForHttps() || // CRYANC
             !(mRequestHead.Method() == nsHttp::Get ||
               mRequestHead.Method() == nsHttp::Head)) {
             LOG(("  pipelining disallowed\n"));
@@ -526,10 +529,11 @@ nsHttpChannel::SetupTransaction()
     }
 
     // use the URI path if not proxying (transparent proxying such as SSL proxy
-    // does not count here). also, figure out what version we should be speaking.
+    // does not count here, except if HTTP-to-HTTPS). also, figure out what version we should be speaking.
     nsCAutoString buf, path;
     const char* requestURI;
-    if (mConnectionInfo->UsingSSL() || !mConnectionInfo->UsingHttpProxy()) {
+    if (!mConnectionInfo->UsingHttpProxy() ||
+        (mConnectionInfo->UsingSSL() && !gHttpHandler->UseHttpProxyForHttps())) { // CRYANC
         rv = mURI->GetPath(path);
         if (NS_FAILED(rv)) return rv;
         // path may contain UTF-8 characters, so ensure that they're escaped.
@@ -1823,6 +1827,9 @@ nsHttpChannel::ProcessAuthentication(PRUint32 httpStatus)
             LOG(("rejecting 407 when proxy server not configured!\n"));
             return NS_ERROR_UNEXPECTED;
         }
+        // XXX: CRYANC
+        // If a HTTP-to-HTTPS server implements challenge authentication, this needs
+        // to be tested.
         if (mConnectionInfo->UsingSSL() && !mTransaction->SSLConnectFailed()) {
             // we need to verify that this challenge came from the proxy
             // server itself, and not some server on the other side of the

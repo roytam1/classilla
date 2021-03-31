@@ -547,12 +547,18 @@ public:
         
   /* For Classilla: figure out if we had to bail out on double buffering. issue 28 */                       
   NS_IMETHOD GetLastUpdateFlags(PRUint32 *aUpdateFlags)=0;
+  /* For Classilla: force full invalidation for overflow hidden. issue 226 */
+  NS_IMETHOD AlwaysFullInvalidate(PRBool aFullInvalidate)=0;
 
 };
 
+//when the refresh happens, should it be double buffered?
+#define NS_VMREFRESH_DOUBLE_BUFFER      0x0001
 //update view now?
 #define NS_VMREFRESH_IMMEDIATE          0x0002
 //prevent "sync painting"
 #define NS_VMREFRESH_NO_SYNC            0x0004
+//double buffer but force full invalidation (flag to nsWindow for issue 226)
+#define NS_VMREFRESH_FORCE_INVALIDATION 0x0008
 
 #endif  // nsIViewManager_h___

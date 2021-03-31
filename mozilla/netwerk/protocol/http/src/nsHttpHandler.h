@@ -88,6 +88,7 @@ public:
     PRBool         SendSecureXSiteReferrer() { return mSendSecureXSiteReferrer; }
     PRUint8        RedirectionLimit()        { return mRedirectionLimit; }
     PRUint16       IdleTimeout()             { return mIdleTimeout; }
+    PRBool         UseHttpProxyForHttps()    { return mUseHttpProxyForHttps; } // Classilla
     PRUint16       MaxRequestAttempts()      { return mMaxRequestAttempts; }
     const char    *DefaultSocketType()       { return mDefaultSocketType.get(); /* ok to return null */ }
     nsIIDNService *IDNConverter()            { return mIDNConverter; }
@@ -252,6 +253,10 @@ private:
     // mSendSecureXSiteReferrer: default is false, 
     // if true allow referrer headers between secure non-matching hosts
     PRPackedBool   mSendSecureXSiteReferrer;
+    
+    // Classilla (for Cryanc)
+    // if true sends https:// requests to an HTTP proxy and does not use CONNECT
+    PRPackedBool   mUseHttpProxyForHttps;
 };
 
 //-----------------------------------------------------------------------------

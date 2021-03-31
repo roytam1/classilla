@@ -132,7 +132,8 @@ nsHttpConnection::Activate(nsAHttpTransaction *trans, PRUint8 caps)
         rv = CreateTransport();
         if (NS_SUCCEEDED(rv)) {
             // need to handle SSL proxy CONNECT if this is the first time.
-            if (mConnInfo->UsingSSL() && mConnInfo->UsingHttpProxy())
+            // Don't do this if we're using an HTTP-to-HTTPS proxy like Cryanc.
+            if (mConnInfo->UsingSSL() && mConnInfo->UsingHttpProxy() && !gHttpHandler->UseHttpProxyForHttps()) // CRYANC
                 rv = SetupSSLProxyConnect();
         }
         if (NS_FAILED(rv))
@@ -219,6 +220,11 @@ nsHttpConnection::SupportsPipelining(nsHttpResponseHead *responseHead)
 {
     // XXX there should be a strict mode available that disables this
     // blacklisting.
+
+    if (gHttpHandler->UseHttpProxyForHttps()) { // CRYANC
+    	return PR_FALSE; // no known HTTP-to-HTTPS proxy implements this yet. XXX?
+    	// see also nsHttpChannel::SetupTransaction()
+    }
 
     // assuming connection is HTTP/1.1 with keep-alive enabled
     if (mConnInfo->UsingHttpProxy() && !mConnInfo->UsingSSL()) {

@@ -517,21 +517,23 @@ nsStyleContext::ApplyStyleFixups(nsIPresContext* aPresContext)
   else {
     // We might have defined a decoration.
     const nsStyleTextReset* text = (const nsStyleTextReset*)GetStyleData(eStyleStruct_TextReset);
-    if (text->mTextDecoration != NS_STYLE_TEXT_DECORATION_NONE &&
+    if (/* text && */
+        text->mTextDecoration != NS_STYLE_TEXT_DECORATION_NONE &&
         text->mTextDecoration != NS_STYLE_TEXT_DECORATION_OVERRIDE_ALL)
       mBits |= NS_STYLE_HAS_TEXT_DECORATIONS;
   }
 
   // Correct tables.
   const nsStyleDisplay* disp = (const nsStyleDisplay*)GetStyleData(eStyleStruct_Display);
-  if (disp->mDisplay == NS_STYLE_DISPLAY_TABLE) {
+  if (/* disp && */ disp->mDisplay == NS_STYLE_DISPLAY_TABLE) {
     // -moz-center and -moz-right are used for HTML's alignment
     // This is covering the <div align="right"><table>...</table></div> case.
     // In this case, we don't want to inherit the text alignment into the table.
     const nsStyleText* text = (const nsStyleText*)GetStyleData(eStyleStruct_Text);
     
-    if (text->mTextAlign == NS_STYLE_TEXT_ALIGN_MOZ_CENTER ||
-        text->mTextAlign == NS_STYLE_TEXT_ALIGN_MOZ_RIGHT)
+    if (/* text && */ (
+        text->mTextAlign == NS_STYLE_TEXT_ALIGN_MOZ_CENTER ||
+        text->mTextAlign == NS_STYLE_TEXT_ALIGN_MOZ_RIGHT))
     {
       nsStyleText* uniqueText = (nsStyleText*)GetUniqueStyleData(aPresContext, eStyleStruct_Text);
       uniqueText->mTextAlign = NS_STYLE_TEXT_ALIGN_DEFAULT;

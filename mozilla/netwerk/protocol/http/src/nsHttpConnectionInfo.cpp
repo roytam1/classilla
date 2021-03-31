@@ -1,3 +1,4 @@
+#include "nsHttpHandler.h" // for gHttpHandler
 #include "nsHttpConnectionInfo.h"
 #include "nsPrintfCString.h"
 
@@ -17,7 +18,7 @@ nsHttpConnectionInfo::SetOriginServer(const nsACString &host, PRInt32 port)
     const char *keyHost;
     PRInt32 keyPort;
 
-    if (mUsingHttpProxy && !mUsingSSL) {
+    if (mUsingHttpProxy && (!mUsingSSL || !gHttpHandler || gHttpHandler->UseHttpProxyForHttps())) { // CRYANC
         keyHost = ProxyHost();
         keyPort = ProxyPort();
     }

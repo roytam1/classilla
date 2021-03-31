@@ -48,7 +48,7 @@ pref("keyword.URL", "http://keyword.netscape.com/keyword/");
 pref("keyword.enabled", false);
 pref("general.useragent.locale", "chrome://navigator/locale/navigator.properties");
 pref("general.useragent.contentlocale", "chrome://navigator-region/locale/region.properties");
-pref("general.useragent.misc", "rv:9.3.3");
+pref("general.useragent.misc", "rv:9.3.4");
 // these are synced up by UA override support in Classilla 9.0.4+ using g.u.misc.
 pref("general.useragent.override_template", "");
 pref("general.useragent.override", "");
@@ -546,6 +546,11 @@ pref("network.http.proxy.version", "1.1");    // default
 
 // enable caching of http documents
 pref("network.http.use-cache", true);
+
+// enable sending HTTPS requests to an HTTP proxy instead of using CONNECT
+// for bolt-on systems like Cryanc. inherently insecure, so default false.
+// disables pipelining and certain other features.
+pref("network.http.proxy.use-http-proxy-for-https", false);
 
 // this preference can be set to override the socket type used for normal
 // HTTP traffic.  an empty value indicates the normal TCP/IP socket type.

@@ -438,8 +438,9 @@ NS_IMETHODIMP nsRenderingContextMac::CopyOffScreenBits(nsDrawingSurface aSrcSurf
   
 	// get the source clip region
 	StRegionFromPool clipRgn;
-	if (!clipRgn) return NS_ERROR_OUT_OF_MEMORY;
-		
+	if (!clipRgn)
+		return NS_ERROR_OUT_OF_MEMORY;
+
 	if (aCopyFlags & NS_COPYBITS_USE_SOURCE_CLIP_REGION) {
 		::GetPortClipRegion(srcPort, clipRgn);
 	} else

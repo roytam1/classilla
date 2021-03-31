@@ -407,10 +407,38 @@ PRMJ_DSTOffset(JSInt64 local_time)
      * to UTC time, then compare difference with our GMT offset. If they are the same, then
      * DST must not be in effect for the input date/time.
      */
+// issue 133
+#if 0
     UInt32 macLocalSeconds = (local_time / PRMJ_USEC_PER_SEC) + gJanuaryFirst1970Seconds, utcSeconds;
+#endif
+// When 64-bit integer emulation is used, native operator cannot be used. Use JSLL macros.
+#if JS_HAVE_LONG_LONG
+    UInt32 macLocalSeconds = (local_time / PRMJ_USEC_PER_SEC) + gJanuaryFirst1970Seconds, utcSeconds;
+#else
+    UInt32 macLocalSeconds = 0, utcSeconds;
+    JSLL_L2UI(macLocalSeconds, local_time);
+    macLocalSeconds /= PRMJ_USEC_PER_SEC;
+    macLocalSeconds += gJanuaryFirst1970Seconds;
+#endif
+// end bug
     ConvertLocalTimeToUTC(macLocalSeconds, &utcSeconds);
     if ((utcSeconds - macLocalSeconds) == PRMJ_LocalGMTDifference())
+// issue 133
+#if 0
         return 0;
+#endif
+// When 64-bit integer emulation is used, JSInt64 is a struct so returning an pure integer is not right
+// Used unused us2s variable to return zero instead.
+// This is a fix for compilation issue after disabling use of long long rather than a fix for the issue 133
+#if JS_HAVE_LONG_LONG
+        return 0;
+#else
+    {
+        JSLL_UI2L(us2s, 0);
+        return us2s;
+    }
+#endif
+// end bug
     else {
         JSInt64 dlsOffset;
     	JSLL_UI2L(us2s, PRMJ_USEC_PER_SEC);

@@ -1721,9 +1721,10 @@ function stylesheetFillPopup(menuPopup)
     var currentStyleSheet = styleSheets[i];
 
     if (currentStyleSheet.title) {
-      if (!currentStyleSheet.disabled)
+      if (!currentStyleSheet.disabled) {
         // noOptionalStyles = false;
         altStyleSelected = true; // bug 32732
+      }
 
       var lastWithSameTitle = null;
       if (currentStyleSheet.title in currentStyleSheets)
@@ -1791,23 +1792,26 @@ function setStyleDisabled(disabled) {
 }
 // end bug
 
-// for Classilla's CSS button (at some point)
+// Classilla CSS toggle (with eventual support for a button)
 function classillaCSStoggle(what) {
   if (getMarkupDocumentViewer().authorStyleDisabled == false) {
-  	what.setAttribute("list-style-image", "chrome://navigator/skin/icons/cssoff.png");
-  	what.setAttribute("tooltiptext", "&cssIcon.labeloff;");
+  	if (what) {
+  	  what.setAttribute("list-style-image", "chrome://navigator/skin/icons/cssoff.png");
+  	  what.setAttribute("tooltiptext", "&cssIcon.labeloff;");
+  	}
   	setStyleDisabled(true);
-  	stylesheetSwitchAll(window.content, '');
+  	BrowserReload();
   	return;
   }
-  what.setAttribute("list-style-image", "chrome://navigator/skin/icons/csson.png");
-  what.setAttribute("tooltiptext", "&cssIcon.labelon;");
-  setStyleDisabled(false);
+
+  if (what) {
+    what.setAttribute("list-style-image", "chrome://navigator/skin/icons/csson.png");
+    what.setAttribute("tooltiptext", "&cssIcon.labelon;");
+  }
   stylesheetSwitchAll(window.content, gCurrentStyleSheet);
+  setStyleDisabled(false);
   return;
 }
-  
- 	
 
 function applyTheme(themeName)
 {

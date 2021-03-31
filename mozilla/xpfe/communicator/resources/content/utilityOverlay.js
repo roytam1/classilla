@@ -257,7 +257,7 @@ function goCheckForUpdates()
 {
 	// for future expansion
 	//openTopWin('http://www.classilla.org/start/');
-	window.openDialog( getBrowserURL(), "_blank", "chrome,all,dialog=no", 'http://www.classilla.org/start/' );
+	window.openDialog( getBrowserURL(), "_blank", "chrome,all,dialog=no", 'http://www.floodgap.com/software/classilla/' );
 }
 
 function goAboutDialog()

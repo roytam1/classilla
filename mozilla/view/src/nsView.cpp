@@ -98,6 +98,7 @@ nsView::nsView()
   mOpacity = 1.0f;
   mViewManager = nsnull;
   mChildRemoved = PR_FALSE;
+  mAlwaysInvalidate = PR_FALSE; // issue 226
 }
 
 nsView::~nsView()

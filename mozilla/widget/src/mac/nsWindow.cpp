@@ -77,10 +77,10 @@
 //#include "nsIStringBundle.h"
 #include "nsIServiceManager.h"
 #include "nsIView.h"
+#include "nsIViewManager.h"
 
-//#include "nsViewManager.h"
-// this is not a good idea, but *I'm* sure as hell not changing it! -- Cameron
-#define NS_VMREFRESH_DOUBLE_BUFFER      0x0001
+/* for OS integration */
+#include <Events.h>
 
 #if PINK_PROFILING
 #include "profilerutils.h"
@@ -1567,6 +1567,13 @@ else
     }
 #else
 
+// Let the OS breathe.
+EventRecord event;
+    EventAvail(0, &event);
+    EventAvail(0, &event);
+    EventAvail(0, &event);
+    EventAvail(0, &event);
+
     EachRegionRect ( updateRgn, CountRect, &numRects );
     if (numRects <= kMaxUpdateRects ) {
       Rect rectList[kMaxUpdateRects];
@@ -1872,9 +1879,10 @@ nsWindow::ScrollBits ( Rect & inRectToScroll, PRInt32 inLeftDelta, PRInt32 inTop
 		} else {
 			PRUint32 lastFlags;
 			// did the view manager turn off double buffering?
+			// or, did it request full invalidation anyway? (issue 226)
 			viewManager->GetLastUpdateFlags(&lastFlags);
 			if (
-				//0 &&
+				(lastFlags & NS_VMREFRESH_FORCE_INVALIDATION) ||
 				!(lastFlags & NS_VMREFRESH_DOUBLE_BUFFER)) {
 				OHCRAP;
 			} else {

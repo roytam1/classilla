@@ -36,7 +36,8 @@
 		   <child rdf:href="http://www.hotwired.com/webmonkey/98/04/index1a.html?collection=javascript" name="Thau's JavaScript Tutorial: Day 4" smallIcon="http://static.wired.com/rdf/objects/webmonkey_small.gif"/>
 		   <child rdf:href="http://www.hotwired.com/webmonkey/98/04/index3a.html?collection=javascript" name="Thau's JavaScript Tutorial: Day 5 " smallIcon="http://static.wired.com/rdf/objects/webmonkey_small.gif"/>
 		 </Topic>
-	       </child>
+	       </child>
+
            </Topic>
 	     </child>
 	     <child>
@@ -119,7 +120,8 @@
        <Topic  name="HotBot" smallIcon="http://static.wired.com/rdf/objects/hotbot_small.gif">
          <child rdf:href="http://www.hotbot.com/" name="HotBot" smallIcon="http://static.wired.com/rdf/objects/hotbot_small.gif"/>
 	 <child rdf:href="http://www.hotbot.com/super.html" name="SuperSearch" smallIcon="http://static.wired.com/rdf/objects/hotbot_small.gif"/>
-	 <child>
+	 <child>
+
    	   <Topic id="Other Search Tools" name="Other Search Tools" smallIcon="http://static.wired.com/rdf/objects/hotbot_small.gif">
               <child rdf:href="http://www.hotbot.com/usenet/" name="Usenet" smallIcon="http://static.wired.com/rdf/objects/hotbot_small.gif"/>
 	      <child rdf:href="http://www.newsbot.com/" name="Top News Sites" smallIcon="http://static.wired.com/rdf/objects/hotbot_small.gif"/>
@@ -130,9 +132,12 @@
 	      <child rdf:href="http://www.hotbot.com/partners/websitez.html" name="Domain Names" smallIcon="http://static.wired.com/rdf/objects/hotbot_small.gif"/>
 	      <child rdf:href="http://stocks.hotbot.com/" name="Stocks" smallIcon="http://static.wired.com/rdf/objects/hotbot_small.gif"/>
 	      <child rdf:href="http://www.hotbot.com/partners/filez.html" name="ShareWare" smallIcon="http://static.wired.com/rdf/objects/hotbot_small.gif"/>
-           </Topic>
-         </child>
-      </Topic>
+           </Topic>
+
+         </child>
+
+      </Topic>
+
     </child>
    <child>
       <Topic name="Wired Magazine" smallIcon="http://static.wired.com/rdf/objects/wiredmagazine_small.gif">
@@ -140,9 +145,13 @@
          <child rdf:href="http://www.wired.com/wired/subscribe/" name="Subscribe to Wired Magazine" smallIcon="http://static.wired.com/rdf/objects/wiredmagazine_small.gif"/>
       </Topic>
    </child>
-   <child rdf:href="http://www.livewired.com/" name="LiveWired" smallIcon="http://static.wired.com/rdf/objects/livewired_small.gif"/>
-
-<child rdf:href="http://www.suck.com" name="Suck.com" smallIcon="http://static.wired.com/rdf/objects/suck_small.gif"/>
+   <child rdf:href="http://www.livewired.com/" name="LiveWired" smallIcon="http://static.wired.com/rdf/objects/livewired_small.gif"/>
+
+
+
+<child rdf:href="http://www.suck.com" name="Suck.com" smallIcon="http://static.wired.com/rdf/objects/suck_small.gif"/>
+
 </Topic>
-
+
+
 </RDF:RDF>

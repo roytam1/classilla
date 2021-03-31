@@ -2739,7 +2739,7 @@ js_TraceContext(JSTracer *trc, JSContext *acx)
     JSStackFrame *fp, *nextChain;
     JSStackHeader *sh;
     JSTempValueRooter *tvr;
-
+	int64 a_base_64, lifespan_64;
     if (IS_GC_MARKING_TRACER(trc)) {
         /*
          * Release stackPool here, if it has been in existence for longer than
@@ -2748,8 +2748,26 @@ js_TraceContext(JSTracer *trc, JSContext *acx)
         a = acx->stackPool.current;
         if (a == acx->stackPool.first.next &&
             a->avail == a->base + sizeof(int64)) {
+// issue 133
+#if 0
             age = JS_Now() - *(int64 *) a->base;
             if (age > (int64) acx->runtime->gcStackPoolLifespan * 1000)
+#endif
+            // When it uses 64-bit integer emulation, it should use JSLL macros to do calculation and typecasting
+            // otherwise in this case compiler produces errors such as
+            // "illegal operand" and "explicit casting from 'unsigned int' to 'struct'"
+            // It fails compilation.
+            // // This is a fix for compilation issue after disabling use of long long rather than a fix for the issue 133
+#if JS_HAVE_LONG_LONG
+            age = JS_Now() - *(int64 *) a->base;
+            if (age > (int64) acx->runtime->gcStackPoolLifespan * 1000)
+#else 
+            JSLL_UI2L(a_base_64, a->base);
+            JSLL_SUB(age, JS_Now(), a_base_64);
+            JSLL_UI2L(lifespan_64, acx->runtime->gcStackPoolLifespan);
+            if (JSLL_CMP(age, >, lifespan_64))
+#endif
+// end bug
                 JS_FinishArenaPool(&acx->stackPool);
         }
 

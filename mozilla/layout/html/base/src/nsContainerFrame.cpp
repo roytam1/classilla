@@ -904,6 +904,14 @@ nsContainerFrame::FrameNeedsView(nsIPresContext* aPresContext,
   // block-level, but we can't trust that the style context 'display' value is
   // set correctly
   if ((display->IsBlockLevel() || display->IsFloating()) &&
+  		(display->mOverflow == NS_STYLE_OVERFLOW_HIDDEN)) { // issue 226
+  	// If we don't give it a view, nsHTMLContainerFrame.cpp can't set the
+  	// forced invalidation flag on it.
+  	return PR_TRUE;
+  }
+  
+  // Use _CLIP for the old code.
+  if ((display->IsBlockLevel() || display->IsFloating()) &&
       //(display->mOverflow == NS_STYLE_OVERFLOW_HIDDEN)) {
       (display->mOverflow == NS_STYLE_OVERFLOW_CLIP)) { // bug 69355
     // XXX Check for the frame being a block frame and only force a view

@@ -98,6 +98,9 @@ public:
 // is z-index:auto also
 #define NS_VIEW_FLAG_TOPMOST              0x0400
 
+// if set, never double buffer this view (issue 226)
+#define NS_VIEW_NEVER_DOUBLE_BUFFER       0x0800
+
 class nsView : public nsIView
 {
 public:
@@ -296,6 +299,11 @@ public:
    // Helper function to determine if the view point is inside of a view
   PRBool PointIsInside(nsView& aView, nscoord x, nscoord y) const;
 
+   /**
+    * Hack for issue 226
+    */
+   NS_IMETHOD SetAlwaysInvalidate() { mAlwaysInvalidate = PR_TRUE; return NS_OK; }
+
 public: // NOT in nsIView, so only available in view module
   nsView* GetFirstChild() const { return mFirstChild; }
   nsView* GetNextSibling() const { return mNextSibling; }
@@ -305,6 +313,7 @@ public: // NOT in nsIView, so only available in view module
   nsViewVisibility GetVisibility() const { return mVis; }
   void* GetClientData() const { return mClientData; }
   PRBool GetFloating() const { return (mVFlags & NS_VIEW_FLAG_FLOATING) != 0; }
+  PRBool GetAlwaysInvalidate() const { return mAlwaysInvalidate; }
 
   PRInt32 GetChildCount() const { return mNumKids; }
   nsView* GetChild(PRInt32 aIndex) const;
@@ -318,6 +327,7 @@ public: // NOT in nsIView, so only available in view module
 
   PRUint32 GetViewFlags() const { return mVFlags; }
   void SetViewFlags(PRUint32 aFlags) { mVFlags = aFlags; }
+  void AddViewFlagBit(PRUint32 aBit) { mVFlags |= aBit; } // convenience for issue 226
 
   void SetTopMost(PRBool aTopMost) { aTopMost ? mVFlags |= NS_VIEW_FLAG_TOPMOST : mVFlags &= ~NS_VIEW_FLAG_TOPMOST; }
   PRBool IsTopMost() { return((mVFlags & NS_VIEW_FLAG_TOPMOST) != 0); }
@@ -352,6 +362,7 @@ protected:
   // Bug #19416
   PRPackedBool      mShouldIgnoreSetPosition;
   PRPackedBool      mChildRemoved;
+  PRPackedBool      mAlwaysInvalidate; // issue 226
 
 private:
   NS_IMETHOD_(nsrefcnt) AddRef(void);

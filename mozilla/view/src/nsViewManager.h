@@ -239,6 +239,12 @@ public:
   	*aUpdateFlags = mLastUpdateFlags;
   	return NS_OK;
   }
+  /* For Classilla: set whether full invalidation should always be forced. issue 226 */
+  NS_IMETHOD AlwaysFullInvalidate(PRBool aFullInvalidate) {
+  	mAlwaysFullInvalidate = aFullInvalidate;
+  	return NS_OK;
+  }
+  
 
 // bug 141901
   /* Determine if invalidates are being batched through the use
@@ -390,6 +396,7 @@ private:
   PRBool            mRefreshEnabled;
   PRBool            mPainting;
   PRBool            mRecursiveRefreshPending;
+  PRBool			mAlwaysFullInvalidate; // issue 226
   nsView            *mMouseGrabber;
   nsView            *mKeyGrabber;
   PRInt32           mUpdateCnt;
@@ -443,8 +450,5 @@ protected:
   MOZ_TIMER_DECLARE(mWatch) //  Measures compositing+paint time for current document
 #endif
 };
-
-//when the refresh happens, should it be double buffered?
-#define NS_VMREFRESH_DOUBLE_BUFFER      0x0001
 
 #endif /* nsViewManager_h___ */

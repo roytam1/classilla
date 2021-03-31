@@ -785,6 +785,10 @@ DRIPTESTGT(height, 1080) {
   }
 #endif
 // end issue
+/* This works but looks awful.
+  if ((aUpdateFlags & NS_VMREFRESH_DOUBLE_BUFFER) && mAlwaysFullInvalidate)
+  	aUpdateFlags &= ~NS_VMREFRESH_DOUBLE_BUFFER; // issue 226
+*/
 
   if (aUpdateFlags & NS_VMREFRESH_DOUBLE_BUFFER)
   {
@@ -870,7 +874,10 @@ DRIPTESTGT(height, 1080) {
 
   localcx->ReleaseBackbuffer();
   mLastUpdateFlags = aUpdateFlags; // issue 28
-
+  /* This is dreadfully slow on large screens, but looks the best. */
+  if (mAlwaysFullInvalidate)
+  	mLastUpdateFlags |= NS_VMREFRESH_FORCE_INVALIDATION; // issue 226
+  	
 #ifdef NS_VM_PERF_METRICS
   MOZ_TIMER_DEBUGLOG(("Stop: nsViewManager::Refresh(region), this=%p\n", this));
   MOZ_TIMER_STOP(mWatch);
@@ -1707,7 +1714,16 @@ NS_IMETHODIMP nsViewManager::UpdateView(nsIView *aView, const nsRect &aRect, PRU
   NS_PRECONDITION(nsnull != aView, "null view");
 
   nsView* view = NS_STATIC_CAST(nsView*, aView);
+  nsRect damagedRect;
 
+  // If this is an always invalidated view, then blow the whole rect regardless
+  // (issue 226).
+  // XXX: This doesn't actually seem to do anything?? See other issue 226 notations in this file.
+if (view->GetAlwaysInvalidate()) {
+  // Mark the entire view as damaged
+  view->GetBounds(damagedRect);
+  view->ConvertFromParentCoords(&damagedRect.x, &damagedRect.y);
+} else {
   // Only Update the rectangle region of the rect that intersects the view's non clipped rectangle
   nsRect clippedRect;
   PRBool isClipped;
@@ -1718,12 +1734,12 @@ NS_IMETHODIMP nsViewManager::UpdateView(nsIView *aView, const nsRect &aRect, PRU
   }
   view->ConvertFromParentCoords(&clippedRect.x, &clippedRect.y);
 
-  nsRect damagedRect;
   damagedRect.x = aRect.x;
   damagedRect.y = aRect.y;
   damagedRect.width = aRect.width;
   damagedRect.height = aRect.height;
   damagedRect.IntersectRect(aRect, clippedRect);
+}
 
    // If the rectangle is not visible then abort
    // without invalidating. This is a performance 
@@ -1855,6 +1871,7 @@ NS_IMETHODIMP nsViewManager::DispatchEvent(nsGUIEvent *aEvent, nsEventStatus *aS
 
                 if (damrect.width > 0 && damrect.height > 0)
                   {
+                    // issue 226
                     PRUint32   updateFlags = NS_VMREFRESH_DOUBLE_BUFFER;
                     PRBool     doDefault = PR_TRUE;
 

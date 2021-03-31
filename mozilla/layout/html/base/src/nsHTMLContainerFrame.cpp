@@ -688,6 +688,9 @@ nsHTMLContainerFrame::CreateViewForFrame(nsIPresContext* aPresContext,
   if (NS_STYLE_POSITION_FIXED == display->mPosition) {
     view->CreateWidget(kCChildCID);
   }
+  if (display->mOverflow == NS_STYLE_OVERFLOW_HIDDEN) // issue 226
+  	// view->SetAlwaysInvalidate(); // doesn't work, see nsView.cpp and nsViewManager.cpp
+  	viewManager->AlwaysFullInvalidate(PR_TRUE);
 
   // Remember our view
   aFrame->SetView(aPresContext, view);

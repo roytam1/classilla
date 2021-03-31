@@ -164,7 +164,20 @@ _callHook(JSDContext *jsdc, JSContext *cx, JSStackFrame *fp, JSBool before,
                         }
                         if (delta > pdata->maxExecutionTime)
                             pdata->maxExecutionTime = delta;
+// issue 133
+#if 0
                         pdata->lastCallStart = JSLL_INIT(0x00000000, 0x00000000); /* JSLL_ZERO; */
+#endif
+                        // Compilation fails when using 64-bit integer emulation
+                        // since CodeWarrior 7.1 does not seem to support shorthand ( = { ..., ... }; )
+                        // a fix for compilation issue after disabling use of long long, rather than a fix for the actual issue.
+#if JS_HAVE_LONG_LONG
+                        pdata->lastCallStart = JSLL_INIT(0x00000000, 0x00000000); /* JSLL_ZERO; */
+#else
+                        pdata->lastCallStart.lo = 0x00000000;
+                        pdata->lastCallStart.hi = 0x00000000;
+#endif
+// end bug
                         ++pdata->callCount;
                     } else if (pdata->recurseDepth) {
                         --pdata->recurseDepth;

@@ -83,9 +83,10 @@
     <key key="&reloadCmd.commandkey;" oncommand="BrowserReloadSkipCache();" modifiers="accel,shift"/>
     <key id="key_viewSource" key="&pageSourceCmd.commandkey;" command="View:PageSource" modifiers="accel"/>
     <key id="key_viewInfo"   key="&pageInfoCmd.commandkey;"   command="View:PageInfo"   modifiers="accel"/>
-    <key id="key_viewSlowScroll" key="&viewSlowScroll.commandkey;" command="View:SlowScroll" modifiers="accel,shift"/>
-    <key id="key_viewNoStyle" key="z" command="View:NoStyle" modifiers="accel,shift"/>
+    <!-- key id="key_viewSlowScroll" key="&viewSlowScroll.commandkey;" command="View:SlowScroll" modifiers="accel,shift" -->
     <!-- key id="key_viewFixups" key="&viewFixups.commandkey;" command="View:Fixups" modifiers="accel,shift" -->
+    <!-- key id="key_viewNoStyle" key="z" command="View:NoStyle" modifiers="accel,shift" -->
+    <key id="key_viewNoStyle" key="z" modifiers="accel,shift" oncommand="classillaCSStoggle(); event.preventBubble();"/>
     <key id="key_viewNextSidebarPanel" keycode="VK_PAGE_DOWN"  oncommand="SidebarGetRelativePanel(1);"  modifiers="alt" />
     <key id="key_viewPrevSidebarPanel" keycode="VK_PAGE_UP"  oncommand="SidebarGetRelativePanel(-1);"  modifiers="alt" />
 
@@ -165,7 +166,7 @@
     <command id="View:PageInfo"   oncommand="BrowserPageInfo();"/>
     <command id="View:FullScreen" oncommand="BrowserFullScreen();"/>
     <!-- command id="View:Fixups" oncommand="BrowserToggleFixups();" -->
-    <command id="View:SlowScroll" oncommand="BrowserToggleSlowScroll();"/>
+    <!-- command id="View:SlowScroll" oncommand="BrowserToggleSlowScroll();" -->
   
     <!-- Search Menu -->
     <command id="Browser:Find" oncommand="BrowserFind();" observes="isImage"/>
@@ -296,11 +297,11 @@
           <menupopup onpopupshowing="stylesheetFillPopup(this);"
                      oncommand="stylesheetSwitchAll(window.content, event.target.getAttribute('data')); setStyleDisabled(false);" type="radio">
             <!-- menuitem label="&useStyleSheetNone.label;" accesskey="&useStyleSheetNone.accesskey;" key="key_viewNoStyle" oncommand="setStyleDisabled(true); BrowserReload(); event.preventBubble();" type="radio" -->
-            <menuitem label="&useStyleSheetNone.label;" accesskey="&useStyleSheetNone.accesskey;" command="View:NoStyle" type="radio"/>
+            <menuitem label="&useStyleSheetNone.label;" key="key_viewNoStyle" accesskey="&useStyleSheetNone.accesskey;" command="View:NoStyle" type="radio"/>
             <menuitem label="&useStyleSheetPersistentOnly.label;" accesskey="&useStyleSheetPersistentOnly.accesskey;" type="radio"/>
           </menupopup>
         </menu>
-        <menuitem accesskey="&viewSlowScroll.commandkey;"   label="&viewSlowScroll.label;" key="key_viewSlowScroll" command="View:SlowScroll" type="checkbox" observes="isSlowScroll"/>
+        <!-- menuitem accesskey="&viewSlowScroll.commandkey;"   label="&viewSlowScroll.label;" key="key_viewSlowScroll" command="View:SlowScroll" type="checkbox" observes="isSlowScroll" -->
         <!-- menuitem accesskey="&viewFixups.commandkey;"   label="&viewFixups.label;"   key="key_viewFixups"   command="View:Fixups"  type="checkbox"  observes="isFixupRender" -->
         <menu id="charsetMenu" observes="isImage"/>
         <menuseparator />

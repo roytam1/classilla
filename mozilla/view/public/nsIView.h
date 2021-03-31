@@ -262,6 +262,11 @@ public:
    */
   NS_IMETHOD  List(FILE* out, PRInt32 aIndent = 0) const = 0;
 
+  /**
+   * Set whether this view should always be fully redrawn (issue 226).
+   */
+  NS_IMETHOD  SetAlwaysInvalidate() = 0;
+   
 private:
   NS_IMETHOD_(nsrefcnt) AddRef(void) = 0;
   NS_IMETHOD_(nsrefcnt) Release(void) = 0;
