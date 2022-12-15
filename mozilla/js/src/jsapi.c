@@ -93,7 +93,7 @@
 #define JS_ADDRESSOF_VA_LIST(ap) (&(ap))
 #endif
 
-#if defined(JS_THREADSAFE)
+#if 0//defined(JS_THREADSAFE)
 #define CHECK_REQUEST(cx)                                                   \
     JS_ASSERT((cx)->requestDepth || (cx)->thread == (cx)->runtime->gcThread)
 #else

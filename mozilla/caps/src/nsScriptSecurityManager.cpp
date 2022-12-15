@@ -499,7 +499,7 @@ nsScriptSecurityManager::CheckObjectAccess(JSContext *cx, JSObject *obj,
     // added, but we can handle that case too -- if a primitive value in a
     // property of obj is being accessed, we should use obj as the target
     // object.
-    NS_ASSERTION(!JSVAL_IS_PRIMITIVE(*vp), "unexpected target property value");
+//    NS_ASSERTION(!JSVAL_IS_PRIMITIVE(*vp), "unexpected target property value");
     JSObject* target = JSVAL_IS_PRIMITIVE(*vp) ? obj : JSVAL_TO_OBJECT(*vp); 
     // Do the same-origin check -- this sets a JS exception if the check fails.
     // Pass the target object's class name, as we have no class-info for it.
