@@ -14568,8 +14568,8 @@ nsCSSFrameConstructor::WipeContainingBlock(nsIPresContext* aPresContext,
       
 #ifdef DEBUG
       if (gNoisyContentUpdates) {
-        printf("nsCSSFrameConstructor::WipeContainingBlock: aBlockContent=%p parentContainer=%p\n",
-               NS_STATIC_CAST(void*, aBlockContent),
+        printf("nsCSSFrameConstructor::WipeContainingBlock: blockContent=%p parentContainer=%p\n",
+               NS_STATIC_CAST(void*, blockContent),
                NS_STATIC_CAST(void*, parentContainer));
 /* fix this eventually
 +    printf("nsCSSFrameConstructor::WipeContainingBlock: blockContent=%p parentContainer=%p\n",

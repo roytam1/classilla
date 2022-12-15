@@ -90,10 +90,12 @@
 #endif
 
 #define NSCAP_FEATURE_FACTOR_DESTRUCTOR
+#define NSCAP_FEATURE_USE_BASE
 
 #ifdef NS_DEBUG
   #define NSCAP_FEATURE_TEST_DONTQUERY_CASES
   #define NSCAP_FEATURE_DEBUG_PTR_TYPES
+  #undef NSCAP_FEATURE_USE_BASE
 //#define NSCAP_FEATURE_TEST_NONNULL_QUERY_SUCCEEDS
 #endif
 
@@ -621,7 +623,7 @@ class nsCOMPtr
       swap( nsCOMPtr<T>& rhs )
           // ...exchange ownership with |rhs|; can save a pair of refcount operations
         {
-#if(1) //def NSCAP_FEATURE_USE_BASE
+#ifdef NSCAP_FEATURE_USE_BASE
           nsISupports* temp = rhs.mRawPtr;
 #else
           T* temp = rhs.mRawPtr;
@@ -639,7 +641,7 @@ class nsCOMPtr
       swap( T*& rhs )
           // ...exchange ownership with |rhs|; can save a pair of refcount operations
         {
-#if(1)//def NSCAP_FEATURE_USE_BASE
+#ifdef NSCAP_FEATURE_USE_BASE
           nsISupports* temp = rhs;
 #else
           T* temp = rhs;

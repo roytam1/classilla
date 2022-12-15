@@ -58,6 +58,7 @@ extern PRLogModuleInfo *gSocketTransportLog;
 #else
 #define LOG(args)
 #endif
+#define LOG_ENABLED() PR_LOG_TEST(gSocketTransportLog, PR_LOG_DEBUG)
 
 //-----------------------------------------------------------------------------
 

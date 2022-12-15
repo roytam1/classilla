@@ -1216,9 +1216,12 @@ void CSSImportantRule::SizeOf(nsISizeOfHandler *aSizeOfHandler, PRUint32 &aSize)
   aSizeOfHandler->AddSize(tag,aSize);
 
   // now dump the mDeclaration and mSheet
+#if(0)
+// bug 125246
   if(mDeclaration){
     mDeclaration->SizeOf(aSizeOfHandler, localSize);
   }
+#endif
   if(mSheet){
     mSheet->SizeOf(aSizeOfHandler, localSize);
   }
@@ -3120,19 +3123,22 @@ void CSSStyleRuleImpl::SizeOf(nsISizeOfHandler *aSizeOfHandler, PRUint32 &aSize)
   // remove the sizeof the mSelector's class since we count it seperately below
   aSize -= sizeof(mSelector);
 
+#if(0)
+// bug 125246
   // and add the size of the DOMDeclaration
   // XXX - investigate the size and quantity of these
   if(mDOMDeclaration && uniqueItems->AddItem(mDOMDeclaration)){
     aSize += sizeof(DOMCSSDeclarationImpl);
   }
   aSizeOfHandler->AddSize(tag,aSize);
-  
+
   // now delegate to the Selector, Declaration, and ImportantRule
   mSelector.SizeOf(aSizeOfHandler, localSize);
 
   if(mDeclaration){
     mDeclaration->SizeOf(aSizeOfHandler, localSize);
   }
+#endif
   if(mImportantRule){
     mImportantRule->SizeOf(aSizeOfHandler, localSize);
   }

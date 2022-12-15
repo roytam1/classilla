@@ -710,7 +710,7 @@ void nsCSSMargin::List(FILE* out, PRInt32 aIndent) const
     };
     mPadding.List(out, aIndent, trbl); // bug 125246 // mPadding->List(out, aIndent, trbl);
   }
-  if (nsnull != mBorderWidth) {
+  { // bug 125246 again // if (nsnull != mBorderWidth) {
     static const nsCSSProperty trbl[] = {
       eCSSProperty_border_top_width,
       eCSSProperty_border_right_width,

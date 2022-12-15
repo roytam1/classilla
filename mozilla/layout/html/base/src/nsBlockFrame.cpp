@@ -3264,7 +3264,7 @@ nsBlockFrame::DeleteLine(nsBlockReflowState& aState,
  */
 static void GetRectDifferenceStrips(const nsRect& aR1, const nsRect& aR2,
                                     nsRect* aHStrip, nsRect* aVStrip) {
-  NS_ASSERTION(aR1.TopLeft() == aR2.TopLeft(),
+  NS_ASSERTION(aR1.x == aR2.x && aR1.y == aR2.y,
                "expected rects at the same position");
   nsRect unionRect(aR1.x, aR1.y, PR_MAX(aR1.width, aR2.width),
                    PR_MAX(aR1.height, aR2.height));

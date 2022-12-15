@@ -412,7 +412,7 @@ static void PrintObjectBasics(JSObject* obj)
     if(OBJ_IS_NATIVE(obj))
         printf("%#p 'native' <%s>",
                obj,
-               ((JSClass*)(obj->slots[JSSLOT_CLASS]-1))->name);
+               ((JSClass*)(obj->fslots[JSSLOT_CLASS]-1))->name);
     else
         printf("%#p 'host'", obj);
 
@@ -438,8 +438,8 @@ static void PrintObject(JSObject* obj, int depth, ObjectPile* pile)
     if(!OBJ_IS_NATIVE(obj))
         return;
 
-    JSObject* parent = (JSObject*)(obj->slots[JSSLOT_PARENT]);
-    JSObject* proto  = (JSObject*)(obj->slots[JSSLOT_PROTO]);
+    JSObject* parent = (JSObject*)(obj->fslots[JSSLOT_PARENT]);
+    JSObject* proto  = (JSObject*)(obj->fslots[JSSLOT_PROTO]);
 
     printf("%*sparent: ", INDENT(depth+1));
     if(parent)
@@ -459,9 +459,9 @@ xpc_DumpJSObject(JSObject* obj)
     ObjectPile pile;
 
     printf("Debugging reminders...\n");
-    printf("  class:  (JSClass*)(obj->slots[2]-1)\n");
-    printf("  parent: (JSObject*)(obj->slots[1])\n");
-    printf("  proto:  (JSObject*)(obj->slots[0])\n");
+    printf("  class:  (JSClass*)(obj->fslots[2]-1)\n");
+    printf("  parent: (JSObject*)(obj->fslots[1])\n");
+    printf("  proto:  (JSObject*)(obj->fslots[0])\n");
     printf("\n");
 
     if(obj)

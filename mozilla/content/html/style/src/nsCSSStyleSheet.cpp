@@ -4647,12 +4647,14 @@ void CascadeSizeEnumFunc(RuleCascadeData *cascade, CascadeSizeEnumData *pData)
   CascadeSizeEnumData stateData(pData->handler,pData->uniqueItems,stateSelectorSizeTag);
   cascade->mStateSelectors.EnumerateForwards(StateSelectorsSizeEnumFunc, &stateData);
   
+#if(0)  // bug 98765
   if(cascade->mWeightedRules){
     nsCOMPtr<nsIAtom> weightedRulesSizeTag;
     weightedRulesSizeTag = do_GetAtom("CascadeWeightedRules");
     CascadeSizeEnumData stateData2(pData->handler,pData->uniqueItems,weightedRulesSizeTag);
     cascade->mWeightedRules->EnumerateForwards(WeightedRulesSizeEnumFunc, &stateData2);
   }
+#endif
 }
 
 /******************************************************************************
