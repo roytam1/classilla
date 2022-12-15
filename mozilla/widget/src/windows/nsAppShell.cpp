@@ -163,8 +163,8 @@ NS_METHOD nsAppShell::Run(void)
 #else
         ::DispatchMessage(&msg);
 #endif /* MOZ_UNICODE */
-        if (mDispatchListener)
-          mDispatchListener->AfterDispatch();
+        //if (mDispatchListener)
+        //  mDispatchListener->AfterDispatch();
       }
     } else {
 
