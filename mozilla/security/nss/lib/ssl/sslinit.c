@@ -24,7 +24,7 @@ ssl_Init(void)
 	}
 
 #ifdef DEBUG
-        ssl3_CheckCipherSuiteOrderConsistency();
+        //ssl3_CheckCipherSuiteOrderConsistency();
 #endif
 
 	ssl_inited = 1;
